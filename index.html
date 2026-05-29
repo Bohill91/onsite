@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Construction Labour Recruitment MVP</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Construction Labour Recruitment</p>
+        <h1>Worker Matching Admin</h1>
+      </div>
+      <button id="resetDemoBtn" class="secondary-button" type="button">Reset demo data</button>
+    </header>
+
+    <main class="app-shell">
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Add Worker</h2>
+            <p>Keep worker records simple and focused on matching.</p>
+          </div>
+        </div>
+
+        <form id="workerForm" class="form-grid">
+          <label>
+            Name
+            <input id="workerName" type="text" required placeholder="e.g. Sam Taylor" />
+          </label>
+          <label>
+            Trade
+            <input id="workerTrade" type="text" required placeholder="e.g. Electrician" />
+          </label>
+          <label class="wide">
+            Qualifications / tickets
+            <input id="workerQualifications" type="text" placeholder="e.g. ECS, IPAF, CSCS" />
+          </label>
+          <label>
+            Availability
+            <select id="workerAvailability">
+              <option value="available">Available</option>
+              <option value="not available">Not available</option>
+            </select>
+          </label>
+          <label>
+            Reliability score
+            <input id="workerReliability" type="number" min="0" max="100" value="75" required />
+          </label>
+          <button class="primary-button wide" type="submit">Add worker</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Add Job Request</h2>
+            <p>Contractor request fields are intentionally minimal.</p>
+          </div>
+        </div>
+
+        <form id="jobForm" class="form-grid">
+          <label>
+            Trade required
+            <input id="jobTrade" type="text" required placeholder="e.g. Plumber" />
+          </label>
+          <label>
+            Location
+            <input id="jobLocation" type="text" required placeholder="e.g. Manchester" />
+          </label>
+          <label>
+            Start date/time
+            <input id="jobStart" type="datetime-local" required />
+          </label>
+          <label>
+            Duration
+            <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
+          </label>
+          <button class="primary-button wide" type="submit">Add job request</button>
+        </form>
+      </section>
+
+      <section class="panel wide-panel">
+        <div class="section-heading">
+          <div>
+            <h2>Match Results</h2>
+            <p>Available workers are matched by trade, then ranked by reliability.</p>
+          </div>
+        </div>
+        <div id="matchResults" class="list"></div>
+      </section>
+
+      <section class="panel wide-panel">
+        <div class="section-heading">
+          <div>
+            <h2>Admin View</h2>
+            <p>Review workers and jobs, override assignments, and update reliability.</p>
+          </div>
+        </div>
+
+        <div class="admin-grid">
+          <div>
+            <h3>Workers</h3>
+            <div id="workersList" class="list"></div>
+          </div>
+          <div>
+            <h3>Job Requests</h3>
+            <div id="jobsList" class="list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
