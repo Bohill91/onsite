@@ -190,9 +190,6 @@ function setWorkerStep(step) {
   if (target) target.classList.add('active');
 
   document.querySelectorAll('#workerStepper .stepper-dot').forEach(function(dot, i) {
-    dot.classList.toggle('done',   i + 1 < step);
-    dot.classList.toggle('active', i + 1 === step);
-    dot.classList.remove(i + 1 < step ? '' : 'done');
     if (i + 1 < step)  { dot.classList.add('done');   dot.classList.remove('active'); }
     if (i + 1 === step){ dot.classList.add('active');  dot.classList.remove('done');  }
     if (i + 1 > step)  { dot.classList.remove('done'); dot.classList.remove('active');}
