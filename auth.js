@@ -74,6 +74,9 @@ function updateTopbarUser(user) {
   }
   userSection.style.display = 'flex';
   if (resetBtn) resetBtn.style.display = 'none';
+
+  // Apply role-specific UI
+  if (typeof applyRoleView === 'function') applyRoleView(user);
 }
 
 // ─── Login ─────────────────────────────────────────────────
@@ -359,6 +362,10 @@ document.getElementById('logoutBtn').addEventListener('click', function() {
   const resetBtn    = document.getElementById('resetDemoBtn');
   if (userSection) userSection.style.display = 'none';
   if (resetBtn)    resetBtn.style.display = '';
+
+  // Reset role-specific UI back to admin/demo view
+  if (typeof applyRoleView === 'function') applyRoleView(null);
+
   showAuthOverlay();
   showScreen('welcome');
 });

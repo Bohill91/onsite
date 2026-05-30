@@ -277,6 +277,11 @@ document.querySelectorAll(".filter-chip").forEach(chip => {
   });
 });
 
+// ─── Session User Helper ──────────────────────────────────
+function getSessionUser() {
+  try { return JSON.parse(localStorage.getItem("onsite_auth_v1")); } catch (_) { return null; }
+}
+
 // ─── Tab Routing ──────────────────────────────────────────
 const allTabBtns   = document.querySelectorAll("[data-tab]");
 const allTabPanels = document.querySelectorAll(".tab-panel");
@@ -289,6 +294,193 @@ function switchTab(tab) {
 allTabBtns.forEach(btn => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+
+// ─── Role-Based View ─────────────────────────────────────
+function applyRoleView(user) {
+  const role = user?.type || null;
+
+  const workerTabBtns = document.querySelectorAll('[data-tab="workers"]');
+  const addTabBtns    = document.querySelectorAll('[data-tab="add"]');
+
+  if (role === "worker") {
+    // Hide Workers + Add tabs — not relevant for workers
+    workerTabBtns.forEach(b => { b.style.display = "none"; b.classList.remove("active"); });
+    addTabBtns.forEach(b    => { b.style.display = "none"; b.classList.remove("active"); });
+
+    // Update the Jobs tab label and header for worker context
+    document.querySelectorAll('[data-tab="jobs"] span, [data-tab="jobs"]').forEach(el => {
+      if (el.tagName === "SPAN") el.textContent = "Jobs";
+    });
+    const jobsHeader = document.querySelector("#tab-jobs .panel-title");
+    const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
+    if (jobsHeader) jobsHeader.textContent = "Available Jobs";
+    if (jobsSub)    jobsSub.textContent    = "Open positions that match your trade — starting soon";
+
+    // Remove the job count badge (irrelevant for workers)
+    const jc = document.getElementById("jobCount");
+    if (jc) jc.style.display = "none";
+
+    switchTab("jobs");
+    renderWorkerJobBoard(user);
+
+  } else if (role === "company") {
+    // Show everything
+    workerTabBtns.forEach(b => b.style.display = "");
+    addTabBtns.forEach(b    => b.style.display = "");
+
+    // Reset jobs tab labels
+    const jobsHeader = document.querySelector("#tab-jobs .panel-title");
+    const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
+    if (jobsHeader) jobsHeader.textContent = "Job Requests";
+    if (jobsSub)    jobsSub.textContent    = "Contractor requests awaiting assignment";
+    const jc = document.getElementById("jobCount");
+    if (jc) jc.style.display = "";
+
+    // Default Add tab to job form, not worker form
+    document.querySelectorAll(".add-toggle-btn").forEach(b => b.classList.remove("active"));
+    const jobToggle = document.querySelector('.add-toggle-btn[data-form="job"]');
+    if (jobToggle) jobToggle.classList.add("active");
+    document.querySelector("#formWorker")?.classList.add("hidden");
+    document.querySelector("#formJob")?.classList.remove("hidden");
+
+    switchTab("dashboard");
+
+  } else {
+    // Admin / demo — show everything, default dashboard
+    workerTabBtns.forEach(b => b.style.display = "");
+    addTabBtns.forEach(b    => b.style.display = "");
+    const jobsHeader = document.querySelector("#tab-jobs .panel-title");
+    const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
+    if (jobsHeader) jobsHeader.textContent = "Job Requests";
+    if (jobsSub)    jobsSub.textContent    = "Contractor requests awaiting assignment";
+    const jc = document.getElementById("jobCount");
+    if (jc) jc.style.display = "";
+    switchTab("dashboard");
+  }
+
+  render();
+}
+
+// ─── Worker Job Board ─────────────────────────────────────
+function renderWorkerJobBoard(user) {
+  const jobsList = document.getElementById("jobsList");
+  if (!jobsList) return;
+
+  const trade = (user?.trade || "").toLowerCase();
+
+  // Sort jobs: matching trade first, then by start date
+  const sorted = [...state.jobs].sort((a, b) => {
+    const aMatch = trade && normalize(a.trade) === trade ? 0 : 1;
+    const bMatch = trade && normalize(b.trade) === trade ? 0 : 1;
+    if (aMatch !== bMatch) return aMatch - bMatch;
+    return (new Date(a.start || 0)) - (new Date(b.start || 0));
+  });
+
+  const stats  = getWorkerStats(user?.id || "");
+  const reliability = stats.totalShifts > 0 ? stats.reliability : (user?.reliability ?? 100);
+  const pct    = calcWorkerCompletion(user || {});
+  const tier   = reliabilityTier(reliability);
+
+  const statusCard = `
+    <div class="worker-status-card">
+      <div class="wsc-left">
+        <div class="wsc-avatar ${avatarColor(user?.name || "U")}">${initials(user?.name || "?")}</div>
+        <div class="wsc-info">
+          <div class="wsc-name">${escapeHtml(user?.name || "Worker")}</div>
+          <div class="wsc-trade">${escapeHtml(user?.trade || "Trade not set")}${user?.grade ? ` · ${escapeHtml(user.grade)}` : ""}</div>
+          <div class="wsc-pills">
+            <span class="status-pill ${user?.availability === "not available" ? "unavailable" : "available"}">${user?.availability || "available"}</span>
+            <span class="wsc-verify-badge ${user?.verificationStatus || "incomplete"}">${
+              { verified: "✓ Verified", pending: "Pending Review", incomplete: "Incomplete Profile" }[user?.verificationStatus || "incomplete"]
+            }</span>
+          </div>
+        </div>
+      </div>
+      <div class="wsc-right">
+        ${reliabilityBadge(reliability, 44)}
+        ${completionRingHTML(pct)}
+      </div>
+    </div>`;
+
+  if (!sorted.length) {
+    jobsList.innerHTML = statusCard + emptyState("No open jobs at the moment — check back soon.");
+    return;
+  }
+
+  jobsList.innerHTML = statusCard + sorted.map(job => workerJobCard(job, user)).join("");
+
+  jobsList.querySelectorAll("[data-apply-job]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      btn.textContent = "✓ Interest Registered";
+      btn.disabled = true;
+      btn.classList.add("applied");
+      showToast("Your interest has been registered — you'll be contacted shortly.");
+    });
+  });
+
+  jobsList.querySelectorAll("[data-map-job]").forEach(btn => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
+}
+
+function workerJobCard(job, user) {
+  const trade = (user?.trade || "").toLowerCase();
+  const isMatch = trade && normalize(job.trade) === trade;
+  const hasPin  = job.sitePin && job.sitePin.lat !== null;
+  const daysUntil = job.start
+    ? Math.ceil((new Date(job.start) - new Date()) / 86400000)
+    : null;
+
+  const urgencyLabel = daysUntil !== null
+    ? daysUntil <= 0   ? `<span class="wjc-urgency urgency-now">Starting today</span>`
+    : daysUntil === 1  ? `<span class="wjc-urgency urgency-soon">Starting tomorrow</span>`
+    : daysUntil <= 7   ? `<span class="wjc-urgency urgency-soon">Starting in ${daysUntil} days</span>`
+    :                    `<span class="wjc-urgency urgency-later">In ${daysUntil} days</span>`
+    : "";
+
+  const matchBanner = isMatch
+    ? `<div class="wjc-match-banner">⭐ Matches your trade</div>` : "";
+
+  return `
+  <article class="worker-job-card${isMatch ? " wjc-highlighted" : ""}">
+    ${matchBanner}
+    <div class="wjc-header">
+      <div class="wjc-trade-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </div>
+      <div class="wjc-meta">
+        <div class="wjc-title">${escapeHtml(job.trade)}</div>
+        <div class="wjc-location">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          ${escapeHtml(job.location)}${hasPin ? " · <span class='wjc-pin-confirmed'>Location pinned</span>" : ""}
+        </div>
+      </div>
+      ${urgencyLabel}
+    </div>
+    <div class="wjc-details">
+      ${job.start ? `<div class="wjc-detail-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${new Date(job.start).toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}
+      </div>` : ""}
+      ${job.duration ? `<div class="wjc-detail-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        ${escapeHtml(job.duration)}
+      </div>` : ""}
+      ${job.requiredQualifications ? `<div class="wjc-detail-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        ${escapeHtml(job.requiredQualifications)}
+      </div>` : ""}
+    </div>
+    ${job.arrivalInstructions ? `<div class="wjc-arrival">${escapeHtml(job.arrivalInstructions)}</div>` : ""}
+    <div class="wjc-footer">
+      <button class="wjc-apply-btn" type="button" data-apply-job="${job.id}">Register Interest</button>
+      ${hasPin ? `<button class="wjc-map-btn" type="button" data-map-job="${job.id}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        View Site
+      </button>` : ""}
+    </div>
+  </article>`;
+}
 
 // ─── Form Toggle (Add tab) ────────────────────────────────
 document.querySelectorAll(".add-toggle-btn").forEach(btn => {
@@ -387,14 +579,22 @@ resetDemoBtn.addEventListener("click", () => {
 
 // ─── Render ───────────────────────────────────────────────
 function render() {
+  const user = getSessionUser();
+  const role = user?.type || null;
+
   renderStats();
-  renderWorkers();
-  renderJobs();
-  renderMatches();
   renderActivity();
   renderAttendance();
   workerCount.textContent = state.workers.length;
   jobCount.textContent    = state.jobs.length;
+
+  if (role === "worker") {
+    renderWorkerJobBoard(user);
+  } else {
+    renderWorkers();
+    renderJobs();
+    renderMatches();
+  }
 }
 
 function renderStats() {
