@@ -366,15 +366,12 @@ function renderWorkerJobBoard(user) {
   const jobsList = document.getElementById("jobsList");
   if (!jobsList) return;
 
-  const trade = (user?.trade || "").toLowerCase();
+  const trade = (user?.trade || "").toLowerCase().trim();
 
-  // Sort jobs: matching trade first, then by start date
-  const sorted = [...state.jobs].sort((a, b) => {
-    const aMatch = trade && normalize(a.trade) === trade ? 0 : 1;
-    const bMatch = trade && normalize(b.trade) === trade ? 0 : 1;
-    if (aMatch !== bMatch) return aMatch - bMatch;
-    return (new Date(a.start || 0)) - (new Date(b.start || 0));
-  });
+  // Filter to only jobs matching this worker's trade, sorted by start date
+  const sorted = [...state.jobs]
+    .filter(job => !trade || normalize(job.trade) === trade)
+    .sort((a, b) => (new Date(a.start || 0)) - (new Date(b.start || 0)));
 
   const stats  = getWorkerStats(user?.id || "");
   const reliability = stats.totalShifts > 0 ? stats.reliability : (user?.reliability ?? 100);
@@ -403,7 +400,10 @@ function renderWorkerJobBoard(user) {
     </div>`;
 
   if (!sorted.length) {
-    jobsList.innerHTML = statusCard + emptyState("No open jobs at the moment — check back soon.");
+    const emptyMsg = trade
+      ? `No open ${escapeHtml(user?.trade || trade)} jobs right now — check back soon or update your trade in your profile.`
+      : "No open jobs at the moment — check back soon.";
+    jobsList.innerHTML = statusCard + emptyState(emptyMsg);
     return;
   }
 
@@ -424,8 +424,6 @@ function renderWorkerJobBoard(user) {
 }
 
 function workerJobCard(job, user) {
-  const trade = (user?.trade || "").toLowerCase();
-  const isMatch = trade && normalize(job.trade) === trade;
   const hasPin  = job.sitePin && job.sitePin.lat !== null;
   const daysUntil = job.start
     ? Math.ceil((new Date(job.start) - new Date()) / 86400000)
@@ -438,12 +436,9 @@ function workerJobCard(job, user) {
     :                    `<span class="wjc-urgency urgency-later">In ${daysUntil} days</span>`
     : "";
 
-  const matchBanner = isMatch
-    ? `<div class="wjc-match-banner">⭐ Matches your trade</div>` : "";
-
   return `
-  <article class="worker-job-card${isMatch ? " wjc-highlighted" : ""}">
-    ${matchBanner}
+  <article class="worker-job-card">
+    
     <div class="wjc-header">
       <div class="wjc-trade-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
