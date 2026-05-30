@@ -281,12 +281,20 @@ jobForm.addEventListener("submit", e => {
   logActivity("job", `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}`);
   jobForm.reset();
 
+  // Capture photos
+  const photos = {};
+  ["gate", "entrance", "welfare"].forEach(k => { if (currentJobPhotos[k]) photos[k] = currentJobPhotos[k]; });
+  if (Object.keys(photos).length) job.sitePhotos = photos;
+
   // Reset location section
   currentJobPin = { lat: null, lng: null };
   document.querySelector("#pinCoordsDisplay")?.classList.add("hidden");
   document.querySelector("#siteLocFields")?.classList.add("hidden");
   document.querySelector("#siteLocChevron").style.transform = "";
   if (pickerMarker) { pickerMarker.remove(); pickerMarker = null; }
+
+  // Reset photo cards
+  resetJobPhotos();
 
   saveAndRender();
   showToast("Job request posted");
@@ -611,6 +619,69 @@ function getMatches(job) {
 function findWorker(id) { return state.workers.find(w => w.id === id); }
 function findJob(id)    { return state.jobs.find(j => j.id === id);    }
 
+// ─── Site Photo Upload ────────────────────────────────────
+let currentJobPhotos = { gate: null, entrance: null, welfare: null };
+
+const PHOTO_KEYS = [
+  { key: "gate",     inputId: "photoGate",     prevId: "prvGate",     phId: "phGate"     },
+  { key: "entrance", inputId: "photoEntrance", prevId: "prvEntrance", phId: "phEntrance" },
+  { key: "welfare",  inputId: "photoWelfare",  prevId: "prvWelfare",  phId: "phWelfare"  },
+];
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL("image/jpeg", 0.75)); } catch (err) { reject(err); }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
+  document.getElementById(inputId)?.addEventListener("change", async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      currentJobPhotos[key] = compressed;
+      const card = e.target.closest(".photo-card");
+      const prev = document.getElementById(prevId);
+      const ph   = document.getElementById(phId);
+      if (prev) { prev.src = compressed; prev.style.display = "block"; }
+      if (ph)   { ph.style.display = "none"; }
+      if (card) { card.classList.add("has-photo"); }
+    } catch (_) { showToast("Photo upload failed — try a different image"); }
+  });
+});
+
+function resetJobPhotos() {
+  PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
+    const input = document.getElementById(inputId);
+    const card  = input?.closest(".photo-card");
+    const prev  = document.getElementById(prevId);
+    const ph    = document.getElementById(phId);
+    if (input) input.value = "";
+    if (prev)  { prev.src = ""; prev.style.display = ""; }
+    if (ph)    { ph.style.display = ""; }
+    if (card)  card.classList.remove("has-photo");
+  });
+  currentJobPhotos = { gate: null, entrance: null, welfare: null };
+}
+
 // ─── Site Location & Map System ───────────────────────────
 let pickerMap    = null;
 let pickerMarker = null;
@@ -713,6 +784,23 @@ function openSiteMap(jobId) {
   // Site info content
   document.getElementById("siteInfoPanel").innerHTML = buildSiteInfoHtml(job);
 
+  // Photo strip
+  const photoStrip  = document.getElementById("sitePhotoStrip");
+  const photoLabels = { gate: "Gate", entrance: "Site Entrance", welfare: "Welfare Cabin" };
+  const jobPhotos   = job.sitePhotos || {};
+  const photoEntries = Object.entries(photoLabels).filter(([k]) => jobPhotos[k]);
+  if (photoEntries.length) {
+    photoStrip.innerHTML = photoEntries.map(([k, label]) => `
+      <div class="strip-item" data-lightbox-src="${jobPhotos[k]}" data-lightbox-label="${escapeHtml(label)}">
+        <img src="${jobPhotos[k]}" class="strip-img" alt="${escapeHtml(label)}" />
+        <span class="strip-label">${escapeHtml(label)}</span>
+        <span class="strip-hint">Tap to expand</span>
+      </div>`).join("");
+    photoStrip.classList.remove("hidden");
+  } else {
+    photoStrip.classList.add("hidden");
+  }
+
   siteMapModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
 
@@ -745,7 +833,40 @@ function closeSiteMap() {
 
 document.getElementById("closeMapBtn")?.addEventListener("click", closeSiteMap);
 siteMapModal?.addEventListener("click", e => { if (e.target === siteMapModal) closeSiteMap(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeSiteMap(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteMap(); closePhotoLightbox(); } });
+
+// ─── Photo Lightbox ────────────────────────────────────────
+let lightboxEl = null;
+
+function openPhotoLightbox(src, label) {
+  if (!lightboxEl) {
+    lightboxEl = document.createElement("div");
+    lightboxEl.className = "photo-lightbox";
+    lightboxEl.innerHTML = `
+      <button class="photo-lb-close" type="button" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <img class="photo-lb-img" alt="" />
+      <span class="photo-lb-label"></span>`;
+    lightboxEl.addEventListener("click", e => {
+      if (e.target === lightboxEl || e.target.closest(".photo-lb-close")) closePhotoLightbox();
+    });
+    document.body.appendChild(lightboxEl);
+  }
+  lightboxEl.querySelector(".photo-lb-img").src = src;
+  lightboxEl.querySelector(".photo-lb-img").alt = label;
+  lightboxEl.querySelector(".photo-lb-label").textContent = label;
+  lightboxEl.classList.add("open");
+}
+
+function closePhotoLightbox() {
+  lightboxEl?.classList.remove("open");
+}
+
+document.addEventListener("click", e => {
+  const item = e.target.closest("[data-lightbox-src]");
+  if (item) openPhotoLightbox(item.dataset.lightboxSrc, item.dataset.lightboxLabel);
+});
 
 function siteInfoRow(iconPath, label, value) {
   if (!value) return "";
