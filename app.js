@@ -1,4 +1,5 @@
 const STORAGE_KEY = "sitematch_v2";
+const ACTIVITY_KEY = "sitematch_activity";
 
 const AVATAR_COLORS = ["av-0", "av-1", "av-2", "av-3", "av-4", "av-5"];
 
@@ -83,6 +84,61 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+// ─── Activity Log ─────────────────────────────────────────
+let activityLog = loadActivity();
+
+function loadActivity() {
+  try {
+    const saved = localStorage.getItem(ACTIVITY_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (_) {}
+  return [];
+}
+
+function saveActivity() {
+  try { localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activityLog.slice(0, 50))); } catch (_) {}
+}
+
+function logActivity(type, text) {
+  activityLog.unshift({ type, text, ts: Date.now() });
+  if (activityLog.length > 50) activityLog.pop();
+  saveActivity();
+}
+
+function timeAgo(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60)   return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "short" }).format(new Date(ts));
+}
+
+const ACTIVITY_ICONS = {
+  assign:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  score:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  worker:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  job:     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+  avail:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+};
+
+function renderActivity() {
+  const feed = document.querySelector("#activityFeed");
+  if (!feed) return;
+  if (!activityLog.length) {
+    feed.innerHTML = `<div class="activity-empty">No activity yet — add workers or post jobs to get started.</div>`;
+    return;
+  }
+  feed.innerHTML = activityLog.map(item => `
+    <div class="activity-item">
+      <div class="activity-dot dot-${item.type}">${ACTIVITY_ICONS[item.type] || ""}</div>
+      <div class="activity-body">
+        <div class="activity-text">${item.text}</div>
+        <div class="activity-time">${timeAgo(item.ts)}</div>
+      </div>
+    </div>
+  `).join("");
 }
 
 // ─── Demo Data ────────────────────────────────────────────
@@ -171,14 +227,18 @@ document.querySelectorAll(".add-toggle-btn").forEach(btn => {
 // ─── Forms ────────────────────────────────────────────────
 workerForm.addEventListener("submit", e => {
   e.preventDefault();
+  const name  = document.querySelector("#workerName").value.trim();
+  const trade = document.querySelector("#workerTrade").value.trim();
+  const score = clampScore(document.querySelector("#workerReliability").value);
   state.workers.push({
     id: createId(),
-    name:            document.querySelector("#workerName").value.trim(),
-    trade:           document.querySelector("#workerTrade").value.trim(),
+    name,
+    trade,
     qualifications:  document.querySelector("#workerQualifications").value.trim(),
     availability:    document.querySelector("#workerAvailability").value,
-    reliability:     clampScore(document.querySelector("#workerReliability").value),
+    reliability:     score,
   });
+  logActivity("worker", `<strong>${escapeHtml(name)}</strong> added to roster as ${escapeHtml(trade)} (score ${score})`);
   workerForm.reset();
   document.querySelector("#workerReliability").value = 75;
   saveAndRender();
@@ -188,14 +248,18 @@ workerForm.addEventListener("submit", e => {
 
 jobForm.addEventListener("submit", e => {
   e.preventDefault();
+  const trade    = document.querySelector("#jobTrade").value.trim();
+  const location = document.querySelector("#jobLocation").value.trim();
+  const duration = document.querySelector("#jobDuration").value.trim();
   state.jobs.push({
     id: createId(),
-    trade:      document.querySelector("#jobTrade").value.trim(),
-    location:   document.querySelector("#jobLocation").value.trim(),
+    trade,
+    location,
     start:      document.querySelector("#jobStart").value,
-    duration:   document.querySelector("#jobDuration").value.trim(),
+    duration,
     assignedWorkerId: "",
   });
+  logActivity("job", `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}`);
   jobForm.reset();
   saveAndRender();
   showToast("Job request posted");
@@ -204,6 +268,8 @@ jobForm.addEventListener("submit", e => {
 
 resetDemoBtn.addEventListener("click", () => {
   state = structuredClone(demoData);
+  activityLog = [];
+  saveActivity();
   saveAndRender();
   showToast("Demo data restored");
 });
@@ -214,6 +280,7 @@ function render() {
   renderWorkers();
   renderJobs();
   renderMatches();
+  renderActivity();
   workerCount.textContent = state.workers.length;
   jobCount.textContent    = state.jobs.length;
 }
@@ -277,6 +344,7 @@ function renderWorkers() {
     sel.addEventListener("change", () => {
       const w = findWorker(sel.dataset.workerAvail);
       w.availability = sel.value;
+      logActivity("avail", `<strong>${escapeHtml(w.name)}</strong> marked as <em>${escapeHtml(sel.value)}</em>`);
       saveAndRender();
     });
   });
@@ -284,10 +352,15 @@ function renderWorkers() {
   workersList.querySelectorAll("[data-score-action]").forEach(btn => {
     btn.addEventListener("click", () => {
       const w = findWorker(btn.dataset.workerId);
-      const delta = { onTime: 5, late: -8, noShow: -15 }[btn.dataset.scoreAction];
-      w.reliability = clampScore(w.reliability + delta);
+      const action = btn.dataset.scoreAction;
+      const delta = { onTime: 5, late: -8, noShow: -15 }[action];
+      const prev = w.reliability;
+      w.reliability = clampScore(prev + delta);
+      const labels = { onTime: "completed on time", late: "was late", noShow: "no-showed" };
+      const sign   = delta > 0 ? `+${delta}` : `${delta}`;
+      logActivity("score", `<strong>${escapeHtml(w.name)}</strong> ${labels[action]} — score ${prev} → ${w.reliability} (${sign})`);
       saveAndRender();
-      showToast(btn.dataset.scoreAction === "onTime" ? `+5 reliability for ${w.name}` : `Score updated for ${w.name}`);
+      showToast(action === "onTime" ? `+5 reliability for ${w.name}` : `Score updated for ${w.name}`);
     });
   });
 }
@@ -333,8 +406,12 @@ function renderJobs() {
     sel.addEventListener("change", () => {
       const job = findJob(sel.dataset.assignJob);
       job.assignedWorkerId = sel.value;
+      if (sel.value) {
+        const w = findWorker(sel.value);
+        logActivity("assign", `<strong>${escapeHtml(w.name)}</strong> manually assigned to ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}`);
+        showToast("Worker assigned");
+      }
       saveAndRender();
-      if (sel.value) showToast("Worker assigned");
     });
   });
 }
@@ -393,6 +470,7 @@ function renderMatches() {
       const [best] = getMatches(job);
       if (!best) return;
       job.assignedWorkerId = best.id;
+      logActivity("assign", `<strong>${escapeHtml(best.name)}</strong> auto-assigned as best match for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} (score ${best.reliability})`);
       saveAndRender();
       showToast(`Assigned ${best.name} to job`);
     });
