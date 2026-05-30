@@ -1,0 +1,138 @@
+# Site Location & Navigation System
+
+## Purpose
+
+Workers frequently struggle to locate the correct site entrance on their first day.
+
+The platform must provide exact site access information, not just a postal address.
+
+---
+
+## Job Location Setup
+
+When creating a job, the company must provide:
+
+### Site Address
+
+Standard address lookup field.
+
+Example:
+
+* Project Name
+* Address
+* Postcode
+
+---
+
+### Exact Site Pin (Required)
+
+The company must drop a pin on an interactive map showing the precise worker arrival location.
+
+Examples:
+
+* Main gate
+* Site entrance
+* Welfare cabin
+* Logistics entrance
+* Compound entrance
+* Site office
+
+This pin location should be mandatory before a job can be published.
+
+---
+
+### Optional Arrival Information
+
+Additional fields:
+
+* Site Contact Name
+* Site Contact Number
+* Arrival Instructions
+* Parking Information
+* PPE Requirements
+* Gate Access Instructions
+
+Example:
+
+"Enter via Gate 3 on Eastern Road. Report to Site Office Cabin B."
+
+---
+
+# Worker Access
+
+Workers should only gain access to site location information after:
+
+* Accepting the job
+* Being approved by the company
+
+This prevents unnecessary sharing of site information.
+
+---
+
+# Site Map Screen
+
+Workers should be able to access:
+
+### Interactive Map
+
+Display:
+
+* Exact pinned site location
+* Current worker location
+* Route guidance
+
+---
+
+### Navigation Options
+
+Buttons:
+
+* Open in Google Maps
+* Open in Apple Maps
+* Open in Waze
+
+---
+
+### Site Information
+
+Display:
+
+* Project Name
+* Site Address
+* Arrival Instructions
+* Contact Name
+* Contact Number
+
+---
+
+# Future Enhancement: Geofenced Check-In
+
+Future versions should support:
+
+### Site Arrival Detection
+
+When worker enters site perimeter:
+
+Prompt:
+
+"Have you arrived on site?"
+
+Worker taps:
+
+* Yes
+
+Attendance can be pre-populated.
+
+---
+
+# Future Enhancement: Attendance Validation
+
+Optional future feature:
+
+Worker check-in location must be within a defined radius of the site pin.
+
+Example:
+
+Within 100 metres.
+
+This helps verify attendance and reduces disputes.

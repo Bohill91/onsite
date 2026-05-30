@@ -251,16 +251,43 @@ jobForm.addEventListener("submit", e => {
   const trade    = document.querySelector("#jobTrade").value.trim();
   const location = document.querySelector("#jobLocation").value.trim();
   const duration = document.querySelector("#jobDuration").value.trim();
-  state.jobs.push({
+
+  const job = {
     id: createId(),
     trade,
     location,
     start:      document.querySelector("#jobStart").value,
     duration,
     assignedWorkerId: "",
-  });
-  logActivity("job", `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}`);
+  };
+
+  // Capture optional site location fields
+  const siteAddr = document.querySelector("#jobSiteAddress")?.value.trim();
+  if (siteAddr) job.siteAddress = siteAddr;
+  if (currentJobPin.lat !== null) job.sitePin = { ...currentJobPin };
+  const cName  = document.querySelector("#jobContactName")?.value.trim();
+  const cPhone = document.querySelector("#jobContactPhone")?.value.trim();
+  if (cName || cPhone) job.siteContact = { name: cName || "", phone: cPhone || "" };
+  const arrival = document.querySelector("#jobArrivalInstructions")?.value.trim();
+  if (arrival) job.arrivalInstructions = arrival;
+  const parking = document.querySelector("#jobParking")?.value.trim();
+  if (parking) job.parking = parking;
+  const ppe = document.querySelector("#jobPpe")?.value.trim();
+  if (ppe) job.ppe = ppe;
+  const gate = document.querySelector("#jobGateAccess")?.value.trim();
+  if (gate) job.gateAccess = gate;
+
+  state.jobs.push(job);
+  logActivity("job", `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}`);
   jobForm.reset();
+
+  // Reset location section
+  currentJobPin = { lat: null, lng: null };
+  document.querySelector("#pinCoordsDisplay")?.classList.add("hidden");
+  document.querySelector("#siteLocFields")?.classList.add("hidden");
+  document.querySelector("#siteLocChevron").style.transform = "";
+  if (pickerMarker) { pickerMarker.remove(); pickerMarker = null; }
+
   saveAndRender();
   showToast("Job request posted");
   switchTab("dashboard");
@@ -455,10 +482,15 @@ function renderJobs() {
       saveAndRender();
     });
   });
+
+  jobsList.querySelectorAll("[data-map-job]").forEach(btn => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
 }
 
 function jobCard(job) {
   const assigned = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const hasPin   = job.sitePin && job.sitePin.lat !== null;
 
   return `
   <article class="job-card">
@@ -477,6 +509,10 @@ function jobCard(job) {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             ${escapeHtml(job.duration)}
           </span>` : ""}
+          ${hasPin ? `<span class="job-detail-item job-has-pin">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Location pinned
+          </span>` : ""}
         </div>
       </div>
       ${assigned
@@ -487,6 +523,10 @@ function jobCard(job) {
         : `<span class="unassigned-pill">Unassigned</span>`}
     </div>
     <div class="job-card-footer">
+      ${hasPin ? `<button class="site-loc-view-btn" type="button" data-map-job="${job.id}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Site Location
+      </button>` : ""}
       <select class="job-assign-select" aria-label="Assign worker" data-assign-job="${job.id}">
         <option value="">Manual assignment…</option>
         ${state.workers.map(w =>
@@ -570,6 +610,179 @@ function getMatches(job) {
 
 function findWorker(id) { return state.workers.find(w => w.id === id); }
 function findJob(id)    { return state.jobs.find(j => j.id === id);    }
+
+// ─── Site Location & Map System ───────────────────────────
+let pickerMap    = null;
+let pickerMarker = null;
+let siteViewMap  = null;
+let siteViewMarker = null;
+let currentJobPin  = { lat: null, lng: null };
+
+const siteMapModal = document.getElementById("siteMapModal");
+
+// ── Toggle location section in job form ────────────────────
+document.getElementById("toggleSiteLocBtn")?.addEventListener("click", () => {
+  const fields   = document.getElementById("siteLocFields");
+  const chevron  = document.getElementById("siteLocChevron");
+  const isOpen   = !fields.classList.contains("hidden");
+  fields.classList.toggle("hidden", isOpen);
+  chevron.style.transform = isOpen ? "" : "rotate(180deg)";
+  if (!isOpen) {
+    // Initialise picker map after section is visible
+    requestAnimationFrame(() => initPickerMap());
+  }
+});
+
+// ── Geocode button ─────────────────────────────────────────
+document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
+  const addr = document.getElementById("jobSiteAddress")?.value.trim();
+  if (!addr) { showToast("Enter a site address first"); return; }
+  const btn  = document.getElementById("geocodeBtn");
+  btn.textContent = "Searching…";
+  btn.disabled = true;
+  try {
+    const res  = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1&countrycodes=gb`);
+    const data = await res.json();
+    if (data[0]) {
+      const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
+      if (!pickerMap) initPickerMap();
+      pickerMap.setView([lat, lng], 17);
+      showToast("Map centred — click to drop exact entrance pin");
+    } else { showToast("Address not found — place pin manually on the map"); }
+  } catch (_) { showToast("Search failed — place pin manually on the map"); }
+  btn.textContent = "Find on Map";
+  btn.disabled = false;
+});
+
+function initPickerMap() {
+  if (pickerMap) { pickerMap.invalidateSize(); return; }
+  pickerMap = L.map("jobPickerMap", { zoomControl: true }).setView([52.4862, -1.8904], 11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(pickerMap);
+
+  const pinIcon = L.divIcon({
+    className: "",
+    html: `<div class="site-drop-pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+  });
+
+  pickerMap.on("click", e => {
+    const { lat, lng } = e.latlng;
+    currentJobPin = { lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) };
+    if (pickerMarker) { pickerMarker.setLatLng(e.latlng); }
+    else {
+      pickerMarker = L.marker(e.latlng, { icon: pinIcon, draggable: true }).addTo(pickerMap);
+      pickerMarker.on("dragend", ev => {
+        const p = ev.target.getLatLng();
+        currentJobPin = { lat: parseFloat(p.lat.toFixed(6)), lng: parseFloat(p.lng.toFixed(6)) };
+        updatePinCoords();
+      });
+    }
+    updatePinCoords();
+  });
+}
+
+function updatePinCoords() {
+  const el  = document.getElementById("pinCoordsDisplay");
+  const txt = document.getElementById("pinCoordsText");
+  if (!el || !txt) return;
+  if (currentJobPin.lat !== null) {
+    txt.textContent = `${currentJobPin.lat}, ${currentJobPin.lng}`;
+    el.classList.remove("hidden");
+  } else {
+    el.classList.add("hidden");
+  }
+}
+
+// ── Site Map Modal ─────────────────────────────────────────
+function openSiteMap(jobId) {
+  const job = findJob(jobId);
+  if (!job?.sitePin) return;
+
+  const { lat, lng } = job.sitePin;
+  document.getElementById("siteMapJobName").textContent = `${job.trade} · ${job.location}`;
+
+  // Navigation deep links
+  document.getElementById("navGoogleMaps").href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  document.getElementById("navAppleMaps").href  = `https://maps.apple.com/?daddr=${lat},${lng}`;
+  document.getElementById("navWaze").href        = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+
+  // Site info content
+  document.getElementById("siteInfoPanel").innerHTML = buildSiteInfoHtml(job);
+
+  siteMapModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  // Init or update Leaflet map
+  setTimeout(() => {
+    if (!siteViewMap) {
+      siteViewMap = L.map("siteLeafletMap", { zoomControl: true, attributionControl: false }).setView([lat, lng], 17);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19,
+      }).addTo(siteViewMap);
+
+      const viewIcon = L.divIcon({
+        className: "",
+        html: `<div class="site-view-pin"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
+        iconSize: [40, 40], iconAnchor: [20, 40],
+      });
+      siteViewMarker = L.marker([lat, lng], { icon: viewIcon }).addTo(siteViewMap);
+    } else {
+      siteViewMap.setView([lat, lng], 17);
+      siteViewMarker.setLatLng([lat, lng]);
+      siteViewMap.invalidateSize();
+    }
+  }, 120);
+}
+
+function closeSiteMap() {
+  siteMapModal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+document.getElementById("closeMapBtn")?.addEventListener("click", closeSiteMap);
+siteMapModal?.addEventListener("click", e => { if (e.target === siteMapModal) closeSiteMap(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSiteMap(); });
+
+function siteInfoRow(iconPath, label, value) {
+  if (!value) return "";
+  return `
+    <div class="site-info-row">
+      <div class="site-info-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${iconPath}</svg>
+      </div>
+      <div class="site-info-content">
+        <span class="site-info-label">${label}</span>
+        <span class="site-info-value">${escapeHtml(String(value))}</span>
+      </div>
+    </div>`;
+}
+
+function buildSiteInfoHtml(job) {
+  const rows = [
+    siteInfoRow('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>', "Address", job.siteAddress || job.location),
+    job.siteContact?.name  ? siteInfoRow('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', "Site Contact", job.siteContact.name) : "",
+    job.siteContact?.phone ? `
+    <div class="site-info-row">
+      <div class="site-info-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-1.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.72 2z"/></svg>
+      </div>
+      <div class="site-info-content">
+        <span class="site-info-label">Phone</span>
+        <a class="site-info-value site-phone-link" href="tel:${escapeHtml(job.siteContact.phone)}">${escapeHtml(job.siteContact.phone)}</a>
+      </div>
+    </div>` : "",
+    siteInfoRow('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>', "Arrival", job.arrivalInstructions),
+    siteInfoRow('<rect x="5" y="3" width="14" height="18" rx="1"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/>', "Parking", job.parking),
+    siteInfoRow('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', "PPE Required", job.ppe),
+    siteInfoRow('<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>', "Gate / Access", job.gateAccess),
+  ].filter(Boolean).join("");
+
+  return rows || `<p style="color:var(--ink-3);font-size:0.87rem;padding:8px 0;">No site details added.</p>`;
+}
 
 // ─── Attendance System ────────────────────────────────────
 const ATTENDANCE_KEY = "onsite_attendance_v1";
