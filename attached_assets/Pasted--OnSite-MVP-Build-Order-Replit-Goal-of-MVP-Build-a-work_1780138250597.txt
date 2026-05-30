@@ -1,0 +1,443 @@
+# OnSite MVP Build Order (Replit)
+
+# Goal of MVP
+
+Build a working version where:
+
+* Companies can post jobs
+* Verified workers can be matched and booked
+* Site attendance is tracked
+* Worker compliance is visible
+* Reliability and punctuality scores are generated automatically
+* Workers can navigate directly to the exact site entrance
+* Attendance disputes can be managed with GPS evidence
+
+Do not build unnecessary features yet.
+
+The focus is operational functionality.
+
+---
+
+# PHASE 1 — Core Foundations
+
+## 1. Authentication + User Roles
+
+Create 3 user roles:
+
+* Worker
+* Company
+* Admin
+
+Include:
+
+* Sign up
+* Login
+* Password reset
+* Role-based dashboards
+
+---
+
+## 2. Registration Flows
+
+### Worker Registration
+
+Steps:
+
+#### Basic Information
+
+* Full name
+* Email
+* Mobile number
+* Password
+
+#### Trade Information
+
+* Trade
+* Role / Grade
+* Years experience
+* Location
+* Minimum day rate
+
+#### Compliance Verification
+
+* UTR number
+* Right to work upload
+* Photo ID upload
+* Trade cards/certificates upload
+
+Worker statuses:
+
+* Incomplete
+* Pending Verification
+* Verified
+
+Only verified workers can apply for jobs or be matched.
+
+---
+
+### Company Registration
+
+Fields:
+
+* Company name
+* Contact name
+* Email
+* Mobile number
+* Password
+* Registered address
+* Company registration number
+* VAT number (optional)
+
+---
+
+## 3. Core Database Structure
+
+Create linked models for:
+
+* Users
+* WorkerProfiles
+* CompanyProfiles
+* Jobs
+* Applications
+* Bookings
+* AttendanceRecords
+* Documents
+* ReliabilityScores
+* Disputes
+* SiteLocations
+
+---
+
+# PHASE 2 — Worker Profiles & Compliance
+
+## 4. Structured Worker Profiles
+
+Workers can add:
+
+* Trade
+* Role / Grade
+* Experience
+* Minimum day rate
+* Availability
+* Qualifications
+* Project history
+
+Do NOT use traditional CVs as primary profiles.
+
+Use structured profile data.
+
+---
+
+## 5. Compliance System
+
+Workers can upload:
+
+* CSCS
+* ECS
+* JIB
+* IPAF
+* PASMA
+* SSSTS
+* SMSTS
+* Right to Work documents
+* Photo ID
+
+Store:
+
+* Document type
+* Expiry date
+* Verification status
+
+Display:
+
+* Valid
+* Expiring Soon
+* Expired
+
+---
+
+## 6. Profile Completion System
+
+Show profile completion percentage.
+
+Example:
+
+* Basic Details ✔
+* Qualifications ✔
+* UTR ✔
+* Right to Work ✔
+
+Profiles with higher completion rank higher.
+
+---
+
+# PHASE 3 — Job Posting & Matching
+
+## 7. Job Posting System
+
+Companies can create jobs with:
+
+* Trade required
+* Role / Grade
+* Number of workers required
+* Location
+* Start date
+* Duration
+* Required qualifications
+* Urgency
+* Optional budget
+
+---
+
+## 8. Exact Site Pin System
+
+When posting a job:
+
+Company must:
+
+* Enter site address
+* Drop exact map pin
+
+Examples:
+
+* Main gate
+* Welfare cabin
+* Logistics entrance
+* Site office
+
+Optional:
+
+* Site photos
+* Arrival instructions
+* Parking details
+* Site contact number
+
+---
+
+## 9. Worker Matching System
+
+Do NOT build AI yet.
+
+Basic ranking logic only.
+
+Rank workers by:
+
+* Correct trade
+* Correct qualifications
+* Availability
+* Distance from site
+* Reliability score
+* Punctuality score
+
+---
+
+## 10. Application & Booking System
+
+Workers can:
+
+* View jobs
+* Apply for jobs
+
+Companies can:
+
+* Accept
+* Reject
+
+Once accepted:
+
+* Worker becomes booked
+* Worker gains access to site map and navigation
+
+---
+
+# PHASE 4 — Site Navigation & GPS
+
+## 11. Site Navigation Screen
+
+Booked workers can view:
+
+* Site address
+* Exact site pin
+* Site photos
+* Arrival instructions
+* Site contact details
+
+Buttons:
+
+* Open in Google Maps
+* Open in Apple Maps
+* Open in Waze
+
+---
+
+## 12. GPS Site Check-In
+
+When worker enters site geofence:
+
+Prompt:
+"You appear to have arrived on site."
+
+Worker can:
+
+* Check In
+* Dismiss
+
+Store:
+
+* Timestamp
+* GPS coordinates
+* Distance from site pin
+
+Default geofence:
+100 metres
+
+---
+
+# PHASE 5 — Attendance System (CORE DIFFERENTIATOR)
+
+## 13. Daily Attendance System
+
+Company/site manager records attendance.
+
+Statuses:
+
+* On Time
+* Late
+* No Show
+* Not Required Today
+* Site Cancelled
+
+Attendance should be extremely fast and mobile-friendly.
+
+---
+
+## 14. Automatic Attendance Logic
+
+Generate:
+
+* Reliability score
+* Punctuality score
+* Completed shifts count
+
+Every worker starts at:
+100% reliability
+
+Workers cannot edit scores.
+
+---
+
+## 15. Site Dashboard
+
+Company can view:
+
+* Who checked in
+* Who is late
+* Who did not show
+* Live attendance status
+
+---
+
+# PHASE 6 — Attendance Disputes
+
+## 16. Attendance Dispute System
+
+Workers can dispute:
+
+* No shows
+* Late marks
+* Incorrect attendance
+
+Workers can upload:
+
+* Screenshots
+* Photos
+* Documents
+* Comments
+
+---
+
+## 17. GPS Attendance Validation
+
+When disputes occur:
+
+System checks:
+
+* Was worker inside site geofence?
+* Was check-in recorded?
+* Was GPS recorded near site?
+
+If GPS evidence exists:
+
+Flag:
+"Potential Attendance Conflict Detected"
+
+---
+
+## 18. Attendance Under Review Logic
+
+When dispute is raised:
+
+* Reliability score frozen
+* Payroll status on hold
+* Attendance marked:
+  "Under Review"
+
+Admin can:
+
+* Approve worker claim
+* Approve company claim
+* Amend attendance record
+
+All actions logged in audit trail.
+
+---
+
+# PHASE 7 — Basic Admin Panel
+
+## 19. Admin Dashboard
+
+Admin can:
+
+* View users
+* View jobs
+* View attendance
+* View disputes
+* Verify documents
+* Disable accounts
+* Amend attendance records
+
+---
+
+# WHAT NOT TO BUILD YET
+
+Do NOT build yet:
+
+* AI admin assistant
+* Payroll system
+* Invoice automation
+* Advanced analytics
+* Workforce forecasting
+* Messaging system
+* Training marketplace
+* Dynamic pricing engine
+* Advanced AI matching
+* Accounting integrations
+
+---
+
+# MVP SUCCESS CRITERIA
+
+MVP is complete when:
+
+* Companies can post jobs
+* Workers can register and verify
+* Workers can apply for jobs
+* Companies can book workers
+* Workers can navigate to exact site location
+* GPS check-ins work
+* Attendance is tracked
+* Reliability scores are generated
+* Attendance disputes work
+* Admin can manage the system
+
+That is the MVP.
