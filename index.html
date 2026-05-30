@@ -3,115 +3,205 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Construction Labour Recruitment MVP</title>
+    <title>SiteMatch — Construction Labour Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Construction Labour Recruitment</p>
-        <h1>Worker Matching Admin</h1>
-      </div>
-      <button id="resetDemoBtn" class="secondary-button" type="button">Reset demo data</button>
-    </header>
+    <div class="app-root">
 
-    <main class="app-shell">
-      <section class="panel">
-        <div class="section-heading">
-          <div>
-            <h2>Add Worker</h2>
-            <p>Keep worker records simple and focused on matching.</p>
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-brand">
+          <div class="brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <span class="brand-name">SiteMatch</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="resetDemoBtn" class="ghost-btn" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+            Reset
+          </button>
+        </div>
+      </header>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="dashboard" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </button>
+        <button class="tab-btn" data-tab="workers" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Workers
+          <span class="tab-count" id="workerCount">0</span>
+        </button>
+        <button class="tab-btn" data-tab="jobs" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          Jobs
+          <span class="tab-count" id="jobCount">0</span>
+        </button>
+        <button class="tab-btn" data-tab="add" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Add New
+        </button>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="content-area">
+
+        <!-- DASHBOARD TAB -->
+        <div class="tab-panel active" id="tab-dashboard">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Match Dashboard</h2>
+              <p class="panel-subtitle">Best available workers ranked by reliability score</p>
+            </div>
+          </div>
+          <div id="matchResults" class="card-list"></div>
+        </div>
+
+        <!-- WORKERS TAB -->
+        <div class="tab-panel" id="tab-workers">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Worker Roster</h2>
+              <p class="panel-subtitle">Manage profiles, availability &amp; reliability ratings</p>
+            </div>
+          </div>
+          <div id="workersList" class="card-list"></div>
+        </div>
+
+        <!-- JOBS TAB -->
+        <div class="tab-panel" id="tab-jobs">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Job Requests</h2>
+              <p class="panel-subtitle">Contractor requests awaiting assignment</p>
+            </div>
+          </div>
+          <div id="jobsList" class="card-list"></div>
+        </div>
+
+        <!-- ADD TAB -->
+        <div class="tab-panel" id="tab-add">
+          <div class="add-toggle">
+            <button class="add-toggle-btn active" data-form="worker" type="button">Add Worker</button>
+            <button class="add-toggle-btn" data-form="job" type="button">Add Job</button>
+          </div>
+
+          <div id="formWorker" class="form-section">
+            <div class="form-card">
+              <div class="form-card-header">
+                <div class="form-icon form-icon--worker">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div>
+                  <h3>Register Worker</h3>
+                  <p>Add a tradesperson to the matching pool</p>
+                </div>
+              </div>
+              <form id="workerForm" class="form-grid">
+                <label class="field-label">
+                  Full Name
+                  <input id="workerName" type="text" required placeholder="e.g. Sam Taylor" />
+                </label>
+                <label class="field-label">
+                  Trade
+                  <input id="workerTrade" type="text" required placeholder="e.g. Electrician" />
+                </label>
+                <label class="field-label wide">
+                  Qualifications &amp; Tickets
+                  <input id="workerQualifications" type="text" placeholder="e.g. ECS, IPAF, CSCS" />
+                </label>
+                <label class="field-label">
+                  Availability
+                  <select id="workerAvailability">
+                    <option value="available">Available</option>
+                    <option value="not available">Not available</option>
+                  </select>
+                </label>
+                <label class="field-label">
+                  Reliability Score
+                  <div class="score-input-wrap">
+                    <input id="workerReliability" type="number" min="0" max="100" value="75" required />
+                    <span class="score-suffix">/100</span>
+                  </div>
+                </label>
+                <button class="primary-btn wide" type="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Worker
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div id="formJob" class="form-section hidden">
+            <div class="form-card">
+              <div class="form-card-header">
+                <div class="form-icon form-icon--job">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </div>
+                <div>
+                  <h3>Post Job Request</h3>
+                  <p>Log a contractor's labour requirement</p>
+                </div>
+              </div>
+              <form id="jobForm" class="form-grid">
+                <label class="field-label">
+                  Trade Required
+                  <input id="jobTrade" type="text" required placeholder="e.g. Plumber" />
+                </label>
+                <label class="field-label">
+                  Location
+                  <input id="jobLocation" type="text" required placeholder="e.g. Manchester" />
+                </label>
+                <label class="field-label">
+                  Start Date &amp; Time
+                  <input id="jobStart" type="datetime-local" required />
+                </label>
+                <label class="field-label">
+                  Duration
+                  <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
+                </label>
+                <button class="primary-btn wide" type="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Post Job Request
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 
-        <form id="workerForm" class="form-grid">
-          <label>
-            Name
-            <input id="workerName" type="text" required placeholder="e.g. Sam Taylor" />
-          </label>
-          <label>
-            Trade
-            <input id="workerTrade" type="text" required placeholder="e.g. Electrician" />
-          </label>
-          <label class="wide">
-            Qualifications / tickets
-            <input id="workerQualifications" type="text" placeholder="e.g. ECS, IPAF, CSCS" />
-          </label>
-          <label>
-            Availability
-            <select id="workerAvailability">
-              <option value="available">Available</option>
-              <option value="not available">Not available</option>
-            </select>
-          </label>
-          <label>
-            Reliability score
-            <input id="workerReliability" type="number" min="0" max="100" value="75" required />
-          </label>
-          <button class="primary-button wide" type="submit">Add worker</button>
-        </form>
-      </section>
+      </main>
 
-      <section class="panel">
-        <div class="section-heading">
-          <div>
-            <h2>Add Job Request</h2>
-            <p>Contractor request fields are intentionally minimal.</p>
+      <!-- Mobile Bottom Nav -->
+      <nav class="bottom-nav">
+        <button class="bottom-nav-btn active" data-tab="dashboard" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="bottom-nav-btn" data-tab="workers" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Workers</span>
+        </button>
+        <button class="bottom-nav-btn add-btn" data-tab="add" type="button">
+          <div class="add-fab">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </div>
-        </div>
+          <span>Add</span>
+        </button>
+        <button class="bottom-nav-btn" data-tab="jobs" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span>Jobs</span>
+        </button>
+        <button class="bottom-nav-btn" data-tab="workers" type="button" id="bottomWorkersBtn" style="display:none"></button>
+      </nav>
 
-        <form id="jobForm" class="form-grid">
-          <label>
-            Trade required
-            <input id="jobTrade" type="text" required placeholder="e.g. Plumber" />
-          </label>
-          <label>
-            Location
-            <input id="jobLocation" type="text" required placeholder="e.g. Manchester" />
-          </label>
-          <label>
-            Start date/time
-            <input id="jobStart" type="datetime-local" required />
-          </label>
-          <label>
-            Duration
-            <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
-          </label>
-          <button class="primary-button wide" type="submit">Add job request</button>
-        </form>
-      </section>
-
-      <section class="panel wide-panel">
-        <div class="section-heading">
-          <div>
-            <h2>Match Results</h2>
-            <p>Available workers are matched by trade, then ranked by reliability.</p>
-          </div>
-        </div>
-        <div id="matchResults" class="list"></div>
-      </section>
-
-      <section class="panel wide-panel">
-        <div class="section-heading">
-          <div>
-            <h2>Admin View</h2>
-            <p>Review workers and jobs, override assignments, and update reliability.</p>
-          </div>
-        </div>
-
-        <div class="admin-grid">
-          <div>
-            <h3>Workers</h3>
-            <div id="workersList" class="list"></div>
-          </div>
-          <div>
-            <h3>Job Requests</h3>
-            <div id="jobsList" class="list"></div>
-          </div>
-        </div>
-      </section>
-    </main>
-
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
