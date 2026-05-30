@@ -87,7 +87,8 @@ button, input, select, textarea {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  height: 60px;
+  height: auto;
+  min-height: 60px;
   position: sticky;
   top: 0;
   z-index: 50;
@@ -100,8 +101,8 @@ button, input, select, textarea {
 }
 
 .brand-logo {
-  width: 80px;
-  height: 40px;
+  width: 400px;
+  height: 200px;
   object-fit: contain;
   flex-shrink: 0;
 }
