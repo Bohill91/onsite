@@ -1,0 +1,435 @@
+# ADDITIONAL REQUIREMENTS TO APPEND TO ONSITE MVP SPECIFICATION
+
+## User Registration & Authentication
+
+Upon opening the app, users must see:
+
+### Welcome Screen
+
+**Welcome to OnSite**
+
+Find work or hire verified tradespeople.
+
+Buttons:
+
+* Join as a Worker
+* Join as a Company
+
+---
+
+## Login Screen
+
+Fields:
+
+* Email Address
+* Password
+
+Options:
+
+* Login
+* Forgot Password
+* Register
+
+---
+
+# Worker Registration Flow
+
+Worker registration should be broken into stages to maximise sign-up completion.
+
+---
+
+## Step 1: Basic Details
+
+Fields:
+
+* Full Name
+* Email Address
+* Mobile Number
+* Password
+
+---
+
+## Step 2: Trade Information
+
+Fields:
+
+* Trade
+* Role / Grade
+* Years Experience
+* Location
+* Minimum Daily Rate
+
+Examples:
+
+Electrical:
+
+* Mate
+* Improver
+* Electrician
+* Approved Electrician
+* Supervisor
+
+Plumbing:
+
+* Mate
+* Improver
+* Plumber
+* Pipefitter
+* Mechanical Supervisor
+
+Carpentry:
+
+* Mate
+* Carpenter
+* Shopfitter
+* Supervisor
+
+Groundworks:
+
+* Labourer
+* Groundworker
+* Plant Operator
+* Foreman
+
+The system should support adding additional trades and grades from the admin panel.
+
+---
+
+## Step 3: Compliance Verification
+
+Workers must complete compliance verification before becoming eligible for work.
+
+Required documents:
+
+### UTR Number
+
+* 10-digit UTR number field
+* Validation required
+
+### Right to Work in the UK
+
+Accepted documents:
+
+* British Passport
+* Irish Passport
+* UK Share Code
+* Biometric Residence Permit
+
+### Photo Identification
+
+Accepted documents:
+
+* Passport
+* Driving Licence
+
+### Trade Cards & Certifications
+
+Examples:
+
+* CSCS
+* ECS
+* JIB
+* IPAF
+* PASMA
+* SSSTS
+* SMSTS
+* First Aid
+
+Allow multiple document uploads.
+
+---
+
+# Worker Verification Statuses
+
+Workers should have one of the following statuses:
+
+### Incomplete Registration
+
+Profile created.
+
+Cannot:
+
+* Apply for jobs
+* Accept jobs
+* Be matched automatically
+
+---
+
+### Pending Verification
+
+Documents uploaded.
+
+Awaiting admin review.
+
+Cannot:
+
+* Accept jobs
+
+---
+
+### Verified
+
+All compliance checks approved.
+
+Can:
+
+* Apply for jobs
+* Accept jobs
+* Be automatically matched
+
+Only verified workers should appear in search results and auto-match algorithms.
+
+---
+
+# Worker Profile Completion System
+
+Display profile completion percentage.
+
+Examples:
+
+Basic Information ✔
+
+Trade Information ✔
+
+Profile Photo ✔
+
+UTR Number ✔
+
+Right to Work ✔
+
+Qualifications ✔
+
+Completion:
+
+100% Complete – Verified
+
+The platform should encourage workers to reach 100% completion.
+
+Profiles with higher completion should rank higher in search and matching.
+
+---
+
+# Company Registration Flow
+
+Fields:
+
+### Company Details
+
+* Company Name
+* Contact Name
+* Email Address
+* Mobile Number
+* Password
+
+### Company Information
+
+* Registered Address
+* Company Registration Number
+* VAT Number (Optional Initially)
+
+---
+
+# Company Verification (Future Phase)
+
+The system should support future verification of:
+
+* Companies House details
+* VAT status
+* Credit checks
+
+---
+
+# User Roles
+
+## Worker
+
+Can:
+
+* Create profile
+* Upload compliance documents
+* Apply for jobs
+* Accept jobs
+* Track attendance
+* View earnings
+
+---
+
+## Company
+
+Can:
+
+* Post jobs
+* Review candidates
+* Approve workers
+* Submit attendance
+* View invoices
+* Manage workforce
+
+---
+
+# Attendance System (Updated Requirements)
+
+Attendance is one of the platform's core features.
+
+Workers MUST NOT self-report reliability.
+
+Reliability must be generated from actual attendance records.
+
+---
+
+## Default Reliability Score
+
+Every worker starts with:
+
+Reliability Score = 100%
+
+No worker can manually edit or influence this score.
+
+---
+
+## Daily Attendance Submission
+
+The client/site manager must record attendance daily.
+
+Attendance options:
+
+* On Time
+* Late
+* No Show
+* Not Required Today
+* Site Cancelled
+
+Attendance should be fast and mobile-friendly.
+
+Target completion time:
+
+Less than 30 seconds for an entire workforce.
+
+---
+
+## Reliability Tracking
+
+Reliability should be calculated automatically.
+
+Examples:
+
+On Time:
+No penalty
+
+Late:
+Small penalty
+
+No Show:
+Major penalty
+
+Client Cancelled:
+No impact
+
+Site Closed:
+No impact
+
+---
+
+## Performance Metrics
+
+Track three independent scores:
+
+### Reliability
+
+Did they attend?
+
+### Punctuality
+
+Did they arrive on time?
+
+### Performance
+
+How did the client rate their work?
+
+---
+
+## Example Worker Statistics
+
+Reliability:
+99.4%
+
+Punctuality:
+96.7%
+
+Performance:
+4.8/5
+
+Completed Shifts:
+142
+
+No Shows:
+1
+
+Late Arrivals:
+6
+
+These statistics should become a key differentiator for OnSite.
+
+---
+
+# Attendance-Driven Payroll & Invoicing
+
+Attendance submissions should automatically generate:
+
+* Approved Timesheets
+* Payroll Records
+* Invoices
+
+Goal:
+
+Eliminate manual timesheets and recruiter administration.
+
+---
+
+# Attendance Disputes
+
+Workers must be able to challenge attendance records.
+
+Example:
+
+Client marks No Show.
+
+Worker submits dispute.
+
+Admin reviews evidence.
+
+Admin can amend attendance records if required.
+
+This prevents abuse and protects worker reliability scores.
+
+---
+
+# Future Payroll Features
+
+Prepare database architecture for:
+
+* CIS payments
+* PAYE workers
+* Payroll exports
+* Invoice generation
+* Accounting software integrations
+
+Even if these features are not included in MVP, the architecture should support future implementation.
+
+---
+
+# Core Principle
+
+OnSite should become the trusted workforce operating system for construction.
+
+Trust should be built through:
+
+* Verified workers
+* Compliance tracking
+* Attendance records
+* Reliability scoring
+* Automated matching
+* Automated payroll approval
+* Automated workforce management
+
+The long-term objective is to replace traditional recruitment administration with technology and performance data.
