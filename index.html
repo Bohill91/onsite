@@ -8,9 +8,418 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="auth.css" />
   </head>
   <body>
-    <div class="app-root">
+
+    <!-- ══════════════════════════════════════════════════════
+         AUTH OVERLAY
+    ══════════════════════════════════════════════════════ -->
+    <div id="auth-overlay" class="auth-overlay" style="display:none">
+
+      <!-- ── Welcome Screen ─────────────────────────────── -->
+      <div class="auth-screen" id="screen-welcome">
+        <div class="welcome-inner">
+          <img src="/logo.png" alt="OnSite" class="auth-logo" style="margin-bottom:24px;" />
+          <p class="welcome-tagline">The smarter way to find construction work.</p>
+          <p class="welcome-sub">Join thousands of verified tradespeople and contractors already on OnSite.</p>
+          <div class="welcome-actions">
+            <button class="cta-btn" type="button" onclick="showScreen('worker-reg'); setWorkerStep(1);">
+              <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Join as a Worker
+            </button>
+            <button class="cta-btn cta-btn--secondary" type="button" onclick="showScreen('company-reg'); setCompanyStep(1);">
+              <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              Join as a Company
+            </button>
+          </div>
+          <p class="auth-link-row">Already have an account? <button class="auth-link" type="button" onclick="showScreen('login');">Sign in</button></p>
+        </div>
+      </div>
+
+      <!-- ── Login Screen ────────────────────────────────── -->
+      <div class="auth-screen" id="screen-login">
+        <div class="auth-header-bar">
+          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+          <div style="width:60px;"></div>
+        </div>
+        <div class="auth-inner">
+          <div class="auth-form-wrap">
+            <h1 class="auth-title">Welcome back</h1>
+            <p class="auth-subtitle">Sign in to your OnSite account</p>
+            <div id="loginError" class="auth-error"></div>
+            <form id="loginForm">
+              <div class="auth-field-group">
+                <div class="auth-field">
+                  <label class="auth-label" for="loginEmail">Email Address</label>
+                  <input class="auth-input" id="loginEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
+                </div>
+                <div class="auth-field">
+                  <label class="auth-label" for="loginPassword">Password</label>
+                  <input class="auth-input" id="loginPassword" type="password" placeholder="Your password" required autocomplete="current-password" />
+                </div>
+                <div class="auth-forgot-row">
+                  <button class="auth-link" type="button" onclick="showScreen('forgot');">Forgot password?</button>
+                </div>
+              </div>
+              <button class="auth-submit-btn" type="submit">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                Sign In
+              </button>
+            </form>
+            <p class="auth-link-row" style="margin-top:20px;">
+              Don't have an account?
+              <button class="auth-link" type="button" onclick="showScreen('welcome');">Register</button>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Forgot Password ─────────────────────────────── -->
+      <div class="auth-screen" id="screen-forgot">
+        <div class="auth-header-bar">
+          <button class="auth-back-btn" type="button" onclick="showScreen('login');">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+          <div style="width:60px;"></div>
+        </div>
+        <div class="auth-inner">
+          <div class="auth-form-wrap">
+            <h1 class="auth-title">Reset password</h1>
+            <p class="auth-subtitle">Enter your email and we'll send you a reset link.</p>
+            <div id="forgotFormWrap">
+              <form id="forgotForm">
+                <div class="auth-field-group">
+                  <div class="auth-field">
+                    <label class="auth-label" for="forgotEmail">Email Address</label>
+                    <input class="auth-input" id="forgotEmail" type="email" placeholder="your@email.com" required />
+                  </div>
+                </div>
+                <button class="auth-submit-btn" type="submit">Send Reset Link</button>
+              </form>
+            </div>
+            <div id="forgotMsg" style="display:none;">
+              <div class="verify-banner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                If that email is registered, a reset link has been sent. Check your inbox.
+              </div>
+              <button class="auth-submit-btn" type="button" onclick="showScreen('login');">Back to Sign In</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Worker Registration ─────────────────────────── -->
+      <div class="auth-screen" id="screen-worker-reg">
+        <div class="auth-header-bar">
+          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+          <div style="width:60px;"></div>
+        </div>
+        <div class="auth-inner">
+          <div class="auth-form-wrap">
+            <div class="stepper" id="workerStepper">
+              <div class="stepper-item">
+                <div class="stepper-dot active">1</div>
+              </div>
+              <div class="stepper-line"></div>
+              <div class="stepper-item">
+                <div class="stepper-dot">2</div>
+              </div>
+              <div class="stepper-line"></div>
+              <div class="stepper-item">
+                <div class="stepper-dot">3</div>
+              </div>
+            </div>
+            <p class="stepper-label" id="workerStepLabel">Step <strong>1</strong> of 3 — Basic Details</p>
+
+            <!-- Step 1: Basic Details -->
+            <div class="reg-step active" data-step="1">
+              <h1 class="auth-title">Join as a Worker</h1>
+              <p class="auth-subtitle">Create your profile to start getting matched with jobs.</p>
+              <div id="step1Error" class="auth-error"></div>
+              <form id="workerStep1Form">
+                <div class="auth-field-group">
+                  <div class="auth-field">
+                    <label class="auth-label" for="regName">Full Name</label>
+                    <input class="auth-input" id="regName" type="text" placeholder="e.g. Sam Taylor" required autocomplete="name" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regEmail">Email Address</label>
+                    <input class="auth-input" id="regEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regPhone">Mobile Number</label>
+                    <input class="auth-input" id="regPhone" type="tel" placeholder="e.g. 07700 900000" required autocomplete="tel" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regPassword">Password</label>
+                    <input class="auth-input" id="regPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regPassword2">Confirm Password</label>
+                    <input class="auth-input" id="regPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                  </div>
+                </div>
+                <button class="auth-submit-btn" type="submit">
+                  Continue
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </form>
+              <p class="auth-link-row" style="margin-top:16px;">Already have an account? <button class="auth-link" type="button" onclick="showScreen('login');">Sign in</button></p>
+            </div>
+
+            <!-- Step 2: Trade Information -->
+            <div class="reg-step" data-step="2">
+              <h1 class="auth-title">Your Trade</h1>
+              <p class="auth-subtitle">Tell us what you do so we can match you with the right jobs.</p>
+              <form id="workerStep2Form">
+                <div class="auth-field-group">
+                  <div class="auth-input-row">
+                    <div class="auth-field">
+                      <label class="auth-label" for="regTrade">Trade</label>
+                      <select class="auth-input auth-select" id="regTrade" required>
+                        <option value="Electrical">Electrical</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Carpentry">Carpentry</option>
+                        <option value="Groundworks">Groundworks</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div class="auth-field">
+                      <label class="auth-label" for="regGrade">Role / Grade</label>
+                      <select class="auth-input auth-select" id="regGrade" required></select>
+                    </div>
+                  </div>
+                  <div class="auth-input-row">
+                    <div class="auth-field">
+                      <label class="auth-label" for="regYearsExp">Years Experience</label>
+                      <input class="auth-input" id="regYearsExp" type="number" min="0" max="60" placeholder="e.g. 5" required />
+                    </div>
+                    <div class="auth-field">
+                      <label class="auth-label" for="regMinRate">Min. Daily Rate (£)</label>
+                      <input class="auth-input" id="regMinRate" type="number" min="0" placeholder="e.g. 200" required />
+                    </div>
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regLocation">Location</label>
+                    <input class="auth-input" id="regLocation" type="text" placeholder="e.g. Manchester" required />
+                  </div>
+                </div>
+                <button class="auth-submit-btn" type="submit">
+                  Continue
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setWorkerStep(1);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  Back
+                </button>
+              </form>
+            </div>
+
+            <!-- Step 3: Compliance Verification -->
+            <div class="reg-step" data-step="3">
+              <h1 class="auth-title">Compliance</h1>
+              <p class="auth-subtitle">Required to become eligible for work on the platform.</p>
+              <div class="verify-banner">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Documents will be reviewed by our compliance team before you can accept jobs.
+              </div>
+              <div id="step3Error" class="auth-error"></div>
+              <form id="workerStep3Form">
+                <div class="auth-field-group">
+                  <p class="auth-section-heading">UTR Number</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regUTR">Unique Taxpayer Reference</label>
+                    <input class="auth-input" id="regUTR" type="text" placeholder="10-digit UTR number" maxlength="10" required />
+                    <span class="auth-hint">Your 10-digit UTR from HMRC — found on tax returns or the HMRC app.</span>
+                  </div>
+
+                  <p class="auth-section-heading">Right to Work in the UK</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regRightToWork">Document Type</label>
+                    <select class="auth-input auth-select" id="regRightToWork" required>
+                      <option value="">Select document…</option>
+                      <option value="British Passport">British Passport</option>
+                      <option value="Irish Passport">Irish Passport</option>
+                      <option value="UK Share Code">UK Share Code</option>
+                      <option value="Biometric Residence Permit">Biometric Residence Permit</option>
+                    </select>
+                  </div>
+
+                  <p class="auth-section-heading">Photo Identification</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regPhotoId">Document Type</label>
+                    <select class="auth-input auth-select" id="regPhotoId" required>
+                      <option value="">Select document…</option>
+                      <option value="Passport">Passport</option>
+                      <option value="Driving Licence">Driving Licence</option>
+                    </select>
+                  </div>
+
+                  <p class="auth-section-heading">Trade Cards &amp; Certifications</p>
+                  <div class="cert-checkboxes" id="certCheckboxes"></div>
+                </div>
+                <button class="auth-submit-btn" type="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Complete Registration
+                </button>
+                <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setWorkerStep(2);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  Back
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Worker Success Screen ───────────────────────── -->
+      <div class="auth-screen" id="screen-worker-success">
+        <div class="success-inner">
+          <div class="success-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 class="success-title">You're registered, <span id="workerSuccessName"></span>!</h1>
+          <p class="success-sub">Your documents are pending review. You'll be notified when your account is verified and you can start accepting jobs.</p>
+          <div class="completion-card">
+            <div class="completion-header">
+              <span class="completion-label">Profile Completion</span>
+              <span class="completion-pct" id="workerCompletionPct">0%</span>
+            </div>
+            <div class="completion-bar-bg">
+              <div class="completion-bar-fill" id="workerCompletionBar" style="width:0%"></div>
+            </div>
+            <ul class="completion-checklist" id="completionChecklist"></ul>
+          </div>
+          <button class="cta-btn" type="button" id="workerSuccessContinueBtn">Continue to OnSite</button>
+        </div>
+      </div>
+
+      <!-- ── Company Registration ────────────────────────── -->
+      <div class="auth-screen" id="screen-company-reg">
+        <div class="auth-header-bar">
+          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+          <div style="width:60px;"></div>
+        </div>
+        <div class="auth-inner">
+          <div class="auth-form-wrap">
+            <div class="stepper" id="companyStepper">
+              <div class="stepper-item">
+                <div class="stepper-dot active">1</div>
+              </div>
+              <div class="stepper-line"></div>
+              <div class="stepper-item">
+                <div class="stepper-dot">2</div>
+              </div>
+            </div>
+            <p class="stepper-label" id="companyStepLabel">Step <strong>1</strong> of 2 — Company Details</p>
+
+            <!-- Step 1: Company Details -->
+            <div class="company-step active" data-step="1">
+              <h1 class="auth-title">Join as a Company</h1>
+              <p class="auth-subtitle">Post jobs and connect with verified tradespeople.</p>
+              <div id="companyStep1Error" class="auth-error"></div>
+              <form id="companyStep1Form">
+                <div class="auth-field-group">
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyName">Company Name</label>
+                    <input class="auth-input" id="companyName" type="text" placeholder="e.g. Apex Contractors Ltd" required />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyContactName">Contact Name</label>
+                    <input class="auth-input" id="companyContactName" type="text" placeholder="Your full name" required autocomplete="name" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyEmail">Email Address</label>
+                    <input class="auth-input" id="companyEmail" type="email" placeholder="contact@company.co.uk" required autocomplete="email" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyPhone">Mobile Number</label>
+                    <input class="auth-input" id="companyPhone" type="tel" placeholder="e.g. 07700 900000" required autocomplete="tel" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyPassword">Password</label>
+                    <input class="auth-input" id="companyPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyPassword2">Confirm Password</label>
+                    <input class="auth-input" id="companyPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                  </div>
+                </div>
+                <button class="auth-submit-btn" type="submit">
+                  Continue
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </form>
+              <p class="auth-link-row" style="margin-top:16px;">Already have an account? <button class="auth-link" type="button" onclick="showScreen('login');">Sign in</button></p>
+            </div>
+
+            <!-- Step 2: Company Information -->
+            <div class="company-step" data-step="2">
+              <h1 class="auth-title">Company Details</h1>
+              <p class="auth-subtitle">Your registered business information.</p>
+              <form id="companyStep2Form">
+                <div class="auth-field-group">
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyAddress">Registered Address</label>
+                    <input class="auth-input" id="companyAddress" type="text" placeholder="e.g. 10 High Street, London, SW1A 1AA" required />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyRegNumber">Company Registration Number</label>
+                    <input class="auth-input" id="companyRegNumber" type="text" placeholder="e.g. 12345678" required />
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="companyVAT">VAT Number <span style="font-weight:400;color:var(--ink-3);">(optional)</span></label>
+                    <input class="auth-input" id="companyVAT" type="text" placeholder="e.g. GB 123 456 789" />
+                  </div>
+                </div>
+                <button class="auth-submit-btn" type="submit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Create Company Account
+                </button>
+                <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setCompanyStep(1);">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  Back
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Company Success Screen ──────────────────────── -->
+      <div class="auth-screen" id="screen-company-success">
+        <div class="success-inner">
+          <div class="success-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 class="success-title">Welcome to OnSite!</h1>
+          <p class="success-sub"><strong id="companySuccessName"></strong> is now registered. You can start posting jobs and browsing verified tradespeople right away.</p>
+          <button class="cta-btn" type="button" id="companySuccessContinueBtn">Go to Dashboard</button>
+        </div>
+      </div>
+
+    </div><!-- /auth-overlay -->
+
+
+    <!-- ══════════════════════════════════════════════════════
+         MAIN APP
+    ══════════════════════════════════════════════════════ -->
+    <div class="app-root" id="main-app">
 
       <!-- Top Bar -->
       <header class="topbar">
@@ -22,6 +431,18 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
             Reset
           </button>
+          <!-- User section (shown when logged in) -->
+          <div id="topbar-user" class="topbar-user" style="display:none">
+            <div class="topbar-user-avatar" id="topbar-user-initials"></div>
+            <div class="topbar-user-info">
+              <div class="topbar-user-name" id="topbar-user-name"></div>
+              <span class="user-status-badge" id="topbar-user-status"></span>
+            </div>
+            <button id="logoutBtn" class="ghost-btn ghost-btn--logout" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -219,7 +640,9 @@
         <button class="bottom-nav-btn" data-tab="workers" type="button" id="bottomWorkersBtn" style="display:none"></button>
       </nav>
 
-    </div>
+    </div><!-- /app-root -->
+
     <script src="app.js"></script>
+    <script src="auth.js"></script>
   </body>
 </html>
