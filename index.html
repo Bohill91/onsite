@@ -864,8 +864,20 @@
       </div>
     </div>
 
+    <!-- AI Assistant FAB -->
+    <button id="aiFab" class="ai-fab" type="button" aria-label="Open AI Assistant" aria-expanded="false">
+      <svg class="ai-fab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      <span class="ai-fab-label">AI</span>
+    </button>
+
+    <!-- AI Chat Panel -->
+    <div id="aiPanelWrapper" class="ai-panel-wrapper hidden">
+      <div id="aiChatPanel" class="ai-chat-panel"></div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="app.js"></script>
     <script src="auth.js"></script>
+    <script src="ai.js"></script>
   </body>
 </html>
