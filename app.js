@@ -281,6 +281,7 @@ function render() {
   renderJobs();
   renderMatches();
   renderActivity();
+  renderAttendance();
   workerCount.textContent = state.workers.length;
   jobCount.textContent    = state.jobs.length;
 }
@@ -382,6 +383,17 @@ function workerCard(worker) {
   const avCls    = avatarColor(worker.name);
   const statusCls = worker.availability === "available" ? "available" : "unavailable";
   const quals    = (worker.qualifications || "").split(",").map(q => q.trim()).filter(Boolean);
+  const stats    = getWorkerStats(worker.id);
+
+  const statsRow = stats.totalShifts > 0 ? `
+    <div class="worker-att-stats">
+      <span class="w-stat"><span style="color:${stats.reliability>=90?"var(--orange)":stats.reliability>=75?"var(--green-text)":"var(--red-text)"};font-weight:700">${stats.reliability}%</span> reliability</span>
+      <span class="w-stat-sep">·</span>
+      <span class="w-stat"><span style="font-weight:700">${stats.punctuality??100}%</span> punctuality</span>
+      ${stats.performance ? `<span class="w-stat-sep">·</span><span class="w-stat"><span style="color:var(--amber);font-weight:700">★${stats.performance}</span></span>` : ""}
+      <span class="w-stat-sep">·</span>
+      <span class="w-stat">${stats.totalShifts} shift${stats.totalShifts!==1?"s":""}</span>
+    </div>` : "";
 
   return `
   <article class="worker-card">
@@ -397,6 +409,7 @@ function workerCard(worker) {
       </div>
       ${reliabilityBadge(worker.reliability)}
     </div>
+    ${statsRow}
     <div class="worker-card-actions">
       <select class="worker-select" aria-label="Update availability" data-worker-avail="${worker.id}">
         <option value="available"     ${worker.availability === "available"     ? "selected" : ""}>Available</option>
@@ -558,5 +571,227 @@ function getMatches(job) {
 function findWorker(id) { return state.workers.find(w => w.id === id); }
 function findJob(id)    { return state.jobs.find(j => j.id === id);    }
 
+// ─── Attendance System ────────────────────────────────────
+const ATTENDANCE_KEY = "onsite_attendance_v1";
+
+let attendanceRecords  = loadAttendanceRecords();
+let todayAttendanceMap = {}; // workerId -> { status, rating }
+
+function loadAttendanceRecords() {
+  try { const s = localStorage.getItem(ATTENDANCE_KEY); if (s) return JSON.parse(s); } catch (_) {}
+  return [];
+}
+function saveAttendanceRecords() {
+  try { localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(attendanceRecords)); } catch (_) {}
+}
+function todayDateStr() { return new Date().toISOString().split("T")[0]; }
+function formatAttDate(d) {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" })
+    .format(new Date(d + "T00:00:00"));
+}
+
+const ATT_CFG = {
+  onTime:        { icon: "✓", label: "On Time",      color: "var(--green-text)", bg: "rgba(22,163,74,0.12)",  border: "rgba(22,163,74,0.35)"  },
+  late:          { icon: "⏱", label: "Late",         color: "var(--amber-text)", bg: "rgba(217,119,6,0.12)",  border: "rgba(217,119,6,0.35)"  },
+  noShow:        { icon: "✗", label: "No Show",      color: "var(--red-text)",   bg: "rgba(220,38,38,0.1)",   border: "rgba(220,38,38,0.3)"   },
+  notRequired:   { icon: "—", label: "Not Required", color: "var(--ink-3)",      bg: "var(--surface-3)",      border: "var(--border)"         },
+  siteCancelled: { icon: "⊘", label: "Site Cancel",  color: "#6366f1",           bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.25)" },
+};
+
+// ─── Worker Stats from Attendance Records ─────────────────
+function getWorkerStats(workerId) {
+  const recs      = attendanceRecords.filter(r => r.workerId === workerId);
+  const countable = recs.filter(r => r.status !== "notRequired" && r.status !== "siteCancelled");
+  const attended  = countable.filter(r => r.status === "onTime" || r.status === "late");
+  const onTime    = countable.filter(r => r.status === "onTime");
+  const ratings   = recs.filter(r => r.rating > 0).map(r => r.rating);
+  return {
+    totalShifts: countable.length,
+    attended:    attended.length,
+    onTime:      onTime.length,
+    late:        attended.length - onTime.length,
+    noShow:      countable.length - attended.length,
+    reliability: countable.length ? Math.round(attended.length / countable.length * 100) : null,
+    punctuality: attended.length  ? Math.round(onTime.length   / attended.length  * 100) : null,
+    performance: ratings.length   ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null,
+    ratingCount: ratings.length,
+  };
+}
+
+// ─── Submit Day Attendance ─────────────────────────────────
+function submitDayAttendance() {
+  const today = todayDateStr();
+  let count = 0;
+  Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
+    if (!data.status) return;
+    attendanceRecords = attendanceRecords.filter(r => !(r.workerId === wid && r.date === today));
+    attendanceRecords.unshift({ id: createId(), workerId: wid, date: today, status: data.status, rating: data.rating || 0, recordedAt: Date.now() });
+    const w = findWorker(wid);
+    if (w) {
+      const stats = getWorkerStats(wid);
+      if (stats.reliability !== null) {
+        const prev = w.reliability;
+        w.reliability = stats.reliability;
+        const lbl = { onTime: "on time", late: "late", noShow: "no-showed", notRequired: "not required", siteCancelled: "site cancelled" };
+        logActivity("attend", `<strong>${escapeHtml(w.name)}</strong> marked ${lbl[data.status] || data.status}${w.reliability !== prev ? ` — reliability ${prev}% → ${w.reliability}%` : ""}`);
+      }
+    }
+    count++;
+  });
+  if (!count) { showToast("No attendance marked yet"); return; }
+  saveAttendanceRecords();
+  saveState();
+  todayAttendanceMap = {};
+  renderAttendance();
+  render();
+  showToast(`Attendance saved for ${count} worker${count !== 1 ? "s" : ""}`);
+}
+
+// ─── Attendance Card ──────────────────────────────────────
+function attendanceCard(worker, today) {
+  const avCls = avatarColor(worker.name);
+  const saved = todayAttendanceMap[worker.id] || {};
+  const stats = getWorkerStats(worker.id);
+  const job   = state.jobs.find(j => j.assignedWorkerId === worker.id);
+
+  const statusBtns = Object.entries(ATT_CFG).map(([key, cfg]) => {
+    const active = saved.status === key;
+    const style  = active ? `background:${cfg.bg};border-color:${cfg.border};color:${cfg.color}` : "";
+    return `<button class="att-btn${active ? " att-btn--active" : ""}" style="${style}"
+      data-att-worker="${worker.id}" data-att-status="${key}" type="button">
+      <span class="att-btn-icon">${cfg.icon}</span>
+      <span class="att-btn-label">${cfg.label}</span>
+    </button>`;
+  }).join("");
+
+  const showRating = saved.status === "onTime" || saved.status === "late";
+  const ratingRow  = showRating ? `
+    <div class="att-rating-row">
+      <span class="att-rating-label">Rate performance:</span>
+      ${[1,2,3,4,5].map(n => `<button class="att-star${(saved.rating||0)>=n?" att-star--filled":""}"
+        data-att-worker="${worker.id}" data-att-star="${n}" type="button">★</button>`).join("")}
+    </div>` : "";
+
+  const statsRow = stats.totalShifts > 0 ? `
+    <div class="att-worker-stats">
+      <span class="att-stat"><span class="att-stat-val" style="color:${stats.reliability>=90?"var(--orange)":stats.reliability>=75?"var(--green-text)":"var(--red-text)"}">${stats.reliability}%</span> Reliability</span>
+      <span class="att-sep">·</span>
+      <span class="att-stat"><span class="att-stat-val">${stats.punctuality??100}%</span> Punctuality</span>
+      ${stats.performance ? `<span class="att-sep">·</span><span class="att-stat"><span class="att-stat-val" style="color:var(--amber)">★${stats.performance}</span></span>` : ""}
+      <span class="att-sep">·</span>
+      <span class="att-stat">${stats.totalShifts} shift${stats.totalShifts!==1?"s":""}</span>
+    </div>` : "";
+
+  const savedStatus = saved.status ? `<span style="color:${ATT_CFG[saved.status]?.color};font-weight:600;">${ATT_CFG[saved.status]?.icon} ${ATT_CFG[saved.status]?.label}</span>` : '<span style="color:var(--ink-3)">Not recorded</span>';
+
+  return `
+  <article class="attendance-card" id="att-card-${worker.id}">
+    <div class="att-worker-row">
+      <div class="worker-avatar ${avCls}" style="width:38px;height:38px;font-size:0.8rem;flex-shrink:0;">${initials(worker.name)}</div>
+      <div class="att-worker-info">
+        <div class="att-worker-name">${escapeHtml(worker.name)}</div>
+        <div class="att-worker-sub">${escapeHtml(worker.trade)}${job ? ` · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span>` : ""} · ${savedStatus}</div>
+      </div>
+    </div>
+    ${statsRow}
+    <div class="att-status-btns">${statusBtns}</div>
+    ${ratingRow}
+  </article>`;
+}
+
+function bindAttendanceEvents(container) {
+  container.querySelectorAll("[data-att-status]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const wid = btn.dataset.attWorker, status = btn.dataset.attStatus;
+      if (!todayAttendanceMap[wid]) todayAttendanceMap[wid] = {};
+      todayAttendanceMap[wid].status = (todayAttendanceMap[wid].status === status) ? null : status;
+      if (status !== "onTime" && status !== "late") todayAttendanceMap[wid].rating = 0;
+      refreshAttCard(wid);
+    });
+  });
+  container.querySelectorAll("[data-att-star]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const wid = btn.dataset.attWorker, n = Number(btn.dataset.attStar);
+      if (!todayAttendanceMap[wid]) todayAttendanceMap[wid] = {};
+      todayAttendanceMap[wid].rating = (todayAttendanceMap[wid].rating === n) ? 0 : n;
+      refreshAttCard(wid);
+    });
+  });
+}
+
+function refreshAttCard(wid) {
+  const card = document.getElementById("att-card-" + wid);
+  const w    = findWorker(wid);
+  if (!card || !w) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = attendanceCard(w, todayDateStr());
+  card.replaceWith(tmp.firstElementChild);
+  bindAttendanceEvents(document.getElementById("attendanceCards"));
+}
+
+// ─── Render Attendance Tab ─────────────────────────────────
+function renderAttendance() {
+  const container = document.getElementById("attendanceCards");
+  const histEl    = document.getElementById("attendanceHistory");
+  const badge     = document.getElementById("attTodayBadge");
+  if (!container) return;
+
+  if (badge) badge.textContent = formatAttDate(todayDateStr());
+
+  const today = todayDateStr();
+  // Pre-fill todayAttendanceMap from saved records if not yet set
+  attendanceRecords.filter(r => r.date === today).forEach(r => {
+    if (!todayAttendanceMap[r.workerId]) todayAttendanceMap[r.workerId] = { status: r.status, rating: r.rating };
+  });
+
+  container.innerHTML = state.workers.length
+    ? state.workers.map(w => attendanceCard(w, today)).join("")
+    : emptyState("No workers in the roster. Add workers first.");
+  if (state.workers.length) bindAttendanceEvents(container);
+
+  // ── History ──
+  const pastDates = [...new Set(attendanceRecords.map(r => r.date).filter(d => d !== today))]
+    .sort().reverse().slice(0, 7);
+
+  if (!pastDates.length) {
+    histEl.innerHTML = `<div class="att-empty">No history yet — submit today's attendance to start tracking.</div>`;
+    return;
+  }
+  histEl.innerHTML = pastDates.map(date => {
+    const recs = attendanceRecords.filter(r => r.date === date);
+    const c = { on: recs.filter(r=>r.status==="onTime").length, late: recs.filter(r=>r.status==="late").length, ns: recs.filter(r=>r.status==="noShow").length };
+    return `
+    <div class="att-history-group">
+      <div class="att-history-header">
+        <span class="att-history-date">${formatAttDate(date)}</span>
+        <div class="att-history-counts">
+          <span class="att-hc on-time">✓ ${c.on}</span>
+          <span class="att-hc late">⏱ ${c.late}</span>
+          <span class="att-hc no-show">✗ ${c.ns}</span>
+        </div>
+      </div>
+      <div class="att-history-rows">
+        ${recs.map(r => {
+          const w = findWorker(r.workerId); if (!w) return "";
+          const cfg = ATT_CFG[r.status] || ATT_CFG.notRequired;
+          const stars = r.rating ? "★".repeat(r.rating) + "☆".repeat(5-r.rating) : "";
+          return `<div class="att-history-row">
+            <span class="att-history-dot" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</span>
+            <span class="att-history-worker">${escapeHtml(w.name)}</span>
+            <span class="att-history-trade">${escapeHtml(w.trade)}</span>
+            ${stars ? `<span class="att-stars">${stars}</span>` : ""}
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+  }).join("");
+}
+
 // ─── Init ─────────────────────────────────────────────────
 render();
+renderAttendance();
+
+document.getElementById("submitAttendanceBtn")?.addEventListener("click", submitDayAttendance);
+
+// Add attend icon to activity log
+ACTIVITY_ICONS.attend = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;

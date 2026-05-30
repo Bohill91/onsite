@@ -462,6 +462,10 @@
           Jobs
           <span class="tab-count" id="jobCount">0</span>
         </button>
+        <button class="tab-btn" data-tab="attendance" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Attendance
+        </button>
         <button class="tab-btn" data-tab="add" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           Add New
@@ -512,6 +516,31 @@
           </div>
           <div id="workersEmpty" class="empty-state" style="display:none">No workers match your search.</div>
           <div id="workersList" class="card-list"></div>
+        </div>
+
+        <!-- ATTENDANCE TAB -->
+        <div class="tab-panel" id="tab-attendance">
+          <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <h2 class="panel-title">Attendance</h2>
+              <p class="panel-subtitle">Record today's workforce — tap a status for each worker</p>
+            </div>
+            <span class="att-today-badge" id="attTodayBadge"></span>
+          </div>
+          <div id="attendanceCards" class="card-list"></div>
+          <div class="att-submit-wrap">
+            <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Submit Attendance
+            </button>
+          </div>
+          <div class="panel-header" style="margin-top:32px;">
+            <div>
+              <h2 class="panel-title">History</h2>
+              <p class="panel-subtitle">Past attendance records by day</p>
+            </div>
+          </div>
+          <div id="attendanceHistory"></div>
         </div>
 
         <!-- JOBS TAB -->
@@ -633,11 +662,14 @@
           </div>
           <span>Add</span>
         </button>
+        <button class="bottom-nav-btn" data-tab="attendance" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span>Attendance</span>
+        </button>
         <button class="bottom-nav-btn" data-tab="jobs" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
           <span>Jobs</span>
         </button>
-        <button class="bottom-nav-btn" data-tab="workers" type="button" id="bottomWorkersBtn" style="display:none"></button>
       </nav>
 
     </div><!-- /app-root -->

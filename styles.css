@@ -1268,6 +1268,305 @@ button, input, select, textarea {
 .av-4 { background: rgba(14,165,233,0.15); color: #38bdf8; }
 .av-5 { background: rgba(245,158,11,0.15); color: #f59e0b; }
 
+/* ─── Attendance Tab ───────────────────────────────────── */
+.att-today-badge {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 999px;
+  color: var(--orange);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  white-space: nowrap;
+}
+
+.attendance-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s;
+}
+
+.attendance-card:hover {
+  border-color: var(--border-light);
+}
+
+.att-worker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.att-worker-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.att-worker-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.att-worker-sub {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+
+/* ─── Attendance Stats (on cards) ──────────────────────── */
+.att-worker-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.att-stat { white-space: nowrap; }
+.att-stat-val { font-weight: 700; }
+.att-sep { color: var(--border-light); font-weight: 300; }
+
+/* ─── Worker Card Attendance Stats ─────────────────────── */
+.worker-att-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 7px 10px;
+  font-size: 0.77rem;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+
+.w-stat { white-space: nowrap; }
+.w-stat-sep { color: var(--border-light); }
+
+/* ─── Status Buttons ────────────────────────────────────── */
+.att-status-btns {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.att-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 8px 4px;
+  transition: all 0.12s;
+  min-height: 56px;
+}
+
+.att-btn:hover {
+  border-color: var(--border-light);
+  color: var(--ink);
+}
+
+.att-btn--active {
+  font-weight: 700;
+}
+
+.att-btn-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.att-btn-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .att-status-btns {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ─── Performance Stars ─────────────────────────────────── */
+.att-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.att-rating-label {
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.att-star {
+  background: none;
+  border: none;
+  color: var(--border-light);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 2px;
+  transition: color 0.1s, transform 0.1s;
+}
+
+.att-star:hover,
+.att-star--filled {
+  color: var(--amber);
+}
+
+.att-star:hover {
+  transform: scale(1.2);
+}
+
+/* ─── Submit Bar ────────────────────────────────────────── */
+.att-submit-wrap {
+  margin-top: 16px;
+}
+
+.att-submit-btn {
+  background: var(--orange);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.97rem;
+  font-weight: 700;
+  min-height: 50px;
+  width: 100%;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.att-submit-btn:hover { background: var(--orange-dark); }
+
+/* ─── Attendance History ────────────────────────────────── */
+.att-empty {
+  color: var(--ink-3);
+  font-size: 0.87rem;
+  padding: 16px;
+  text-align: center;
+}
+
+.att-history-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.att-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.att-history-date {
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.att-history-counts {
+  display: flex;
+  gap: 10px;
+}
+
+.att-hc {
+  font-size: 0.77rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.att-hc.on-time  { background: rgba(22,163,74,0.1);  color: var(--green-text); }
+.att-hc.late     { background: rgba(217,119,6,0.1);  color: var(--amber-text); }
+.att-hc.no-show  { background: rgba(220,38,38,0.08); color: var(--red-text);   }
+
+.att-history-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.att-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.83rem;
+}
+
+.att-history-row:last-child { border-bottom: none; }
+
+.att-history-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.att-history-worker {
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-history-trade {
+  color: var(--ink-3);
+  font-size: 0.77rem;
+  white-space: nowrap;
+}
+
+.att-stars {
+  font-size: 0.75rem;
+  color: var(--amber);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+
 /* ─── Toast Notification ───────────────────────────────── */
 .toast {
   position: fixed;
