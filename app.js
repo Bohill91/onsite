@@ -210,11 +210,45 @@ resetDemoBtn.addEventListener("click", () => {
 
 // ─── Render ───────────────────────────────────────────────
 function render() {
+  renderStats();
   renderWorkers();
   renderJobs();
   renderMatches();
   workerCount.textContent = state.workers.length;
   jobCount.textContent    = state.jobs.length;
+}
+
+function renderStats() {
+  const total     = state.workers.length;
+  const available = state.workers.filter(w => w.availability === "available").length;
+  const open      = state.jobs.filter(j => !j.assignedWorkerId).length;
+  const assigned  = state.jobs.filter(j =>  j.assignedWorkerId).length;
+  const avgScore  = total
+    ? Math.round(state.workers.reduce((s, w) => s + w.reliability, 0) / total)
+    : 0;
+
+  document.querySelector("#statsRow").innerHTML = `
+    <div class="stat-card">
+      <span class="stat-label">Total Workers</span>
+      <span class="stat-value">${total}</span>
+      <span class="stat-sub">Avg score ${avgScore}/100</span>
+    </div>
+    <div class="stat-card stat-available">
+      <span class="stat-label">Available</span>
+      <span class="stat-value">${available}</span>
+      <span class="stat-sub">${total - available} unavailable</span>
+    </div>
+    <div class="stat-card stat-open">
+      <span class="stat-label">Open Jobs</span>
+      <span class="stat-value">${open}</span>
+      <span class="stat-sub">Awaiting assignment</span>
+    </div>
+    <div class="stat-card stat-assigned">
+      <span class="stat-label">Assigned</span>
+      <span class="stat-value">${assigned}</span>
+      <span class="stat-sub">of ${state.jobs.length} total jobs</span>
+    </div>
+  `;
 }
 
 // ─── Worker Cards ─────────────────────────────────────────
