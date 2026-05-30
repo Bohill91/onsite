@@ -99,15 +99,10 @@ button, input, select, textarea {
   gap: 10px;
 }
 
-.brand-icon {
+.brand-logo {
   width: 34px;
   height: 34px;
-  background: var(--orange);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
