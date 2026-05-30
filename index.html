@@ -542,6 +542,15 @@
             </div>
           </div>
           <div id="attendanceHistory"></div>
+
+          <!-- Dispute Dashboard -->
+          <div class="panel-header" style="margin-top:32px;">
+            <div>
+              <h2 class="panel-title">Dispute Dashboard</h2>
+              <p class="panel-subtitle">Active and resolved attendance disputes</p>
+            </div>
+          </div>
+          <div id="disputeDashboard"></div>
         </div>
 
         <!-- JOBS TAB -->
@@ -801,6 +810,57 @@
         </div>
 
         <div class="site-info-panel" id="siteInfoPanel"></div>
+      </div>
+    </div>
+
+    <!-- Dispute Modal -->
+    <div id="disputeModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+      <div class="dispute-sheet">
+        <div class="dispute-sheet-header">
+          <div>
+            <h3 class="dispute-sheet-title">Raise Attendance Dispute</h3>
+            <p class="dispute-sheet-sub">Your reliability score is frozen until this is resolved.</p>
+          </div>
+          <button id="closeDisputeBtn" class="modal-close-btn" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dispute-sheet-body">
+          <div id="disputeRecordSummary" class="dispute-record-summary"></div>
+          <div id="disputeGpsSection" class="dispute-gps-section hidden"></div>
+          <label class="field-label">
+            Reason for Dispute
+            <select id="disputeReason">
+              <option>Incorrect No Show</option>
+              <option>Incorrect Late Mark</option>
+              <option>Incorrect Hours Worked</option>
+              <option>Wrong Date</option>
+              <option>Site Cancellation</option>
+              <option>Incorrect Site Assignment</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label class="field-label">
+            Additional Comments
+            <textarea id="disputeComment" rows="3" placeholder='e.g. "I arrived at 07:20 and signed in with the gate security team."'></textarea>
+          </label>
+          <div>
+            <div class="field-label" style="margin-bottom:8px;">
+              Upload Evidence
+              <span style="font-weight:400;color:var(--ink-3)"> — photos, screenshots, documents (optional)</span>
+            </div>
+            <label class="evidence-upload-area" for="evidenceFileInput">
+              <input type="file" id="evidenceFileInput" multiple accept="image/*,.pdf,.doc,.docx" class="photo-file-input" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Tap to upload photos or documents</span>
+            </label>
+            <div id="evidencePreviewArea" class="evidence-preview-area"></div>
+          </div>
+          <button id="submitDisputeBtn" class="primary-btn wide" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+            Submit Dispute
+          </button>
+        </div>
       </div>
     </div>
 

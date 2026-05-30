@@ -833,7 +833,10 @@ function closeSiteMap() {
 
 document.getElementById("closeMapBtn")?.addEventListener("click", closeSiteMap);
 siteMapModal?.addEventListener("click", e => { if (e.target === siteMapModal) closeSiteMap(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteMap(); closePhotoLightbox(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteMap(); closePhotoLightbox(); closeDisputeModal(); } });
+document.getElementById("closeDisputeBtn")?.addEventListener("click", closeDisputeModal);
+document.getElementById("disputeModal")?.addEventListener("click", e => { if (e.target === document.getElementById("disputeModal")) closeDisputeModal(); });
+document.getElementById("submitDisputeBtn")?.addEventListener("click", submitDispute);
 
 // ─── Photo Lightbox ────────────────────────────────────────
 let lightboxEl = null;
@@ -935,16 +938,20 @@ const ATT_CFG = {
 // ─── Worker Stats from Attendance Records ─────────────────
 function getWorkerStats(workerId) {
   const recs      = attendanceRecords.filter(r => r.workerId === workerId);
-  const countable = recs.filter(r => r.status !== "notRequired" && r.status !== "siteCancelled");
+  // Records under active dispute are frozen — don't apply penalty until resolved
+  const scoreable = recs.filter(r => r.disputeStatus !== "pending");
+  const countable = scoreable.filter(r => r.status !== "notRequired" && r.status !== "siteCancelled");
   const attended  = countable.filter(r => r.status === "onTime" || r.status === "late");
   const onTime    = countable.filter(r => r.status === "onTime");
   const ratings   = recs.filter(r => r.rating > 0).map(r => r.rating);
+  const disputed  = recs.filter(r => r.disputeStatus === "pending").length;
   return {
     totalShifts: countable.length,
     attended:    attended.length,
     onTime:      onTime.length,
     late:        attended.length - onTime.length,
     noShow:      countable.length - attended.length,
+    disputed,
     reliability: countable.length ? Math.round(attended.length / countable.length * 100) : null,
     punctuality: attended.length  ? Math.round(onTime.length   / attended.length  * 100) : null,
     performance: ratings.length   ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null,
@@ -956,10 +963,42 @@ function getWorkerStats(workerId) {
 function submitDayAttendance() {
   const today = todayDateStr();
   let count = 0;
+
+  // Smart No-Show validation — flag GPS conflicts before finalising
+  const conflicts = [];
+  Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
+    if (data.status !== "noShow") return;
+    const gps = data.gps;
+    if (!gps) return;
+    const job = state.jobs.find(j => j.assignedWorkerId === wid);
+    if (!job?.sitePin) return;
+    const dist = haversine(gps.lat, gps.lng, job.sitePin.lat, job.sitePin.lng);
+    if (dist <= 300) {
+      const w = findWorker(wid);
+      conflicts.push(`${w?.name || wid} (GPS recorded ${Math.round(dist)}m from site pin)`);
+    }
+  });
+  if (conflicts.length) {
+    const ok = confirm(
+      `⚠ Potential Attendance Conflict Detected\n\nGPS evidence suggests the following worker(s) may have been on site:\n\n${conflicts.join("\n")}\n\nContinue marking as No Show?`
+    );
+    if (!ok) return;
+  }
+
   Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
     if (!data.status) return;
+    const rec = {
+      id: createId(), workerId: wid, date: today,
+      status: data.status, rating: data.rating || 0, recordedAt: Date.now(),
+    };
+    if (data.gps) {
+      rec.gpsLat       = data.gps.lat;
+      rec.gpsLng       = data.gps.lng;
+      rec.gpsDistance  = data.gps.distance;
+      rec.gpsTimestamp = data.gps.timestamp;
+    }
     attendanceRecords = attendanceRecords.filter(r => !(r.workerId === wid && r.date === today));
-    attendanceRecords.unshift({ id: createId(), workerId: wid, date: today, status: data.status, rating: data.rating || 0, recordedAt: Date.now() });
+    attendanceRecords.unshift(rec);
     const w = findWorker(wid);
     if (w) {
       const stats = getWorkerStats(wid);
@@ -967,7 +1006,7 @@ function submitDayAttendance() {
         const prev = w.reliability;
         w.reliability = stats.reliability;
         const lbl = { onTime: "on time", late: "late", noShow: "no-showed", notRequired: "not required", siteCancelled: "site cancelled" };
-        logActivity("attend", `<strong>${escapeHtml(w.name)}</strong> marked ${lbl[data.status] || data.status}${w.reliability !== prev ? ` — reliability ${prev}% → ${w.reliability}%` : ""}`);
+        logActivity("attend", `<strong>${escapeHtml(w.name)}</strong> marked ${lbl[data.status] || data.status}${w.reliability !== prev ? ` — reliability ${prev}% → ${w.reliability}%` : ""}${data.gps ? ` · GPS ${data.gps.distance !== null ? Math.round(data.gps.distance) + "m" : "recorded"}` : ""}`);
       }
     }
     count++;
@@ -1018,6 +1057,22 @@ function attendanceCard(worker, today) {
 
   const savedStatus = saved.status ? `<span style="color:${ATT_CFG[saved.status]?.color};font-weight:600;">${ATT_CFG[saved.status]?.icon} ${ATT_CFG[saved.status]?.label}</span>` : '<span style="color:var(--ink-3)">Not recorded</span>';
 
+  // GPS capture row — shown when a status is selected
+  const showGps   = saved.status && saved.status !== "notRequired" && saved.status !== "siteCancelled";
+  const gpsData   = saved.gps;
+  const gpsRow    = showGps ? `
+    <div class="att-gps-row" id="gps-${worker.id}">
+      ${gpsData
+        ? `<div class="gps-captured-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            ${gpsData.distance !== null ? gpsDistanceLabel(gpsData.distance) : "Location captured"}
+           </div>`
+        : `<button class="gps-capture-btn" data-gps-worker="${worker.id}" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            Record My Location
+           </button>`}
+    </div>` : "";
+
   return `
   <article class="attendance-card" id="att-card-${worker.id}">
     <div class="att-worker-row">
@@ -1030,6 +1085,7 @@ function attendanceCard(worker, today) {
     ${statsRow}
     <div class="att-status-btns">${statusBtns}</div>
     ${ratingRow}
+    ${gpsRow}
   </article>`;
 }
 
@@ -1049,6 +1105,25 @@ function bindAttendanceEvents(container) {
       if (!todayAttendanceMap[wid]) todayAttendanceMap[wid] = {};
       todayAttendanceMap[wid].rating = (todayAttendanceMap[wid].rating === n) ? 0 : n;
       refreshAttCard(wid);
+    });
+  });
+  container.querySelectorAll("[data-gps-worker]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const wid = btn.dataset.gpsWorker;
+      btn.textContent = "Getting location…";
+      btn.disabled = true;
+      try {
+        const { lat, lng } = await getGPS();
+        const job  = state.jobs.find(j => j.assignedWorkerId === wid);
+        const dist = job?.sitePin ? haversine(lat, lng, job.sitePin.lat, job.sitePin.lng) : null;
+        if (!todayAttendanceMap[wid]) todayAttendanceMap[wid] = {};
+        todayAttendanceMap[wid].gps = { lat, lng, distance: dist, timestamp: Date.now() };
+        refreshAttCard(wid);
+      } catch (_) {
+        showToast("Location unavailable — enable location access in your browser");
+        btn.textContent = "Record My Location";
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -1109,17 +1184,282 @@ function renderAttendance() {
           const w = findWorker(r.workerId); if (!w) return "";
           const cfg = ATT_CFG[r.status] || ATT_CFG.notRequired;
           const stars = r.rating ? "★".repeat(r.rating) + "☆".repeat(5-r.rating) : "";
-          return `<div class="att-history-row">
+          const disputed = r.disputeStatus === "pending";
+          const resolved = r.disputeStatus === "resolved";
+          return `<div class="att-history-row ${disputed ? "att-hist-disputed" : ""}">
             <span class="att-history-dot" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</span>
             <span class="att-history-worker">${escapeHtml(w.name)}</span>
             <span class="att-history-trade">${escapeHtml(w.trade)}</span>
             ${stars ? `<span class="att-stars">${stars}</span>` : ""}
+            ${r.gpsLat ? `<span class="att-gps-badge" title="GPS recorded">📍</span>` : ""}
+            ${disputed ? `<span class="att-dispute-badge att-dispute-badge--pending">⏳ Under Review</span>`
+              : resolved ? `<span class="att-dispute-badge att-dispute-badge--resolved">✓ Resolved</span>`
+              : `<button class="att-raise-dispute" data-dispute-record="${r.id}" type="button">Raise Dispute</button>`}
           </div>`;
         }).join("")}
       </div>
     </div>`;
   }).join("");
+
+  // Wire dispute buttons
+  histEl.querySelectorAll("[data-dispute-record]").forEach(btn => {
+    btn.addEventListener("click", () => openDisputeModal(btn.dataset.disputeRecord));
+  });
+
+  renderDisputeDashboard();
 }
+
+// ─── GPS & Geofence Helpers ───────────────────────────────
+function getGPS() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("Geolocation not supported")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => reject(err),
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  });
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R    = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a    = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function gpsDistanceLabel(dist) {
+  if (dist === null || dist === undefined) return "Location captured";
+  const m = Math.round(dist);
+  if (m <= 100)  return `<span class="gps-strong">✓ ${m}m from site pin — within geofence</span>`;
+  if (m <= 500)  return `<span class="gps-warn">⚠ ${m}m from site — outside geofence</span>`;
+  return `<span class="gps-far">${(dist / 1000).toFixed(1)}km from site</span>`;
+}
+
+// ─── Attendance Disputes ──────────────────────────────────
+let currentDisputeRecordId = null;
+
+function openDisputeModal(recordId) {
+  currentDisputeRecordId = recordId;
+  const rec = attendanceRecords.find(r => r.id === recordId);
+  if (!rec) return;
+  const w   = findWorker(rec.workerId);
+  const cfg = ATT_CFG[rec.status] || ATT_CFG.notRequired;
+
+  document.getElementById("disputeRecordSummary").innerHTML = `
+    <div class="dispute-record-info">
+      <div class="dispute-record-worker">${escapeHtml(w?.name || "Unknown worker")}</div>
+      <div class="dispute-record-meta">
+        <span style="color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</span>
+        <span class="dispute-meta-sep">·</span>
+        <span>${formatAttDate(rec.date)}</span>
+      </div>
+    </div>`;
+
+  const gpsSec = document.getElementById("disputeGpsSection");
+  if (rec.gpsLat) {
+    const time = new Date(rec.gpsTimestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    gpsSec.innerHTML = `
+      <div class="dispute-gps-evidence">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+        <strong>GPS Evidence on file:</strong>
+        ${gpsDistanceLabel(rec.gpsDistance)} — recorded at ${time}
+      </div>`;
+    gpsSec.classList.remove("hidden");
+  } else {
+    gpsSec.classList.add("hidden");
+  }
+
+  document.getElementById("disputeReason").value  = "Incorrect No Show";
+  document.getElementById("disputeComment").value = "";
+  document.getElementById("evidenceFileInput").value = "";
+  document.getElementById("evidencePreviewArea").innerHTML = "";
+
+  document.getElementById("disputeModal").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeDisputeModal() {
+  document.getElementById("disputeModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+  currentDisputeRecordId = null;
+}
+
+async function submitDispute() {
+  const rec = attendanceRecords.find(r => r.id === currentDisputeRecordId);
+  if (!rec) return;
+
+  const btn     = document.getElementById("submitDisputeBtn");
+  const reason  = document.getElementById("disputeReason").value;
+  const comment = document.getElementById("disputeComment").value.trim();
+  const files   = document.getElementById("evidenceFileInput").files;
+
+  btn.disabled = true;
+  btn.textContent = "Submitting…";
+
+  rec.disputeStatus    = "pending";
+  rec.disputeReason    = reason;
+  rec.disputeComment   = comment;
+  rec.disputeTimestamp = Date.now();
+
+  if (files?.length) {
+    rec.disputePhotos = [];
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith("image/")) {
+        try { rec.disputePhotos.push(await compressImage(file)); } catch (_) {}
+      }
+    }
+  }
+
+  const w = findWorker(rec.workerId);
+  logActivity("attend", `Dispute raised by <strong>${escapeHtml(w?.name || "")}</strong>: ${escapeHtml(reason)}`);
+
+  saveAttendanceRecords();
+  render();
+  renderAttendance();
+  closeDisputeModal();
+  showToast("Dispute submitted — attendance frozen pending review");
+}
+
+function resolveDispute(recordId, resolution) {
+  const rec = attendanceRecords.find(r => r.id === recordId);
+  if (!rec) return;
+  const w = findWorker(rec.workerId);
+
+  rec.disputeStatus = "resolved";
+  rec.resolution    = resolution;
+  rec.resolvedAt    = Date.now();
+
+  if (resolution === "accepted_worker") {
+    const statusMap = {
+      "Incorrect No Show":   "onTime",
+      "Incorrect Late Mark": "onTime",
+      "Site Cancellation":   "siteCancelled",
+      "Incorrect Hours Worked": "onTime",
+    };
+    const newStatus = statusMap[rec.disputeReason] || "onTime";
+    rec.originalStatus = rec.status;
+    rec.status         = newStatus;
+    rec.resolvedStatus = newStatus;
+    logActivity("attend", `Dispute accepted: <strong>${escapeHtml(w?.name || "")}</strong> record updated to ${ATT_CFG[newStatus]?.label}`);
+    showToast("Worker claim accepted — attendance record updated");
+  } else {
+    rec.resolvedStatus = rec.status;
+    logActivity("attend", `Dispute rejected: <strong>${escapeHtml(w?.name || "")}</strong> original record confirmed`);
+    showToast("Original record confirmed — dispute closed");
+  }
+
+  const worker = findWorker(rec.workerId);
+  if (worker) {
+    const stats = getWorkerStats(rec.workerId);
+    if (stats.reliability !== null) worker.reliability = stats.reliability;
+  }
+
+  saveAttendanceRecords();
+  saveState();
+  render();
+  renderAttendance();
+}
+
+function renderDisputeDashboard() {
+  const container = document.getElementById("disputeDashboard");
+  if (!container) return;
+
+  const disputes = attendanceRecords.filter(r => r.disputeStatus);
+  if (!disputes.length) {
+    container.innerHTML = `<div class="att-empty">No disputes raised yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = disputes.map(rec => {
+    const w       = findWorker(rec.workerId);
+    const job     = state.jobs.find(j => j.assignedWorkerId === rec.workerId);
+    const cfg     = ATT_CFG[rec.status] || ATT_CFG.notRequired;
+    const pending = rec.disputeStatus === "pending";
+
+    const gpsHtml = rec.gpsLat ? `
+      <div class="dd-row">
+        <span class="dd-label">GPS Evidence</span>
+        <span class="dd-val">${gpsDistanceLabel(rec.gpsDistance)}</span>
+      </div>` : "";
+
+    const photosHtml = rec.disputePhotos?.length ? `
+      <div class="dd-row dd-row--photos">
+        <span class="dd-label">Evidence Photos</span>
+        <div class="dd-photo-strip">
+          ${rec.disputePhotos.map(src => `<img src="${src}" class="dd-evidence-thumb"
+            data-lightbox-src="${src}" data-lightbox-label="Dispute Evidence" alt="Evidence" />`).join("")}
+        </div>
+      </div>` : "";
+
+    const resHtml = !pending ? `
+      <div class="dd-resolution ${rec.resolution === "accepted_worker" ? "dd-res--worker" : "dd-res--company"}">
+        ${rec.resolution === "accepted_worker"
+          ? `✓ Worker claim accepted · Record updated to <strong>${ATT_CFG[rec.resolvedStatus]?.label || rec.resolvedStatus}</strong>`
+          : `✓ Original record confirmed — ${cfg.icon} ${cfg.label} stands`}
+      </div>` : "";
+
+    const actHtml = pending ? `
+      <div class="dd-actions">
+        <button class="dd-btn dd-btn--accept" data-resolve="${rec.id}" data-resolution="accepted_worker" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Accept Worker Claim
+        </button>
+        <button class="dd-btn dd-btn--reject" data-resolve="${rec.id}" data-resolution="accepted_company" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Confirm Original
+        </button>
+      </div>` : "";
+
+    return `
+    <div class="dispute-card ${pending ? "dispute-card--pending" : "dispute-card--resolved"}">
+      <div class="dd-header">
+        <div class="dd-worker">
+          <span class="dd-worker-name">${escapeHtml(w?.name || "Unknown")}</span>
+          <span class="dd-worker-meta">${formatAttDate(rec.date)}${job ? ` · ${escapeHtml(job.location)}` : ""}</span>
+        </div>
+        <span class="dd-badge ${pending ? "dd-badge--pending" : "dd-badge--resolved"}">
+          ${pending ? "⏳ Under Review" : "✓ Resolved"}
+        </span>
+      </div>
+      <div class="dd-body">
+        <div class="dd-row">
+          <span class="dd-label">Original Record</span>
+          <span class="dd-val" style="color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</span>
+        </div>
+        <div class="dd-row">
+          <span class="dd-label">Dispute Reason</span>
+          <span class="dd-val">${escapeHtml(rec.disputeReason || "—")}</span>
+        </div>
+        ${rec.disputeComment ? `
+        <div class="dd-row dd-row--full">
+          <span class="dd-label">Worker Comment</span>
+          <span class="dd-val dd-comment">"${escapeHtml(rec.disputeComment)}"</span>
+        </div>` : ""}
+        ${gpsHtml}
+        ${photosHtml}
+      </div>
+      ${resHtml}
+      ${actHtml}
+    </div>`;
+  }).join("");
+
+  container.querySelectorAll("[data-resolve]").forEach(btn => {
+    btn.addEventListener("click", () => resolveDispute(btn.dataset.resolve, btn.dataset.resolution));
+  });
+}
+
+// Evidence file preview
+document.getElementById("evidenceFileInput")?.addEventListener("change", e => {
+  const preview = document.getElementById("evidencePreviewArea");
+  if (!preview) return;
+  const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+  preview.innerHTML = files.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    return `<img src="${url}" class="evidence-thumb" alt="Evidence ${i + 1}" data-lightbox-src="${url}" data-lightbox-label="Evidence" />`;
+  }).join("");
+});
 
 // ─── Init ─────────────────────────────────────────────────
 render();

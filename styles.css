@@ -1458,6 +1458,375 @@ button, input, select, textarea {
 
 .photo-lb-close:hover { background: rgba(255, 255, 255, 0.25); }
 
+/* ─── GPS Attendance Row ─────────────────────────────────── */
+.att-gps-row {
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.gps-capture-btn {
+  align-items: center;
+  background: var(--surface-3);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  gap: 5px;
+  padding: 5px 12px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.gps-capture-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.gps-captured-label {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 5px;
+}
+
+.gps-strong { color: #16a34a; }
+.gps-warn   { color: var(--amber); }
+.gps-far    { color: var(--ink-3); }
+
+/* ─── Attendance History Dispute Controls ──────────────── */
+.att-hist-disputed {
+  background: rgba(245, 158, 11, 0.04);
+  border-radius: var(--radius-xs);
+}
+
+.att-gps-badge {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.att-raise-dispute {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 2px 8px;
+  transition: border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.att-raise-dispute:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.att-dispute-badge {
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.att-dispute-badge--pending  { background: rgba(245,158,11,0.12); color: #d97706; }
+.att-dispute-badge--resolved { background: rgba(34,197,94,0.1); color: #16a34a; }
+
+/* ─── Dispute Modal ─────────────────────────────────────── */
+.dispute-sheet {
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-height: 90vh;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.14);
+}
+
+@media (min-width: 640px) {
+  .dispute-sheet {
+    border-radius: var(--radius-lg);
+    bottom: auto;
+    left: 50%;
+    max-width: 520px;
+    position: relative;
+    top: auto;
+    transform: none;
+    margin: auto;
+    max-height: 88vh;
+  }
+}
+
+.dispute-sheet-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+}
+
+.dispute-sheet-title {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+}
+
+.dispute-sheet-sub {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.dispute-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
+}
+
+.dispute-record-summary {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.dispute-record-info { display: flex; flex-direction: column; gap: 4px; }
+
+.dispute-record-worker {
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.dispute-record-meta {
+  color: var(--ink-2);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 6px;
+}
+
+.dispute-meta-sep { color: var(--ink-3); }
+
+.dispute-gps-section {
+  align-items: center;
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: var(--radius-sm);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 7px;
+  padding: 10px 12px;
+}
+
+.dispute-gps-section.hidden { display: none; }
+
+.evidence-upload-area {
+  align-items: center;
+  background: var(--surface-3);
+  border: 1.5px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 18px;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+
+.evidence-upload-area:hover { border-color: var(--orange); }
+
+.evidence-preview-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.evidence-thumb {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  height: 60px;
+  object-fit: cover;
+  width: 60px;
+}
+
+/* ─── Dispute Dashboard ─────────────────────────────────── */
+.dispute-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.dispute-card--pending  { border-left: 3px solid var(--amber); }
+.dispute-card--resolved { border-left: 3px solid #22c55e; opacity: 0.85; }
+
+.dd-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+}
+
+.dd-worker { display: flex; flex-direction: column; gap: 3px; }
+
+.dd-worker-name {
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.dd-worker-meta {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+}
+
+.dd-badge {
+  border-radius: 10px;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 9px;
+}
+
+.dd-badge--pending  { background: rgba(245,158,11,0.14); color: #d97706; }
+.dd-badge--resolved { background: rgba(34,197,94,0.1);   color: #16a34a; }
+
+.dd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 14px;
+}
+
+.dd-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 7px 0;
+}
+
+.dd-row:last-child { border-bottom: none; }
+
+.dd-row--full { flex-direction: column; align-items: flex-start; gap: 3px; }
+.dd-row--photos { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+.dd-label {
+  color: var(--ink-3);
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dd-val {
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+}
+
+.dd-comment {
+  color: var(--ink-2);
+  font-style: italic;
+  font-weight: 400;
+  text-align: left;
+}
+
+.dd-photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dd-evidence-thumb {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  height: 52px;
+  object-fit: cover;
+  width: 52px;
+  transition: transform 0.1s;
+}
+
+.dd-evidence-thumb:hover { transform: scale(1.05); }
+
+.dd-resolution {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 14px;
+}
+
+.dd-res--worker  { background: rgba(34,197,94,0.07);  color: #16a34a; }
+.dd-res--company { background: rgba(100,116,139,0.07); color: var(--ink-2); }
+
+.dd-actions {
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.dd-btn {
+  align-items: center;
+  border: 1.5px solid;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 1;
+  font-size: 0.77rem;
+  font-weight: 800;
+  gap: 5px;
+  justify-content: center;
+  padding: 8px 10px;
+  transition: background 0.15s;
+}
+
+.dd-btn--accept {
+  background: rgba(34,197,94,0.08);
+  border-color: rgba(34,197,94,0.4);
+  color: #16a34a;
+}
+
+.dd-btn--accept:hover { background: rgba(34,197,94,0.16); }
+
+.dd-btn--reject {
+  background: rgba(239,68,68,0.07);
+  border-color: rgba(239,68,68,0.3);
+  color: #dc2626;
+}
+
+.dd-btn--reject:hover { background: rgba(239,68,68,0.14); }
+
 /* ─── Site Location Form Fields ───────────────────────── */
 .site-loc-toggle-wrap {
   margin-top: 4px;

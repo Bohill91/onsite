@@ -1,0 +1,442 @@
+# Attendance Disputes, GPS Verification & Site Check-In System
+
+## Purpose
+
+Attendance is a core feature of OnSite.
+
+Attendance records directly impact:
+
+* Reliability Scores
+* Punctuality Scores
+* Worker Reputation
+* Payroll Approval
+* Invoicing
+* Future Job Opportunities
+
+For this reason, attendance records must be accurate, auditable, and challengeable.
+
+---
+
+# Attendance Workflow
+
+Each working day, the Company/Site Manager must record attendance for every worker.
+
+Available attendance statuses:
+
+* On Time
+* Late
+* No Show
+* Not Required Today
+* Site Cancelled
+
+Attendance submissions should be quick and mobile-friendly.
+
+Target completion time:
+
+Under 30 seconds for an entire workforce.
+
+---
+
+# Worker Attendance Review
+
+Workers should be able to view all attendance records.
+
+For every attendance record, workers can:
+
+* Accept Attendance Record
+* Raise Dispute
+
+---
+
+# Attendance Dispute Creation
+
+When a worker raises a dispute, they must choose a reason.
+
+Reasons:
+
+* Incorrect No Show
+* Incorrect Late Mark
+* Incorrect Hours Worked
+* Wrong Date
+* Site Cancellation
+* Incorrect Site Assignment
+* Other
+
+---
+
+## Worker Comments
+
+Workers can provide additional information.
+
+Example:
+
+"I arrived at 07:20 and signed in with the gate security team."
+
+---
+
+## Evidence Upload
+
+Workers can upload evidence.
+
+Supported uploads:
+
+* Photos
+* Screenshots
+* PDFs
+* Documents
+
+Examples:
+
+* Site induction photo
+* WhatsApp conversation
+* Email confirmation
+* Sign-in sheet
+* Site pass
+
+---
+
+# GPS Attendance Evidence
+
+This feature should be included in MVP.
+
+---
+
+## Worker Location Permission
+
+When accepting a job, workers are asked:
+
+"Allow OnSite to access your location while attending jobs?"
+
+Options:
+
+* Allow
+* Decline
+
+Location data should only be collected for accepted jobs.
+
+---
+
+# Site Geofence
+
+Each job site has:
+
+* Site Address
+* Exact Site Pin
+
+The company must pin the exact site entrance location.
+
+Examples:
+
+* Main Gate
+* Welfare Cabin
+* Logistics Entrance
+* Site Office
+
+---
+
+## Geofence Radius
+
+Default:
+
+100 metres
+
+Admin configurable.
+
+---
+
+# Arrival Detection
+
+When a worker enters the site geofence:
+
+Trigger:
+
+"You appear to have arrived at site."
+
+Options:
+
+* Check In
+* Dismiss
+
+---
+
+# GPS Attendance Record
+
+Store:
+
+* Timestamp
+* Latitude
+* Longitude
+* Distance from Site Pin
+
+This creates supporting attendance evidence.
+
+---
+
+# GPS Evidence During Disputes
+
+When a dispute is raised, the system automatically checks:
+
+Was the worker inside the site geofence during the disputed period?
+
+Examples:
+
+### Yes
+
+Worker was detected:
+
+07:12 AM
+
+Distance:
+
+23 metres from Site Pin
+
+Evidence Status:
+
+Strong Supporting Evidence
+
+---
+
+### No
+
+No GPS activity recorded near site.
+
+Evidence Status:
+
+No GPS Support
+
+---
+
+# Attendance Under Review
+
+If a dispute is raised:
+
+Attendance Status becomes:
+
+Attendance Under Review
+
+During review:
+
+* Reliability Score is frozen
+* Punctuality Score is frozen
+* Payroll is placed on hold
+* Invoice generation is placed on hold
+
+No penalties should be applied until the dispute is resolved.
+
+---
+
+# Company Dispute Response
+
+The company receives a notification.
+
+Available actions:
+
+* Accept Worker Claim
+* Reject Worker Claim
+* Upload Evidence
+* Add Comments
+
+Supported evidence:
+
+* Site Sign-In Sheets
+* Photos
+* Screenshots
+* Emails
+* Documents
+
+---
+
+# Admin Dispute Dashboard
+
+Admins must be able to view:
+
+* Worker Name
+* Company Name
+* Site
+* Attendance Date
+* Original Attendance Record
+* Worker Evidence
+* Company Evidence
+* GPS Evidence
+* Dispute Status
+
+---
+
+# Admin Resolution Options
+
+Admins can:
+
+* Approve Worker Claim
+* Approve Company Claim
+* Amend Attendance Record
+* Request More Information
+
+---
+
+# Automatic Reliability Updates
+
+Once resolved:
+
+Reliability Score updates automatically.
+
+Examples:
+
+### Worker Wins
+
+Original:
+
+No Show
+
+Updated:
+
+On Time
+
+Reliability restored automatically.
+
+---
+
+### Company Wins
+
+Original:
+
+No Show
+
+Confirmed:
+
+No Show
+
+Reliability penalty applied.
+
+---
+
+# Payroll Integration
+
+Attendance controls payroll.
+
+Examples:
+
+### On Time
+
+Payroll Approved
+
+Invoice Approved
+
+---
+
+### Attendance Under Review
+
+Payroll On Hold
+
+Invoice On Hold
+
+---
+
+### Dispute Resolved
+
+Payroll Released Automatically
+
+Invoice Generated Automatically
+
+---
+
+# Full Audit Trail
+
+Every attendance action must be logged.
+
+Store:
+
+* Original Record
+* Modified Record
+* User Making Change
+* Date
+* Time
+* Reason
+* Outcome
+
+Records must never be permanently deleted.
+
+---
+
+# Site Check-In System
+
+Workers can access site navigation after:
+
+* Accepting the job
+* Being approved by the company
+
+---
+
+## Site Information Page
+
+Display:
+
+* Project Name
+* Site Address
+* Exact Site Pin
+* Arrival Instructions
+* Site Contact
+* Site Contact Number
+
+---
+
+## Navigation
+
+Provide buttons:
+
+* Open in Google Maps
+* Open in Apple Maps
+* Open in Waze
+
+---
+
+## Site Photos
+
+Company can upload:
+
+* Site Entrance Photo
+* Welfare Cabin Photo
+* Gate Photo
+* Site Office Photo
+
+Workers should see these before travelling.
+
+---
+
+# Smart Attendance Validation
+
+When a site manager marks:
+
+"No Show"
+
+The system should automatically check:
+
+1. Did worker enter site geofence?
+2. Did worker check in?
+3. Was GPS recorded near site?
+4. Did worker previously attend that project?
+
+If GPS evidence exists:
+
+Flag:
+
+"Potential Attendance Conflict Detected"
+
+Require confirmation before finalising the No Show.
+
+This reduces false no-shows and protects worker reliability.
+
+---
+
+# Long-Term Objective
+
+Create the most trusted attendance and workforce verification system in construction.
+
+The platform should know:
+
+* Who attended
+* When they arrived
+* How reliable they are
+* Which projects they worked on
+* Whether attendance records are supported by evidence
+
+This data becomes significantly more valuable than traditional CVs and allows OnSite to automate recruitment, payroll, compliance, workforce management, and worker reputation tracking.
