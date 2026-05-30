@@ -340,6 +340,19 @@ function renderWorkers() {
     ? emptyState("No workers in the roster yet. Add one from the Add tab.")
     : filtered.map(workerCard).join("");
 
+  workersList.querySelectorAll("[data-delete-worker]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const w = findWorker(btn.dataset.deleteWorker);
+      if (!w) return;
+      if (!confirm(`Remove ${w.name} from the roster?`)) return;
+      logActivity("worker", `<strong>${escapeHtml(w.name)}</strong> removed from roster`);
+      state.workers = state.workers.filter(x => x.id !== w.id);
+      state.jobs.forEach(j => { if (j.assignedWorkerId === w.id) j.assignedWorkerId = ""; });
+      saveAndRender();
+      showToast(`${w.name} removed`);
+    });
+  });
+
   workersList.querySelectorAll("[data-worker-avail]").forEach(sel => {
     sel.addEventListener("change", () => {
       const w = findWorker(sel.dataset.workerAvail);
@@ -392,6 +405,9 @@ function workerCard(worker) {
       <button class="score-action-btn on-time" type="button" data-score-action="onTime"  data-worker-id="${worker.id}">✓ On time</button>
       <button class="score-action-btn late"    type="button" data-score-action="late"    data-worker-id="${worker.id}">⚡ Late</button>
       <button class="score-action-btn no-show" type="button" data-score-action="noShow"  data-worker-id="${worker.id}">✕ No-show</button>
+      <button class="delete-btn" type="button" data-delete-worker="${worker.id}" aria-label="Remove ${escapeHtml(worker.name)}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+      </button>
     </div>
   </article>`;
 }
@@ -401,6 +417,18 @@ function renderJobs() {
   jobsList.innerHTML = state.jobs.length
     ? state.jobs.map(jobCard).join("")
     : emptyState("No job requests yet. Post one from the Add tab.");
+
+  jobsList.querySelectorAll("[data-delete-job]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const job = findJob(btn.dataset.deleteJob);
+      if (!job) return;
+      if (!confirm(`Remove the ${job.trade} job in ${job.location}?`)) return;
+      logActivity("job", `Job removed: <strong>${escapeHtml(job.trade)}</strong> in ${escapeHtml(job.location)}`);
+      state.jobs = state.jobs.filter(j => j.id !== job.id);
+      saveAndRender();
+      showToast("Job request removed");
+    });
+  });
 
   jobsList.querySelectorAll("[data-assign-job]").forEach(sel => {
     sel.addEventListener("change", () => {
@@ -454,6 +482,10 @@ function jobCard(job) {
           </option>`
         ).join("")}
       </select>
+      <button class="delete-btn delete-btn--job" type="button" data-delete-job="${job.id}" aria-label="Remove job">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        Remove
+      </button>
     </div>
   </article>`;
 }

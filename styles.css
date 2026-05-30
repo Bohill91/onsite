@@ -553,6 +553,37 @@ button, input, select, textarea {
   background: rgba(239, 68, 68, 0.2);
 }
 
+.delete-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 0.77rem;
+  font-weight: 600;
+  min-height: 34px;
+  padding: 6px 9px;
+  margin-left: auto;
+  transition: all 0.15s;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--red);
+  color: var(--red-text);
+}
+
+.delete-btn--job {
+  margin-left: 0;
+  margin-top: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
 /* ─── Job Card ─────────────────────────────────────────── */
 .job-card {
   background: var(--surface);
