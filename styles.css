@@ -2166,6 +2166,170 @@ button, input, select, textarea {
   color: var(--orange);
 }
 
+/* ─── Worker Self-Attendance Card ───────────────────────── */
+.wsa-card {
+  background: linear-gradient(135deg, rgba(249,115,22,0.04) 0%, var(--surface) 60%);
+  border-color: rgba(249,115,22,0.2);
+}
+
+.wsa-date-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 14px 14px 0;
+}
+
+.wsa-date-label {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.wsa-current-status {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.wsa-stats-row {
+  align-items: center;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-light);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+}
+
+.wsa-stat { align-items: center; color: var(--ink-2); display: flex; font-size: 0.78rem; gap: 4px; }
+.wsa-stat-val { color: var(--ink); font-size: 0.85rem; font-weight: 800; }
+.wsa-sep { color: var(--border); font-size: 0.75rem; }
+
+.wsa-btns { padding: 0 14px 12px; }
+
+.wsa-rating { padding: 0 14px 12px; }
+
+/* ─── Timesheet ─────────────────────────────────────────── */
+.ts-summary {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.ts-summary-item {
+  border-right: 1px solid var(--border);
+  flex: 1;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+.ts-summary-item:last-child { border-right: none; }
+
+.ts-summary-val {
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+
+.ts-summary-lbl {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ts-rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.ts-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.ts-row:last-child { border-bottom: none; }
+
+.ts-row:hover { background: var(--surface-2); }
+
+.ts-row-date {
+  color: var(--ink-2);
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  min-width: 96px;
+}
+
+.ts-row-status {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ts-status-dot {
+  align-items: center;
+  border-radius: 5px;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.ts-status-lbl {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ts-row-right {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.ts-site {
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.ts-stars {
+  color: var(--amber-text);
+  font-size: 0.78rem;
+  letter-spacing: -0.04em;
+}
+
+.ts-gps { font-size: 0.75rem; }
+
+.ts-self-badge, .ts-co-badge {
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  text-transform: uppercase;
+}
+
+.ts-self-badge { background: rgba(249,115,22,0.1); color: var(--orange); }
+.ts-co-badge   { background: var(--surface-3);     color: var(--ink-3); }
+
 /* ─── GPS Attendance Row ─────────────────────────────────── */
 .att-gps-row {
   border-top: 1px solid var(--border-light);

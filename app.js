@@ -579,16 +579,17 @@ function render() {
 
   renderStats();
   renderActivity();
-  renderAttendance();
   workerCount.textContent = state.workers.length;
   jobCount.textContent    = state.jobs.length;
 
   if (role === "worker") {
     renderWorkerJobBoard(user);
+    renderWorkerAttendance(user);
   } else {
     renderWorkers();
     renderJobs();
     renderMatches();
+    renderAttendance();
   }
 }
 
@@ -1444,12 +1445,293 @@ function refreshAttCard(wid) {
   bindAttendanceEvents(document.getElementById("attendanceCards"));
 }
 
+// ─── Worker Self-Attendance ────────────────────────────────
+function renderWorkerAttendance(user) {
+  const container  = document.getElementById("attendanceCards");
+  const submitBtn  = document.getElementById("submitAttendanceBtn");
+  const submitWrap = document.querySelector(".att-submit-wrap");
+  const histEl     = document.getElementById("attendanceHistory");
+  const disputeWrap= document.getElementById("disputeDashboard");
+  const disputeHdr = disputeWrap?.previousElementSibling;
+  const badge      = document.getElementById("attTodayBadge");
+  if (!container) return;
+
+  // Restyle the attendance header for worker context
+  const attTitle = document.querySelector("#tab-attendance .panel-title");
+  const attSub   = document.querySelector("#tab-attendance .panel-subtitle");
+  if (attTitle) attTitle.textContent = "My Attendance";
+  if (attSub)   attSub.textContent   = "Mark your status for today — this feeds your timesheet";
+
+  // Hide the company dispute panel
+  if (disputeWrap) disputeWrap.style.display = "none";
+  if (disputeHdr)  disputeHdr.style.display  = "none";
+
+  if (badge) badge.textContent = formatAttDate(todayDateStr());
+
+  const today = todayDateStr();
+  const uid   = user.id;
+
+  // Synthetic worker object from auth user data
+  const workerObj = findWorker(uid) || {
+    id: uid, name: user.name || "Me", trade: user.trade || "",
+    availability: user.availability || "available", grade: user.grade || "",
+  };
+
+  // Pre-fill from saved record for today
+  const savedToday = attendanceRecords.find(r => r.workerId === uid && r.date === today);
+  if (savedToday && !todayAttendanceMap[uid]) {
+    todayAttendanceMap[uid] = { status: savedToday.status, rating: savedToday.rating };
+  }
+
+  container.innerHTML = workerSelfAttCard(workerObj, today);
+  bindWorkerAttEvents(container, uid, workerObj);
+
+  // Wire submit button to worker-specific handler
+  if (submitBtn) {
+    submitBtn.textContent = "Save Today's Attendance";
+    if (submitWrap) submitWrap.style.display = "";
+    submitBtn.onclick = (e) => {
+      e.stopImmediatePropagation();
+      submitWorkerAttendance(user, workerObj);
+    };
+  }
+
+  // Relabel History → Timesheet for workers
+  const histTitle = document.getElementById("attHistoryTitle");
+  const histSub   = document.getElementById("attHistorySub");
+  if (histTitle) histTitle.textContent = "My Timesheet";
+  if (histSub)   histSub.textContent   = "Full record of your attendance and performance ratings";
+
+  renderWorkerTimesheet(uid, user, histEl);
+}
+
+function workerSelfAttCard(worker, today) {
+  const saved = todayAttendanceMap[worker.id] || {};
+  const stats = getWorkerStats(worker.id);
+  const savedStatus = saved.status;
+
+  const statusBtns = Object.entries(ATT_CFG).map(([key, cfg]) => {
+    const active = savedStatus === key;
+    const style  = active ? `background:${cfg.bg};border-color:${cfg.border};color:${cfg.color}` : "";
+    return `<button class="att-btn wsa-status-btn${active ? " att-btn--active" : ""}" style="${style}"
+      data-att-worker="${worker.id}" data-att-status="${key}" type="button">
+      <span class="att-btn-icon">${cfg.icon}</span>
+      <span class="att-btn-label">${cfg.label}</span>
+    </button>`;
+  }).join("");
+
+  const showRating = savedStatus === "onTime" || savedStatus === "late";
+  const ratingRow  = showRating ? `
+    <div class="att-rating-row wsa-rating">
+      <span class="att-rating-label">Rate today's experience:</span>
+      ${[1,2,3,4,5].map(n => `<button class="att-star${(saved.rating||0)>=n?" att-star--filled":""}"
+        data-att-worker="${worker.id}" data-att-star="${n}" type="button">★</button>`).join("")}
+    </div>` : "";
+
+  const showGps = savedStatus && savedStatus !== "notRequired" && savedStatus !== "siteCancelled";
+  const gpsData = saved.gps;
+  const gpsRow  = showGps ? `
+    <div class="att-gps-row" id="gps-${worker.id}">
+      ${gpsData
+        ? `<div class="gps-captured-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            ${gpsData.distance !== null ? gpsDistanceLabel(gpsData.distance) : "Location captured"}
+           </div>`
+        : `<button class="gps-capture-btn" data-gps-worker="${worker.id}" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            Record My Location
+           </button>`}
+    </div>` : "";
+
+  const statsRow = stats.totalShifts > 0 ? `
+    <div class="wsa-stats-row">
+      <span class="wsa-stat">
+        <span class="wsa-stat-val" style="color:${stats.reliability>=90?"var(--orange)":stats.reliability>=75?"var(--green-text)":"var(--red-text)"}">${stats.reliability}%</span>
+        Reliability
+      </span>
+      <span class="wsa-sep">·</span>
+      <span class="wsa-stat"><span class="wsa-stat-val">${stats.punctuality ?? 100}%</span> Punctuality</span>
+      ${stats.performance ? `<span class="wsa-sep">·</span><span class="wsa-stat"><span class="wsa-stat-val" style="color:var(--amber-text)">★ ${stats.performance}</span> Avg Rating</span>` : ""}
+      <span class="wsa-sep">·</span>
+      <span class="wsa-stat"><span class="wsa-stat-val">${stats.totalShifts}</span> Shift${stats.totalShifts!==1?"s":""}</span>
+    </div>` : "";
+
+  const currentLabel = savedStatus
+    ? `<span class="wsa-current-status" style="color:${ATT_CFG[savedStatus].color}">${ATT_CFG[savedStatus].icon} ${ATT_CFG[savedStatus].label}</span>`
+    : `<span class="wsa-current-status" style="color:var(--ink-3)">Not recorded yet</span>`;
+
+  return `
+  <article class="attendance-card wsa-card" id="att-card-${worker.id}">
+    <div class="wsa-date-row">
+      <span class="wsa-date-label">${formatAttDate(today)}</span>
+      ${currentLabel}
+    </div>
+    ${statsRow}
+    <div class="att-status-btns wsa-btns">${statusBtns}</div>
+    ${ratingRow}
+    ${gpsRow}
+  </article>`;
+}
+
+function bindWorkerAttEvents(container, uid, workerObj) {
+  container.querySelectorAll("[data-att-status]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
+      const status = btn.dataset.attStatus;
+      todayAttendanceMap[uid].status = todayAttendanceMap[uid].status === status ? null : status;
+      if (status !== "onTime" && status !== "late") todayAttendanceMap[uid].rating = 0;
+      refreshWorkerAttCard(uid, workerObj);
+    });
+  });
+  container.querySelectorAll("[data-att-star]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const n = Number(btn.dataset.attStar);
+      if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
+      todayAttendanceMap[uid].rating = todayAttendanceMap[uid].rating === n ? 0 : n;
+      refreshWorkerAttCard(uid, workerObj);
+    });
+  });
+  container.querySelectorAll("[data-gps-worker]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.textContent = "Getting location…";
+      btn.disabled = true;
+      try {
+        const { lat, lng } = await getGPS();
+        const job  = state.jobs.find(j => j.assignedWorkerId === uid);
+        const dist = job?.sitePin ? haversine(lat, lng, job.sitePin.lat, job.sitePin.lng) : null;
+        if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
+        todayAttendanceMap[uid].gps = { lat, lng, distance: dist, timestamp: Date.now() };
+        refreshWorkerAttCard(uid, workerObj);
+      } catch (_) {
+        showToast("Location unavailable — enable location access in your browser");
+        btn.textContent = "Record My Location";
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function refreshWorkerAttCard(uid, workerObj) {
+  const card = document.getElementById("att-card-" + uid);
+  if (!card) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = workerSelfAttCard(workerObj, todayDateStr());
+  card.replaceWith(tmp.firstElementChild);
+  bindWorkerAttEvents(document.getElementById("attendanceCards"), uid, workerObj);
+}
+
+function submitWorkerAttendance(user, workerObj) {
+  const today = todayDateStr();
+  const uid   = user.id;
+  const data  = todayAttendanceMap[uid];
+
+  if (!data?.status) { showToast("Please select a status first"); return; }
+
+  const rec = {
+    id: createId(), workerId: uid, date: today,
+    status: data.status, rating: data.rating || 0, recordedAt: Date.now(),
+    selfReported: true,
+  };
+  if (data.gps) {
+    rec.gpsLat = data.gps.lat; rec.gpsLng = data.gps.lng;
+    rec.gpsDistance = data.gps.distance; rec.gpsTimestamp = data.gps.timestamp;
+  }
+
+  attendanceRecords = attendanceRecords.filter(r => !(r.workerId === uid && r.date === today));
+  attendanceRecords.unshift(rec);
+  saveAttendanceRecords();
+
+  const lbl = { onTime:"on time", late:"late", noShow:"no-showed", notRequired:"not required", siteCancelled:"site cancelled" };
+  logActivity("attend", `<strong>${escapeHtml(user.name)}</strong> checked in — ${lbl[data.status] || data.status}`);
+
+  showToast(`Attendance saved — ${ATT_CFG[data.status].label}`);
+  renderWorkerAttendance(user);
+}
+
+// ─── Worker Timesheet ─────────────────────────────────────
+function renderWorkerTimesheet(uid, user, histEl) {
+  if (!histEl) return;
+
+  const myRecs = attendanceRecords
+    .filter(r => r.workerId === uid)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const stats = getWorkerStats(uid);
+
+  const tsHeader = document.querySelector("#tab-attendance .ts-header");
+
+  if (!myRecs.length) {
+    histEl.innerHTML = `<div class="att-empty">No attendance history yet — mark your first day above.</div>`;
+    return;
+  }
+
+  const summaryBar = `
+    <div class="ts-summary">
+      <div class="ts-summary-item">
+        <div class="ts-summary-val" style="color:${stats.reliability>=90?"var(--orange)":stats.reliability>=75?"var(--green-text)":"var(--red-text)"}">${stats.reliability ?? "—"}%</div>
+        <div class="ts-summary-lbl">Reliability</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${stats.punctuality ?? "—"}%</div>
+        <div class="ts-summary-lbl">Punctuality</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${stats.performance ? `★${stats.performance}` : "—"}</div>
+        <div class="ts-summary-lbl">Avg Rating</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${stats.totalShifts}</div>
+        <div class="ts-summary-lbl">Shifts</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${stats.noShow}</div>
+        <div class="ts-summary-lbl">No Shows</div>
+      </div>
+    </div>`;
+
+  const rows = myRecs.map(rec => {
+    const cfg  = ATT_CFG[rec.status] || ATT_CFG.notRequired;
+    const stars = rec.rating ? `<span class="ts-stars">${"★".repeat(rec.rating)}${"☆".repeat(5 - rec.rating)}</span>` : "";
+    const job   = state.jobs.find(j => j.assignedWorkerId === uid);
+    const site  = job ? `<span class="ts-site">${escapeHtml(job.location)}</span>` : "";
+    const gps   = rec.gpsLat ? `<span class="ts-gps" title="GPS recorded">📍</span>` : "";
+    const self  = rec.selfReported ? `<span class="ts-self-badge">Self</span>` : `<span class="ts-co-badge">Co</span>`;
+    return `
+      <div class="ts-row">
+        <div class="ts-row-date">${formatAttDate(rec.date)}</div>
+        <div class="ts-row-status">
+          <span class="ts-status-dot" style="background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.border}">${cfg.icon}</span>
+          <span class="ts-status-lbl" style="color:${cfg.color}">${cfg.label}</span>
+        </div>
+        <div class="ts-row-right">${site}${stars}${gps}${self}</div>
+      </div>`;
+  }).join("");
+
+  histEl.innerHTML = summaryBar + `<div class="ts-rows">${rows}</div>`;
+}
+
 // ─── Render Attendance Tab ─────────────────────────────────
 function renderAttendance() {
   const container = document.getElementById("attendanceCards");
   const histEl    = document.getElementById("attendanceHistory");
   const badge     = document.getElementById("attTodayBadge");
   if (!container) return;
+
+  // Reset labels for company/admin (worker view may have changed these)
+  const attTitle = document.querySelector("#tab-attendance .panel-title");
+  const attSub   = document.querySelector("#tab-attendance .panel-subtitle");
+  if (attTitle) attTitle.textContent = "Attendance";
+  if (attSub)   attSub.textContent   = "Record today's workforce — tap a status for each worker";
+  const histTitle = document.getElementById("attHistoryTitle");
+  const histSub   = document.getElementById("attHistorySub");
+  if (histTitle) histTitle.textContent = "History";
+  if (histSub)   histSub.textContent   = "Past attendance records by day";
+  const disputeWrap = document.getElementById("disputeDashboard");
+  const disputeHdr  = disputeWrap?.previousElementSibling;
+  if (disputeWrap) disputeWrap.style.display = "";
+  if (disputeHdr)  disputeHdr.style.display  = "";
+  const submitBtn = document.getElementById("submitAttendanceBtn");
+  if (submitBtn) { submitBtn.textContent = "Submit Attendance"; submitBtn.onclick = null; }
 
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
