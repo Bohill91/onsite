@@ -72,6 +72,18 @@
               <p class="panel-subtitle">Manage profiles, availability &amp; reliability ratings</p>
             </div>
           </div>
+          <div class="workers-toolbar">
+            <div class="search-wrap">
+              <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="workerSearch" type="search" placeholder="Search by name or trade…" autocomplete="off" />
+            </div>
+            <div class="filter-chips">
+              <button class="filter-chip active" data-filter="all"       type="button">All</button>
+              <button class="filter-chip"        data-filter="available" type="button">Available</button>
+              <button class="filter-chip"        data-filter="elite"     type="button">Elite 90+</button>
+            </div>
+          </div>
+          <div id="workersEmpty" class="empty-state" style="display:none">No workers match your search.</div>
           <div id="workersList" class="card-list"></div>
         </div>
 

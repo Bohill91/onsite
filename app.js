@@ -124,11 +124,26 @@ function saveAndRender() {
 const workerForm    = document.querySelector("#workerForm");
 const jobForm       = document.querySelector("#jobForm");
 const workersList   = document.querySelector("#workersList");
+const workersEmpty  = document.querySelector("#workersEmpty");
 const jobsList      = document.querySelector("#jobsList");
 const matchResults  = document.querySelector("#matchResults");
 const resetDemoBtn  = document.querySelector("#resetDemoBtn");
 const workerCount   = document.querySelector("#workerCount");
 const jobCount      = document.querySelector("#jobCount");
+const workerSearch  = document.querySelector("#workerSearch");
+
+let activeFilter = "all";
+
+workerSearch.addEventListener("input", () => renderWorkers());
+
+document.querySelectorAll(".filter-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    activeFilter = chip.dataset.filter;
+    renderWorkers();
+  });
+});
 
 // ─── Tab Routing ──────────────────────────────────────────
 const allTabBtns   = document.querySelectorAll("[data-tab]");
@@ -204,9 +219,25 @@ function render() {
 
 // ─── Worker Cards ─────────────────────────────────────────
 function renderWorkers() {
-  workersList.innerHTML = state.workers.length
-    ? state.workers.map(workerCard).join("")
-    : emptyState("No workers in the roster yet. Add one from the Add tab.");
+  const query = (workerSearch.value || "").trim().toLowerCase();
+  const filtered = state.workers.filter(w => {
+    const matchesSearch = !query ||
+      w.name.toLowerCase().includes(query) ||
+      w.trade.toLowerCase().includes(query) ||
+      (w.qualifications || "").toLowerCase().includes(query);
+    const matchesFilter =
+      activeFilter === "all"       ? true :
+      activeFilter === "available" ? w.availability === "available" :
+      activeFilter === "elite"     ? w.reliability >= 90 :
+      true;
+    return matchesSearch && matchesFilter;
+  });
+
+  const hasAny = state.workers.length > 0;
+  workersEmpty.style.display = (hasAny && filtered.length === 0) ? "block" : "none";
+  workersList.innerHTML = !hasAny
+    ? emptyState("No workers in the roster yet. Add one from the Add tab.")
+    : filtered.map(workerCard).join("");
 
   workersList.querySelectorAll("[data-worker-avail]").forEach(sel => {
     sel.addEventListener("change", () => {
