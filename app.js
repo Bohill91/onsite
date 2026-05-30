@@ -61,6 +61,82 @@ function clampScore(value) {
 
 function normalize(v) { return v.trim().toLowerCase(); }
 
+// ─── Profile Completion ────────────────────────────────────
+function calcWorkerCompletion(worker) {
+  const checks = [
+    !!worker.name,
+    !!worker.trade,
+    !!(worker.qualifications || (worker.certifications && worker.certifications.length)),
+    !!worker.utr,
+    !!worker.rightToWork,
+    !!(worker.location || worker.grade || worker.yearsExp),
+  ];
+  return Math.round(checks.filter(Boolean).length / checks.length * 100);
+}
+
+function completionRingHTML(pct) {
+  const size = 34;
+  const r    = 13;
+  const circ = 2 * Math.PI * r;
+  const fill = (pct / 100) * circ;
+  const color = pct >= 80 ? "var(--green-text)" : pct >= 50 ? "var(--amber-text)" : "var(--red-text)";
+  return `<div class="completion-mini" title="Profile ${pct}% complete">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="2.5"
+        stroke-dasharray="${fill.toFixed(2)} ${circ.toFixed(2)}"
+        stroke-dashoffset="${(circ * 0.25).toFixed(2)}"
+        stroke-linecap="round"/>
+    </svg>
+    <span class="completion-mini-pct" style="color:${color}">${pct}%</span>
+  </div>`;
+}
+
+// ─── Document Expiry ──────────────────────────────────────
+function certExpiryStatus(expiry) {
+  if (!expiry) return null;
+  const daysLeft = Math.ceil((new Date(expiry) - new Date()) / 86400000);
+  if (daysLeft < 0)   return { cls: "cert-expired",  label: "Expired" };
+  if (daysLeft <= 30) return { cls: "cert-expiring", label: `Exp in ${daysLeft}d` };
+  return {
+    cls:   "cert-valid",
+    label: new Date(expiry).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+  };
+}
+
+function certChipsHTML(worker) {
+  const certs = worker.certifications;
+  if (certs && certs.length && typeof certs[0] === "object") {
+    return certs.slice(0, 4).map(c => {
+      const st = certExpiryStatus(c.expiry);
+      return st
+        ? `<span class="cert-chip ${st.cls}">${escapeHtml(c.name)}<span class="cert-exp-label">${st.label}</span></span>`
+        : `<span class="qual-chip">${escapeHtml(c.name)}</span>`;
+    }).join("");
+  }
+  if (certs && certs.length && typeof certs[0] === "string") {
+    return certs.slice(0, 3).map(n => `<span class="qual-chip">${escapeHtml(n)}</span>`).join("");
+  }
+  return (worker.qualifications || "").split(",").map(q => q.trim()).filter(Boolean)
+    .slice(0, 3).map(q => `<span class="qual-chip">${escapeHtml(q)}</span>`).join("");
+}
+
+function certExpiryWarnings(worker) {
+  const certs = worker.certifications;
+  if (!certs || !certs.length || typeof certs[0] !== "object") return "";
+  const problems = certs.filter(c => {
+    const st = certExpiryStatus(c.expiry);
+    return st && (st.cls === "cert-expired" || st.cls === "cert-expiring");
+  });
+  if (!problems.length) return "";
+  const expired  = problems.filter(c => certExpiryStatus(c.expiry).cls === "cert-expired");
+  const expiring = problems.filter(c => certExpiryStatus(c.expiry).cls === "cert-expiring");
+  const parts = [];
+  if (expired.length)  parts.push(`<span class="doc-warn doc-warn--expired">${expired.length} cert${expired.length>1?"s":""} expired</span>`);
+  if (expiring.length) parts.push(`<span class="doc-warn doc-warn--expiring">${expiring.length} expiring soon</span>`);
+  return `<div class="worker-doc-warnings">${parts.join("")}</div>`;
+}
+
 function formatDate(value) {
   if (!value) return "No date set";
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -415,10 +491,10 @@ function renderWorkers() {
 }
 
 function workerCard(worker) {
-  const avCls    = avatarColor(worker.name);
+  const avCls     = avatarColor(worker.name);
   const statusCls = worker.availability === "available" ? "available" : "unavailable";
-  const quals    = (worker.qualifications || "").split(",").map(q => q.trim()).filter(Boolean);
-  const stats    = getWorkerStats(worker.id);
+  const stats     = getWorkerStats(worker.id);
+  const completion = calcWorkerCompletion(worker);
 
   const statsRow = stats.totalShifts > 0 ? `
     <div class="worker-att-stats">
@@ -439,11 +515,15 @@ function workerCard(worker) {
         <div class="worker-trade">${escapeHtml(worker.trade)}</div>
         <div class="worker-quals">
           <span class="status-pill ${statusCls}">${worker.availability}</span>
-          ${quals.slice(0, 3).map(q => `<span class="qual-chip">${escapeHtml(q)}</span>`).join("")}
+          ${certChipsHTML(worker)}
         </div>
       </div>
-      ${reliabilityBadge(worker.reliability)}
+      <div class="worker-card-scores">
+        ${reliabilityBadge(worker.reliability)}
+        ${completionRingHTML(completion)}
+      </div>
     </div>
+    ${certExpiryWarnings(worker)}
     ${statsRow}
     <div class="worker-card-actions">
       <select class="worker-select" aria-label="Update availability" data-worker-avail="${worker.id}">
@@ -595,8 +675,11 @@ function matchCard(job) {
 }
 
 function matchWorkerRow(worker, index) {
-  const avCls = avatarColor(worker.name);
-  const rankCls = index === 0 ? "rank-1" : "rank-other";
+  const avCls    = avatarColor(worker.name);
+  const rankCls  = index === 0 ? "rank-1" : "rank-other";
+  const rel      = worker._reliability ?? worker.reliability;
+  const punc     = worker._punctuality ?? 100;
+  const puncColor = punc >= 90 ? "var(--green-text)" : punc >= 70 ? "var(--amber-text)" : "var(--red-text)";
   return `
   <div class="match-worker-row">
     <div class="match-rank ${rankCls}">${index + 1}</div>
@@ -604,16 +687,44 @@ function matchWorkerRow(worker, index) {
     <div class="match-worker-info">
       <div class="match-worker-name">${index === 0 ? "⭐ " : ""}${escapeHtml(worker.name)}</div>
       <div class="match-worker-quals">${escapeHtml(worker.qualifications || worker.trade)}</div>
+      <div class="match-worker-meta">
+        <span class="match-meta-item">Reliability <b>${rel}%</b></span>
+        <span class="match-meta-sep">·</span>
+        <span class="match-meta-item" style="color:${puncColor}">Punctuality <b>${punc}%</b></span>
+      </div>
     </div>
-    ${miniBadge(worker.reliability)}
+    ${miniBadge(worker._composite ?? worker.reliability)}
   </div>`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
 function getMatches(job) {
+  const jobQualList = (job.requiredQualifications || "")
+    .split(",").map(q => q.trim().toLowerCase()).filter(Boolean);
+
   return state.workers
     .filter(w => normalize(w.trade) === normalize(job.trade) && w.availability === "available")
-    .sort((a, b) => b.reliability - a.reliability);
+    .map(w => {
+      const stats      = getWorkerStats(w.id);
+      const reliability = stats.totalShifts > 0 ? stats.reliability : w.reliability;
+      const punctuality = stats.punctuality ?? 100;
+
+      // Qualification match: how many job-required quals does worker have?
+      let qualBonus = 10; // neutral if no specific quals required
+      if (jobQualList.length) {
+        const workerQualStr = [
+          w.qualifications || "",
+          ...(w.certifications || []).map(c => (typeof c === "object" ? c.name : c)),
+        ].join(" ").toLowerCase();
+        const matched = jobQualList.filter(q => workerQualStr.includes(q)).length;
+        qualBonus = Math.round((matched / jobQualList.length) * 20);
+      }
+
+      // Composite: 50% reliability + 30% punctuality + 20% qual bonus (normalised)
+      const composite = Math.round(reliability * 0.5 + punctuality * 0.3 + qualBonus * 0.2 * 5);
+      return { ...w, _reliability: reliability, _punctuality: punctuality, _qualBonus: qualBonus, _composite: composite };
+    })
+    .sort((a, b) => b._composite - a._composite);
 }
 
 function findWorker(id) { return state.workers.find(w => w.id === id); }

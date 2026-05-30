@@ -411,9 +411,9 @@
 
 /* ─── Cert Checkboxes ───────────────────────────────────── */
 .cert-checkboxes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 4px;
 }
 
@@ -428,7 +428,7 @@
   font-size: 0.83rem;
   font-weight: 600;
   color: var(--ink-2);
-  padding: 9px 12px;
+  padding: 8px 12px;
   transition: all 0.12s;
   user-select: none;
 }
@@ -446,10 +446,40 @@
   cursor: pointer;
 }
 
+.cert-name {
+  flex: 1;
+}
+
+.cert-expiry-input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.75rem;
+  opacity: 0;
+  padding: 3px 7px;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.cert-checkbox:has(input[type="checkbox"]:checked) .cert-expiry-input {
+  opacity: 1;
+  pointer-events: all;
+}
+
 .cert-checkbox:has(input:checked) {
   background: var(--orange-light);
   border-color: var(--orange);
   color: var(--orange);
+}
+
+.cert-checkbox:has(input:checked) .cert-expiry-input {
+  border-color: rgba(249, 115, 22, 0.35);
+  color: var(--ink);
 }
 
 /* ─── Document Select ───────────────────────────────────── */

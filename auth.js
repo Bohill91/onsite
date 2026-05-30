@@ -154,8 +154,12 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
   }
   err.style.display = 'none';
 
-  const certs = Array.from(document.querySelectorAll('#certCheckboxes input:checked'))
-    .map(c => c.value);
+  const certs = Array.from(document.querySelectorAll('#certCheckboxes input[type="checkbox"]:checked'))
+    .map(function(c) {
+      const lbl    = c.closest('.cert-checkbox');
+      const expiry = lbl ? (lbl.querySelector('.cert-expiry-input')?.value || null) : null;
+      return { name: c.value, expiry: expiry || null };
+    });
 
   const user = {
     id: 'user-' + Date.now() + '-' + Math.random().toString(16).slice(2),
@@ -364,7 +368,11 @@ document.getElementById('logoutBtn').addEventListener('click', function() {
   // Populate cert checkboxes
   const certContainer = document.getElementById('certCheckboxes');
   certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
-    return '<label class="cert-checkbox"><input type="checkbox" value="' + c + '" /><span>' + c + '</span></label>';
+    return '<label class="cert-checkbox">' +
+      '<input type="checkbox" value="' + c + '" />' +
+      '<span class="cert-name">' + c + '</span>' +
+      '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
+      '</label>';
   }).join('');
 
   // Populate initial grades
