@@ -59,7 +59,21 @@ function clampScore(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
-function normalize(v) { return v.trim().toLowerCase(); }
+function normalize(v) { return (v || "").trim().toLowerCase(); }
+
+// Map common trade role/category synonyms to a canonical category so that
+// company job trades and worker registration trades match reliably.
+const TRADE_SYNONYMS = {
+  electrical: "electrical", electrician: "electrical", electric: "electrical", sparky: "electrical",
+  plumbing: "plumbing", plumber: "plumbing", pipefitter: "plumbing",
+  carpentry: "carpentry", carpenter: "carpentry", joiner: "carpentry", chippy: "carpentry",
+  groundworks: "groundworks", groundwork: "groundworks", groundworker: "groundworks",
+  labourer: "groundworks", laborer: "groundworks", labouring: "groundworks",
+};
+function canonicalTrade(v) {
+  const n = normalize(v);
+  return TRADE_SYNONYMS[n] || n;
+}
 
 // ─── Profile Completion ────────────────────────────────────
 function calcWorkerCompletion(worker) {
@@ -220,15 +234,15 @@ function renderActivity() {
 // ─── Demo Data ────────────────────────────────────────────
 const demoData = {
   workers: [
-    { id: createId(), name: "Sam Taylor",    trade: "Electrician", qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92 },
-    { id: createId(), name: "Aisha Khan",    trade: "Labourer",    qualifications: "CSCS green card",         availability: "available",     reliability: 84 },
-    { id: createId(), name: "Mark Evans",    trade: "Plumber",     qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78 },
-    { id: createId(), name: "Grace Miller",  trade: "Electrician", qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88 },
-    { id: createId(), name: "Liam Chen",     trade: "Carpenter",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
+    { id: createId(), name: "Sam Taylor",    trade: "Electrical",  qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92 },
+    { id: createId(), name: "Aisha Khan",    trade: "Groundworks", qualifications: "CSCS green card",         availability: "available",     reliability: 84 },
+    { id: createId(), name: "Mark Evans",    trade: "Plumbing",    qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78 },
+    { id: createId(), name: "Grace Miller",  trade: "Electrical",  qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88 },
+    { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
   ],
   jobs: [
-    { id: createId(), trade: "Electrician", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16), duration: "3 days",  assignedWorkerId: "" },
-    { id: createId(), trade: "Carpenter",   location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", assignedWorkerId: "" },
+    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16), duration: "3 days",  assignedWorkerId: "" },
+    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", assignedWorkerId: "" },
   ],
 };
 
@@ -406,9 +420,9 @@ function renderWorkerHome(user) {
   const booking = state.jobs.find(j => j.assignedWorkerId === user.id);
 
   // Recommended jobs (trade-matched, up to 3)
-  const trade = (user.trade || "").toLowerCase().trim();
+  const trade = canonicalTrade(user.trade);
   const recommended = [...state.jobs]
-    .filter(j => !trade || normalize(j.trade) === trade)
+    .filter(j => !trade || canonicalTrade(j.trade) === trade)
     .sort((a, b) => (new Date(a.start || 0)) - (new Date(b.start || 0)))
     .slice(0, 3);
 
@@ -691,11 +705,11 @@ function renderWorkerJobBoard(user) {
   const jobsList = document.getElementById("jobsList");
   if (!jobsList) return;
 
-  const trade = (user?.trade || "").toLowerCase().trim();
+  const trade = canonicalTrade(user?.trade);
 
   // Filter to only jobs matching this worker's trade, sorted by start date
   const sorted = [...state.jobs]
-    .filter(job => !trade || normalize(job.trade) === trade)
+    .filter(job => !trade || canonicalTrade(job.trade) === trade)
     .sort((a, b) => (new Date(a.start || 0)) - (new Date(b.start || 0)));
 
   const stats  = getWorkerStats(user?.id || "");

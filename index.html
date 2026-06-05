@@ -629,7 +629,14 @@
               <form id="jobForm" class="form-grid">
                 <label class="field-label">
                   Trade Required
-                  <input id="jobTrade" type="text" required placeholder="e.g. Plumber" />
+                  <select id="jobTrade" required>
+                    <option value="">Select a trade</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Carpentry">Carpentry</option>
+                    <option value="Groundworks">Groundworks</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </label>
                 <label class="field-label">
                   Location
