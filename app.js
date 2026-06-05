@@ -1807,8 +1807,6 @@ function renderWorkerAttendance(user) {
   const submitBtn  = document.getElementById("submitAttendanceBtn");
   const submitWrap = document.querySelector(".att-submit-wrap");
   const histEl     = document.getElementById("attendanceHistory");
-  const disputeWrap= document.getElementById("disputeDashboard");
-  const disputeHdr = disputeWrap?.previousElementSibling;
   const badge      = document.getElementById("attTodayBadge");
   if (!container) return;
 
@@ -1817,10 +1815,6 @@ function renderWorkerAttendance(user) {
   const attSub   = document.querySelector("#tab-attendance .panel-subtitle");
   if (attTitle) attTitle.textContent = "My Attendance";
   if (attSub)   attSub.textContent   = "Mark your status for today — this feeds your timesheet";
-
-  // Hide the company dispute panel
-  if (disputeWrap) disputeWrap.style.display = "none";
-  if (disputeHdr)  disputeHdr.style.display  = "none";
 
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
@@ -2099,10 +2093,6 @@ function renderAttendance() {
   const histSub   = document.getElementById("attHistorySub");
   if (histTitle) histTitle.textContent = "History";
   if (histSub)   histSub.textContent   = "Past attendance records by day";
-  const disputeWrap = document.getElementById("disputeDashboard");
-  const disputeHdr  = disputeWrap?.previousElementSibling;
-  if (disputeWrap) disputeWrap.style.display = "";
-  if (disputeHdr)  disputeHdr.style.display  = "";
   const submitBtn = document.getElementById("submitAttendanceBtn");
   if (submitBtn) { submitBtn.textContent = "Submit Attendance"; submitBtn.onclick = null; }
 
@@ -2184,7 +2174,6 @@ function renderAttendance() {
     btn.addEventListener("click", () => openDisputeModal(btn.dataset.disputeRecord));
   });
 
-  renderDisputeDashboard();
 }
 
 // ─── GPS & Geofence Helpers ───────────────────────────────
@@ -2340,93 +2329,6 @@ function resolveDispute(recordId, resolution) {
   renderAttendance();
 }
 
-function renderDisputeDashboard() {
-  const container = document.getElementById("disputeDashboard");
-  if (!container) return;
-
-  const disputes = attendanceRecords.filter(r => r.disputeStatus);
-  if (!disputes.length) {
-    container.innerHTML = `<div class="att-empty">No disputes raised yet.</div>`;
-    return;
-  }
-
-  container.innerHTML = disputes.map(rec => {
-    const w       = findWorker(rec.workerId);
-    const job     = state.jobs.find(j => j.assignedWorkerId === rec.workerId);
-    const cfg     = ATT_CFG[rec.status] || ATT_CFG.notRequired;
-    const pending = rec.disputeStatus === "pending";
-
-    const gpsHtml = rec.gpsLat ? `
-      <div class="dd-row">
-        <span class="dd-label">GPS Evidence</span>
-        <span class="dd-val">${gpsDistanceLabel(rec.gpsDistance)}</span>
-      </div>` : "";
-
-    const photosHtml = rec.disputePhotos?.length ? `
-      <div class="dd-row dd-row--photos">
-        <span class="dd-label">Evidence Photos</span>
-        <div class="dd-photo-strip">
-          ${rec.disputePhotos.map(src => `<img src="${src}" class="dd-evidence-thumb"
-            data-lightbox-src="${src}" data-lightbox-label="Dispute Evidence" alt="Evidence" />`).join("")}
-        </div>
-      </div>` : "";
-
-    const resHtml = !pending ? `
-      <div class="dd-resolution ${rec.resolution === "accepted_worker" ? "dd-res--worker" : "dd-res--company"}">
-        ${rec.resolution === "accepted_worker"
-          ? `✓ Worker claim accepted · Record updated to <strong>${ATT_CFG[rec.resolvedStatus]?.label || rec.resolvedStatus}</strong>`
-          : `✓ Original record confirmed — ${cfg.icon} ${cfg.label} stands`}
-      </div>` : "";
-
-    const actHtml = pending ? `
-      <div class="dd-actions">
-        <button class="dd-btn dd-btn--accept" data-resolve="${rec.id}" data-resolution="accepted_worker" type="button">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Accept Worker Claim
-        </button>
-        <button class="dd-btn dd-btn--reject" data-resolve="${rec.id}" data-resolution="accepted_company" type="button">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          Confirm Original
-        </button>
-      </div>` : "";
-
-    return `
-    <div class="dispute-card ${pending ? "dispute-card--pending" : "dispute-card--resolved"}">
-      <div class="dd-header">
-        <div class="dd-worker">
-          <span class="dd-worker-name">${escapeHtml(w?.name || "Unknown")}</span>
-          <span class="dd-worker-meta">${formatAttDate(rec.date)}${job ? ` · ${escapeHtml(job.location)}` : ""}</span>
-        </div>
-        <span class="dd-badge ${pending ? "dd-badge--pending" : "dd-badge--resolved"}">
-          ${pending ? "⏳ Under Review" : "✓ Resolved"}
-        </span>
-      </div>
-      <div class="dd-body">
-        <div class="dd-row">
-          <span class="dd-label">Original Record</span>
-          <span class="dd-val" style="color:${cfg.color};font-weight:700">${cfg.icon} ${cfg.label}</span>
-        </div>
-        <div class="dd-row">
-          <span class="dd-label">Dispute Reason</span>
-          <span class="dd-val">${escapeHtml(rec.disputeReason || "—")}</span>
-        </div>
-        ${rec.disputeComment ? `
-        <div class="dd-row dd-row--full">
-          <span class="dd-label">Worker Comment</span>
-          <span class="dd-val dd-comment">"${escapeHtml(rec.disputeComment)}"</span>
-        </div>` : ""}
-        ${gpsHtml}
-        ${photosHtml}
-      </div>
-      ${resHtml}
-      ${actHtml}
-    </div>`;
-  }).join("");
-
-  container.querySelectorAll("[data-resolve]").forEach(btn => {
-    btn.addEventListener("click", () => resolveDispute(btn.dataset.resolve, btn.dataset.resolution));
-  });
-}
 
 // Evidence file preview
 document.getElementById("evidenceFileInput")?.addEventListener("change", e => {
