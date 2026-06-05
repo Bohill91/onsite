@@ -1,0 +1,1 @@
+- [OnSite Architecture & Role Nav](onsite-architecture.md) — dynamic nav rebuild pattern, render dispatch, dashboard restore, user type keys, job model fields.

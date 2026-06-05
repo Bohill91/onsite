@@ -283,82 +283,408 @@ function getSessionUser() {
 }
 
 // ─── Tab Routing ──────────────────────────────────────────
-const allTabBtns   = document.querySelectorAll("[data-tab]");
-const allTabPanels = document.querySelectorAll(".tab-panel");
-
 function switchTab(tab) {
-  allTabBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
-  allTabPanels.forEach(panel => panel.classList.toggle("active", panel.id === `tab-${tab}`));
+  document.querySelectorAll("[data-tab]").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach(panel =>
+    panel.classList.toggle("active", panel.id === `tab-${tab}`));
 }
 
-allTabBtns.forEach(btn => {
-  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-});
+function bindTabEvents() {
+  document.querySelectorAll("[data-tab]").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+}
+bindTabEvents();
+
+// ─── Nav Rebuild ──────────────────────────────────────────
+const ORIG_TOP_NAV    = document.querySelector(".tab-nav").innerHTML;
+const ORIG_BOTTOM_NAV = document.querySelector(".bottom-nav").innerHTML;
+const ORIG_DASHBOARD  = document.getElementById("tab-dashboard").innerHTML;
+
+const NAV_SM = {
+  home:      `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  jobs:      `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
+  bookings:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  profile:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  requests:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  workforce: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  account:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
+};
+
+const NAV_LG = Object.fromEntries(
+  Object.entries(NAV_SM).map(([k, v]) => [k, v.replace(/width="16" height="16"/g, 'width="22" height="22"')])
+);
+
+const WORKER_TABS = [
+  { id: "dashboard",  icon: "home",     label: "Home"     },
+  { id: "jobs",       icon: "jobs",     label: "Jobs"     },
+  { id: "attendance", icon: "bookings", label: "Bookings" },
+  { id: "profile",    icon: "profile",  label: "Profile"  },
+];
+
+const CONTRACTOR_TABS = [
+  { id: "dashboard", icon: "home",      label: "Home"      },
+  { id: "add",       icon: "requests",  label: "Requests"  },
+  { id: "workers",   icon: "workforce", label: "Workforce" },
+  { id: "account",   icon: "account",   label: "Account"   },
+];
+
+function rebuildNav(tabDefs, activeId) {
+  const topNav    = document.querySelector(".tab-nav");
+  const bottomNav = document.querySelector(".bottom-nav");
+  if (!topNav || !bottomNav) return;
+  topNav.innerHTML = tabDefs.map(t => `
+    <button class="tab-btn${t.id === activeId ? " active" : ""}" data-tab="${t.id}" type="button">
+      ${NAV_SM[t.icon] || ""}${t.label}
+    </button>`).join("");
+  bottomNav.innerHTML = tabDefs.map(t => `
+    <button class="bottom-nav-btn${t.id === activeId ? " active" : ""}" data-tab="${t.id}" type="button">
+      ${NAV_LG[t.icon] || ""}
+      <span>${t.label}</span>
+    </button>`).join("");
+  bindTabEvents();
+}
+
+function restoreNav() {
+  document.querySelector(".tab-nav").innerHTML    = ORIG_TOP_NAV;
+  document.querySelector(".bottom-nav").innerHTML = ORIG_BOTTOM_NAV;
+  bindTabEvents();
+}
 
 // ─── Role-Based View ─────────────────────────────────────
 function applyRoleView(user) {
   const role = user?.type || null;
 
-  const workerTabBtns = document.querySelectorAll('[data-tab="workers"]');
-  const addTabBtns    = document.querySelectorAll('[data-tab="add"]');
-
   if (role === "worker") {
-    // Hide Workers + Add tabs — not relevant for workers
-    workerTabBtns.forEach(b => { b.style.display = "none"; b.classList.remove("active"); });
-    addTabBtns.forEach(b    => { b.style.display = "none"; b.classList.remove("active"); });
-
-    // Update the Jobs tab label and header for worker context
-    document.querySelectorAll('[data-tab="jobs"] span, [data-tab="jobs"]').forEach(el => {
-      if (el.tagName === "SPAN") el.textContent = "Jobs";
-    });
+    rebuildNav(WORKER_TABS, "dashboard");
+    // Update jobs panel header for workers
     const jobsHeader = document.querySelector("#tab-jobs .panel-title");
     const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
     if (jobsHeader) jobsHeader.textContent = "Available Jobs";
-    if (jobsSub)    jobsSub.textContent    = "Open positions that match your trade — starting soon";
-
-    // Remove the job count badge (irrelevant for workers)
-    const jc = document.getElementById("jobCount");
-    if (jc) jc.style.display = "none";
-
-    switchTab("jobs");
-    renderWorkerJobBoard(user);
+    if (jobsSub)    jobsSub.textContent    = "Open positions matching your trade";
+    render();
+    switchTab("dashboard");
 
   } else if (role === "company") {
-    // Show everything
-    workerTabBtns.forEach(b => b.style.display = "");
-    addTabBtns.forEach(b    => b.style.display = "");
-
-    // Reset jobs tab labels
-    const jobsHeader = document.querySelector("#tab-jobs .panel-title");
-    const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
-    if (jobsHeader) jobsHeader.textContent = "Job Requests";
-    if (jobsSub)    jobsSub.textContent    = "Contractor requests awaiting assignment";
-    const jc = document.getElementById("jobCount");
-    if (jc) jc.style.display = "";
-
-    // Default Add tab to job form, not worker form
-    document.querySelectorAll(".add-toggle-btn").forEach(b => b.classList.remove("active"));
-    const jobToggle = document.querySelector('.add-toggle-btn[data-form="job"]');
-    if (jobToggle) jobToggle.classList.add("active");
+    rebuildNav(CONTRACTOR_TABS, "dashboard");
+    // Contractors: show job form only, hide worker form and toggle bar
+    document.querySelector(".add-toggle")?.classList.add("hidden");
     document.querySelector("#formWorker")?.classList.add("hidden");
     document.querySelector("#formJob")?.classList.remove("hidden");
-
+    // Update the add tab header for contractors
+    const addTitle = document.querySelector("#tab-add .form-card-header h3");
+    const addSub   = document.querySelector("#tab-add .form-card-header p");
+    if (addTitle) addTitle.textContent = "Labour Request";
+    if (addSub)   addSub.textContent   = "Post a new labour requirement";
+    render();
     switchTab("dashboard");
 
   } else {
-    // Admin / demo — show everything, default dashboard
-    workerTabBtns.forEach(b => b.style.display = "");
-    addTabBtns.forEach(b    => b.style.display = "");
+    // Admin / demo — restore original nav and dashboard
+    restoreNav();
+    document.getElementById("tab-dashboard").innerHTML = ORIG_DASHBOARD;
     const jobsHeader = document.querySelector("#tab-jobs .panel-title");
     const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
     if (jobsHeader) jobsHeader.textContent = "Job Requests";
     if (jobsSub)    jobsSub.textContent    = "Contractor requests awaiting assignment";
-    const jc = document.getElementById("jobCount");
-    if (jc) jc.style.display = "";
+    render();
     switchTab("dashboard");
   }
+}
 
-  render();
+// ─── Worker Home ──────────────────────────────────────────
+function renderWorkerHome(user) {
+  const el = document.getElementById("tab-dashboard");
+  if (!el) return;
+
+  const stats       = getWorkerStats(user.id || "");
+  const reliability = stats.totalShifts > 0 ? (stats.reliability ?? 100) : (user.reliability ?? 100);
+  const pct         = calcWorkerCompletion(user);
+
+  // Active booking
+  const booking = state.jobs.find(j => j.assignedWorkerId === user.id);
+
+  // Recommended jobs (trade-matched, up to 3)
+  const trade = (user.trade || "").toLowerCase().trim();
+  const recommended = [...state.jobs]
+    .filter(j => !trade || normalize(j.trade) === trade)
+    .sort((a, b) => (new Date(a.start || 0)) - (new Date(b.start || 0)))
+    .slice(0, 3);
+
+  // Greeting
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
+
+  // Days worked this month
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const daysThisMonth = attendanceRecords.filter(r =>
+    r.workerId === user.id && r.date.startsWith(thisMonth) &&
+    (r.status === "onTime" || r.status === "late")).length;
+
+  const activeBookingHtml = booking ? `
+    <div class="wh-booking-card">
+      <div class="wh-booking-label">Active Booking</div>
+      <div class="wh-booking-trade">${escapeHtml(booking.trade)}</div>
+      <div class="wh-booking-meta">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        ${escapeHtml(booking.location)}
+        ${booking.start ? ` · ${new Date(booking.start).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}` : ""}
+        ${booking.duration ? ` · ${escapeHtml(booking.duration)}` : ""}
+        ${booking.payRate ? ` · <strong>${escapeHtml(booking.payRate)}</strong>` : ""}
+      </div>
+    </div>` : "";
+
+  const recJobsHtml = recommended.length ? `
+    <div class="wh-section-label">Recommended for You</div>
+    ${recommended.map(job => {
+      const daysUntil = job.start ? Math.ceil((new Date(job.start) - new Date()) / 86400000) : null;
+      const urgency = daysUntil !== null
+        ? daysUntil <= 0  ? `<span class="wjc-urgency urgency-now">Today</span>`
+        : daysUntil === 1 ? `<span class="wjc-urgency urgency-soon">Tomorrow</span>`
+        : daysUntil <= 7  ? `<span class="wjc-urgency urgency-soon">${daysUntil}d</span>`
+        :                   `<span class="wjc-urgency urgency-later">${daysUntil}d</span>`
+        : "";
+      return `
+      <div class="wh-rec-job" data-apply-home="${job.id}">
+        <div class="wh-rec-left">
+          <div class="wh-rec-trade">${escapeHtml(job.trade)}</div>
+          <div class="wh-rec-loc">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            ${escapeHtml(job.location)}
+            ${job.payRate ? ` · <strong>${escapeHtml(job.payRate)}</strong>` : ""}
+          </div>
+        </div>
+        <div class="wh-rec-right">${urgency}<svg class="wh-rec-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>`;
+    }).join("")}
+    <button class="wh-view-all" type="button" data-tab="jobs">View all jobs →</button>` : `
+    <div class="wh-section-label">Recommended for You</div>
+    <div class="att-empty">No open ${escapeHtml(user.trade || "jobs")} positions right now — check back soon.</div>`;
+
+  el.innerHTML = `
+    <div class="wh-greeting">${greet}, <strong>${escapeHtml((user.name || "").split(" ")[0])}</strong> 👋</div>
+    <div class="wh-hero">
+      <div class="wh-hero-left">
+        ${reliabilityBadge(reliability, 72)}
+        <div class="wh-avail-wrap">
+          <button class="wh-avail-btn ${user.availability === "not available" ? "unavailable" : "available"}"
+            id="whAvailBtn" type="button">
+            <span class="wh-avail-dot"></span>
+            ${user.availability === "not available" ? "Unavailable" : "Available"}
+          </button>
+          <div class="wh-avail-hint">Tap to toggle</div>
+        </div>
+      </div>
+      <div class="wh-hero-stats">
+        <div class="wh-stat-card">
+          <div class="wh-stat-val">${stats.totalShifts}</div>
+          <div class="wh-stat-lbl">Jobs Done</div>
+        </div>
+        <div class="wh-stat-card">
+          <div class="wh-stat-val" style="color:${reliability>=90?"var(--orange)":reliability>=75?"var(--green-text)":"var(--red-text)"}">${reliability}%</div>
+          <div class="wh-stat-lbl">Reliability</div>
+        </div>
+        <div class="wh-stat-card">
+          <div class="wh-stat-val">${daysThisMonth}</div>
+          <div class="wh-stat-lbl">Days This Month</div>
+        </div>
+      </div>
+    </div>
+    ${activeBookingHtml}
+    ${recJobsHtml}`;
+
+  // Availability toggle
+  document.getElementById("whAvailBtn")?.addEventListener("click", () => {
+    const users = JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
+    const session = JSON.parse(localStorage.getItem("onsite_auth_v1") || "null");
+    if (!session) return;
+    session.availability = session.availability === "not available" ? "available" : "not available";
+    localStorage.setItem("onsite_auth_v1", JSON.stringify(session));
+    const idx = users.findIndex(u => u.id === session.id);
+    if (idx !== -1) { users[idx].availability = session.availability; localStorage.setItem("onsite_users_v1", JSON.stringify(users)); }
+    renderWorkerHome(session);
+    showToast(`Status set to ${session.availability}`);
+  });
+
+  // Recommended job clicks → go to Jobs tab
+  el.querySelectorAll("[data-apply-home]").forEach(row => {
+    row.addEventListener("click", () => switchTab("jobs"));
+  });
+  el.querySelectorAll("[data-tab]").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+}
+
+// ─── Worker Profile ───────────────────────────────────────
+function renderWorkerProfile(user) {
+  const el = document.getElementById("profileContent");
+  if (!el) return;
+
+  const stats = getWorkerStats(user.id || "");
+  const reliability = stats.totalShifts > 0 ? (stats.reliability ?? 100) : (user.reliability ?? 100);
+  const pct = calcWorkerCompletion(user);
+
+  const certs = (user.certifications || []).map(c => {
+    const expStatus = c.expiry ? certExpiryStatus(c.expiry) : "valid";
+    return `<span class="cert-chip cert-chip--${expStatus}">${escapeHtml(c.name)}${c.expiry ? ` · ${c.expiry}` : ""}</span>`;
+  }).join("");
+
+  const fields = [
+    { label: "Trade",          val: user.trade },
+    { label: "Grade",          val: user.grade },
+    { label: "Availability",   val: user.availability },
+    { label: "UTR Number",     val: user.utr },
+    { label: "Right to Work",  val: user.rightToWork ? "Provided" : null },
+    { label: "Location",       val: user.location },
+  ].filter(f => f.val).map(f => `
+    <div class="prof-field">
+      <div class="prof-field-label">${f.label}</div>
+      <div class="prof-field-val">${escapeHtml(String(f.val))}</div>
+    </div>`).join("");
+
+  el.innerHTML = `
+    <div class="prof-header">
+      <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "?")}</div>
+      <div class="prof-id">
+        <div class="prof-name">${escapeHtml(user.name || "")}</div>
+        <div class="prof-trade">${escapeHtml(user.trade || "Trade not set")}${user.grade ? ` · ${escapeHtml(user.grade)}` : ""}</div>
+        <div class="prof-verify ${user.verificationStatus || "incomplete"}">
+          ${{ verified:"✓ Verified", pending:"Pending Review", incomplete:"Incomplete Profile" }[user.verificationStatus || "incomplete"]}
+        </div>
+      </div>
+      <div class="prof-ring">
+        ${reliabilityBadge(reliability, 56)}
+        ${completionRingHTML(pct)}
+      </div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Profile Details</div>
+      <div class="prof-fields">${fields}</div>
+    </div>
+
+    ${certs ? `<div class="prof-section">
+      <div class="prof-section-title">Qualifications &amp; Certifications</div>
+      <div class="prof-certs">${certs}</div>
+    </div>` : ""}
+
+    <div class="prof-section">
+      <div class="prof-section-title">Reliability Stats</div>
+      <div class="prof-stats-grid">
+        <div class="prof-stat"><div class="prof-stat-val" style="color:${reliability>=90?"var(--orange)":reliability>=75?"var(--green-text)":"var(--red-text)"}">${reliability}%</div><div class="prof-stat-lbl">Reliability</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${stats.totalShifts}</div><div class="prof-stat-lbl">Jobs Done</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${stats.punctuality ?? "—"}%</div><div class="prof-stat-lbl">On-Time %</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${stats.noShow}</div><div class="prof-stat-lbl">No Shows</div></div>
+      </div>
+    </div>`;
+}
+
+// ─── Contractor Home ──────────────────────────────────────
+function renderContractorHome(user) {
+  const el = document.getElementById("tab-dashboard");
+  if (!el) return;
+
+  const today = todayDateStr();
+  const todayRecs = attendanceRecords.filter(r => r.date === today);
+  const att = {
+    on:   todayRecs.filter(r => r.status === "onTime").length,
+    late: todayRecs.filter(r => r.status === "late").length,
+    ns:   todayRecs.filter(r => r.status === "noShow").length,
+  };
+
+  const activeJobs = state.jobs.filter(j => !j.completed);
+  const bookedWorkers = state.workers.filter(w =>
+    state.jobs.some(j => j.assignedWorkerId === w.id));
+
+  const bookedHtml = bookedWorkers.length ? bookedWorkers.slice(0, 5).map(w => {
+    const job   = state.jobs.find(j => j.assignedWorkerId === w.id);
+    const stats = getWorkerStats(w.id);
+    const rel   = stats.totalShifts > 0 ? stats.reliability : w.reliability;
+    return `<div class="ch-worker-row">
+      <div class="worker-avatar ${avatarColor(w.name)}" style="width:34px;height:34px;font-size:0.78rem;flex-shrink:0">${initials(w.name)}</div>
+      <div class="ch-wrow-info">
+        <div class="ch-wrow-name">${escapeHtml(w.name)}</div>
+        <div class="ch-wrow-meta">${escapeHtml(w.trade)}${job ? ` · ${escapeHtml(job.location)}` : ""}</div>
+      </div>
+      <div class="ch-wrow-rel" style="color:${rel>=90?"var(--orange)":rel>=75?"var(--green-text)":"var(--red-text)"};font-weight:800;font-size:0.82rem">${rel}%</div>
+    </div>`;
+  }).join("") : `<div class="att-empty">No workers currently assigned.</div>`;
+
+  const reqHtml = activeJobs.length ? activeJobs.slice(0, 4).map(job => {
+    const assigned = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+    return `<div class="ch-req-row">
+      <div class="ch-req-trade">${escapeHtml(job.trade)}</div>
+      <div class="ch-req-meta">
+        ${escapeHtml(job.location)}
+        ${job.start ? ` · ${new Date(job.start).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}` : ""}
+        ${job.quantity && job.quantity > 1 ? ` · ${job.quantity} workers` : ""}
+        ${job.payRate ? ` · ${escapeHtml(job.payRate)}` : ""}
+      </div>
+      <span class="ch-req-status ${assigned ? "status-assigned" : "status-open"}">${assigned ? `✓ ${escapeHtml(assigned.name)}` : "Open"}</span>
+    </div>`;
+  }).join("") : `<div class="att-empty">No active requests — use the Requests tab to post one.</div>`;
+
+  const companyName = user.companyName || user.name || "Contractor";
+
+  el.innerHTML = `
+    <div class="ch-greeting">Welcome back, <strong>${escapeHtml(companyName.split(" ")[0])}</strong></div>
+    <button class="ch-request-btn" type="button" id="chRequestBtn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Request Labour
+    </button>
+    <div class="ch-att-bar">
+      <div class="ch-att-item on-time"><span class="ch-att-num">${att.on}</span><span class="ch-att-lbl">On Time</span></div>
+      <div class="ch-att-item late"><span class="ch-att-num">${att.late}</span><span class="ch-att-lbl">Late</span></div>
+      <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
+    </div>
+    <div class="ch-section-label">Active Requests</div>
+    <div class="ch-req-list">${reqHtml}</div>
+    <div class="ch-section-label">Workforce On Site</div>
+    <div class="ch-workers-list">${bookedHtml}</div>`;
+
+  document.getElementById("chRequestBtn")?.addEventListener("click", () => switchTab("add"));
+}
+
+// ─── Contractor Account ───────────────────────────────────
+function renderContractorAccount(user) {
+  const el = document.getElementById("accountContent");
+  if (!el) return;
+
+  const ini = (user.name || "C").trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+  el.innerHTML = `
+    <div class="prof-header">
+      <div class="prof-avatar ${avatarColor(user.name || "C")}">${ini}</div>
+      <div class="prof-id">
+        <div class="prof-name">${escapeHtml(user.companyName || user.name || "")}</div>
+        <div class="prof-trade">Contractor Account</div>
+        <span class="wsc-verify-badge verified">✓ Verified</span>
+      </div>
+    </div>
+    <div class="prof-section">
+      <div class="prof-section-title">Account Details</div>
+      <div class="prof-fields">
+        <div class="prof-field"><div class="prof-field-label">Contact Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Company</div><div class="prof-field-val">${escapeHtml(user.companyName || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Contractor</div></div>
+      </div>
+    </div>
+    <div class="prof-section">
+      <div class="prof-section-title">Activity</div>
+      <div class="prof-stats-grid">
+        <div class="prof-stat"><div class="prof-stat-val">${state.jobs.length}</div><div class="prof-stat-lbl">Requests Posted</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${state.jobs.filter(j=>j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
+      </div>
+    </div>
+    <button class="ch-logout-btn" type="button" id="accLogoutBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
+    </button>`;
+
+  document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
+    document.getElementById("logoutBtn")?.click();
+  });
 }
 
 // ─── Worker Job Board ─────────────────────────────────────
@@ -461,6 +787,14 @@ function workerJobCard(job, user) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         ${escapeHtml(job.duration)}
       </div>` : ""}
+      ${job.payRate ? `<div class="wjc-detail-item wjc-pay-rate">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        ${escapeHtml(job.payRate)}
+      </div>` : ""}
+      ${job.quantity && job.quantity > 1 ? `<div class="wjc-detail-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        ${job.quantity} workers needed
+      </div>` : ""}
       ${job.requiredQualifications ? `<div class="wjc-detail-item">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         ${escapeHtml(job.requiredQualifications)}
@@ -515,12 +849,17 @@ jobForm.addEventListener("submit", e => {
   const location = document.querySelector("#jobLocation").value.trim();
   const duration = document.querySelector("#jobDuration").value.trim();
 
+  const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
+  const payRate  = document.querySelector("#jobPayRate")?.value.trim() || "";
+
   const job = {
     id: createId(),
     trade,
     location,
     start:      document.querySelector("#jobStart").value,
     duration,
+    quantity,
+    payRate,
     assignedWorkerId: "",
   };
 
@@ -577,15 +916,28 @@ function render() {
   const user = getSessionUser();
   const role = user?.type || null;
 
-  renderStats();
-  renderActivity();
-  workerCount.textContent = state.workers.length;
-  jobCount.textContent    = state.jobs.length;
+  // Update counts (elements may not exist after nav rebuild)
+  const wcEl = document.getElementById("workerCount");
+  const jcEl = document.getElementById("jobCount");
+  if (wcEl) wcEl.textContent = state.workers.length;
+  if (jcEl) jcEl.textContent = state.jobs.length;
 
   if (role === "worker") {
+    renderWorkerHome(user);
     renderWorkerJobBoard(user);
     renderWorkerAttendance(user);
+    renderWorkerProfile(user);
+  } else if (role === "company") {
+    renderContractorHome(user);
+    renderWorkers();
+    renderAttendance();
+    renderContractorAccount(user);
+    // Contractor's add tab: show job form only
+    document.querySelector("#formWorker")?.classList.add("hidden");
+    document.querySelector("#formJob")?.classList.remove("hidden");
   } else {
+    renderStats();
+    renderActivity();
     renderWorkers();
     renderJobs();
     renderMatches();
@@ -594,6 +946,9 @@ function render() {
 }
 
 function renderStats() {
+  const statsRow = document.querySelector("#statsRow");
+  if (!statsRow) return;
+
   const total     = state.workers.length;
   const available = state.workers.filter(w => w.availability === "available").length;
   const open      = state.jobs.filter(j => !j.assignedWorkerId).length;
@@ -602,7 +957,7 @@ function renderStats() {
     ? Math.round(state.workers.reduce((s, w) => s + w.reliability, 0) / total)
     : 0;
 
-  document.querySelector("#statsRow").innerHTML = `
+  statsRow.innerHTML = `
     <div class="stat-card">
       <span class="stat-label">Total Workers</span>
       <span class="stat-value">${total}</span>
@@ -829,6 +1184,7 @@ function jobCard(job) {
 
 // ─── Match Cards ──────────────────────────────────────────
 function renderMatches() {
+  if (!matchResults) return;
   matchResults.innerHTML = state.jobs.length
     ? state.jobs.map(matchCard).join("")
     : emptyState("Post a job request to see worker matches here.");

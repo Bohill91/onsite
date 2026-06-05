@@ -22,19 +22,25 @@
       <div class="auth-screen" id="screen-welcome">
         <div class="welcome-inner">
           <img src="/logo.png" alt="OnSite" class="auth-logo" style="margin-bottom:24px;" />
-          <p class="welcome-tagline">The smarter way to find construction work.</p>
+          <p class="welcome-tagline">Reliable trades, on demand.</p>
           <p class="welcome-sub">Join thousands of verified tradespeople and contractors already on OnSite.</p>
           <div class="welcome-actions">
-            <button class="cta-btn" type="button" onclick="showScreen('worker-reg'); setWorkerStep(1);">
-              <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Join as a Worker
+            <button class="cta-btn" type="button" onclick="showScreen('login');">
+              <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              Log In
             </button>
-            <button class="cta-btn cta-btn--secondary" type="button" onclick="showScreen('company-reg'); setCompanyStep(1);">
-              <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-              Join as a Company
-            </button>
+            <div class="welcome-divider"><span>or create an account</span></div>
+            <div class="welcome-type-row">
+              <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('worker-reg'); setWorkerStep(1);">
+                <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Worker
+              </button>
+              <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('company-reg'); setCompanyStep(1);">
+                <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                Contractor
+              </button>
+            </div>
           </div>
-          <p class="auth-link-row">Already have an account? <button class="auth-link" type="button" onclick="showScreen('login');">Sign in</button></p>
         </div>
       </div>
 
@@ -327,11 +333,11 @@
                 <div class="stepper-dot">2</div>
               </div>
             </div>
-            <p class="stepper-label" id="companyStepLabel">Step <strong>1</strong> of 2 — Company Details</p>
+            <p class="stepper-label" id="companyStepLabel">Step <strong>1</strong> of 2 — Contractor Details</p>
 
-            <!-- Step 1: Company Details -->
+            <!-- Step 1: Contractor Details -->
             <div class="company-step active" data-step="1">
-              <h1 class="auth-title">Join as a Company</h1>
+              <h1 class="auth-title">Join as a Contractor</h1>
               <p class="auth-subtitle">Post jobs and connect with verified tradespeople.</p>
               <div id="companyStep1Error" class="auth-error"></div>
               <form id="companyStep1Form">
@@ -390,7 +396,7 @@
                 </div>
                 <button class="auth-submit-btn" type="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Create Company Account
+                  Create Contractor Account
                 </button>
                 <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setCompanyStep(1);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -645,6 +651,14 @@
                   Duration
                   <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
                 </label>
+                <label class="field-label">
+                  Workers Required
+                  <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" />
+                </label>
+                <label class="field-label">
+                  Pay Rate
+                  <input id="jobPayRate" type="text" placeholder="e.g. £180/day or £18/hr" />
+                </label>
 
                 <!-- Site Location Section -->
                 <div class="site-loc-toggle-wrap">
@@ -738,11 +752,21 @@
 
                 <button class="primary-btn wide" type="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Post Job Request
+                  Find Labour
                 </button>
               </form>
             </div>
           </div>
+        </div>
+
+        <!-- PROFILE TAB (Worker) -->
+        <div class="tab-panel" id="tab-profile">
+          <div id="profileContent"></div>
+        </div>
+
+        <!-- ACCOUNT TAB (Contractor) -->
+        <div class="tab-panel" id="tab-account">
+          <div id="accountContent"></div>
         </div>
 
       </main>
