@@ -542,7 +542,9 @@
             </div>
             <span class="att-today-badge" id="attTodayBadge"></span>
           </div>
+          <div id="siteQrPanel"></div>
           <div id="attendanceCards" class="card-list"></div>
+          <div id="adminAttReview"></div>
           <div class="att-submit-wrap">
             <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -890,6 +892,50 @@
           <button id="submitDisputeBtn" class="primary-btn wide" type="button">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
             Submit Dispute
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report Delay / Absence Modal -->
+    <div id="reportModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Report delay or absence">
+      <div class="dispute-sheet">
+        <div class="dispute-sheet-header">
+          <div>
+            <h3 class="dispute-sheet-title">Report Delay or Absence</h3>
+            <p class="dispute-sheet-sub">Let your supervisor know — this won't affect your score until they review it.</p>
+          </div>
+          <button id="closeReportBtn" class="modal-close-btn" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dispute-sheet-body">
+          <label class="field-label">
+            Reason
+            <select id="reportReason">
+              <option>Running late</option>
+              <option>Transport issue</option>
+              <option>Illness</option>
+              <option>Personal emergency</option>
+              <option>Site / access issue</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label class="report-check">
+            <input type="checkbox" id="reportUnable" />
+            <span>I'm unable to attend today</span>
+          </label>
+          <label class="field-label" id="reportEtaWrap">
+            Expected arrival time
+            <input type="time" id="reportEta" />
+          </label>
+          <label class="field-label">
+            Note (optional)
+            <textarea id="reportNote" rows="3" placeholder='e.g. "Stuck in traffic on the M6, should arrive by 09:00."'></textarea>
+          </label>
+          <button id="submitReportBtn" class="primary-btn wide" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+            Send Report
           </button>
         </div>
       </div>

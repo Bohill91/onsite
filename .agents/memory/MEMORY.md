@@ -1,2 +1,3 @@
 - [OnSite Architecture & Role Nav](onsite-architecture.md) — dynamic nav rebuild pattern, render dispatch, dashboard restore, user type keys, job model fields.
 - [Booking Protection cancellation rules](booking-protection.md) — all un-assignment must route through cancelBooking(); cancellations[] is source of truth; company cancel doesn't hit reliability.
+- [Reliability gating & attendance statuses](reliability-gating.md) — self-reported/QR records never move score until supervisorConfirmed; only COUNTABLE_STATUSES count; keep notRequired in SUPERVISOR_DECISIONS.

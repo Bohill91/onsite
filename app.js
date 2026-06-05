@@ -426,6 +426,7 @@ const demoData = {
     { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", payRate: "£220/day", assignedWorkerId: "" },
   ],
   cancellations: [],
+  siteCodes: [],
 };
 
 // ─── State ────────────────────────────────────────────────
@@ -443,6 +444,7 @@ function loadState() {
 function migrateState(s) {
   if (!s || typeof s !== "object") return structuredClone(demoData);
   if (!Array.isArray(s.cancellations)) s.cancellations = [];
+  if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
   (s.jobs || []).forEach(j => {
     if (j.assignedWorkerId && !j.bookingStatus) {
       j.bookingStatus = "confirmed";
@@ -1773,6 +1775,10 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteM
 document.getElementById("closeDisputeBtn")?.addEventListener("click", closeDisputeModal);
 document.getElementById("disputeModal")?.addEventListener("click", e => { if (e.target === document.getElementById("disputeModal")) closeDisputeModal(); });
 document.getElementById("submitDisputeBtn")?.addEventListener("click", submitDispute);
+document.getElementById("closeReportBtn")?.addEventListener("click", closeReportModal);
+document.getElementById("reportModal")?.addEventListener("click", e => { if (e.target === document.getElementById("reportModal")) closeReportModal(); });
+document.getElementById("submitReportBtn")?.addEventListener("click", submitReport);
+document.getElementById("reportUnable")?.addEventListener("change", syncReportEta);
 
 // ─── Photo Lightbox ────────────────────────────────────────
 let lightboxEl = null;
@@ -1849,6 +1855,7 @@ const ATTENDANCE_KEY = "onsite_attendance_v1";
 
 let attendanceRecords  = loadAttendanceRecords();
 let todayAttendanceMap = {}; // workerId -> { status, rating }
+let qrSelectedJobId    = null; // supervisor-selected job for the daily site QR
 
 function loadAttendanceRecords() {
   try { const s = localStorage.getItem(ATTENDANCE_KEY); if (s) return JSON.parse(s); } catch (_) {}
@@ -1867,16 +1874,113 @@ const ATT_CFG = {
   onTime:        { icon: "✓", label: "On Time",      color: "var(--green-text)", bg: "rgba(22,163,74,0.12)",  border: "rgba(22,163,74,0.35)"  },
   late:          { icon: "⏱", label: "Late",         color: "var(--amber-text)", bg: "rgba(217,119,6,0.12)",  border: "rgba(217,119,6,0.35)"  },
   noShow:        { icon: "✗", label: "No Show",      color: "var(--red-text)",   bg: "rgba(220,38,38,0.1)",   border: "rgba(220,38,38,0.3)"   },
+  excused:       { icon: "✎", label: "Excused",      color: "var(--amber-text)", bg: "rgba(217,119,6,0.08)",  border: "rgba(217,119,6,0.28)"  },
+  sentHome:      { icon: "⊝", label: "Sent Home",    color: "var(--ink-3)",      bg: "var(--surface-3)",      border: "var(--border)"         },
   notRequired:   { icon: "—", label: "Not Required", color: "var(--ink-3)",      bg: "var(--surface-3)",      border: "var(--border)"         },
   siteCancelled: { icon: "⊘", label: "Site Cancel",  color: "#6366f1",           bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.25)" },
+  checkedIn:     { icon: "◷", label: "Checked In",   color: "var(--orange)",     bg: "rgba(249,115,22,0.1)",  border: "rgba(249,115,22,0.3)"  },
+  unconfirmed:   { icon: "?", label: "Unconfirmed",  color: "var(--ink-3)",      bg: "var(--surface-3)",      border: "var(--border-light)"   },
+  reportedIssue: { icon: "!", label: "Reported Issue", color: "var(--amber-text)", bg: "rgba(217,119,6,0.1)", border: "rgba(217,119,6,0.3)"  },
 };
+
+// Statuses that count toward the reliability ratio (attended / countable).
+const COUNTABLE_STATUSES = ["onTime", "late", "noShow"];
+// Decisions a supervisor can confirm from the approval screen.
+const SUPERVISOR_DECISIONS = ["onTime", "late", "noShow", "excused", "sentHome", "notRequired", "siteCancelled"];
+
+// ─── Attendance timing rules ──────────────────────────────
+const GRACE_MIN  = 10; // within this many minutes of start = On Time
+const CUTOFF_MIN = 60; // no scan after this many minutes = Unconfirmed
+
+// Build a Date for today at a job/site start time (HH:MM).
+function siteStartMs(startTime) {
+  const [h, m] = (startTime || "08:00").split(":").map(Number);
+  const d = new Date();
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d.getTime();
+}
+
+// Suggested status from a scan time relative to the site start.
+function suggestStatusForScan(scanMs, startMs) {
+  return scanMs <= startMs + GRACE_MIN * 60000 ? "onTime" : "late";
+}
+function isPastCutoff(startMs) {
+  return Date.now() > startMs + CUTOFF_MIN * 60000;
+}
+
+// ─── Daily Site QR Codes ──────────────────────────────────
+function getSiteCode(jobId, date) {
+  return (state.siteCodes || []).find(c => c.jobId === jobId && c.date === date) || null;
+}
+function activeSiteCode(jobId) {
+  const code = getSiteCode(jobId, todayDateStr());
+  return code && Date.now() < code.expiresAt ? code : null;
+}
+function generateSiteCode(jobId) {
+  const job = findJob(jobId);
+  if (!job) return null;
+  const today = todayDateStr();
+  if (!Array.isArray(state.siteCodes)) state.siteCodes = [];
+  // Refresh: drop any prior code for this job/day, then create fresh.
+  state.siteCodes = state.siteCodes.filter(c => !(c.jobId === jobId && c.date === today));
+  const startTime = job.start && job.start.includes("T") ? job.start.split("T")[1].slice(0, 5) : "08:00";
+  const endOfDay  = new Date(); endOfDay.setHours(23, 59, 59, 0);
+  const code = {
+    id: createId(), jobId, date: today,
+    token: "OS-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
+    startTime, expiresAt: endOfDay.getTime(), createdAt: Date.now(),
+  };
+  state.siteCodes.unshift(code);
+  saveState();
+  return code;
+}
+
+// Render a deterministic QR-style grid from a token (visual only — simulated scan).
+function renderQrGlyph(token) {
+  let h = 0;
+  for (let i = 0; i < token.length; i++) h = (h * 31 + token.charCodeAt(i)) >>> 0;
+  const N = 11;
+  let cells = "";
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      // Fixed finder squares in three corners
+      const finder =
+        (x < 3 && y < 3) || (x > N - 4 && y < 3) || (x < 3 && y > N - 4);
+      const edge =
+        (x === 0 || x === 2 || y === 0 || y === 2) &&
+        ((x <= 2 && y <= 2) || (x >= N - 3 && y <= 2) || (x <= 2 && y >= N - 3));
+      let on;
+      if (finder) on = (x === 1 && y === 1) ? false : edge || (x === 1 && y === 1);
+      else { h = (h * 1103515245 + 12345) >>> 0; on = ((h >> ((x + y) % 16)) & 1) === 1; }
+      if (on) cells += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+    }
+  }
+  return `<svg class="qr-glyph" viewBox="0 0 ${N} ${N}" width="120" height="120" shape-rendering="crispEdges" aria-hidden="true"><rect width="${N}" height="${N}" fill="#fff"/><g fill="#18181b">${cells}</g></svg>`;
+}
+
+// ─── 90-day Exception Counters (internal / admin-only) ────
+function getExceptionInfo(workerId) {
+  const cutoff = Date.now() - 90 * 86400000;
+  const exc = attendanceRecords.filter(r =>
+    r.workerId === workerId &&
+    (r.status === "excused" || r.status === "reportedIssue") &&
+    new Date(r.date + "T00:00:00").getTime() >= cutoff
+  );
+  const count = exc.length;
+  const flag  = count >= 7 ? "review" : count >= 4 ? "warning" : "none";
+  return { count, flag };
+}
 
 // ─── Worker Stats from Attendance Records ─────────────────
 function getWorkerStats(workerId) {
   const recs      = attendanceRecords.filter(r => r.workerId === workerId);
   // Records under active dispute are frozen — don't apply penalty until resolved
   const scoreable = recs.filter(r => r.disputeStatus !== "pending");
-  const countable = scoreable.filter(r => r.status !== "notRequired" && r.status !== "siteCancelled");
+  // Only confirmed attendance statuses affect reliability. A worker's own scan /
+  // self-report never moves the score until a supervisor confirms it.
+  const countable = scoreable.filter(r =>
+    COUNTABLE_STATUSES.includes(r.status) && (!r.selfReported || r.supervisorConfirmed)
+  );
   const attended  = countable.filter(r => r.status === "onTime" || r.status === "late");
   const onTime    = countable.filter(r => r.status === "onTime");
   const ratings   = recs.filter(r => r.rating > 0).map(r => r.rating);
@@ -1923,10 +2027,19 @@ function submitDayAttendance() {
 
   Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
     if (!data.status) return;
+    // Preserve any check-in / reported-issue context the worker logged today.
+    const prevRec = attendanceRecords.find(r => r.workerId === wid && r.date === today);
     const rec = {
       id: createId(), workerId: wid, date: today,
       status: data.status, rating: data.rating || 0, recordedAt: Date.now(),
+      supervisorConfirmed: true, supervisorDecision: data.status, confirmedAt: Date.now(),
     };
+    if (prevRec) {
+      if (prevRec.checkInTime)     rec.checkInTime     = prevRec.checkInTime;
+      if (prevRec.suggestedStatus) rec.suggestedStatus = prevRec.suggestedStatus;
+      if (prevRec.scanToken)       rec.scanToken       = prevRec.scanToken;
+      if (prevRec.reportedIssue)   rec.reportedIssue   = prevRec.reportedIssue;
+    }
     if (data.gps) {
       rec.gpsLat       = data.gps.lat;
       rec.gpsLng       = data.gps.lng;
@@ -1963,7 +2076,8 @@ function attendanceCard(worker, today) {
   const stats = getWorkerStats(worker.id);
   const job   = state.jobs.find(j => j.assignedWorkerId === worker.id);
 
-  const statusBtns = Object.entries(ATT_CFG).map(([key, cfg]) => {
+  const statusBtns = SUPERVISOR_DECISIONS.map(key => {
+    const cfg = ATT_CFG[key];
     const active = saved.status === key;
     const style  = active ? `background:${cfg.bg};border-color:${cfg.border};color:${cfg.color}` : "";
     return `<button class="att-btn${active ? " att-btn--active" : ""}" style="${style}"
@@ -1972,6 +2086,27 @@ function attendanceCard(worker, today) {
       <span class="att-btn-label">${cfg.label}</span>
     </button>`;
   }).join("");
+
+  // Check-in context from any record the worker logged today (scan / report).
+  const rec = attendanceRecords.find(r => r.workerId === worker.id && r.date === today);
+  let checkInBanner = "";
+  if (rec && rec.status === "checkedIn") {
+    const t = rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+    const sug = rec.suggestedStatus ? ATT_CFG[rec.suggestedStatus] : null;
+    checkInBanner = `<div class="att-checkin-banner att-checkin--in" data-att-worker="${worker.id}" data-att-suggested="${rec.suggestedStatus || ""}">
+        <span>${ATT_CFG.checkedIn.icon} Checked in ${t}${sug ? ` · Suggested <strong style="color:${sug.color}">${sug.label}</strong>` : ""}</span>
+      </div>`;
+  } else if (rec && rec.status === "reportedIssue") {
+    const ri = rec.reportedIssue || {};
+    const detail = ri.unableToAttend ? "Unable to attend" : (ri.expectedArrival ? `ETA ${escapeHtml(ri.expectedArrival)}` : "");
+    checkInBanner = `<div class="att-checkin-banner att-checkin--issue">
+        <span>${ATT_CFG.reportedIssue.icon} Reported: ${escapeHtml(ri.reason || "Issue")}${detail ? ` · ${detail}` : ""}</span>
+      </div>`;
+  } else if (job && !rec && isPastCutoff(siteStartMs(activeSiteCode(job.id)?.startTime))) {
+    checkInBanner = `<div class="att-checkin-banner att-checkin--unconf">
+        <span>${ATT_CFG.unconfirmed.icon} No check-in — Unconfirmed. Confirm a status below.</span>
+      </div>`;
+  }
 
   const showRating = saved.status === "onTime" || saved.status === "late";
   const ratingRow  = showRating ? `
@@ -2018,8 +2153,9 @@ function attendanceCard(worker, today) {
         <div class="att-worker-sub">${escapeHtml(worker.trade)}${job ? ` · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span>` : ""} · ${savedStatus}</div>
       </div>
     </div>
+    ${checkInBanner}
     ${statsRow}
-    <div class="att-status-btns">${statusBtns}</div>
+    <div class="att-status-btns att-status-btns--sup">${statusBtns}</div>
     ${ratingRow}
     ${gpsRow}
   </article>`;
@@ -2109,15 +2245,9 @@ function renderWorkerAttendance(user) {
   container.innerHTML = workerSelfAttCard(workerObj, today);
   bindWorkerAttEvents(container, uid, workerObj);
 
-  // Wire submit button to worker-specific handler
-  if (submitBtn) {
-    submitBtn.textContent = "Save Today's Attendance";
-    if (submitWrap) submitWrap.style.display = "";
-    submitBtn.onclick = (e) => {
-      e.stopImmediatePropagation();
-      submitWorkerAttendance(user, workerObj);
-    };
-  }
+  // Workers check in / report directly — the bulk submit button is supervisor-only.
+  if (submitBtn) submitBtn.onclick = null;
+  if (submitWrap) submitWrap.style.display = "none";
 
   // Relabel History → Timesheet for workers
   const histTitle = document.getElementById("attHistoryTitle");
@@ -2129,42 +2259,9 @@ function renderWorkerAttendance(user) {
 }
 
 function workerSelfAttCard(worker, today) {
-  const saved = todayAttendanceMap[worker.id] || {};
   const stats = getWorkerStats(worker.id);
-  const savedStatus = saved.status;
-
-  const statusBtns = Object.entries(ATT_CFG).map(([key, cfg]) => {
-    const active = savedStatus === key;
-    const style  = active ? `background:${cfg.bg};border-color:${cfg.border};color:${cfg.color}` : "";
-    return `<button class="att-btn wsa-status-btn${active ? " att-btn--active" : ""}" style="${style}"
-      data-att-worker="${worker.id}" data-att-status="${key}" type="button">
-      <span class="att-btn-icon">${cfg.icon}</span>
-      <span class="att-btn-label">${cfg.label}</span>
-    </button>`;
-  }).join("");
-
-  const showRating = savedStatus === "onTime" || savedStatus === "late";
-  const ratingRow  = showRating ? `
-    <div class="att-rating-row wsa-rating">
-      <span class="att-rating-label">Rate today's experience:</span>
-      ${[1,2,3,4,5].map(n => `<button class="att-star${(saved.rating||0)>=n?" att-star--filled":""}"
-        data-att-worker="${worker.id}" data-att-star="${n}" type="button">★</button>`).join("")}
-    </div>` : "";
-
-  const showGps = savedStatus && savedStatus !== "notRequired" && savedStatus !== "siteCancelled";
-  const gpsData = saved.gps;
-  const gpsRow  = showGps ? `
-    <div class="att-gps-row" id="gps-${worker.id}">
-      ${gpsData
-        ? `<div class="gps-captured-label">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
-            ${gpsData.distance !== null ? gpsDistanceLabel(gpsData.distance) : "Location captured"}
-           </div>`
-        : `<button class="gps-capture-btn" data-gps-worker="${worker.id}" type="button">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
-            Record My Location
-           </button>`}
-    </div>` : "";
+  const job   = state.jobs.find(j => j.assignedWorkerId === worker.id);
+  const rec   = attendanceRecords.find(r => r.workerId === worker.id && r.date === today);
 
   const statsRow = stats.totalShifts > 0 ? `
     <div class="wsa-stats-row">
@@ -2179,59 +2276,77 @@ function workerSelfAttCard(worker, today) {
       <span class="wsa-stat"><span class="wsa-stat-val">${stats.totalShifts}</span> Shift${stats.totalShifts!==1?"s":""}</span>
     </div>` : "";
 
-  const currentLabel = savedStatus
-    ? `<span class="wsa-current-status" style="color:${ATT_CFG[savedStatus].color}">${ATT_CFG[savedStatus].icon} ${ATT_CFG[savedStatus].label}</span>`
-    : `<span class="wsa-current-status" style="color:var(--ink-3)">Not recorded yet</span>`;
+  // No job assigned — nothing to check in to.
+  if (!job) {
+    return `
+    <article class="attendance-card wsa-card" id="att-card-${worker.id}">
+      <div class="wsa-date-row"><span class="wsa-date-label">${formatAttDate(today)}</span></div>
+      ${statsRow}
+      <div class="wsa-empty">You're not assigned to a site today. Check-in opens once a job is booked.</div>
+    </article>`;
+  }
+
+  const siteLine = `<div class="wsa-site">${escapeHtml(job.trade)} · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span></div>`;
+
+  // Build the action / status block based on today's record.
+  let body;
+  if (rec && rec.supervisorConfirmed) {
+    const cfg = ATT_CFG[rec.status] || ATT_CFG.notRequired;
+    body = `
+      <div class="wsa-state wsa-state--done" style="border-color:${cfg.border};background:${cfg.bg}">
+        <span class="wsa-state-icon" style="color:${cfg.color}">${cfg.icon}</span>
+        <div>
+          <div class="wsa-state-title" style="color:${cfg.color}">${cfg.label}</div>
+          <div class="wsa-state-sub">Confirmed by your supervisor</div>
+        </div>
+      </div>`;
+  } else if (rec && rec.status === "checkedIn") {
+    const t   = rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+    const sug = rec.suggestedStatus ? ATT_CFG[rec.suggestedStatus] : null;
+    body = `
+      <div class="wsa-state wsa-state--pending">
+        <span class="wsa-state-icon">${ATT_CFG.checkedIn.icon}</span>
+        <div>
+          <div class="wsa-state-title">Checked in${t ? ` at ${t}` : ""}</div>
+          <div class="wsa-state-sub">Pending supervisor approval${sug ? ` · suggested ${sug.label}` : ""}</div>
+        </div>
+      </div>
+      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report a problem</button>`;
+  } else if (rec && rec.status === "reportedIssue") {
+    const ri = rec.reportedIssue || {};
+    const detail = ri.unableToAttend ? "Unable to attend" : (ri.expectedArrival ? `ETA ${escapeHtml(ri.expectedArrival)}` : "");
+    body = `
+      <div class="wsa-state wsa-state--issue">
+        <span class="wsa-state-icon">${ATT_CFG.reportedIssue.icon}</span>
+        <div>
+          <div class="wsa-state-title">Reported: ${escapeHtml(ri.reason || "Issue")}</div>
+          <div class="wsa-state-sub">${detail ? detail + " · " : ""}Pending supervisor review</div>
+        </div>
+      </div>
+      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Update report</button>`;
+  } else {
+    body = `
+      <button class="wsa-checkin-btn" data-att-scan="${worker.id}" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/></svg>
+        Scan site QR to check in
+      </button>
+      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report delay or absence</button>`;
+  }
 
   return `
   <article class="attendance-card wsa-card" id="att-card-${worker.id}">
-    <div class="wsa-date-row">
-      <span class="wsa-date-label">${formatAttDate(today)}</span>
-      ${currentLabel}
-    </div>
+    <div class="wsa-date-row"><span class="wsa-date-label">${formatAttDate(today)}</span></div>
+    ${siteLine}
     ${statsRow}
-    <div class="att-status-btns wsa-btns">${statusBtns}</div>
-    ${ratingRow}
-    ${gpsRow}
+    ${body}
   </article>`;
 }
 
 function bindWorkerAttEvents(container, uid, workerObj) {
-  container.querySelectorAll("[data-att-status]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
-      const status = btn.dataset.attStatus;
-      todayAttendanceMap[uid].status = todayAttendanceMap[uid].status === status ? null : status;
-      if (status !== "onTime" && status !== "late") todayAttendanceMap[uid].rating = 0;
-      refreshWorkerAttCard(uid, workerObj);
-    });
-  });
-  container.querySelectorAll("[data-att-star]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const n = Number(btn.dataset.attStar);
-      if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
-      todayAttendanceMap[uid].rating = todayAttendanceMap[uid].rating === n ? 0 : n;
-      refreshWorkerAttCard(uid, workerObj);
-    });
-  });
-  container.querySelectorAll("[data-gps-worker]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      btn.textContent = "Getting location…";
-      btn.disabled = true;
-      try {
-        const { lat, lng } = await getGPS();
-        const job  = state.jobs.find(j => j.assignedWorkerId === uid);
-        const dist = job?.sitePin ? haversine(lat, lng, job.sitePin.lat, job.sitePin.lng) : null;
-        if (!todayAttendanceMap[uid]) todayAttendanceMap[uid] = {};
-        todayAttendanceMap[uid].gps = { lat, lng, distance: dist, timestamp: Date.now() };
-        refreshWorkerAttCard(uid, workerObj);
-      } catch (_) {
-        showToast("Location unavailable — enable location access in your browser");
-        btn.textContent = "Record My Location";
-        btn.disabled = false;
-      }
-    });
-  });
+  const scanBtn = container.querySelector(`[data-att-scan="${uid}"]`);
+  if (scanBtn) scanBtn.addEventListener("click", () => workerScanCheckIn(uid, workerObj));
+  const reportBtn = container.querySelector(`[data-att-report="${uid}"]`);
+  if (reportBtn) reportBtn.addEventListener("click", () => openReportModal(uid, workerObj));
 }
 
 function refreshWorkerAttCard(uid, workerObj) {
@@ -2243,32 +2358,35 @@ function refreshWorkerAttCard(uid, workerObj) {
   bindWorkerAttEvents(document.getElementById("attendanceCards"), uid, workerObj);
 }
 
-function submitWorkerAttendance(user, workerObj) {
+// Simulated QR scan — validates today's active site code for the worker's job.
+function workerScanCheckIn(uid, workerObj) {
   const today = todayDateStr();
-  const uid   = user.id;
-  const data  = todayAttendanceMap[uid];
+  const job   = state.jobs.find(j => j.assignedWorkerId === uid);
+  if (!job) { showToast("You're not assigned to a site today"); return; }
 
-  if (!data?.status) { showToast("Please select a status first"); return; }
+  const code = activeSiteCode(job.id);
+  if (!code) {
+    showToast("No active site QR yet — ask your supervisor to generate today's code");
+    return;
+  }
+
+  const scanMs     = Date.now();
+  const startMs    = siteStartMs(code.startTime);
+  const suggested  = suggestStatusForScan(scanMs, startMs);
 
   const rec = {
     id: createId(), workerId: uid, date: today,
-    status: data.status, rating: data.rating || 0, recordedAt: Date.now(),
-    selfReported: true,
+    status: "checkedIn", rating: 0, recordedAt: scanMs,
+    selfReported: true, supervisorConfirmed: false,
+    checkInTime: scanMs, suggestedStatus: suggested, scanToken: code.token,
   };
-  if (data.gps) {
-    rec.gpsLat = data.gps.lat; rec.gpsLng = data.gps.lng;
-    rec.gpsDistance = data.gps.distance; rec.gpsTimestamp = data.gps.timestamp;
-  }
-
   attendanceRecords = attendanceRecords.filter(r => !(r.workerId === uid && r.date === today));
   attendanceRecords.unshift(rec);
   saveAttendanceRecords();
 
-  const lbl = { onTime:"on time", late:"late", noShow:"no-showed", notRequired:"not required", siteCancelled:"site cancelled" };
-  logActivity("attend", `<strong>${escapeHtml(user.name)}</strong> checked in — ${lbl[data.status] || data.status}`);
-
-  showToast(`Attendance saved — ${ATT_CFG[data.status].label}`);
-  renderWorkerAttendance(user);
+  logActivity("attend", `<strong>${escapeHtml(workerObj.name)}</strong> scanned in at ${escapeHtml(job.location)} — pending approval`);
+  showToast("Checked in — pending supervisor approval");
+  refreshWorkerAttCard(uid, workerObj);
 }
 
 // ─── Worker Timesheet ─────────────────────────────────────
@@ -2357,24 +2475,40 @@ function renderAttendance() {
   const badge     = document.getElementById("attTodayBadge");
   if (!container) return;
 
+  const isAdmin = !getSessionUser();
+
   // Reset labels for company/admin (worker view may have changed these)
   const attTitle = document.querySelector("#tab-attendance .panel-title");
   const attSub   = document.querySelector("#tab-attendance .panel-subtitle");
-  if (attTitle) attTitle.textContent = "Attendance";
-  if (attSub)   attSub.textContent   = "Required daily — mark every worker's status before end of day";
+  if (attTitle) attTitle.textContent = isAdmin ? "Attendance" : "Site Attendance";
+  if (attSub)   attSub.textContent   = isAdmin
+    ? "Required daily — mark every worker's status before end of day"
+    : "Confirm each worker's attendance — reliability updates only once you confirm";
   const histTitle = document.getElementById("attHistoryTitle");
   const histSub   = document.getElementById("attHistorySub");
   if (histTitle) histTitle.textContent = "History";
   if (histSub)   histSub.textContent   = "Past attendance records by day";
-  const submitBtn = document.getElementById("submitAttendanceBtn");
-  if (submitBtn) { submitBtn.textContent = "Submit Attendance"; submitBtn.onclick = null; }
+  const submitBtn  = document.getElementById("submitAttendanceBtn");
+  const submitWrap = document.querySelector(".att-submit-wrap");
+  if (submitWrap) submitWrap.style.display = "";
+  if (submitBtn) {
+    submitBtn.textContent = isAdmin ? "Submit Attendance" : "Confirm Attendance";
+    submitBtn.onclick = null;
+  }
 
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
   const today = todayDateStr();
-  // Pre-fill todayAttendanceMap from saved records if not yet set
+
+  // Daily site QR generator (supervisor / admin)
+  renderSiteQrPanel();
+
+  // Pre-fill todayAttendanceMap from saved records (skip pure check-in /
+  // reported-issue records so the supervisor still chooses a final status).
   attendanceRecords.filter(r => r.date === today).forEach(r => {
-    if (!todayAttendanceMap[r.workerId]) todayAttendanceMap[r.workerId] = { status: r.status, rating: r.rating };
+    if (todayAttendanceMap[r.workerId]) return;
+    if (r.status === "checkedIn" || r.status === "reportedIssue" || r.status === "unconfirmed") return;
+    todayAttendanceMap[r.workerId] = { status: r.status, rating: r.rating };
   });
 
   // Required banner — count workers without a company-marked record today
@@ -2391,11 +2525,30 @@ function renderAttendance() {
            <strong>${unmarkedCount} worker${unmarkedCount !== 1 ? "s" : ""} not yet marked today</strong> — attendance is required daily`}
     </div>` : "";
 
-  container.innerHTML = (state.workers.length > 0 ? requiredBanner : "") +
+  // Bulk-approve checked-in workers (apply each suggested status, then confirm)
+  const checkedInToday = attendanceRecords.filter(r => r.date === today && r.status === "checkedIn");
+  const bulkBar = checkedInToday.length ? `
+    <div class="att-bulk-bar">
+      <span>${checkedInToday.length} worker${checkedInToday.length !== 1 ? "s" : ""} checked in awaiting confirmation</span>
+      <button class="att-bulk-btn" id="bulkApproveBtn" type="button">Approve all checked-in</button>
+    </div>` : "";
+
+  container.innerHTML = (state.workers.length > 0 ? requiredBanner : "") + bulkBar +
     (state.workers.length
       ? state.workers.map(w => attendanceCard(w, today)).join("")
       : emptyState("No workers in the roster. Add workers first."));
   if (state.workers.length) bindAttendanceEvents(container);
+
+  const bulkBtn = document.getElementById("bulkApproveBtn");
+  if (bulkBtn) bulkBtn.addEventListener("click", () => {
+    checkedInToday.forEach(r => {
+      todayAttendanceMap[r.workerId] = { status: r.suggestedStatus || "onTime", rating: (todayAttendanceMap[r.workerId]?.rating) || 0 };
+    });
+    submitDayAttendance();
+  });
+
+  // Admin-only attendance review (full audit incl. exception counters)
+  renderAdminAttendanceReview();
 
   // ── History ──
   const pastDates = [...new Set(attendanceRecords.map(r => r.date).filter(d => d !== today))]
@@ -2447,6 +2600,152 @@ function renderAttendance() {
     btn.addEventListener("click", () => openDisputeModal(btn.dataset.disputeRecord));
   });
 
+}
+
+// ─── Daily Site QR Panel (supervisor / admin) ─────────────
+function renderSiteQrPanel() {
+  const panel = document.getElementById("siteQrPanel");
+  if (!panel) return;
+
+  // Only jobs with an assigned worker are live sites that need check-in.
+  const liveJobs = state.jobs.filter(j => j.assignedWorkerId);
+  if (!liveJobs.length) {
+    panel.innerHTML = `
+      <div class="qr-panel">
+        <div class="qr-panel-head">
+          <h3 class="qr-panel-title">Daily Site QR</h3>
+        </div>
+        <div class="qr-empty">Assign a worker to a job to generate a site check-in code.</div>
+      </div>`;
+    return;
+  }
+
+  if (!qrSelectedJobId || !liveJobs.some(j => j.id === qrSelectedJobId)) {
+    qrSelectedJobId = liveJobs[0].id;
+  }
+  const job  = findJob(qrSelectedJobId);
+  const code = activeSiteCode(qrSelectedJobId);
+
+  const options = liveJobs.map(j =>
+    `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`
+  ).join("");
+
+  let codeBlock;
+  if (code) {
+    const start  = code.startTime || "08:00";
+    const expiry = new Date(code.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    codeBlock = `
+      <div class="qr-display">
+        ${renderQrGlyph(code.token)}
+        <div class="qr-meta">
+          <div class="qr-token">${escapeHtml(code.token)}</div>
+          <div class="qr-meta-row"><span>Site</span><strong>${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</strong></div>
+          <div class="qr-meta-row"><span>Date</span><strong>${formatAttDate(code.date)}</strong></div>
+          <div class="qr-meta-row"><span>Start</span><strong>${escapeHtml(start)}</strong></div>
+          <div class="qr-meta-row"><span>Valid until</span><strong>${expiry}</strong></div>
+        </div>
+      </div>
+      <button class="qr-gen-btn qr-gen-btn--ghost" id="qrGenBtn" type="button">Regenerate code</button>`;
+  } else {
+    codeBlock = `
+      <div class="qr-empty">No active code for today. Generate one so assigned workers can check in.</div>
+      <button class="qr-gen-btn" id="qrGenBtn" type="button">Generate today's QR</button>`;
+  }
+
+  panel.innerHTML = `
+    <div class="qr-panel">
+      <div class="qr-panel-head">
+        <h3 class="qr-panel-title">Daily Site QR</h3>
+        <span class="qr-panel-sub">Workers scan this to check in</span>
+      </div>
+      <label class="qr-job-label" for="qrJobSelect">Site</label>
+      <select class="qr-job-select" id="qrJobSelect">${options}</select>
+      ${codeBlock}
+    </div>`;
+
+  const sel = document.getElementById("qrJobSelect");
+  if (sel) sel.addEventListener("change", () => { qrSelectedJobId = sel.value; renderSiteQrPanel(); });
+  const gen = document.getElementById("qrGenBtn");
+  if (gen) gen.addEventListener("click", () => {
+    generateSiteCode(qrSelectedJobId);
+    showToast("Site QR generated for today");
+    renderSiteQrPanel();
+  });
+}
+
+// ─── Admin Attendance Review (full audit) ─────────────────
+function renderAdminAttendanceReview() {
+  const el = document.getElementById("adminAttReview");
+  if (!el) return;
+  // Admin (demo) only — supervisors don't see the cross-site audit.
+  if (getSessionUser()) { el.innerHTML = ""; return; }
+
+  const today = todayDateStr();
+  const recent = [...attendanceRecords]
+    .sort((a, b) => (b.recordedAt || 0) - (a.recordedAt || 0))
+    .slice(0, 40);
+
+  if (!recent.length) {
+    el.innerHTML = `
+      <div class="adminrev">
+        <div class="adminrev-head"><h3 class="adminrev-title">Attendance Review</h3></div>
+        <div class="att-empty">No attendance records yet.</div>
+      </div>`;
+    return;
+  }
+
+  const rows = recent.map(r => {
+    const w = findWorker(r.workerId); if (!w) return "";
+    const job = state.jobs.find(j => j.assignedWorkerId === r.workerId);
+    const cfg = ATT_CFG[r.status] || ATT_CFG.notRequired;
+    const exc = getExceptionInfo(r.workerId);
+    const scan = r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—";
+    const decision = r.supervisorConfirmed ? (ATT_CFG[r.supervisorDecision]?.label || cfg.label) : "Unconfirmed";
+    const ri = r.reportedIssue
+      ? escapeHtml(r.reportedIssue.reason || "Issue") + (r.reportedIssue.unableToAttend ? " · unable" : r.reportedIssue.expectedArrival ? ` · ETA ${escapeHtml(r.reportedIssue.expectedArrival)}` : "")
+      : "—";
+    const dispute = r.disputeStatus === "pending" ? "Under review" : r.disputeStatus === "resolved" ? "Resolved" : "—";
+    const flagBadge = exc.flag === "review"
+      ? `<span class="rev-flag rev-flag--review">Review required</span>`
+      : exc.flag === "warning"
+        ? `<span class="rev-flag rev-flag--warn">Warning</span>`
+        : "";
+    return `
+      <div class="rev-row">
+        <div class="rev-cell rev-worker">
+          <strong>${escapeHtml(w.name)}</strong>
+          <span class="rev-sub">${escapeHtml(w.trade)}${job ? ` · ${escapeHtml(job.location)}` : ""}</span>
+        </div>
+        <div class="rev-cell"><span class="rev-lbl">Date</span>${formatAttDate(r.date)}${r.date === today ? " · today" : ""}</div>
+        <div class="rev-cell"><span class="rev-lbl">Status</span><span class="rev-dot" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</span> ${cfg.label}</div>
+        <div class="rev-cell"><span class="rev-lbl">Scan</span>${scan}</div>
+        <div class="rev-cell"><span class="rev-lbl">Supervisor</span>${escapeHtml(decision)}</div>
+        <div class="rev-cell"><span class="rev-lbl">Reported</span>${ri}</div>
+        <div class="rev-cell"><span class="rev-lbl">Dispute</span>${dispute}</div>
+        <div class="rev-cell rev-exc"><span class="rev-lbl">90-day exceptions</span>${exc.count} ${flagBadge}</div>
+        ${(r.status === "late" || r.status === "noShow") && r.disputeStatus === "pending"
+          ? `<div class="rev-actions">
+               <button class="rev-act rev-act--ok" data-rev-resolve="${r.id}" data-rev-res="rejected" type="button">Uphold</button>
+               <button class="rev-act rev-act--warn" data-rev-resolve="${r.id}" data-rev-res="accepted_worker" type="button">Remove impact</button>
+             </div>`
+          : ""}
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="adminrev">
+      <div class="adminrev-head">
+        <h3 class="adminrev-title">Attendance Review</h3>
+        <span class="adminrev-sub">Most recent ${recent.length} records · flags at 4+ (warning) and 7+ (review required)</span>
+      </div>
+      <div class="rev-rows">${rows}</div>
+    </div>`;
+
+  el.querySelectorAll("[data-rev-resolve]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      resolveDispute(btn.dataset.revResolve, btn.dataset.revRes);
+    });
+  });
 }
 
 // ─── GPS & Geofence Helpers ───────────────────────────────
@@ -2560,6 +2859,75 @@ async function submitDispute() {
   renderAttendance();
   closeDisputeModal();
   showToast("Dispute submitted — attendance frozen pending review");
+}
+
+// ─── Report Delay / Absence (worker) ──────────────────────
+let currentReportWorkerId = null;
+
+function syncReportEta() {
+  const unable = document.getElementById("reportUnable")?.checked;
+  const wrap   = document.getElementById("reportEtaWrap");
+  if (wrap) wrap.style.display = unable ? "none" : "";
+}
+
+function openReportModal(uid) {
+  currentReportWorkerId = uid;
+  const today = todayDateStr();
+  const rec   = attendanceRecords.find(r => r.workerId === uid && r.date === today);
+  const ri    = rec && rec.status === "reportedIssue" ? (rec.reportedIssue || {}) : {};
+
+  const reasonSel = document.getElementById("reportReason");
+  if (reasonSel && ri.reason) reasonSel.value = ri.reason;
+  const unable = document.getElementById("reportUnable");
+  if (unable) unable.checked = !!ri.unableToAttend;
+  const eta = document.getElementById("reportEta");
+  if (eta) eta.value = ri.expectedArrival || "";
+  const note = document.getElementById("reportNote");
+  if (note) note.value = ri.note || "";
+  syncReportEta();
+
+  document.getElementById("reportModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeReportModal() {
+  document.getElementById("reportModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+  currentReportWorkerId = null;
+}
+
+function submitReport() {
+  const uid = currentReportWorkerId;
+  if (!uid) return;
+  const today  = todayDateStr();
+  const reason = document.getElementById("reportReason")?.value || "Other";
+  const unable = !!document.getElementById("reportUnable")?.checked;
+  const eta    = document.getElementById("reportEta")?.value || "";
+  const note   = document.getElementById("reportNote")?.value.trim() || "";
+
+  const rec = {
+    id: createId(), workerId: uid, date: today,
+    status: "reportedIssue", rating: 0, recordedAt: Date.now(),
+    selfReported: true, supervisorConfirmed: false,
+    reportedIssue: { reason, unableToAttend: unable, expectedArrival: unable ? "" : eta, note },
+  };
+  attendanceRecords = attendanceRecords.filter(r => !(r.workerId === uid && r.date === today));
+  attendanceRecords.unshift(rec);
+  saveAttendanceRecords();
+
+  const w = findWorker(uid);
+  logActivity("attend", `<strong>${escapeHtml(w?.name || "Worker")}</strong> reported: ${escapeHtml(reason)}${unable ? " (unable to attend)" : eta ? ` (ETA ${escapeHtml(eta)})` : ""}`);
+
+  closeReportModal();
+  showToast("Report sent — your supervisor will review it");
+
+  const sess = getSessionUser();
+  if (sess && sess.id === uid) {
+    const workerObj = findWorker(uid) || { id: uid, name: sess.name, trade: sess.trade };
+    refreshWorkerAttCard(uid, workerObj);
+  } else {
+    renderAttendance();
+  }
 }
 
 function resolveDispute(recordId, resolution) {

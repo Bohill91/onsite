@@ -4214,3 +4214,301 @@ button, input, select, textarea {
   font-weight: 700;
 }
 .cf-val { font-size: 0.85rem; color: var(--ink); font-weight: 600; }
+
+/* ─── QR Attendance System ──────────────────────────────── */
+
+/* Daily Site QR panel (supervisor / admin) */
+.qr-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.qr-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 12px;
+}
+.qr-panel-title { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0; }
+.qr-panel-sub { font-size: 0.78rem; color: var(--ink-3); }
+.qr-job-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.qr-job-select {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+.qr-display {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.qr-glyph {
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: #fff;
+}
+.qr-meta { flex: 1; min-width: 160px; }
+.qr-token {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--orange);
+  margin-bottom: 8px;
+}
+.qr-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 3px 0;
+  border-top: 1px solid var(--border);
+}
+.qr-meta-row:first-of-type { border-top: none; }
+.qr-meta-row span { color: var(--ink-3); }
+.qr-meta-row strong { color: var(--ink); font-weight: 600; text-align: right; }
+.qr-empty {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.qr-gen-btn {
+  width: 100%;
+  padding: 11px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--orange);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.qr-gen-btn:hover { background: var(--orange-dark); }
+.qr-gen-btn--ghost {
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.qr-gen-btn--ghost:hover { background: var(--surface-3); }
+
+/* Supervisor check-in banner inside attendance cards */
+.att-checkin-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  margin: 4px 0 10px;
+  border: 1px solid var(--border);
+}
+.att-checkin--in    { background: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.25); color: var(--ink); }
+.att-checkin--issue { background: rgba(217,119,6,0.08);  border-color: rgba(217,119,6,0.25);  color: var(--amber-text); }
+.att-checkin--unconf{ background: var(--surface-3);       border-color: var(--border-light);   color: var(--ink-2); }
+
+.att-status-btns--sup { flex-wrap: wrap; }
+
+/* Bulk approve bar */
+.att-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--orange-light);
+  border: 1px solid var(--orange-muted);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.att-bulk-btn {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--orange);
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.att-bulk-btn:hover { background: var(--orange-dark); }
+
+/* Worker check-in card */
+.wsa-site {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+.wsa-empty {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  text-align: center;
+}
+.wsa-checkin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 15px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--orange);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 10px;
+}
+.wsa-checkin-btn:hover { background: var(--orange-dark); }
+.wsa-report-btn {
+  width: 100%;
+  padding: 11px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.wsa-report-btn:hover { background: var(--surface-3); }
+.wsa-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.wsa-state--pending { background: rgba(249,115,22,0.07); border-color: rgba(249,115,22,0.25); }
+.wsa-state--issue   { background: rgba(217,119,6,0.07);  border-color: rgba(217,119,6,0.25); }
+.wsa-state-icon { font-size: 1.4rem; line-height: 1; color: var(--orange); flex-shrink: 0; }
+.wsa-state--issue .wsa-state-icon { color: var(--amber-text); }
+.wsa-state-title { font-size: 0.92rem; font-weight: 700; color: var(--ink); }
+.wsa-state-sub { font-size: 0.78rem; color: var(--ink-2); margin-top: 2px; }
+
+/* Report modal */
+.report-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  margin: 4px 0 8px;
+  cursor: pointer;
+}
+.report-check input { width: 16px; height: 16px; accent-color: var(--orange); }
+
+/* Admin attendance review */
+.adminrev {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 16px 0;
+}
+.adminrev-head { margin-bottom: 12px; }
+.adminrev-title { font-size: 1rem; font-weight: 700; color: var(--ink); margin: 0; }
+.adminrev-sub { font-size: 0.76rem; color: var(--ink-3); }
+.rev-rows { display: flex; flex-direction: column; gap: 10px; }
+.rev-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px 14px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.rev-cell { font-size: 0.82rem; color: var(--ink); display: flex; align-items: baseline; gap: 6px; }
+.rev-lbl {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  font-weight: 700;
+  min-width: 76px;
+}
+.rev-worker { flex-direction: column; align-items: flex-start; gap: 1px; }
+.rev-worker strong { font-size: 0.9rem; font-weight: 700; }
+.rev-sub { font-size: 0.76rem; color: var(--ink-3); }
+.rev-dot {
+  display: inline-flex;
+  width: 18px; height: 18px;
+  align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}
+.rev-flag {
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rev-flag--warn   { background: var(--amber-bg); color: var(--amber-text); }
+.rev-flag--review { background: rgba(185,28,28,0.1); color: var(--red-text); }
+.rev-actions { display: flex; gap: 8px; margin-top: 4px; }
+.rev-act {
+  padding: 7px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--surface);
+}
+.rev-act--ok { color: var(--ink-2); }
+.rev-act--ok:hover { background: var(--surface-3); }
+.rev-act--warn { color: var(--amber-text); border-color: var(--amber-text); }
+.rev-act--warn:hover { background: var(--amber-bg); }
+
+@media (min-width: 620px) {
+  .rev-row {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    align-items: start;
+  }
+  .rev-worker { grid-column: 1 / -1; }
+  .rev-actions { grid-column: 1 / -1; }
+}
