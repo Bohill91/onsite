@@ -1,0 +1,116 @@
+Update the existing OnSite web app. Do not rebuild the project from scratch and do not delete existing files or working features.
+
+Current goal:
+Improve the app structure so users have different experiences based on account type.
+
+Important:
+We already have a basic working MVP with worker profiles, contractor job requests, matching, reliability scoring, and basic UI. Preserve existing functionality unless it directly conflicts with the new structure.
+
+Add/adjust the user flow:
+
+1. First screen
+Create a clean landing/auth screen with:
+- OnSite logo/name
+- Slogan: “Reliable trades, on demand.”
+- Log In button
+- Create Account button
+
+2. Account creation flow
+When a user creates an account, they must select account type:
+- Worker
+- Contractor
+
+After selecting account type, send them to the correct dashboard.
+
+3. Worker experience
+Worker users should have their own app experience focused on finding work.
+
+Worker navigation:
+- Home
+- Jobs
+- Bookings
+- Profile
+
+Worker Home should include:
+- Greeting
+- Reliability score
+- Availability toggle/status
+- Active booking card if booked
+- Recommended jobs
+- Quick stats: jobs completed, reliability score, days worked this month
+
+Worker Profile should include:
+- Name
+- Trade
+- Location
+- Qualifications/tickets
+- Right to Work
+- UTR number
+- Rate
+- Availability
+- Reliability stats: score, jobs completed, on-time %, no-shows
+
+4. Contractor experience
+Contractor users should have their own app experience focused on requesting labour quickly.
+
+Contractor navigation:
+- Home
+- Labour Requests
+- Workforce
+- Account
+
+Contractor Home should include:
+- Large “Request Labour” button
+- Active labour requests
+- Workers currently booked/on site
+- Attendance summary for today: on time, late, no-show
+
+Labour Request screen should include:
+- Trade required
+- Quantity
+- Location
+- Start date/time
+- Duration
+- Pay rate
+- Submit button: “Find Labour”
+
+5. Workforce screen
+Show booked workers with:
+- Name
+- Trade
+- Reliability score
+- Jobs completed
+- Status
+- Attendance buttons: On Time, Late, No Show
+
+Attendance should update the worker reliability score.
+
+6. Reliability score
+Keep reliability score simple:
+- Workers start at 100%
+- On Time: no deduction
+- Late: small deduction
+- No Show: larger deduction
+- Display reliability score clearly on worker cards and profiles
+
+7. Design direction
+Make the app feel premium, modern, and mobile-first.
+Style should feel like a construction-tech platform, not a traditional recruitment agency.
+
+Use:
+- Clean card layouts
+- Strong spacing
+- Modern typography
+- Orange accent colour
+- Dark text on light background
+- Responsive mobile-first design
+
+Do not add:
+- Payments
+- Chat/messaging
+- Recruiter accounts
+- Training/course features
+- Complex AI features
+
+Keep this as a simple working MVP.
+Prioritise clean user flow, reliability scoring, and contractor speed.
