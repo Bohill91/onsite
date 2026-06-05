@@ -2472,6 +2472,21 @@ button, input, select, textarea {
 .att-req-complete svg { color: #16a34a; flex-shrink: 0; }
 
 /* ─── Dispute Modal ─────────────────────────────────────── */
+.modal-overlay {
+  align-items: center;
+  background: rgba(0,0,0,0.5);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.modal-overlay.hidden { display: none; }
+
 .dispute-sheet {
   background: var(--surface);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
