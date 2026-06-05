@@ -75,6 +75,187 @@ function canonicalTrade(v) {
   return TRADE_SYNONYMS[n] || n;
 }
 
+// ─── Booking Protection ───────────────────────────────────
+// Number of working days (Mon–Fri) from today (inclusive) up to, but not
+// including, the job start date. Weekends are ignored. Bank holidays are not
+// considered for MVP.
+function workingDaysUntil(startDateStr) {
+  if (!startDateStr) return null;
+  const now = new Date();   now.setHours(0, 0, 0, 0);
+  const start = new Date(startDateStr); start.setHours(0, 0, 0, 0);
+  if (isNaN(start)) return null;
+  if (start <= now) return 0;
+  let count = 0;
+  const cur = new Date(now);
+  while (cur < start) {
+    const day = cur.getDay(); // 0 Sun … 6 Sat
+    if (day !== 0 && day !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+// Parse a numeric day rate out of a free-text pay field (e.g. "£250/day" → 250).
+function parseDayRate(str) {
+  if (typeof str === "number") return Math.round(str);
+  if (!str) return 0;
+  const m = String(str).replace(/,/g, "").match(/\d+(\.\d+)?/);
+  return m ? Math.round(parseFloat(m[0])) : 0;
+}
+
+function formatMoney(n) {
+  return "£" + Number(n || 0).toLocaleString("en-GB");
+}
+
+// The protection window: cancelling within 3 working days of the start date
+// makes 1 day's pay payable to the worker.
+const PROTECTION_WINDOW_DAYS = 3;
+
+// Given a job/booking, work out the cancellation outcome if cancelled now.
+function computeCancellation(job) {
+  const dayRate  = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+  const workingDays = workingDaysUntil(job.startDate || job.start);
+  const inWindow = workingDays !== null && workingDays <= PROTECTION_WINDOW_DAYS;
+  const amount   = inWindow ? dayRate : 0;
+  return { dayRate, workingDays, inWindow, paymentDue: inWindow, amount };
+}
+
+// Inline "OnSite Protected Booking" notice shown on a confirmed booking.
+function bookingProtectionBanner(job) {
+  const { dayRate, inWindow } = computeCancellation(job);
+  const rateStr = dayRate ? ` The agreed rate is <strong>${formatMoney(dayRate)}/day</strong>.` : "";
+  return `
+  <div class="protection-banner${inWindow ? " in-window" : ""}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <span><strong>OnSite Protected Booking:</strong> If this booking is cancelled within ${PROTECTION_WINDOW_DAYS} working days of the start date, the worker will receive 1 day's pay at the agreed rate.${rateStr}</span>
+  </div>`;
+}
+
+// Bind any [data-cancel-booking] buttons within a container to open the modal.
+function bindCancelBookingButtons(container) {
+  (container || document).querySelectorAll("[data-cancel-booking]").forEach(btn => {
+    btn.addEventListener("click", () => openCancelBookingModal(btn.dataset.cancelBooking));
+  });
+}
+
+// Confirm a worker onto a job — this is the moment a Protected Booking begins.
+function confirmBooking(job, workerId) {
+  if (!job) return;
+  job.assignedWorkerId = workerId;
+  job.workerId         = workerId;
+  job.bookingStatus    = "confirmed";
+  job.confirmedAt      = new Date().toISOString();
+  job.startDate        = job.start;
+  job.agreedDayRate    = parseDayRate(job.payRate);
+  const sess = getSessionUser();
+  if (!job.companyId && sess?.type === "company") job.companyId = sess.id;
+  // Clear any cancellation residue from a previous booking on this job.
+  delete job.cancelledAt;
+  delete job.cancellationReason;
+  delete job.cancellationPaymentDue;
+  delete job.cancellationPaymentAmount;
+}
+
+// Apply a cancellation to a confirmed booking and log it for the admin view.
+function cancelBooking(job, reason) {
+  if (!job) return null;
+  const worker = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const sess   = getSessionUser();
+  const outcome = computeCancellation(job);
+
+  const record = {
+    id: createId(),
+    jobId: job.id,
+    jobTrade: job.trade,
+    jobLocation: job.location,
+    workerId: job.assignedWorkerId || job.workerId || "",
+    workerName: worker?.name || "—",
+    companyId: job.companyId || (sess?.type === "company" ? sess.id : ""),
+    companyName: sess?.companyName || sess?.name || "Contractor",
+    startDate: job.startDate || job.start || "",
+    cancelledAt: new Date().toISOString(),
+    cancellationReason: reason || "Not specified",
+    cancellationPaymentDue: outcome.paymentDue,
+    cancellationPaymentAmount: outcome.amount,
+    agreedDayRate: outcome.dayRate,
+    workingDaysNotice: outcome.workingDays,
+  };
+  state.cancellations.unshift(record);
+
+  // Record cancellation metadata on the job, then free the slot so it can be
+  // re-filled. Worker reliability is intentionally NOT affected.
+  job.bookingStatus            = "cancelled";
+  job.cancelledAt              = record.cancelledAt;
+  job.cancellationReason       = record.cancellationReason;
+  job.cancellationPaymentDue   = outcome.paymentDue;
+  job.cancellationPaymentAmount = outcome.amount;
+  job.assignedWorkerId = "";
+
+  logActivity("job", `Booking cancelled: <strong>${escapeHtml(record.workerName)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}${outcome.paymentDue ? ` · ${formatMoney(outcome.amount)} payment due` : " · no payment due"}`);
+  return record;
+}
+
+// ─── Cancel Booking Modal ─────────────────────────────────
+let pendingCancelJobId = null;
+
+function openCancelBookingModal(jobId) {
+  const job = findJob(jobId);
+  if (!job || !job.assignedWorkerId) return;
+  pendingCancelJobId = jobId;
+
+  const worker = findWorker(job.assignedWorkerId);
+  const { dayRate, workingDays, inWindow, amount } = computeCancellation(job);
+  const startStr = job.startDate || job.start;
+  const startFmt = startStr
+    ? new Date(startStr).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "Not set";
+
+  const windowBanner = inWindow
+    ? `<div class="cancel-window-banner danger">
+         <strong>Inside the protection window.</strong> This booking starts within ${PROTECTION_WINDOW_DAYS} working days. Cancelling now will trigger a cancellation payment of <strong>${formatMoney(amount)}</strong> to the worker.
+       </div>`
+    : `<div class="cancel-window-banner safe">
+         <strong>Outside the protection window.</strong> This booking starts more than ${PROTECTION_WINDOW_DAYS} working days away, so no cancellation payment is due.
+       </div>`;
+
+  document.getElementById("cancelBookingSummary").innerHTML = `
+    <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "—")}</span></div>
+    <div class="cbk-row"><span class="cbk-label">Job</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
+    <div class="cbk-row"><span class="cbk-label">Job start date</span><span class="cbk-val">${escapeHtml(startFmt)}</span></div>
+    <div class="cbk-row"><span class="cbk-label">Agreed day rate</span><span class="cbk-val">${dayRate ? formatMoney(dayRate) : "Not set"}</span></div>
+    <div class="cbk-row"><span class="cbk-label">Notice</span><span class="cbk-val">${workingDays === null ? "—" : `${workingDays} working day${workingDays === 1 ? "" : "s"}`}</span></div>
+    <div class="cbk-row cbk-row--total"><span class="cbk-label">Cancellation payment due</span><span class="cbk-val ${inWindow ? "due" : "none"}">${inWindow ? formatMoney(amount) : "£0"}</span></div>
+    ${windowBanner}`;
+
+  document.getElementById("cancelBookingModal").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeCancelBookingModal() {
+  document.getElementById("cancelBookingModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+  pendingCancelJobId = null;
+}
+
+function confirmCancelBooking() {
+  const job = findJob(pendingCancelJobId);
+  if (!job) { closeCancelBookingModal(); return; }
+  const reason = document.getElementById("cancelBookingReason")?.value || "Not specified";
+  const record = cancelBooking(job, reason);
+  closeCancelBookingModal();
+  saveAndRender();
+  showToast(record?.cancellationPaymentDue
+    ? `Booking cancelled — ${formatMoney(record.cancellationPaymentAmount)} payable to worker`
+    : "Booking cancelled — no payment due");
+}
+
+document.getElementById("closeCancelBookingBtn")?.addEventListener("click", closeCancelBookingModal);
+document.getElementById("keepBookingBtn")?.addEventListener("click", closeCancelBookingModal);
+document.getElementById("confirmCancelBookingBtn")?.addEventListener("click", confirmCancelBooking);
+document.getElementById("cancelBookingModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("cancelBookingModal")) closeCancelBookingModal();
+});
+
 // ─── Profile Completion ────────────────────────────────────
 function calcWorkerCompletion(worker) {
   const checks = [
@@ -241,9 +422,10 @@ const demoData = {
     { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
   ],
   jobs: [
-    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16), duration: "3 days",  assignedWorkerId: "" },
-    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", assignedWorkerId: "" },
+    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16), duration: "3 days",  payRate: "£250/day", assignedWorkerId: "" },
+    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", payRate: "£220/day", assignedWorkerId: "" },
   ],
+  cancellations: [],
 };
 
 // ─── State ────────────────────────────────────────────────
@@ -252,9 +434,25 @@ let state = loadState();
 function loadState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) return migrateState(JSON.parse(saved));
   } catch (_) {}
   return structuredClone(demoData);
+}
+
+// Backfill booking-protection fields on data saved before this feature existed.
+function migrateState(s) {
+  if (!s || typeof s !== "object") return structuredClone(demoData);
+  if (!Array.isArray(s.cancellations)) s.cancellations = [];
+  (s.jobs || []).forEach(j => {
+    if (j.assignedWorkerId && !j.bookingStatus) {
+      j.bookingStatus = "confirmed";
+      j.confirmedAt   = j.confirmedAt || new Date().toISOString();
+      j.workerId      = j.assignedWorkerId;
+      j.startDate     = j.startDate || j.start;
+      if (j.agreedDayRate == null) j.agreedDayRate = parseDayRate(j.payRate);
+    }
+  });
+  return s;
 }
 
 function saveState() {
@@ -436,17 +634,25 @@ function renderWorkerHome(user) {
     r.workerId === user.id && r.date.startsWith(thisMonth) &&
     (r.status === "onTime" || r.status === "late")).length;
 
+  const bookingDayRate = booking ? (booking.agreedDayRate != null ? booking.agreedDayRate : parseDayRate(booking.payRate)) : 0;
   const activeBookingHtml = booking ? `
     <div class="wh-booking-card">
-      <div class="wh-booking-label">Active Booking</div>
+      <div class="wh-booking-head">
+        <div class="wh-booking-label">Active Booking</div>
+        <span class="protected-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Protected
+        </span>
+      </div>
       <div class="wh-booking-trade">${escapeHtml(booking.trade)}</div>
       <div class="wh-booking-meta">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         ${escapeHtml(booking.location)}
         ${booking.start ? ` · ${new Date(booking.start).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}` : ""}
         ${booking.duration ? ` · ${escapeHtml(booking.duration)}` : ""}
-        ${booking.payRate ? ` · <strong>${escapeHtml(booking.payRate)}</strong>` : ""}
+        ${bookingDayRate ? ` · <strong>${formatMoney(bookingDayRate)}/day</strong>` : booking.payRate ? ` · <strong>${escapeHtml(booking.payRate)}</strong>` : ""}
       </div>
+      <div class="wh-booking-protect">If your contractor cancels within ${PROTECTION_WINDOW_DAYS} working days of the start date, you're owed 1 day's pay${bookingDayRate ? ` (${formatMoney(bookingDayRate)})` : ""}.</div>
     </div>` : "";
 
   const recJobsHtml = recommended.length ? `
@@ -617,10 +823,10 @@ function renderContractorHome(user) {
     return `<div class="ch-worker-row">
       <div class="worker-avatar ${avatarColor(w.name)}" style="width:34px;height:34px;font-size:0.78rem;flex-shrink:0">${initials(w.name)}</div>
       <div class="ch-wrow-info">
-        <div class="ch-wrow-name">${escapeHtml(w.name)}</div>
+        <div class="ch-wrow-name">${escapeHtml(w.name)} <span class="protected-badge protected-badge--sm"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Protected</span></div>
         <div class="ch-wrow-meta">${escapeHtml(w.trade)}${job ? ` · ${escapeHtml(job.location)}` : ""}</div>
       </div>
-      <div class="ch-wrow-rel" style="color:${rel>=90?"var(--orange)":rel>=75?"var(--green-text)":"var(--red-text)"};font-weight:800;font-size:0.82rem">${rel}%</div>
+      ${job ? `<button class="ch-cancel-btn" type="button" data-cancel-booking="${job.id}">Cancel</button>` : ""}
     </div>`;
   }).join("") : `<div class="att-empty">No workers currently assigned.</div>`;
 
@@ -654,9 +860,14 @@ function renderContractorHome(user) {
     <div class="ch-section-label">Active Requests</div>
     <div class="ch-req-list">${reqHtml}</div>
     <div class="ch-section-label">Workforce On Site</div>
+    ${bookedWorkers.length ? `<div class="protection-banner">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span><strong>OnSite Protected Booking:</strong> If a booking is cancelled within ${PROTECTION_WINDOW_DAYS} working days of the start date, the worker will receive 1 day's pay at the agreed rate.</span>
+    </div>` : ""}
     <div class="ch-workers-list">${bookedHtml}</div>`;
 
   document.getElementById("chRequestBtn")?.addEventListener("click", () => switchTab("add"));
+  bindCancelBookingButtons(el);
 }
 
 // ─── Contractor Account ───────────────────────────────────
@@ -955,6 +1166,7 @@ function render() {
     renderJobs();
     renderMatches();
     renderAttendance();
+    renderCancelledBookings();
   }
 }
 
@@ -1125,19 +1337,62 @@ function renderJobs() {
   jobsList.querySelectorAll("[data-assign-job]").forEach(sel => {
     sel.addEventListener("change", () => {
       const job = findJob(sel.dataset.assignJob);
-      job.assignedWorkerId = sel.value;
       if (sel.value) {
         const w = findWorker(sel.value);
+        confirmBooking(job, sel.value);
         logActivity("assign", `<strong>${escapeHtml(w.name)}</strong> manually assigned to ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}`);
-        showToast("Worker assigned");
+        showToast("Protected Booking confirmed");
+        saveAndRender();
+      } else if (job.assignedWorkerId) {
+        // Unassigning a confirmed Protected Booking must go through cancellation
+        // so the 3-working-day rule is applied and a record is created.
+        sel.value = job.assignedWorkerId; // revert select until cancellation is confirmed
+        openCancelBookingModal(job.id);
+      } else {
+        saveAndRender();
       }
-      saveAndRender();
     });
   });
 
   jobsList.querySelectorAll("[data-map-job]").forEach(btn => {
     btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
   });
+
+  bindCancelBookingButtons(jobsList);
+}
+
+// ─── Cancelled Bookings (Admin) ───────────────────────────
+function renderCancelledBookings() {
+  const el = document.getElementById("cancelledBookingsList");
+  if (!el) return;
+  const list = state.cancellations || [];
+  if (!list.length) {
+    el.innerHTML = emptyState("No cancelled bookings yet.");
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const startFmt = c.startDate
+      ? new Date(c.startDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+      : "—";
+    const cancelFmt = c.cancelledAt
+      ? new Date(c.cancelledAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+      : "—";
+    return `
+    <article class="cancelled-card">
+      <div class="cancelled-card-top">
+        <div class="cancelled-job">${escapeHtml(c.jobTrade)} · ${escapeHtml(c.jobLocation)}</div>
+        <span class="cancelled-pay ${c.cancellationPaymentDue ? "due" : "none"}">${c.cancellationPaymentDue ? `${formatMoney(c.cancellationPaymentAmount)} due` : "No payment"}</span>
+      </div>
+      <div class="cancelled-grid">
+        <div class="cancelled-field"><span class="cf-label">Worker</span><span class="cf-val">${escapeHtml(c.workerName)}</span></div>
+        <div class="cancelled-field"><span class="cf-label">Company</span><span class="cf-val">${escapeHtml(c.companyName)}</span></div>
+        <div class="cancelled-field"><span class="cf-label">Start date</span><span class="cf-val">${escapeHtml(startFmt)}</span></div>
+        <div class="cancelled-field"><span class="cf-label">Cancelled</span><span class="cf-val">${escapeHtml(cancelFmt)}</span></div>
+        <div class="cancelled-field"><span class="cf-label">Reason</span><span class="cf-val">${escapeHtml(c.cancellationReason)}</span></div>
+        <div class="cancelled-field"><span class="cf-label">Day rate</span><span class="cf-val">${c.agreedDayRate ? formatMoney(c.agreedDayRate) : "—"}</span></div>
+      </div>
+    </article>`;
+  }).join("");
 }
 
 function jobCard(job) {
@@ -1174,10 +1429,15 @@ function jobCard(job) {
            </span>`
         : `<span class="unassigned-pill">Unassigned</span>`}
     </div>
+    ${assigned ? bookingProtectionBanner(job) : ""}
     <div class="job-card-footer">
       ${hasPin ? `<button class="site-loc-view-btn" type="button" data-map-job="${job.id}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         Site Location
+      </button>` : ""}
+      ${assigned ? `<button class="cancel-booking-btn" type="button" data-cancel-booking="${job.id}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Cancel Booking
       </button>` : ""}
       <select class="job-assign-select" aria-label="Assign worker" data-assign-job="${job.id}">
         <option value="">Manual assignment…</option>
@@ -1207,10 +1467,10 @@ function renderMatches() {
       const job = findJob(btn.dataset.autoAssign);
       const [best] = getMatches(job);
       if (!best) return;
-      job.assignedWorkerId = best.id;
+      confirmBooking(job, best.id);
       logActivity("assign", `<strong>${escapeHtml(best.name)}</strong> auto-assigned as best match for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} (score ${best.reliability})`);
       saveAndRender();
-      showToast(`Assigned ${best.name} to job`);
+      showToast(`Protected Booking confirmed for ${best.name}`);
     });
   });
 }
@@ -1268,7 +1528,7 @@ function getMatches(job) {
     .split(",").map(q => q.trim().toLowerCase()).filter(Boolean);
 
   return state.workers
-    .filter(w => normalize(w.trade) === normalize(job.trade) && w.availability === "available")
+    .filter(w => canonicalTrade(w.trade) === canonicalTrade(job.trade) && w.availability === "available")
     .map(w => {
       const stats      = getWorkerStats(w.id);
       const reliability = stats.totalShifts > 0 ? stats.reliability : w.reliability;

@@ -1,1 +1,2 @@
 - [OnSite Architecture & Role Nav](onsite-architecture.md) — dynamic nav rebuild pattern, render dispatch, dashboard restore, user type keys, job model fields.
+- [Booking Protection cancellation rules](booking-protection.md) — all un-assignment must route through cancelBooking(); cancellations[] is source of truth; company cancel doesn't hit reliability.

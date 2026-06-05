@@ -3995,3 +3995,222 @@ button, input, select, textarea {
 .cta-btn--type svg {
   stroke: currentColor;
 }
+
+/* ─── Booking Protection ──────────────────────────────────── */
+.protection-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: var(--radius-xs);
+  padding: 11px 13px;
+  margin: 10px 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.protection-banner svg {
+  color: var(--orange);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.protection-banner.in-window {
+  background: rgba(185, 28, 28, 0.07);
+  border-color: rgba(185, 28, 28, 0.25);
+}
+.protection-banner.in-window svg { color: var(--red-text); }
+
+.protected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--orange);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+.protected-badge svg { stroke: currentColor; }
+.protected-badge--sm {
+  padding: 1px 6px;
+  font-size: 0.6rem;
+  vertical-align: middle;
+}
+
+/* Worker active booking enhancements */
+.wh-booking-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wh-booking-protect {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.25);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  opacity: 0.95;
+}
+
+/* Contractor home cancel button */
+.ch-cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(185, 28, 28, 0.4);
+  color: var(--red-text);
+  border-radius: var(--radius-xs);
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.ch-cancel-btn:hover {
+  background: var(--red-text);
+  color: #fff;
+}
+
+/* Admin job card cancel button */
+.cancel-booking-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid rgba(185, 28, 28, 0.4);
+  color: var(--red-text);
+  border-radius: var(--radius-xs);
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cancel-booking-btn:hover {
+  background: var(--red-text);
+  color: #fff;
+}
+.cancel-booking-btn svg { stroke: currentColor; }
+
+/* ─── Cancel Booking Modal ────────────────────────────────── */
+.cancel-booking-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.cbk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.cbk-label { color: var(--ink-3); }
+.cbk-val { font-weight: 700; color: var(--ink); text-align: right; }
+.cbk-row--total {
+  border-bottom: none;
+  margin-top: 2px;
+}
+.cbk-row--total .cbk-label { font-weight: 700; color: var(--ink); }
+.cbk-val.due { color: var(--red-text); font-size: 1.05rem; }
+.cbk-val.none { color: var(--green-text); }
+
+.cancel-window-banner {
+  margin-top: 10px;
+  border-radius: var(--radius-xs);
+  padding: 12px 14px;
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+.cancel-window-banner.danger {
+  background: rgba(185, 28, 28, 0.08);
+  border: 1px solid rgba(185, 28, 28, 0.3);
+  color: var(--ink-2);
+}
+.cancel-window-banner.safe {
+  background: rgba(21, 128, 61, 0.08);
+  border: 1px solid rgba(21, 128, 61, 0.3);
+  color: var(--ink-2);
+}
+
+.cancel-booking-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.secondary-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-height: 46px;
+  padding: 10px 18px;
+  transition: background 0.15s, transform 0.1s;
+}
+.secondary-btn:hover { background: var(--border); }
+.secondary-btn:active { transform: scale(0.98); }
+.danger-btn {
+  background: var(--red-text);
+  border: none;
+  border-radius: var(--radius-xs);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-height: 46px;
+  padding: 10px 18px;
+  transition: background 0.15s, transform 0.1s;
+}
+.danger-btn:hover { background: #991b1b; }
+.danger-btn:active { transform: scale(0.98); }
+.cancel-booking-actions .secondary-btn,
+.cancel-booking-actions .danger-btn { flex: 1; }
+
+/* ─── Cancelled Bookings (Admin) ──────────────────────────── */
+.cancelled-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.cancelled-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cancelled-job { font-weight: 800; font-size: 0.92rem; color: var(--ink); }
+.cancelled-pay {
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.cancelled-pay.due { background: rgba(185, 28, 28, 0.1); color: var(--red-text); }
+.cancelled-pay.none { background: rgba(21, 128, 61, 0.1); color: var(--green-text); }
+.cancelled-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+.cancelled-field { display: flex; flex-direction: column; gap: 2px; }
+.cf-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.cf-val { font-size: 0.85rem; color: var(--ink); font-weight: 600; }
