@@ -3621,7 +3621,7 @@ button, input, select, textarea {
 
 .wh-view-all:hover { background: var(--orange-light); }
 
-/* ─── Contractor Home ──────────────────────────────────── */
+/* ─── Company Home ──────────────────────────────────── */
 .ch-greeting {
   font-size: 1.1rem;
   font-weight: 700;
@@ -4057,7 +4057,7 @@ button, input, select, textarea {
   opacity: 0.95;
 }
 
-/* Contractor home cancel button */
+/* Company home cancel button */
 .ch-cancel-btn {
   background: transparent;
   border: 1px solid rgba(185, 28, 28, 0.4);
@@ -5047,7 +5047,7 @@ button, input, select, textarea {
 .bill-status--red     { background: var(--red-bg);   color: var(--red-text);   }
 .bill-status--neutral { background: var(--surface-3); color: var(--ink-2);     }
 
-/* Company billing banner (contractor account / worker profile) */
+/* Company billing banner (company account / worker profile) */
 .bill-banner {
   display: flex; align-items: flex-start; gap: 10px;
   background: var(--surface-2); border: 1px solid var(--border);
@@ -5058,7 +5058,7 @@ button, input, select, textarea {
 .bill-banner--amber { background: var(--amber-bg); border-left-color: var(--amber); color: var(--amber-text); }
 .bill-banner--red   { background: var(--red-bg);   border-left-color: var(--red);   color: var(--red-text);   }
 
-/* Invoice list (contractor billing + worker payments) */
+/* Invoice list (company billing + worker payments) */
 .bill-inv-list { display: flex; flex-direction: column; gap: 8px; }
 .bill-inv-row {
   display: flex; align-items: center; gap: 10px;

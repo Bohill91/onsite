@@ -69,7 +69,7 @@ function updateTopbarUser(user) {
     statusEl.textContent = map[user.verificationStatus || 'incomplete'];
     statusEl.className   = 'user-status-badge status-' + (user.verificationStatus || 'incomplete');
   } else {
-    statusEl.textContent = 'Contractor';
+    statusEl.textContent = 'Company';
     statusEl.className   = 'user-status-badge status-company';
   }
   userSection.style.display = 'flex';

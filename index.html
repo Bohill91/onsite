@@ -23,7 +23,7 @@
         <div class="welcome-inner">
           <img src="/logo.png" alt="OnSite" class="auth-logo" style="margin-left:0px;margin-top:36px;margin-bottom:36px;" />
           <p class="welcome-tagline">Reliable trades. On demand.</p>
-          <p class="welcome-sub">Join thousands of verified tradespeople and contractors already using OnSite.</p>
+          <p class="welcome-sub">Join thousands of verified tradespeople and companies already using OnSite.</p>
           <div class="welcome-actions">
             <button class="cta-btn" type="button" onclick="showScreen('login');">
               <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
@@ -37,7 +37,7 @@
               </button>
               <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('company-reg'); setCompanyStep(1);">
                 <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                Contractor
+                Company
               </button>
             </div>
           </div>
@@ -348,18 +348,18 @@
                 <div class="stepper-dot">2</div>
               </div>
             </div>
-            <p class="stepper-label" id="companyStepLabel">Step <strong>1</strong> of 2 — Contractor Details</p>
+            <p class="stepper-label" id="companyStepLabel">Step <strong>1</strong> of 2 — Company Details</p>
 
-            <!-- Step 1: Contractor Details -->
+            <!-- Step 1: Company Details -->
             <div class="company-step active" data-step="1">
-              <h1 class="auth-title">Join as a Contractor</h1>
+              <h1 class="auth-title">Join as a Company</h1>
               <p class="auth-subtitle">Post jobs and connect with verified tradespeople.</p>
               <div id="companyStep1Error" class="auth-error"></div>
               <form id="companyStep1Form">
                 <div class="auth-field-group">
                   <div class="auth-field">
                     <label class="auth-label" for="companyName">Company Name</label>
-                    <input class="auth-input" id="companyName" type="text" placeholder="e.g. Apex Contractors Ltd" required />
+                    <input class="auth-input" id="companyName" type="text" placeholder="e.g. Apex Construction Ltd" required />
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="companyContactName">Contact Name</label>
@@ -411,7 +411,7 @@
                 </div>
                 <button class="auth-submit-btn" type="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Create Contractor Account
+                  Create Company Account
                 </button>
                 <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setCompanyStep(1);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -525,7 +525,7 @@
           <div class="panel-header" style="margin-top:28px;">
             <div>
               <h2 class="panel-title">Cancelled Bookings</h2>
-              <p class="panel-subtitle">Bookings cancelled by contractors &amp; any payment owed to workers</p>
+              <p class="panel-subtitle">Bookings cancelled by companies &amp; any payment owed to workers</p>
             </div>
           </div>
           <div id="cancelledBookingsList" class="card-list"></div>
@@ -588,7 +588,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Job Requests</h2>
-              <p class="panel-subtitle">Contractor requests awaiting assignment</p>
+              <p class="panel-subtitle">Company requests awaiting assignment</p>
             </div>
           </div>
           <div id="jobsList" class="card-list"></div>
@@ -670,7 +670,7 @@
                 </div>
                 <div>
                   <h3>Post Job Request</h3>
-                  <p>Log a contractor's labour requirement</p>
+                  <p>Log a company's labour requirement</p>
                 </div>
               </div>
               <form id="jobForm" class="form-grid">
@@ -859,7 +859,7 @@
           <div id="profileContent"></div>
         </div>
 
-        <!-- ACCOUNT TAB (Contractor) -->
+        <!-- ACCOUNT TAB (Company) -->
         <div class="tab-panel" id="tab-account">
           <div id="accountContent"></div>
         </div>

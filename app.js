@@ -487,7 +487,7 @@ const AGREEMENT_DEFAULTS = {
   attendanceRequirements: "Arrive on site for the agreed start time each working day. Check in via the OnSite site QR code on arrival and report any delay or absence through OnSite as early as possible.",
   reliabilityRules: "Attendance is recorded against your OnSite reliability score. Confirmed lateness and no-shows affect your score. Genuine issues reported in advance and reviewed by your supervisor will not unfairly penalise you.",
   siteRules: "Follow all site safety rules and signage at all times. Wear the required PPE. Comply with reasonable instructions from the site supervisor.",
-  paymentTerms: "Payment is made at the agreed day rate for each confirmed day worked, processed through the contractor's standard payment cycle.",
+  paymentTerms: "Payment is made at the agreed day rate for each confirmed day worked, processed through the company's standard payment cycle.",
 };
 
 function findAgreement(id) {
@@ -541,7 +541,7 @@ function buildAgreementRecord(job, { worker, companyName, dayRate, docs, opts = 
     status: "pending",
     terms: {
       workerName: worker?.name || "Worker",
-      companyName: companyName || "Contractor",
+      companyName: companyName || "Company",
       siteName: job.siteName || job.location || "Site",
       siteAddress: job.siteAddress || job.location || "—",
       trade: job.trade || "—",
@@ -593,7 +593,7 @@ function generateAgreementForBooking(job, opts = {}) {
   const dayRate = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
   const agr = buildAgreementRecord(job, {
     worker,
-    companyName: job.companyName || "Contractor",
+    companyName: job.companyName || "Company",
     dayRate,
     docs: getCompanyDocs(job.companyId),
     opts,
@@ -745,7 +745,7 @@ function ensureAgreementsForState(s) {
       : { workerAccepted: true, companyAccepted: true }; // "active" / legacy
     const agr = buildAgreementRecord(job, {
       worker,
-      companyName: job.companyName || "Contractor",
+      companyName: job.companyName || "Company",
       dayRate,
       docs: getCompanyDocs(job.companyId, s),
       opts,
@@ -1001,7 +1001,7 @@ function confirmBooking(job, workerId) {
   initExtensionFields(job);
   const sess = getSessionUser();
   if (!job.companyId && sess?.type === "company") job.companyId = sess.id;
-  if (!job.companyName) job.companyName = sess?.companyName || sess?.name || "Contractor";
+  if (!job.companyName) job.companyName = sess?.companyName || sess?.name || "Company";
   // Clear any cancellation residue from a previous booking on this job.
   delete job.cancelledAt;
   delete job.cancellationReason;
@@ -1027,7 +1027,7 @@ function cancelBooking(job, reason) {
     workerId: job.assignedWorkerId || job.workerId || "",
     workerName: worker?.name || "—",
     companyId: job.companyId || (sess?.type === "company" ? sess.id : ""),
-    companyName: sess?.companyName || sess?.name || "Contractor",
+    companyName: sess?.companyName || sess?.name || "Company",
     startDate: job.startDate || job.start || "",
     cancelledAt: new Date().toISOString(),
     cancellationReason: reason || "Not specified",
@@ -1430,7 +1430,7 @@ function buildInvoiceRecord({ companyId, companyName, weekStart, weekEnd, lines,
   return {
     id: createId(),
     companyId: companyId || "",
-    companyName: companyName || "Contractor",
+    companyName: companyName || "Company",
     weekStart, weekEnd,
     createdAt: created,
     dueDate: addWorkingDays(created.slice(0, 10), termDays || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM].days),
@@ -1519,7 +1519,7 @@ function generateWeeklyInvoices() {
     if (today <= weekEnd) return; // week not finished yet
     const cid = r.companyId || "__unassigned__";
     const key = `${cid}::${weekStart}`;
-    if (!groups[key]) groups[key] = { companyId: r.companyId || "", companyName: r.companyName || "Contractor", weekStart, weekEnd, recs: [] };
+    if (!groups[key]) groups[key] = { companyId: r.companyId || "", companyName: r.companyName || "Company", weekStart, weekEnd, recs: [] };
     groups[key].recs.push(r);
   });
 
@@ -2113,11 +2113,11 @@ function applyRoleView(user) {
 
   } else if (role === "company") {
     rebuildNav(CONTRACTOR_TABS, "dashboard");
-    // Contractors: show job form only, hide worker form and toggle bar
+    // Companies: show job form only, hide worker form and toggle bar
     document.querySelector(".add-toggle")?.classList.add("hidden");
     document.querySelector("#formWorker")?.classList.add("hidden");
     document.querySelector("#formJob")?.classList.remove("hidden");
-    // Update the add tab header for contractors
+    // Update the add tab header for companies
     const addTitle = document.querySelector("#tab-add .form-card-header h3");
     const addSub   = document.querySelector("#tab-add .form-card-header p");
     if (addTitle) addTitle.textContent = "Labour Request";
@@ -2132,7 +2132,7 @@ function applyRoleView(user) {
     const jobsHeader = document.querySelector("#tab-jobs .panel-title");
     const jobsSub    = document.querySelector("#tab-jobs .panel-subtitle");
     if (jobsHeader) jobsHeader.textContent = "Job Requests";
-    if (jobsSub)    jobsSub.textContent    = "Contractor requests awaiting assignment";
+    if (jobsSub)    jobsSub.textContent    = "Company requests awaiting assignment";
     render();
     switchTab("dashboard");
   }
@@ -2203,7 +2203,7 @@ function renderWorkerHome(user) {
       ${booking.extensionRequestedAt ? `
         <div class="wh-ext-request">
           <div class="wh-ext-req-title">Extension requested</div>
-          <div class="wh-ext-req-body">${escapeHtml(booking.companyName || "Your contractor")} wants to extend your booking until <strong>${formatDate(booking.newProposedEndDate)}</strong> at <strong>${formatMoney(booking.proposedDayRate || bookingDayRate)}/day</strong>.</div>
+          <div class="wh-ext-req-body">${escapeHtml(booking.companyName || "Your company")} wants to extend your booking until <strong>${formatDate(booking.newProposedEndDate)}</strong> at <strong>${formatMoney(booking.proposedDayRate || bookingDayRate)}/day</strong>.</div>
           <div class="wh-ext-actions">
             <button class="wh-ext-btn wh-ext-accept" type="button" data-ext-accept="${booking.id}">Accept</button>
             <button class="wh-ext-btn wh-ext-decline" type="button" data-ext-decline="${booking.id}">Decline</button>
@@ -2214,7 +2214,7 @@ function renderWorkerHome(user) {
           : booking.extensionStatus === "declined_by_worker" ? "You declined the extension. You'll be available for new projects from the end date."
           : "This booking is ending as planned. You'll be available for new projects from the end date."
         }</div>` : ""}
-      <div class="wh-booking-protect">If your contractor cancels within ${PROTECTION_WINDOW_DAYS} working days of the start date, you're owed 1 day's pay${bookingDayRate ? ` (${formatMoney(bookingDayRate)})` : ""}.</div>
+      <div class="wh-booking-protect">If your company cancels within ${PROTECTION_WINDOW_DAYS} working days of the start date, you're owed 1 day's pay${bookingDayRate ? ` (${formatMoney(bookingDayRate)})` : ""}.</div>
     </div>` : "";
 
   const recJobsHtml = recommended.length ? `
@@ -2435,12 +2435,12 @@ function workerPaymentsSection(user) {
         <div class="prof-stat"><div class="prof-stat-val">${formatMoney(totalPaid)}</div><div class="prof-stat-lbl">Paid</div></div>
         <div class="prof-stat"><div class="prof-stat-val">${formatMoney(totalPending)}</div><div class="prof-stat-lbl">Upcoming</div></div>
       </div>
-      <p class="prof-section-hint">Your pay is guaranteed and released once the contractor's invoice is settled.</p>
+      <p class="prof-section-hint">Your pay is guaranteed and released once the company's invoice is settled.</p>
       <div class="bill-inv-list">${rows}</div>
     </div>`;
 }
 
-// Permanent agreement history list (used in worker + contractor accounts).
+// Permanent agreement history list (used in worker + company accounts).
 function agreementHistorySection(agreements) {
   const list = [...(agreements || [])].sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0));
   const rows = list.length ? list.map(a => {
@@ -2461,7 +2461,7 @@ function agreementHistorySection(agreements) {
     </div>`;
 }
 
-// ─── Contractor Home ──────────────────────────────────────
+// ─── Company Home ──────────────────────────────────────
 function renderContractorHome(user) {
   const el = document.getElementById("tab-dashboard");
   if (!el) return;
@@ -2507,7 +2507,7 @@ function renderContractorHome(user) {
     </div>`;
   }).join("") : `<div class="att-empty">No active requests — use the Requests tab to post one.</div>`;
 
-  const companyName = user.companyName || user.name || "Contractor";
+  const companyName = user.companyName || user.name || "Company";
 
   el.innerHTML = `
     <div class="ch-greeting">Welcome back, <strong>${escapeHtml(companyName.split(" ")[0])}</strong></div>
@@ -2561,7 +2561,7 @@ function companyAgreementPanelHTML(user) {
     </div>`;
 }
 
-// ─── Contractor Account ───────────────────────────────────
+// ─── Company Account ───────────────────────────────────
 function renderContractorAccount(user) {
   const el = document.getElementById("accountContent");
   if (!el) return;
@@ -2572,7 +2572,7 @@ function renderContractorAccount(user) {
       <div class="prof-avatar ${avatarColor(user.name || "C")}">${ini}</div>
       <div class="prof-id">
         <div class="prof-name">${escapeHtml(user.companyName || user.name || "")}</div>
-        <div class="prof-trade">Contractor Account</div>
+        <div class="prof-trade">Company Account</div>
         <span class="wsc-verify-badge verified">✓ Verified</span>
       </div>
     </div>
@@ -2582,7 +2582,7 @@ function renderContractorAccount(user) {
         <div class="prof-field"><div class="prof-field-label">Contact Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Company</div><div class="prof-field-val">${escapeHtml(user.companyName || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Contractor</div></div>
+        <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Company</div></div>
       </div>
     </div>
     <div class="prof-section">
@@ -2994,7 +2994,7 @@ function render() {
     renderWorkers();
     renderAttendance();
     renderContractorAccount(user);
-    // Contractor's add tab: show job form only
+    // Company's add tab: show job form only
     document.querySelector("#formWorker")?.classList.add("hidden");
     document.querySelector("#formJob")?.classList.remove("hidden");
   } else {
@@ -3011,7 +3011,7 @@ function render() {
   renderAdminPayments(role);
 
   // Identity/duplicate review is admin-only. Always run it so the panel is
-  // cleared for worker/contractor sessions and never leaks across logins.
+  // cleared for worker/company sessions and never leaks across logins.
   renderAdminDuplicateReview();
   // Extension reminders are admin-only (self-clears for other sessions).
   renderExtensionReminders();
@@ -3935,7 +3935,7 @@ function submitDayAttendance() {
     if (linkedJob) {
       rec.jobId         = linkedJob.id;
       rec.companyId     = linkedJob.companyId || "";
-      rec.companyName   = linkedJob.companyName || "Contractor";
+      rec.companyName   = linkedJob.companyName || "Company";
       rec.jobTrade      = linkedJob.trade || "";
       rec.jobLocation   = linkedJob.location || "";
       rec.workerPay     = linkedJob.pricing?.workerPay != null ? linkedJob.pricing.workerPay : (linkedJob.agreedDayRate || 0);
@@ -4804,14 +4804,14 @@ function renderAdminPayments(role) {
 function getCompaniesForBilling() {
   const map = new Map();
   (state.invoices || []).forEach(i => {
-    if (i.companyId) map.set(i.companyId, i.companyName || "Contractor");
+    if (i.companyId) map.set(i.companyId, i.companyName || "Company");
   });
   Object.values(state.companyBilling || {}).forEach(b => {
-    if (b.companyId && !map.has(b.companyId)) map.set(b.companyId, b.companyName || "Contractor");
+    if (b.companyId && !map.has(b.companyId)) map.set(b.companyId, b.companyName || "Company");
   });
   if (typeof getUsers === "function") {
     try { getUsers().filter(u => u.type === "company").forEach(u => {
-      if (!map.has(u.id)) map.set(u.id, u.companyName || u.name || "Contractor");
+      if (!map.has(u.id)) map.set(u.id, u.companyName || u.name || "Company");
     }); } catch (_) {}
   }
   return [...map.entries()].map(([id, name]) => ({ id, name }));
@@ -4898,7 +4898,7 @@ function bindAdminPaymentEvents(el) {
 function renderAdminDuplicateReview() {
   const el = document.getElementById("adminDupeReview");
   if (!el) return;
-  // Admin (demo) only — workers and contractors never see identity records.
+  // Admin (demo) only — workers and companies never see identity records.
   if (getSessionUser()) { el.innerHTML = ""; return; }
 
   const ids = getIdentities();
