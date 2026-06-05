@@ -4824,3 +4824,209 @@ button, input, select, textarea {
   padding: 1px 7px;
   vertical-align: middle;
 }
+
+/* ─── Digital Job Agreement System ───────────────────────── */
+.agreement-sheet .dispute-sheet-body { gap: 16px; }
+
+/* Status pill */
+.agr-status {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.agr-status--ok   { background: var(--green-bg); color: var(--green-text); border: 1px solid #bbf7d0; }
+.agr-status--warn { background: var(--amber-bg); color: var(--amber-text); border: 1px solid #fde68a; }
+.agr-status--bad  { background: var(--red-bg);   color: var(--red-text);   border: 1px solid #fecaca; }
+
+/* Parties */
+.agr-parties { display: flex; gap: 10px; }
+.agr-party {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.agr-party span { display: block; font-size: 0.68rem; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.agr-party strong { font-size: 0.9rem; }
+
+/* Key facts grid */
+.agr-facts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.agr-fact {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+}
+.agr-fact--wide { margin-top: -8px; }
+.agr-fact-lbl { font-size: 0.66rem; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.agr-fact-val { font-size: 0.82rem; font-weight: 600; margin-top: 2px; }
+
+/* Term + document sections */
+.agr-section { border-top: 1px solid var(--border); padding-top: 14px; }
+.agr-section-title { font-size: 0.84rem; font-weight: 800; margin-bottom: 8px; }
+.agr-section-hint { font-size: 0.74rem; color: var(--ink-3); margin: -4px 0 10px; }
+.agr-term { margin-bottom: 10px; }
+.agr-term-title { font-size: 0.76rem; font-weight: 700; color: var(--ink-2); margin-bottom: 2px; }
+.agr-term-body { font-size: 0.8rem; color: var(--ink-2); line-height: 1.5; margin: 0; }
+
+.agr-doc {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.agr-doc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.agr-doc-title { font-size: 0.82rem; font-weight: 700; }
+.agr-doc-cat { font-size: 0.66rem; font-weight: 700; color: var(--orange); background: var(--orange-light); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.agr-doc-body { font-size: 0.78rem; color: var(--ink-2); line-height: 1.5; margin: 0; white-space: pre-wrap; }
+
+/* Signature blocks */
+.sig-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.sig-block--signed { background: var(--green-bg); border-color: #bbf7d0; }
+.sig-block--pending { background: var(--surface-2); }
+.sig-block-head { display: flex; justify-content: space-between; align-items: center; }
+.sig-role { font-size: 0.8rem; font-weight: 800; }
+.sig-badge { font-size: 0.68rem; font-weight: 800; color: var(--green-text); }
+.sig-badge--pending { color: var(--ink-3); }
+.sig-meta { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.sig-meta div { display: flex; justify-content: space-between; gap: 10px; font-size: 0.72rem; }
+.sig-meta span { color: var(--ink-3); }
+.sig-meta strong { font-weight: 700; text-align: right; word-break: break-word; }
+
+/* Modal actions footer */
+.agreement-actions {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--border);
+}
+.agreement-actions .secondary-btn,
+.agreement-actions .primary-btn { flex: 1; }
+
+/* Worker home agreement banner */
+.wh-agr-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.wh-agr-banner--action { background: var(--amber-bg); border: 1px solid #fde68a; }
+.wh-agr-banner--wait   { background: var(--surface-2); border: 1px solid var(--border); }
+.wh-agr-banner-text { flex: 1; min-width: 0; }
+.wh-agr-banner-text strong { display: block; font-size: 0.8rem; }
+.wh-agr-banner-text span { display: block; font-size: 0.72rem; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
+.wh-agr-review-btn {
+  flex-shrink: 0;
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.wh-agr-review-btn:active { transform: scale(0.97); }
+
+/* Company home agreements panel */
+.ch-agr-panel {
+  background: var(--surface);
+  border: 1px solid #fde68a;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.ch-agr-panel-head { display: flex; align-items: center; gap: 8px; }
+.ch-agr-panel-title { font-size: 0.86rem; font-weight: 800; }
+.ch-agr-panel-count {
+  background: var(--amber-text); color: #fff;
+  font-size: 0.7rem; font-weight: 800;
+  border-radius: 999px; padding: 1px 8px;
+}
+.ch-agr-panel-hint { font-size: 0.74rem; color: var(--ink-3); margin: 4px 0 10px; }
+.ch-agr-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-top: 1px solid var(--border);
+}
+.ch-agr-info { flex: 1; min-width: 0; }
+.ch-agr-title { font-size: 0.82rem; font-weight: 700; }
+.ch-agr-meta { font-size: 0.72rem; color: var(--ink-2); margin-top: 2px; }
+.ch-agr-btn {
+  flex-shrink: 0; background: var(--orange); color: #fff;
+  border: none; border-radius: var(--radius-xs);
+  font-size: 0.74rem; font-weight: 800; padding: 8px 12px; cursor: pointer;
+}
+.ch-agr-btn:active { transform: scale(0.97); }
+
+/* Agreement history list (accounts) */
+.agr-hist-list { display: flex; flex-direction: column; gap: 8px; }
+.agr-hist-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px; cursor: pointer;
+}
+.agr-hist-row:active { transform: scale(0.99); }
+.agr-hist-main { flex: 1; min-width: 0; }
+.agr-hist-title { font-size: 0.82rem; font-weight: 700; }
+.agr-hist-sub { font-size: 0.72rem; color: var(--ink-3); margin-top: 2px; }
+.agr-hist-status {
+  flex-shrink: 0; font-size: 0.64rem; font-weight: 800;
+  padding: 3px 8px; border-radius: 999px; max-width: 42%; text-align: center;
+}
+
+/* Admin agreements overview */
+.agr-overview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.agr-overview-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.agr-overview-title { font-size: 0.9rem; font-weight: 800; }
+.agr-overview-tags { display: flex; gap: 6px; }
+.agr-tag { font-size: 0.66rem; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
+.agr-overview .agr-hist-row { margin-bottom: 8px; }
+
+/* Worker attendance locked state */
+.wsa-locked {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--amber-bg); border: 1px solid #fde68a;
+  border-radius: var(--radius-sm); padding: 12px;
+}
+.wsa-locked-icon { color: var(--amber-text); flex-shrink: 0; }
+.wsa-locked-title { font-size: 0.84rem; font-weight: 800; color: var(--amber-text); }
+.wsa-locked-sub { font-size: 0.74rem; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
+
+/* Site documents manager */
+.prof-section-hint { font-size: 0.74rem; color: var(--ink-3); margin: -4px 0 10px; }
+.doc-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.doc-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.doc-row-info { flex: 1; min-width: 0; }
+.doc-row-title { font-size: 0.82rem; font-weight: 700; }
+.doc-row-cat { font-size: 0.7rem; color: var(--ink-3); margin-top: 2px; }
+.doc-del-btn {
+  flex-shrink: 0; background: none; border: none; color: var(--red-text);
+  cursor: pointer; padding: 4px; border-radius: var(--radius-xs);
+}
+.doc-del-btn:hover { background: var(--red-bg); }
+.doc-add-form { display: flex; flex-direction: column; gap: 10px; }

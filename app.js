@@ -407,6 +407,41 @@ function renderExtensionReminders() {
   bindExtensionButtons(el);
 }
 
+// Admin-only overview of all job agreements (self-clears for other sessions).
+function renderAgreementsOverview() {
+  const el = document.getElementById("agreementsOverview");
+  if (!el) return;
+  if (getSessionUser()) { el.innerHTML = ""; return; }
+  const list = [...(state.agreements || [])].sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0));
+  if (!list.length) { el.innerHTML = ""; return; }
+  const counts = {
+    active:  list.filter(a => a.status === "active").length,
+    pending: list.filter(a => a.status === "pending").length,
+  };
+  el.innerHTML = `
+    <div class="agr-overview">
+      <div class="agr-overview-head">
+        <span class="agr-overview-title">Job Agreements</span>
+        <span class="agr-overview-tags">
+          <span class="agr-tag agr-status--ok">${counts.active} active</span>
+          <span class="agr-tag agr-status--warn">${counts.pending} pending</span>
+        </span>
+      </div>
+      ${list.slice(0, 6).map(a => {
+        const meta = agreementStatusMeta(a);
+        return `
+          <button class="agr-hist-row" type="button" data-agr-open="${a.id}">
+            <div class="agr-hist-main">
+              <div class="agr-hist-title">${escapeHtml(a.terms.trade)} · ${escapeHtml(a.terms.siteName)}</div>
+              <div class="agr-hist-sub">${escapeHtml(a.terms.companyName)} → ${escapeHtml(a.terms.workerName)}</div>
+            </div>
+            <span class="agr-hist-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</span>
+          </button>`;
+      }).join("")}
+    </div>`;
+  bindAgreementOpeners(el);
+}
+
 function bindExtensionButtons(container) {
   const root = container || document;
   root.querySelectorAll("[data-ext-extend]").forEach(btn =>
@@ -442,6 +477,464 @@ function closeExtensionModal() {
   document.getElementById("extensionModal")?.classList.add("hidden");
 }
 
+// ─── Digital Job Agreement System ─────────────────────────
+// On booking confirmation a Job Agreement is generated. Both the worker and the
+// company must review and accept (a digital signature is recorded) before the
+// booking becomes Active. Until then the worker cannot check in, use GPS
+// attendance, or open site navigation. Agreements are stored permanently in
+// state.agreements so both parties keep a full history.
+const AGREEMENT_DEFAULTS = {
+  attendanceRequirements: "Arrive on site for the agreed start time each working day. Check in via the OnSite site QR code on arrival and report any delay or absence through OnSite as early as possible.",
+  reliabilityRules: "Attendance is recorded against your OnSite reliability score. Confirmed lateness and no-shows affect your score. Genuine issues reported in advance and reviewed by your supervisor will not unfairly penalise you.",
+  siteRules: "Follow all site safety rules and signage at all times. Wear the required PPE. Comply with reasonable instructions from the site supervisor.",
+  paymentTerms: "Payment is made at the agreed day rate for each confirmed day worked, processed through the contractor's standard payment cycle.",
+};
+
+function findAgreement(id) {
+  return (state.agreements || []).find(a => a.id === id) || null;
+}
+function agreementForJob(job) {
+  return job && job.agreementId ? findAgreement(job.agreementId) : null;
+}
+
+// Company-specific documents (site rules, induction, H&S, project requirements).
+function getCompanyDocs(companyId, st = state) {
+  if (!companyId) return [];
+  return (st.companyDocuments && st.companyDocuments[companyId]) || [];
+}
+function addCompanyDoc(companyId, doc) {
+  if (!companyId) return;
+  if (!state.companyDocuments) state.companyDocuments = {};
+  if (!state.companyDocuments[companyId]) state.companyDocuments[companyId] = [];
+  state.companyDocuments[companyId].push({ id: createId(), ...doc });
+}
+function removeCompanyDoc(companyId, docId) {
+  const list = state.companyDocuments?.[companyId];
+  if (!list) return;
+  state.companyDocuments[companyId] = list.filter(d => d.id !== docId);
+}
+
+// A digital signature record for one party accepting the agreement.
+function captureSignature(name) {
+  const now = new Date();
+  return {
+    accepted: true,
+    at: now.toISOString(),
+    date: now.toLocaleDateString("en-GB"),
+    time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    user: name || "User",
+    device: (typeof navigator !== "undefined" ? navigator.userAgent : "").slice(0, 140),
+    ip: "", // optional — not collected client-side
+  };
+}
+
+// Pure builder: assemble an agreement record from a job + lookups. Used both at
+// confirm-time (against the live state) and during migration (against a state
+// being loaded), so it must not touch the global `state`.
+function buildAgreementRecord(job, { worker, companyName, dayRate, docs, opts = {} }) {
+  const agr = {
+    id: createId(),
+    jobId: job.id,
+    workerId: job.assignedWorkerId,
+    companyId: job.companyId || "",
+    generatedAt: new Date().toISOString(),
+    status: "pending",
+    terms: {
+      workerName: worker?.name || "Worker",
+      companyName: companyName || "Contractor",
+      siteName: job.siteName || job.location || "Site",
+      siteAddress: job.siteAddress || job.location || "—",
+      trade: job.trade || "—",
+      role: job.role || job.trade || "—",
+      payRate: dayRate ? `${formatMoney(dayRate)}/day` : (job.payRate || "—"),
+      startDate: job.startDate || job.start || "",
+      duration: job.duration || "—",
+      attendanceRequirements: AGREEMENT_DEFAULTS.attendanceRequirements,
+      reliabilityRules: AGREEMENT_DEFAULTS.reliabilityRules,
+      siteRules: job.siteRules || AGREEMENT_DEFAULTS.siteRules,
+      paymentTerms: AGREEMENT_DEFAULTS.paymentTerms,
+    },
+    documents: (docs || []).map(d => ({ ...d })),
+    worker: { accepted: false },
+    company: { accepted: false },
+  };
+  if (opts.workerAccepted) agr.worker = captureSignature(agr.terms.workerName);
+  if (opts.companyAccepted) agr.company = captureSignature(agr.terms.companyName);
+  return agr;
+}
+
+// Generate (once) the agreement for a confirmed booking on the live state.
+// Reuses an existing agreement only when it still matches the current
+// assignment and is not terminal; otherwise it detaches the stale linkage so a
+// fresh agreement is created for the newly assigned worker (the old record is
+// preserved in state.agreements as history).
+function generateAgreementForBooking(job, opts = {}) {
+  if (!job || !job.assignedWorkerId) return null;
+  if (!Array.isArray(state.agreements)) state.agreements = [];
+  const existing = agreementForJob(job);
+  if (existing
+      && existing.status !== "declined_by_worker"
+      && existing.status !== "cancelled"
+      && existing.workerId === job.assignedWorkerId) {
+    return existing;
+  }
+  // Stale or mismatched linkage (e.g. reassignment to a different worker):
+  // terminalize the prior live agreement so it becomes history-only and can no
+  // longer be signed or toggle this booking, then detach before generating a
+  // fresh one.
+  if (existing && existing.status !== "declined_by_worker" && existing.status !== "cancelled") {
+    existing.status = "cancelled";
+  }
+  job.agreementId = "";
+  job.bookingActive = false;
+  const worker  = findWorker(job.assignedWorkerId);
+  const dayRate = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+  const agr = buildAgreementRecord(job, {
+    worker,
+    companyName: job.companyName || "Contractor",
+    dayRate,
+    docs: getCompanyDocs(job.companyId),
+    opts,
+  });
+  state.agreements.push(agr);
+  job.agreementId = agr.id;
+  recomputeAgreement(agr);
+  return agr;
+}
+
+// Recompute an agreement's status and the booking's Active flag.
+function recomputeAgreement(agr) {
+  if (!agr) return;
+  const job = findJob(agr.jobId);
+  // Only the job's *current* agreement may drive its active flag. A stale,
+  // detached agreement kept as history must never toggle a live booking.
+  const isCurrent = !!job && job.agreementId === agr.id;
+  if (agr.status === "declined_by_worker" || agr.status === "cancelled") {
+    if (isCurrent) job.bookingActive = false;
+    return;
+  }
+  if (agr.worker?.accepted && agr.company?.accepted) {
+    agr.status = "active";
+    if (isCurrent) job.bookingActive = true;
+  } else {
+    agr.status = "pending";
+    if (isCurrent) job.bookingActive = false;
+  }
+}
+
+// A booking can be worked only when its agreement is active. Bookings created
+// before this feature (no agreementId) are treated as active so legacy flows
+// keep working.
+function bookingAgreementActive(job) {
+  if (!job) return false;
+  if (!job.agreementId) return true;
+  return !!job.bookingActive;
+}
+
+// Worker-facing status of their agreement, for labels/banners.
+function agreementWorkerState(agr) {
+  if (!agr) return "none";
+  if (agr.status === "active") return "active";
+  if (agr.status === "declined_by_worker") return "declined";
+  if (agr.status === "cancelled") return "cancelled";
+  if (!agr.worker?.accepted) return "pending_worker";   // worker must act
+  return "pending_company";                              // waiting on company
+}
+
+// ─── Agreement actions ────────────────────────────────────
+// A terminal (declined/cancelled) or detached agreement is history-only and can
+// no longer be signed or cancelled.
+function agreementIsActionable(agr) {
+  if (!agr) return false;
+  if (agr.status === "declined_by_worker" || agr.status === "cancelled") return false;
+  const job = findJob(agr.jobId);
+  return !!job && job.agreementId === agr.id;
+}
+
+function workerAcceptAgreement(agreementId) {
+  const agr = findAgreement(agreementId);
+  if (!agr || agr.worker?.accepted || !agreementIsActionable(agr)) return;
+  agr.worker = captureSignature(agr.terms.workerName);
+  recomputeAgreement(agr);
+  closeAgreementModal();
+  logActivity("agreement",
+    `<strong>${escapeHtml(agr.terms.workerName)}</strong> accepted the job agreement for ${escapeHtml(agr.terms.trade)} at ${escapeHtml(agr.terms.siteName)}${agr.status === "active" ? " — booking is now active." : " — awaiting company confirmation."}`);
+  saveAndRender();
+  showToast(agr.status === "active" ? "Agreement accepted — booking active" : "Agreement accepted — awaiting company");
+}
+
+// Declining must NOT affect the worker's reliability score. The slot is freed so
+// the company can re-book; no cancellation/protection payment is triggered
+// because work was never agreed.
+function workerDeclineAgreement(agreementId) {
+  const agr = findAgreement(agreementId);
+  if (!agr || !agreementIsActionable(agr)) return;
+  agr.status = "declined_by_worker";
+  const job = findJob(agr.jobId);
+  if (job) {
+    job.bookingActive = false;
+    job.assignedWorkerId = "";
+    job.workerId = "";
+    job.bookingStatus = "pending";
+    // Detach the (now terminal) agreement so a re-booking generates a fresh one.
+    // The declined record stays in state.agreements as history.
+    job.agreementId = "";
+  }
+  closeAgreementModal();
+  logActivity("agreement",
+    `<strong>${escapeHtml(agr.terms.workerName)}</strong> declined the job agreement for ${escapeHtml(agr.terms.trade)} at ${escapeHtml(agr.terms.siteName)}. Reliability is unaffected; the role is open again.`);
+  saveAndRender();
+  showToast("Agreement declined — your reliability is unaffected");
+}
+
+function companyAcceptAgreement(agreementId) {
+  const agr = findAgreement(agreementId);
+  if (!agr || agr.company?.accepted || !agreementIsActionable(agr)) return;
+  // Claim ownership for seeded/legacy agreements that have no companyId yet.
+  const sess = getSessionUser();
+  if (!agr.companyId && sess?.type === "company") {
+    agr.companyId = sess.id;
+    const job = findJob(agr.jobId);
+    if (job && !job.companyId) job.companyId = sess.id;
+  }
+  agr.company = captureSignature(agr.terms.companyName);
+  recomputeAgreement(agr);
+  closeAgreementModal();
+  logActivity("agreement",
+    `<strong>${escapeHtml(agr.terms.companyName)}</strong> confirmed the job agreement for ${escapeHtml(agr.terms.workerName)}${agr.status === "active" ? " — booking is now active." : " — awaiting worker acceptance."}`);
+  saveAndRender();
+  showToast(agr.status === "active" ? "Agreement confirmed — booking active" : "Agreement confirmed — awaiting worker");
+}
+
+function companyCancelAgreementBooking(agreementId) {
+  const agr = findAgreement(agreementId);
+  if (!agr || !agreementIsActionable(agr)) return;
+  agr.status = "cancelled";
+  const job = findJob(agr.jobId);
+  if (job) {
+    job.bookingActive = false;
+    job.assignedWorkerId = "";
+    job.workerId = "";
+    job.bookingStatus = "pending";
+    // Detach the (now terminal) agreement so a re-booking generates a fresh one.
+    // The cancelled record stays in state.agreements as history.
+    job.agreementId = "";
+  }
+  closeAgreementModal();
+  logActivity("agreement",
+    `Booking cancelled before activation by <strong>${escapeHtml(agr.terms.companyName)}</strong> for ${escapeHtml(agr.terms.trade)} at ${escapeHtml(agr.terms.siteName)} — the role is open again.`);
+  saveAndRender();
+  showToast("Booking cancelled");
+}
+
+// Backfill agreements while a state is being loaded (operates on `s`, not the
+// global state). Legacy confirmed bookings auto-accept both sides so they stay
+// workable; demo seeds honour their agreementSeed.
+function ensureAgreementsForState(s) {
+  if (!Array.isArray(s.agreements)) s.agreements = [];
+  if (!s.companyDocuments || typeof s.companyDocuments !== "object") s.companyDocuments = {};
+  (s.jobs || []).forEach(job => {
+    if (!job.assignedWorkerId || job.completed || job.agreementId) return;
+    const worker = (s.workers || []).find(w => w.id === job.assignedWorkerId);
+    const dayRate = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+    const seed = job.agreementSeed;
+    const opts = seed === "pending_worker"
+      ? { companyAccepted: true }                 // company done, worker still to accept
+      : { workerAccepted: true, companyAccepted: true }; // "active" / legacy
+    const agr = buildAgreementRecord(job, {
+      worker,
+      companyName: job.companyName || "Contractor",
+      dayRate,
+      docs: getCompanyDocs(job.companyId, s),
+      opts,
+    });
+    s.agreements.push(agr);
+    job.agreementId = agr.id;
+    // Inline recompute against `s` (recomputeAgreement uses global state).
+    if (agr.worker.accepted && agr.company.accepted) { agr.status = "active"; job.bookingActive = true; }
+    else { agr.status = "pending"; job.bookingActive = false; }
+  });
+  // One-time cleanup for state persisted before the detach fix: terminalize any
+  // pending agreement that is no longer its job's current one, so stale records
+  // can't linger as actionable/misleading history.
+  (s.agreements || []).forEach(agr => {
+    if (agr.status !== "pending") return;
+    const job = (s.jobs || []).find(j => j.id === agr.jobId);
+    if (!job || job.agreementId !== agr.id) agr.status = "cancelled";
+  });
+}
+
+// ─── Agreement modal (review + sign) ──────────────────────
+function agreementStatusMeta(agr) {
+  switch (agr.status) {
+    case "active":            return { cls: "ok",      label: "Active — both parties accepted" };
+    case "declined_by_worker":return { cls: "bad",     label: "Declined by worker" };
+    case "cancelled":         return { cls: "bad",     label: "Booking cancelled" };
+    default:
+      if (agr.worker?.accepted)  return { cls: "warn", label: "Awaiting company confirmation" };
+      if (agr.company?.accepted) return { cls: "warn", label: "Awaiting worker acceptance" };
+      return { cls: "warn", label: "Awaiting both signatures" };
+  }
+}
+
+function signatureBlockHtml(label, sig) {
+  if (sig?.accepted) {
+    return `
+      <div class="sig-block sig-block--signed">
+        <div class="sig-block-head">
+          <span class="sig-role">${escapeHtml(label)}</span>
+          <span class="sig-badge">✓ Signed</span>
+        </div>
+        <div class="sig-meta">
+          <div><span>Signed by</span><strong>${escapeHtml(sig.user || "—")}</strong></div>
+          <div><span>Date &amp; time</span><strong>${escapeHtml(sig.date || "")} ${escapeHtml(sig.time || "")}</strong></div>
+          <div><span>Device</span><strong>${escapeHtml(sig.device || "—")}</strong></div>
+          ${sig.ip ? `<div><span>IP address</span><strong>${escapeHtml(sig.ip)}</strong></div>` : ""}
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="sig-block sig-block--pending">
+      <div class="sig-block-head">
+        <span class="sig-role">${escapeHtml(label)}</span>
+        <span class="sig-badge sig-badge--pending">Awaiting signature</span>
+      </div>
+    </div>`;
+}
+
+function buildAgreementBody(agr) {
+  const t = agr.terms;
+  const meta = agreementStatusMeta(agr);
+  const term = (title, body) => `
+    <div class="agr-term">
+      <div class="agr-term-title">${escapeHtml(title)}</div>
+      <p class="agr-term-body">${escapeHtml(body)}</p>
+    </div>`;
+  const fact = (label, val) => `
+    <div class="agr-fact"><div class="agr-fact-lbl">${escapeHtml(label)}</div><div class="agr-fact-val">${escapeHtml(val || "—")}</div></div>`;
+
+  const docCat = { rules: "Site Rules", induction: "Induction", hs: "Health & Safety", project: "Project Requirements", other: "Document" };
+  const docsHtml = (agr.documents || []).length
+    ? `<div class="agr-section">
+         <div class="agr-section-title">Site Documents to Review</div>
+         <p class="agr-section-hint">Please read all documents below before accepting.</p>
+         ${agr.documents.map(d => `
+           <div class="agr-doc">
+             <div class="agr-doc-head">
+               <span class="agr-doc-title">${escapeHtml(d.title || "Document")}</span>
+               <span class="agr-doc-cat">${escapeHtml(docCat[d.category] || "Document")}</span>
+             </div>
+             <p class="agr-doc-body">${escapeHtml(d.body || "")}</p>
+           </div>`).join("")}
+       </div>`
+    : "";
+
+  return `
+    <div class="agr-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</div>
+
+    <div class="agr-parties">
+      <div class="agr-party"><span>Worker</span><strong>${escapeHtml(t.workerName)}</strong></div>
+      <div class="agr-party"><span>Company</span><strong>${escapeHtml(t.companyName)}</strong></div>
+    </div>
+
+    <div class="agr-facts">
+      ${fact("Site", t.siteName)}
+      ${fact("Role", t.role)}
+      ${fact("Trade", t.trade)}
+      ${fact("Day rate", t.payRate)}
+      ${fact("Start", t.startDate ? formatDate(t.startDate) : "—")}
+      ${fact("Duration", t.duration)}
+    </div>
+    <div class="agr-fact agr-fact--wide"><div class="agr-fact-lbl">Site address</div><div class="agr-fact-val">${escapeHtml(t.siteAddress)}</div></div>
+
+    <div class="agr-section">
+      <div class="agr-section-title">Agreement Terms</div>
+      ${term("Attendance Requirements", t.attendanceRequirements)}
+      ${term("Reliability & Conduct", t.reliabilityRules)}
+      ${term("Site Rules", t.siteRules)}
+      ${term("Payment Terms", t.paymentTerms)}
+    </div>
+
+    ${docsHtml}
+
+    <div class="agr-section">
+      <div class="agr-section-title">Digital Signatures</div>
+      ${signatureBlockHtml("Worker", agr.worker)}
+      ${signatureBlockHtml("Company", agr.company)}
+    </div>`;
+}
+
+function buildAgreementActions(agr, viewer) {
+  const live = agr.status !== "declined_by_worker" && agr.status !== "cancelled";
+  if (viewer === "worker" && live && !agr.worker?.accepted) {
+    return `
+      <button class="secondary-btn wide" data-agr-action="worker-decline">Decline</button>
+      <button class="primary-btn wide" data-agr-action="worker-accept">Accept &amp; Sign</button>`;
+  }
+  if (viewer === "company" && live && !agr.company?.accepted) {
+    return `
+      <button class="secondary-btn wide" data-agr-action="company-cancel">Cancel Booking</button>
+      <button class="primary-btn wide" data-agr-action="company-accept">Accept &amp; Sign</button>`;
+  }
+  return `<button class="secondary-btn wide" data-agr-action="close">Close</button>`;
+}
+
+function agreementViewerRole(agr) {
+  const sess = getSessionUser();
+  if (sess?.type === "worker" && agr.workerId === sess.id) return "worker";
+  // Company sessions own an agreement when the ids match, or when the agreement
+  // has no companyId (seeded/legacy bookings in this single-company demo).
+  if (sess?.type === "company" && (agr.companyId === sess.id || !agr.companyId)) return "company";
+  return "readonly";
+}
+
+let currentAgreementId = null;
+function openAgreementModal(agreementId) {
+  const agr = findAgreement(agreementId);
+  if (!agr) return;
+  currentAgreementId = agreementId;
+  const viewer = agreementViewerRole(agr);
+  const sub = document.getElementById("agreementSub");
+  if (sub) {
+    sub.textContent = viewer === "readonly"
+      ? "This agreement is read-only."
+      : "Review the full terms and site documents, then sign to accept.";
+  }
+  const body = document.getElementById("agreementBody");
+  if (body) body.innerHTML = buildAgreementBody(agr);
+  const actions = document.getElementById("agreementActions");
+  if (actions) {
+    actions.innerHTML = buildAgreementActions(agr, viewer);
+    actions.querySelectorAll("[data-agr-action]").forEach(btn => {
+      btn.addEventListener("click", () => handleAgreementAction(btn.dataset.agrAction, agreementId));
+    });
+  }
+  document.getElementById("agreementModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeAgreementModal() {
+  currentAgreementId = null;
+  document.getElementById("agreementModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+function handleAgreementAction(action, agreementId) {
+  switch (action) {
+    case "worker-accept":   workerAcceptAgreement(agreementId); break;
+    case "worker-decline":
+      if (confirm("Decline this job agreement? The role will be reopened. Your reliability score will not be affected.")) workerDeclineAgreement(agreementId);
+      break;
+    case "company-accept":  companyAcceptAgreement(agreementId); break;
+    case "company-cancel":
+      if (confirm("Cancel this booking before activation? The role will be reopened.")) companyCancelAgreementBooking(agreementId);
+      break;
+    default: closeAgreementModal();
+  }
+}
+document.getElementById("closeAgreementBtn")?.addEventListener("click", closeAgreementModal);
+document.getElementById("agreementModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("agreementModal")) closeAgreementModal();
+});
+
 // Confirm a worker onto a job — this is the moment a Protected Booking begins.
 function confirmBooking(job, workerId) {
   if (!job) return;
@@ -455,11 +948,15 @@ function confirmBooking(job, workerId) {
   initExtensionFields(job);
   const sess = getSessionUser();
   if (!job.companyId && sess?.type === "company") job.companyId = sess.id;
+  if (!job.companyName) job.companyName = sess?.companyName || sess?.name || "Contractor";
   // Clear any cancellation residue from a previous booking on this job.
   delete job.cancelledAt;
   delete job.cancellationReason;
   delete job.cancellationPaymentDue;
   delete job.cancellationPaymentAmount;
+  // Generate the Job Agreement — the booking stays inactive until both the
+  // worker and company accept it.
+  generateAgreementForBooking(job);
 }
 
 // Apply a cancellation to a confirmed booking and log it for the admin view.
@@ -496,6 +993,14 @@ function cancelBooking(job, reason) {
   job.cancellationPaymentDue   = outcome.paymentDue;
   job.cancellationPaymentAmount = outcome.amount;
   job.assignedWorkerId = "";
+
+  // Detach the agreement: mark a still-pending one cancelled and clear the
+  // job's linkage/active flag so a re-booking generates a fresh agreement. The
+  // agreement record itself stays in state.agreements as history.
+  const agr = agreementForJob(job);
+  if (agr && agr.status === "pending") agr.status = "cancelled";
+  job.agreementId = "";
+  job.bookingActive = false;
 
   logActivity("job", `Booking cancelled: <strong>${escapeHtml(record.workerName)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}${outcome.paymentDue ? ` · ${formatMoney(outcome.amount)} payment due` : " · no payment due"}`);
   return record;
@@ -753,20 +1258,44 @@ const demoData = {
     { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16),  estimatedEndDate: _isoDate(6 * 86400000),  duration: "3 days",  payRate: "£250/day", assignedWorkerId: "" },
     { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), estimatedEndDate: _isoDate(9 * 86400000),  duration: "5 days",  payRate: "£220/day", assignedWorkerId: "" },
     // Active booking nearing its estimated end — demonstrates extension reminders.
+    // Its agreement is seeded as "active" (both parties already accepted).
     {
       id: createId(), trade: "Electrical", location: "Manchester",
+      siteName: "Northgate Tower", siteAddress: "Northgate Tower, 12 Cross St, Manchester, M2 1WS",
+      role: "Site Electrician",
       start: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
       estimatedEndDate: _isoDate(9 * 86400000),
       duration: "3 weeks", payRate: "£260/day",
       assignedWorkerId: _demoWorkers[0].id, workerId: _demoWorkers[0].id,
+      companyName: "Apex Construction Ltd",
       bookingStatus: "confirmed", confirmedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
       startDate: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
       agreedDayRate: 260, noticePeriodDays: 5,
       extensionStatus: "pending", workerAvailabilityStatus: "booked",
+      agreementSeed: "active",
+    },
+    // Confirmed booking whose agreement is awaiting the worker's acceptance —
+    // demonstrates the Pending Agreement gating and accept flow.
+    {
+      id: createId(), trade: "Carpentry", location: "Leeds",
+      siteName: "Riverside Mill", siteAddress: "Riverside Mill, Dock St, Leeds, LS10 1JF",
+      role: "Site Carpenter",
+      start: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16),
+      estimatedEndDate: _isoDate(20 * 86400000),
+      duration: "4 weeks", payRate: "£230/day",
+      assignedWorkerId: _demoWorkers[4].id, workerId: _demoWorkers[4].id,
+      companyName: "Apex Construction Ltd",
+      bookingStatus: "confirmed", confirmedAt: new Date(Date.now() - 86400000).toISOString(),
+      startDate: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16),
+      agreedDayRate: 230, noticePeriodDays: 5,
+      extensionStatus: "pending", workerAvailabilityStatus: "booked",
+      agreementSeed: "pending_worker",
     },
   ],
   cancellations: [],
   siteCodes: [],
+  agreements: [],
+  companyDocuments: {},
 };
 
 // ─── State ────────────────────────────────────────────────
@@ -800,6 +1329,9 @@ function migrateState(s) {
       if (!j.workerAvailabilityStatus)     j.workerAvailabilityStatus = "booked";
     }
   });
+  // Backfill Job Agreements for confirmed bookings (legacy bookings are
+  // auto-accepted on both sides so they stay workable).
+  ensureAgreementsForState(s);
   return s;
 }
 
@@ -1260,15 +1792,29 @@ function renderWorkerHome(user) {
     (r.status === "onTime" || r.status === "late")).length;
 
   const bookingDayRate = booking ? (booking.agreedDayRate != null ? booking.agreedDayRate : parseDayRate(booking.payRate)) : 0;
+  const bookingAgr   = booking ? agreementForJob(booking) : null;
+  const agrState     = bookingAgr ? agreementWorkerState(bookingAgr) : "none";
+  const bookingLive  = booking ? bookingAgreementActive(booking) : false;
+  const agreementBanner = (booking && bookingAgr && agrState !== "active") ? `
+    <div class="wh-agr-banner wh-agr-banner--${agrState === "pending_worker" ? "action" : "wait"}">
+      <div class="wh-agr-banner-text">
+        <strong>${agrState === "pending_worker" ? "Job Agreement — action needed" : "Job Agreement signed"}</strong>
+        <span>${agrState === "pending_worker"
+          ? "Review and accept your agreement to activate this booking. You can't check in or navigate to site until it's active."
+          : "Waiting for the company to confirm. Your booking activates once they sign."}</span>
+      </div>
+      <button class="wh-agr-review-btn" type="button" data-agr-open="${bookingAgr.id}">${agrState === "pending_worker" ? "Review & Sign" : "View"}</button>
+    </div>` : "";
   const activeBookingHtml = booking ? `
     <div class="wh-booking-card">
       <div class="wh-booking-head">
-        <div class="wh-booking-label">Active Booking</div>
+        <div class="wh-booking-label">${bookingLive ? "Active Booking" : "Booking — Pending Agreement"}</div>
         <span class="protected-badge">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Protected
         </span>
       </div>
+      ${agreementBanner}
       <div class="wh-booking-trade">${escapeHtml(booking.trade)}</div>
       <div class="wh-booking-meta">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -1374,7 +1920,15 @@ function renderWorkerHome(user) {
   el.querySelectorAll("[data-tab]").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+  bindAgreementOpeners(el);
   bindExtensionButtons(el);
+}
+
+// Wire any "[data-agr-open]" buttons within a container to open the agreement.
+function bindAgreementOpeners(el) {
+  el?.querySelectorAll("[data-agr-open]").forEach(btn => {
+    btn.addEventListener("click", () => openAgreementModal(btn.dataset.agrOpen));
+  });
 }
 
 // ─── Worker Profile ───────────────────────────────────────
@@ -1443,6 +1997,8 @@ function renderWorkerProfile(user) {
       </div>
     </div>
 
+    ${agreementHistorySection(state.agreements.filter(a => a.workerId === user.id))}
+
     <div class="prof-section">
       <div class="prof-section-title">Account</div>
       <p class="privacy-note">OnSite may retain limited identity and booking history after account deletion where necessary to prevent fraud, protect platform integrity, resolve disputes, and maintain accurate reliability records.</p>
@@ -1452,10 +2008,32 @@ function renderWorkerProfile(user) {
       </button>
     </div>`;
 
+  bindAgreementOpeners(el);
   const delBtn = el.querySelector("#deleteAccountBtn");
   if (delBtn) delBtn.addEventListener("click", () => {
     if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
   });
+}
+
+// Permanent agreement history list (used in worker + contractor accounts).
+function agreementHistorySection(agreements) {
+  const list = [...(agreements || [])].sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0));
+  const rows = list.length ? list.map(a => {
+    const meta = agreementStatusMeta(a);
+    return `
+      <button class="agr-hist-row" type="button" data-agr-open="${a.id}">
+        <div class="agr-hist-main">
+          <div class="agr-hist-title">${escapeHtml(a.terms.trade)} · ${escapeHtml(a.terms.siteName)}</div>
+          <div class="agr-hist-sub">${escapeHtml(a.terms.companyName)} · ${escapeHtml(a.terms.workerName)} · ${a.generatedAt ? formatDate(a.generatedAt) : ""}</div>
+        </div>
+        <span class="agr-hist-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</span>
+      </button>`;
+  }).join("") : `<div class="att-empty">No job agreements yet.</div>`;
+  return `
+    <div class="prof-section">
+      <div class="prof-section-title">Job Agreement History</div>
+      <div class="agr-hist-list">${rows}</div>
+    </div>`;
 }
 
 // ─── Contractor Home ──────────────────────────────────────
@@ -1517,6 +2095,7 @@ function renderContractorHome(user) {
       <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
     </div>
     ${extensionPanelHTML()}
+    ${companyAgreementPanelHTML(user)}
     <div class="ch-section-label">Active Requests</div>
     <div class="ch-req-list">${reqHtml}</div>
     <div class="ch-section-label">Workforce On Site</div>
@@ -1528,7 +2107,32 @@ function renderContractorHome(user) {
 
   document.getElementById("chRequestBtn")?.addEventListener("click", () => switchTab("add"));
   bindCancelBookingButtons(el);
+  bindAgreementOpeners(el);
   bindExtensionButtons(el);
+}
+
+// Company panel: agreements awaiting the company's confirmation.
+function companyAgreementPanelHTML(user) {
+  const pending = (state.agreements || []).filter(a =>
+    (a.companyId === user.id || !a.companyId) && a.status === "pending" && !a.company?.accepted);
+  if (!pending.length) return "";
+  const rows = pending.map(a => `
+    <div class="ch-agr-row">
+      <div class="ch-agr-info">
+        <div class="ch-agr-title">${escapeHtml(a.terms.workerName)} · ${escapeHtml(a.terms.trade)}</div>
+        <div class="ch-agr-meta">${escapeHtml(a.terms.siteName)} · ${a.worker?.accepted ? "Worker signed — your confirmation needed" : "Awaiting both signatures"}</div>
+      </div>
+      <button class="ch-agr-btn" type="button" data-agr-open="${a.id}">Review &amp; Sign</button>
+    </div>`).join("");
+  return `
+    <div class="ch-agr-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Job Agreements — Action Needed</span>
+        <span class="ch-agr-panel-count">${pending.length}</span>
+      </div>
+      <p class="ch-agr-panel-hint">Bookings stay inactive until you and the worker both sign.</p>
+      ${rows}
+    </div>`;
 }
 
 // ─── Contractor Account ───────────────────────────────────
@@ -1562,13 +2166,75 @@ function renderContractorAccount(user) {
         <div class="prof-stat"><div class="prof-stat-val">${state.jobs.filter(j=>j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
       </div>
     </div>
+    ${companyDocsSection(user)}
+    ${agreementHistorySection(state.agreements.filter(a => a.companyId === user.id || !a.companyId))}
     <button class="ch-logout-btn" type="button" id="accLogoutBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign Out
     </button>`;
 
+  bindAgreementOpeners(el);
+  bindCompanyDocsForm(el, user);
   document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
     document.getElementById("logoutBtn")?.click();
+  });
+}
+
+// Company site-documents manager. Documents are snapshotted into each new
+// agreement so workers must review them before accepting.
+function companyDocsSection(user) {
+  const docs = getCompanyDocs(user.id);
+  const catLabel = { rules: "Site Rules", induction: "Induction", hs: "Health & Safety", project: "Project Requirements", other: "Other" };
+  const list = docs.length ? docs.map(d => `
+    <div class="doc-row">
+      <div class="doc-row-info">
+        <div class="doc-row-title">${escapeHtml(d.title || "Document")}</div>
+        <div class="doc-row-cat">${escapeHtml(catLabel[d.category] || "Document")}</div>
+      </div>
+      <button class="doc-del-btn" type="button" data-doc-del="${d.id}" aria-label="Delete document">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>`).join("") : `<div class="att-empty">No site documents yet. Add induction, H&amp;S or site-rules content for workers to review.</div>`;
+  return `
+    <div class="prof-section">
+      <div class="prof-section-title">Site Documents</div>
+      <p class="prof-section-hint">Workers must review these before accepting a job agreement.</p>
+      <div class="doc-list">${list}</div>
+      <div class="doc-add-form">
+        <div class="form-grid-2">
+          <label class="field-label">Title<input id="docTitle" type="text" placeholder="e.g. Site Induction" /></label>
+          <label class="field-label">Category
+            <select id="docCategory">
+              <option value="rules">Site Rules</option>
+              <option value="induction">Induction</option>
+              <option value="hs">Health &amp; Safety</option>
+              <option value="project">Project Requirements</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+        </div>
+        <label class="field-label">Content<textarea id="docBody" rows="3" placeholder="Document text workers must read…"></textarea></label>
+        <button class="primary-btn wide" type="button" id="docAddBtn">Add Document</button>
+      </div>
+    </div>`;
+}
+
+function bindCompanyDocsForm(el, user) {
+  el.querySelectorAll("[data-doc-del]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      removeCompanyDoc(user.id, btn.dataset.docDel);
+      saveAndRender();
+      showToast("Document removed");
+    });
+  });
+  el.querySelector("#docAddBtn")?.addEventListener("click", () => {
+    const title = el.querySelector("#docTitle")?.value.trim();
+    const category = el.querySelector("#docCategory")?.value || "other";
+    const body = el.querySelector("#docBody")?.value.trim();
+    if (!title || !body) { showToast("Add a title and content"); return; }
+    addCompanyDoc(user.id, { title, category, body });
+    saveAndRender();
+    showToast("Document added");
   });
 }
 
@@ -1754,6 +2420,10 @@ jobForm.addEventListener("submit", e => {
   };
 
   // Capture optional site location fields
+  const siteName = document.querySelector("#jobSiteName")?.value.trim();
+  if (siteName) job.siteName = siteName;
+  const role = document.querySelector("#jobRole")?.value.trim();
+  if (role) job.role = role;
   const siteAddr = document.querySelector("#jobSiteAddress")?.value.trim();
   if (siteAddr) job.siteAddress = siteAddr;
   if (currentJobPin.lat !== null) job.sitePin = { ...currentJobPin };
@@ -1843,6 +2513,8 @@ function render() {
   renderAdminDuplicateReview();
   // Extension reminders are admin-only (self-clears for other sessions).
   renderExtensionReminders();
+  // Agreements overview is admin-only (self-clears for other sessions).
+  renderAgreementsOverview();
 }
 
 function renderStats() {
@@ -2404,6 +3076,15 @@ function openSiteMap(jobId) {
   const job = findJob(jobId);
   if (!job?.sitePin) return;
 
+  // Workers can't navigate to site until their booking agreement is active.
+  const sess = getSessionUser();
+  if (sess?.type === "worker" && job.assignedWorkerId === sess.id && !bookingAgreementActive(job)) {
+    showToast("Accept your Job Agreement to unlock site navigation");
+    const agr = agreementForJob(job);
+    if (agr) openAgreementModal(agr.id);
+    return;
+  }
+
   const { lat, lng } = job.sitePin;
   document.getElementById("siteMapJobName").textContent = `${job.trade} · ${job.location}`;
 
@@ -2464,7 +3145,7 @@ function closeSiteMap() {
 
 document.getElementById("closeMapBtn")?.addEventListener("click", closeSiteMap);
 siteMapModal?.addEventListener("click", e => { if (e.target === siteMapModal) closeSiteMap(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteMap(); closePhotoLightbox(); closeDisputeModal(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSiteMap(); closePhotoLightbox(); closeDisputeModal(); closeAgreementModal(); } });
 document.getElementById("closeDisputeBtn")?.addEventListener("click", closeDisputeModal);
 document.getElementById("disputeModal")?.addEventListener("click", e => { if (e.target === document.getElementById("disputeModal")) closeDisputeModal(); });
 document.getElementById("submitDisputeBtn")?.addEventListener("click", submitDispute);
@@ -2998,6 +3679,27 @@ function workerSelfAttCard(worker, today) {
 
   const siteLine = `<div class="wsa-site">${escapeHtml(job.trade)} · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span></div>`;
 
+  // Booking agreement must be active before check-in / attendance is available.
+  if (!bookingAgreementActive(job)) {
+    const agr = agreementForJob(job);
+    return `
+    <article class="attendance-card wsa-card" id="att-card-${worker.id}">
+      <div class="wsa-date-row"><span class="wsa-date-label">${formatAttDate(today)}</span></div>
+      ${siteLine}
+      ${statsRow}
+      <div class="wsa-locked">
+        <span class="wsa-locked-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <div>
+          <div class="wsa-locked-title">Check-in locked</div>
+          <div class="wsa-locked-sub">Accept your Job Agreement to activate this booking before checking in.</div>
+        </div>
+      </div>
+      ${agr ? `<button class="wsa-checkin-btn" type="button" data-agr-open="${agr.id}">Review Job Agreement</button>` : ""}
+    </article>`;
+  }
+
   // Build the action / status block based on today's record.
   let body;
   if (rec && rec.supervisorConfirmed) {
@@ -3057,6 +3759,7 @@ function bindWorkerAttEvents(container, uid, workerObj) {
   if (scanBtn) scanBtn.addEventListener("click", () => workerScanCheckIn(uid, workerObj));
   const reportBtn = container.querySelector(`[data-att-report="${uid}"]`);
   if (reportBtn) reportBtn.addEventListener("click", () => openReportModal(uid, workerObj));
+  bindAgreementOpeners(container);
 }
 
 function refreshWorkerAttCard(uid, workerObj) {
@@ -3073,6 +3776,13 @@ function workerScanCheckIn(uid, workerObj) {
   const today = todayDateStr();
   const job   = state.jobs.find(j => j.assignedWorkerId === uid);
   if (!job) { showToast("You're not assigned to a site today"); return; }
+
+  if (!bookingAgreementActive(job)) {
+    showToast("Accept your Job Agreement before checking in");
+    const agr = agreementForJob(job);
+    if (agr) openAgreementModal(agr.id);
+    return;
+  }
 
   const code = activeSiteCode(job.id);
   if (!code) {
