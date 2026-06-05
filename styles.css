@@ -101,8 +101,8 @@ button, input, select, textarea {
 }
 
 .brand-logo {
-  width: 280px;
-  height: 140px;
+  width: 200px;
+  height: auto;
   object-fit: contain;
   flex-shrink: 0;
 }

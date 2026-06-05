@@ -35,15 +35,15 @@
 
 /* ─── Auth Logo ─────────────────────────────────────────── */
 .auth-logo {
-  width: 160px;
-  height: 80px;
+  width: 240px;
+  height: auto;
   object-fit: contain;
   margin-bottom: 8px;
 }
 
 .auth-logo-sm {
-  width: 180px;
-  height: 90px;
+  width: 200px;
+  height: auto;
   object-fit: contain;
 }
 
