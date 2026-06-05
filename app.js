@@ -111,6 +111,123 @@ function formatMoney(n) {
 // makes 1 day's pay payable to the worker.
 const PROTECTION_WINDOW_DAYS = 3;
 
+// ─── Project Extension & Reallocation ─────────────────────
+// Construction projects often overrun, so OnSite checks whether a company
+// wants to extend its workers before a booking's estimated end date. If no
+// extension is confirmed in time, the worker is freed for future bookings.
+const EXTENSION_REMIND_DAYS  = 14; // first reminder window (calendar days)
+const EXTENSION_SECOND_DAYS  = 7;  // second reminder window (calendar days)
+const DEFAULT_NOTICE_DAYS    = 5;  // working days before end → auto end-as-planned
+
+// Whole calendar days from today (00:00) until the given date. May be negative
+// if the date is in the past. Returns null for an unparseable/empty date.
+function calendarDaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr); target.setHours(0, 0, 0, 0);
+  if (isNaN(target)) return null;
+  return Math.round((target - now) / 86400000);
+}
+
+// Human-readable label for a booking's extension/availability status.
+function extensionStatusLabel(job) {
+  const map = {
+    extended:           { txt: "Extended",            cls: "ext-extended" },
+    ending_as_planned:  { txt: "Ending as planned",   cls: "ext-ending"   },
+    declined_by_worker: { txt: "Declined by worker",  cls: "ext-declined" },
+    declined_by_company:{ txt: "Declined by company", cls: "ext-declined" },
+  };
+  if (job.extensionStatus && map[job.extensionStatus]) return map[job.extensionStatus];
+  if (job.extensionRequestedAt) return { txt: "Awaiting worker response", cls: "ext-pending" };
+  if (job.extensionJustExtended) return { txt: "Extended", cls: "ext-extended" };
+  return { txt: "On schedule", cls: "ext-ok" };
+}
+
+// True when a worker on this booking can be offered future work (their booking
+// is winding down and no extension is in force).
+function isReallocatable(job) {
+  return ["available_soon", "available_from_end_date", "reassigned"]
+    .includes(job?.workerAvailabilityStatus);
+}
+
+// Initialise extension fields on a confirmed booking (idempotent).
+function initExtensionFields(job) {
+  if (!job) return;
+  if (job.noticePeriodDays == null) job.noticePeriodDays = DEFAULT_NOTICE_DAYS;
+  if (!job.extensionStatus)         job.extensionStatus = "pending";
+  if (!job.workerAvailabilityStatus) job.workerAvailabilityStatus = "booked";
+}
+
+// Lifecycle engine — run on every render. Walks confirmed, non-completed
+// bookings that have an estimated end date and advances their extension state
+// based on how close the end date is. Returns true if anything changed.
+function processExtensionLifecycle() {
+  let changed = false;
+  state.jobs.forEach(job => {
+    if (!job.assignedWorkerId || job.completed) return;
+    if (!(job.estimatedEndDate || job.endDate)) return;
+    const endDate = job.estimatedEndDate || job.endDate;
+
+    initExtensionFields(job);
+
+    // Settled bookings (extended / declined / already ending) need no further
+    // automatic transitions.
+    if (job.extensionStatus !== "pending") return;
+
+    const calDays  = calendarDaysUntil(endDate);
+    const workDays = workingDaysUntil(endDate);
+    const worker   = findWorker(job.assignedWorkerId);
+    const wName    = worker?.name || "Worker";
+
+    // Once a freshly-extended booking nears its new end date, drop the
+    // "confirmed" note so the normal reminder cycle can surface again.
+    if (job.extensionJustExtended && calDays !== null && calDays <= EXTENSION_REMIND_DAYS) {
+      job.extensionJustExtended = false;
+      changed = true;
+    }
+
+    // ≤ notice period (working days): auto end-as-planned, worker freed.
+    if (workDays !== null && workDays <= (job.noticePeriodDays || DEFAULT_NOTICE_DAYS)) {
+      job.extensionStatus = "ending_as_planned";
+      job.workerAvailabilityStatus = "available_from_end_date";
+      changed = true;
+      logActivity("extension",
+        `<strong>${escapeHtml(wName)}</strong>'s booking (${escapeHtml(job.trade)}) ends in ${workDays} working day${workDays === 1 ? "" : "s"} with no extension confirmed — now available for future projects.`);
+      return;
+    }
+
+    // 7 calendar days: second reminder + prioritise for matching.
+    if (calDays !== null && calDays <= EXTENSION_SECOND_DAYS) {
+      if (job.workerAvailabilityStatus === "booked") {
+        job.workerAvailabilityStatus = "available_soon";
+        changed = true;
+      }
+      if (!job._remind7) {
+        job._remind7 = true;
+        changed = true;
+        logActivity("extension",
+          `Reminder: <strong>${escapeHtml(job.trade)}</strong> booking ends in ${calDays} day${calDays === 1 ? "" : "s"}. Confirm an extension or the worker will be released.`);
+      }
+      return;
+    }
+
+    // 14 calendar days: first reminder + flag worker as available soon.
+    if (calDays !== null && calDays <= EXTENSION_REMIND_DAYS) {
+      if (job.workerAvailabilityStatus === "booked") {
+        job.workerAvailabilityStatus = "available_soon";
+        changed = true;
+      }
+      if (!job._remind14) {
+        job._remind14 = true;
+        changed = true;
+        logActivity("extension",
+          `This booking (<strong>${escapeHtml(job.trade)}</strong>) is due to end in ${calDays} days. Do you want to extend these workers?`);
+      }
+    }
+  });
+  return changed;
+}
+
 // Given a job/booking, work out the cancellation outcome if cancelled now.
 function computeCancellation(job) {
   const dayRate  = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
@@ -138,6 +255,193 @@ function bindCancelBookingButtons(container) {
   });
 }
 
+// ─── Extension actions ────────────────────────────────────
+// Company asks to extend a worker. The worker must accept before it takes
+// effect — a company can never hold a worker past the estimated end date.
+function requestExtension(jobId, newEndDate, newRate) {
+  const job = findJob(jobId);
+  if (!job || !job.assignedWorkerId || !newEndDate) return;
+  initExtensionFields(job);
+  job.newProposedEndDate     = newEndDate;
+  const baseRate = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+  job.proposedDayRate        = (newRate !== "" && newRate != null) ? parseDayRate(newRate) : baseRate;
+  job.extensionRequestedAt   = new Date().toISOString();
+  job.extensionResponseDeadline = newEndDate;
+  const w = findWorker(job.assignedWorkerId);
+  logActivity("extension",
+    `Extension requested for <strong>${escapeHtml(w?.name || "worker")}</strong> until ${formatDate(newEndDate)} at ${formatMoney(job.proposedDayRate)}/day — awaiting their response.`);
+  saveAndRender();
+  showToast("Extension request sent to worker");
+}
+
+function acceptExtension(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  if (job.newProposedEndDate) job.estimatedEndDate = job.newProposedEndDate;
+  if (job.proposedDayRate) { job.agreedDayRate = job.proposedDayRate; job.payRate = `£${job.proposedDayRate}/day`; }
+  // Re-arm the lifecycle against the NEW end date: status returns to "pending"
+  // and the booking is treated as on-schedule until it again nears its end. A
+  // company still can't hold the worker past this new date without a fresh
+  // accepted extension.
+  job.extensionStatus          = "pending";
+  job.extensionJustExtended    = true; // surfaces the "confirmed" note until next cycle
+  job.workerAvailabilityStatus = "booked";
+  job.extensionRequestedAt     = "";
+  job.newProposedEndDate       = "";
+  job.proposedDayRate          = null;
+  job.extensionResponseDeadline = "";
+  job._remind14 = false; job._remind7 = false; // allow a fresh cycle before the new end date
+  const w = findWorker(job.assignedWorkerId);
+  logActivity("extension",
+    `<strong>${escapeHtml(w?.name || "Worker")}</strong> accepted the extension — booking now runs to ${formatDate(job.estimatedEndDate)}.`);
+  saveAndRender();
+  showToast("Extension accepted");
+}
+
+function declineExtension(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  // Declining must NOT affect the worker's reliability score.
+  job.extensionStatus          = "declined_by_worker";
+  job.workerAvailabilityStatus = "available_from_end_date";
+  job.extensionRequestedAt     = "";
+  job.newProposedEndDate       = "";
+  job.proposedDayRate          = null;
+  const w = findWorker(job.assignedWorkerId);
+  logActivity("extension",
+    `<strong>${escapeHtml(w?.name || "Worker")}</strong> declined the extension — booking ends as planned on ${formatDate(job.estimatedEndDate)}; now available for future projects.`);
+  saveAndRender();
+  showToast("Extension declined — your booking ends on the original date");
+}
+
+function endBookingAsPlanned(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  job.extensionStatus          = "ending_as_planned";
+  job.workerAvailabilityStatus = "available_from_end_date";
+  job.extensionRequestedAt     = "";
+  job.newProposedEndDate       = "";
+  const w = findWorker(job.assignedWorkerId);
+  logActivity("extension",
+    `Booking for <strong>${escapeHtml(w?.name || "worker")}</strong> set to end as planned on ${formatDate(job.estimatedEndDate)} — worker released for future projects.`);
+  saveAndRender();
+  showToast("Booking will end as planned");
+}
+
+// ─── Extension reminder panel (company / admin) ───────────
+function bookingsNeedingExtension() {
+  return state.jobs.filter(j => {
+    if (!j.assignedWorkerId || j.completed) return false;
+    const endDate = j.estimatedEndDate || j.endDate;
+    if (!endDate) return false;
+    const cal = calendarDaysUntil(endDate);
+    const settled = j.extensionStatus && j.extensionStatus !== "pending";
+    return (cal !== null && cal <= EXTENSION_REMIND_DAYS) || settled || j.extensionRequestedAt || j.extensionJustExtended;
+  });
+}
+
+function extensionReminderCard(job) {
+  const w        = findWorker(job.assignedWorkerId);
+  const endDate  = job.estimatedEndDate || job.endDate;
+  const cal      = calendarDaysUntil(endDate);
+  const status   = extensionStatusLabel(job);
+  const awaiting = !!job.extensionRequestedAt;
+  const dayRate  = job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+
+  const daysTxt = cal === null ? ""
+    : cal < 0  ? `Ended ${Math.abs(cal)}d ago`
+    : cal === 0 ? "Ends today"
+    : `Ends in ${cal} day${cal === 1 ? "" : "s"}`;
+
+  let actions = "";
+  if (awaiting) {
+    actions = `<div class="ext-await">Awaiting ${escapeHtml(w?.name || "worker")}'s response — proposed end ${formatDate(job.newProposedEndDate)} at ${formatMoney(job.proposedDayRate || dayRate)}/day.</div>`;
+  } else if (job.extensionJustExtended) {
+    actions = `<div class="ext-await">Worker accepted — booking confirmed to ${formatDate(endDate)}.</div>`;
+  } else {
+    const reEngage = job.extensionStatus === "ending_as_planned" || job.extensionStatus === "declined_by_worker";
+    actions = `<div class="ext-actions">
+      <button class="ext-btn ext-btn-extend" type="button" data-ext-extend="${job.id}">${reEngage ? "Offer Extension" : "Extend Worker"}</button>
+      ${reEngage ? "" : `<button class="ext-btn ext-btn-end" type="button" data-ext-end="${job.id}">End as Planned</button>`}
+    </div>`;
+  }
+
+  return `
+  <div class="ext-card">
+    <div class="ext-card-top">
+      <div class="ext-card-who">
+        <div class="ext-card-name">${escapeHtml(w?.name || "Unassigned")}</div>
+        <div class="ext-card-meta">${escapeHtml(job.trade)}${job.location ? ` · ${escapeHtml(job.location)}` : ""}</div>
+      </div>
+      <span class="ext-status ${status.cls}">${status.txt}</span>
+    </div>
+    <div class="ext-card-dates">
+      <span class="ext-end">${endDate ? formatDate(endDate) : "No end date"}</span>
+      ${daysTxt ? `<span class="ext-days">${daysTxt}</span>` : ""}
+    </div>
+    ${actions}
+  </div>`;
+}
+
+function extensionPanelHTML() {
+  const list = bookingsNeedingExtension();
+  if (!list.length) return "";
+  return `
+  <div class="ext-panel">
+    <div class="ext-panel-head">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Booking Extensions</span>
+    </div>
+    <div class="ext-panel-sub">Confirm extensions before bookings end, or workers are released for new projects.</div>
+    ${list.map(extensionReminderCard).join("")}
+  </div>`;
+}
+
+// Populate the admin dashboard's #extensionReminders container (self-clears for
+// non-admin sessions so it never leaks across logins).
+function renderExtensionReminders() {
+  const el = document.getElementById("extensionReminders");
+  if (!el) return;
+  if (getSessionUser()) { el.innerHTML = ""; return; }
+  el.innerHTML = extensionPanelHTML();
+  bindExtensionButtons(el);
+}
+
+function bindExtensionButtons(container) {
+  const root = container || document;
+  root.querySelectorAll("[data-ext-extend]").forEach(btn =>
+    btn.addEventListener("click", () => openExtensionModal(btn.dataset.extExtend)));
+  root.querySelectorAll("[data-ext-end]").forEach(btn =>
+    btn.addEventListener("click", () => endBookingAsPlanned(btn.dataset.extEnd)));
+  root.querySelectorAll("[data-ext-accept]").forEach(btn =>
+    btn.addEventListener("click", () => acceptExtension(btn.dataset.extAccept)));
+  root.querySelectorAll("[data-ext-decline]").forEach(btn =>
+    btn.addEventListener("click", () => declineExtension(btn.dataset.extDecline)));
+}
+
+// ─── Extension modal (company extend flow) ────────────────
+let currentExtensionJobId = null;
+function openExtensionModal(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  currentExtensionJobId = jobId;
+  const w = findWorker(job.assignedWorkerId);
+  const modal = document.getElementById("extensionModal");
+  const who   = document.getElementById("extModalWho");
+  const endIn = document.getElementById("extNewEnd");
+  const rateChoice = document.getElementById("extRateChoice");
+  const rateWrap   = document.getElementById("extNewRateWrap");
+  if (who) who.textContent = `Extend ${w?.name || "this worker"}'s ${job.trade} booking. They must accept before it takes effect.`;
+  if (endIn) endIn.value = job.estimatedEndDate || job.endDate || "";
+  if (rateChoice) rateChoice.value = "same";
+  if (rateWrap) rateWrap.classList.add("hidden");
+  modal?.classList.remove("hidden");
+}
+function closeExtensionModal() {
+  currentExtensionJobId = null;
+  document.getElementById("extensionModal")?.classList.add("hidden");
+}
+
 // Confirm a worker onto a job — this is the moment a Protected Booking begins.
 function confirmBooking(job, workerId) {
   if (!job) return;
@@ -147,6 +451,8 @@ function confirmBooking(job, workerId) {
   job.confirmedAt      = new Date().toISOString();
   job.startDate        = job.start;
   job.agreedDayRate    = parseDayRate(job.payRate);
+  if (!job.estimatedEndDate && job.endDate) job.estimatedEndDate = job.endDate;
+  initExtensionFields(job);
   const sess = getSessionUser();
   if (!job.companyId && sess?.type === "company") job.companyId = sess.id;
   // Clear any cancellation residue from a previous booking on this job.
@@ -254,6 +560,26 @@ document.getElementById("keepBookingBtn")?.addEventListener("click", closeCancel
 document.getElementById("confirmCancelBookingBtn")?.addEventListener("click", confirmCancelBooking);
 document.getElementById("cancelBookingModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("cancelBookingModal")) closeCancelBookingModal();
+});
+
+// Extension modal wiring
+document.getElementById("closeExtensionBtn")?.addEventListener("click", closeExtensionModal);
+document.getElementById("cancelExtensionBtn")?.addEventListener("click", closeExtensionModal);
+document.getElementById("extRateChoice")?.addEventListener("change", e => {
+  document.getElementById("extNewRateWrap")?.classList.toggle("hidden", e.target.value !== "new");
+});
+document.getElementById("confirmExtensionBtn")?.addEventListener("click", () => {
+  if (!currentExtensionJobId) return;
+  const newEnd = document.getElementById("extNewEnd")?.value;
+  if (!newEnd) { showToast("Please choose a new end date"); return; }
+  const useNewRate = document.getElementById("extRateChoice")?.value === "new";
+  const newRate = useNewRate ? document.getElementById("extNewRate")?.value : "";
+  const jobId = currentExtensionJobId;
+  closeExtensionModal();
+  requestExtension(jobId, newEnd, newRate);
+});
+document.getElementById("extensionModal")?.addEventListener("click", e => {
+  if (e.target === document.getElementById("extensionModal")) closeExtensionModal();
 });
 
 // ─── Profile Completion ────────────────────────────────────
@@ -413,17 +739,31 @@ function renderActivity() {
 }
 
 // ─── Demo Data ────────────────────────────────────────────
+const _demoWorkers = [
+  { id: createId(), name: "Sam Taylor",    trade: "Electrical",  qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92 },
+  { id: createId(), name: "Aisha Khan",    trade: "Groundworks", qualifications: "CSCS green card",         availability: "available",     reliability: 84 },
+  { id: createId(), name: "Mark Evans",    trade: "Plumbing",    qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78 },
+  { id: createId(), name: "Grace Miller",  trade: "Electrical",  qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88 },
+  { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
+];
+const _isoDate = ms => new Date(Date.now() + ms).toISOString().slice(0, 10);
 const demoData = {
-  workers: [
-    { id: createId(), name: "Sam Taylor",    trade: "Electrical",  qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92 },
-    { id: createId(), name: "Aisha Khan",    trade: "Groundworks", qualifications: "CSCS green card",         availability: "available",     reliability: 84 },
-    { id: createId(), name: "Mark Evans",    trade: "Plumbing",    qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78 },
-    { id: createId(), name: "Grace Miller",  trade: "Electrical",  qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88 },
-    { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
-  ],
+  workers: _demoWorkers,
   jobs: [
-    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16), duration: "3 days",  payRate: "£250/day", assignedWorkerId: "" },
-    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), duration: "5 days", payRate: "£220/day", assignedWorkerId: "" },
+    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16),  estimatedEndDate: _isoDate(6 * 86400000),  duration: "3 days",  payRate: "£250/day", assignedWorkerId: "" },
+    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), estimatedEndDate: _isoDate(9 * 86400000),  duration: "5 days",  payRate: "£220/day", assignedWorkerId: "" },
+    // Active booking nearing its estimated end — demonstrates extension reminders.
+    {
+      id: createId(), trade: "Electrical", location: "Manchester",
+      start: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
+      estimatedEndDate: _isoDate(9 * 86400000),
+      duration: "3 weeks", payRate: "£260/day",
+      assignedWorkerId: _demoWorkers[0].id, workerId: _demoWorkers[0].id,
+      bookingStatus: "confirmed", confirmedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+      startDate: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
+      agreedDayRate: 260, noticePeriodDays: 5,
+      extensionStatus: "pending", workerAvailabilityStatus: "booked",
+    },
   ],
   cancellations: [],
   siteCodes: [],
@@ -452,6 +792,12 @@ function migrateState(s) {
       j.workerId      = j.assignedWorkerId;
       j.startDate     = j.startDate || j.start;
       if (j.agreedDayRate == null) j.agreedDayRate = parseDayRate(j.payRate);
+    }
+    // Backfill extension/reallocation fields on confirmed bookings.
+    if (j.assignedWorkerId && (j.estimatedEndDate || j.endDate)) {
+      if (j.noticePeriodDays == null)      j.noticePeriodDays = DEFAULT_NOTICE_DAYS;
+      if (!j.extensionStatus)              j.extensionStatus = "pending";
+      if (!j.workerAvailabilityStatus)     j.workerAvailabilityStatus = "booked";
     }
   });
   return s;
@@ -931,6 +1277,21 @@ function renderWorkerHome(user) {
         ${booking.duration ? ` · ${escapeHtml(booking.duration)}` : ""}
         ${bookingDayRate ? ` · <strong>${formatMoney(bookingDayRate)}/day</strong>` : booking.payRate ? ` · <strong>${escapeHtml(booking.payRate)}</strong>` : ""}
       </div>
+      ${(booking.estimatedEndDate || booking.endDate) ? `<div class="wh-booking-end">Estimated end: <strong>${formatDate(booking.estimatedEndDate || booking.endDate)}</strong></div>` : ""}
+      ${booking.extensionRequestedAt ? `
+        <div class="wh-ext-request">
+          <div class="wh-ext-req-title">Extension requested</div>
+          <div class="wh-ext-req-body">${escapeHtml(booking.companyName || "Your contractor")} wants to extend your booking until <strong>${formatDate(booking.newProposedEndDate)}</strong> at <strong>${formatMoney(booking.proposedDayRate || bookingDayRate)}/day</strong>.</div>
+          <div class="wh-ext-actions">
+            <button class="wh-ext-btn wh-ext-accept" type="button" data-ext-accept="${booking.id}">Accept</button>
+            <button class="wh-ext-btn wh-ext-decline" type="button" data-ext-decline="${booking.id}">Decline</button>
+          </div>
+        </div>` : (booking.extensionJustExtended || (booking.extensionStatus && booking.extensionStatus !== "pending")) ? `
+        <div class="wh-ext-note ${extensionStatusLabel(booking).cls}">${
+          booking.extensionJustExtended ? "Extension confirmed — you're booked to the new end date."
+          : booking.extensionStatus === "declined_by_worker" ? "You declined the extension. You'll be available for new projects from the end date."
+          : "This booking is ending as planned. You'll be available for new projects from the end date."
+        }</div>` : ""}
       <div class="wh-booking-protect">If your contractor cancels within ${PROTECTION_WINDOW_DAYS} working days of the start date, you're owed 1 day's pay${bookingDayRate ? ` (${formatMoney(bookingDayRate)})` : ""}.</div>
     </div>` : "";
 
@@ -1013,6 +1374,7 @@ function renderWorkerHome(user) {
   el.querySelectorAll("[data-tab]").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+  bindExtensionButtons(el);
 }
 
 // ─── Worker Profile ───────────────────────────────────────
@@ -1154,6 +1516,7 @@ function renderContractorHome(user) {
       <div class="ch-att-item late"><span class="ch-att-num">${att.late}</span><span class="ch-att-lbl">Late</span></div>
       <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
     </div>
+    ${extensionPanelHTML()}
     <div class="ch-section-label">Active Requests</div>
     <div class="ch-req-list">${reqHtml}</div>
     <div class="ch-section-label">Workforce On Site</div>
@@ -1165,6 +1528,7 @@ function renderContractorHome(user) {
 
   document.getElementById("chRequestBtn")?.addEventListener("click", () => switchTab("add"));
   bindCancelBookingButtons(el);
+  bindExtensionButtons(el);
 }
 
 // ─── Contractor Account ───────────────────────────────────
@@ -1373,14 +1737,19 @@ jobForm.addEventListener("submit", e => {
   const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
   const payRate  = document.querySelector("#jobPayRate")?.value.trim() || "";
 
+  const endDate  = document.querySelector("#jobEndDate")?.value || "";
+  const noticeRaw = Number(document.querySelector("#jobNoticeDays")?.value);
+
   const job = {
     id: createId(),
     trade,
     location,
     start:      document.querySelector("#jobStart").value,
+    estimatedEndDate: endDate,
     duration,
     quantity,
     payRate,
+    noticePeriodDays: Number.isFinite(noticeRaw) && noticeRaw > 0 ? noticeRaw : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
   };
 
@@ -1437,6 +1806,9 @@ function render() {
   const user = getSessionUser();
   const role = user?.type || null;
 
+  // Advance any booking extension/reallocation states before drawing.
+  if (processExtensionLifecycle()) saveState();
+
   // Update counts (elements may not exist after nav rebuild)
   const wcEl = document.getElementById("workerCount");
   const jcEl = document.getElementById("jobCount");
@@ -1469,6 +1841,8 @@ function render() {
   // Identity/duplicate review is admin-only. Always run it so the panel is
   // cleared for worker/contractor sessions and never leaks across logins.
   renderAdminDuplicateReview();
+  // Extension reminders are admin-only (self-clears for other sessions).
+  renderExtensionReminders();
 }
 
 function renderStats() {
@@ -1811,7 +2185,7 @@ function matchWorkerRow(worker, index) {
     <div class="match-rank ${rankCls}">${index + 1}</div>
     <div class="match-worker-avatar ${avCls}">${initials(worker.name)}</div>
     <div class="match-worker-info">
-      <div class="match-worker-name">${index === 0 ? "⭐ " : ""}${escapeHtml(worker.name)}</div>
+      <div class="match-worker-name">${index === 0 ? "⭐ " : ""}${escapeHtml(worker.name)}${worker._availabilityLabel ? `<span class="match-avail-pill">${escapeHtml(worker._availabilityLabel)}</span>` : ""}</div>
       <div class="match-worker-quals">${escapeHtml(worker.qualifications || worker.trade)}</div>
       <div class="match-worker-meta">
         <span class="match-meta-item">Reliability <b>${rel}%</b></span>
@@ -1829,8 +2203,27 @@ function getMatches(job) {
     .split(",").map(q => q.trim().toLowerCase()).filter(Boolean);
 
   return state.workers
-    .filter(w => canonicalTrade(w.trade) === canonicalTrade(job.trade) && w.availability === "available")
+    .filter(w => canonicalTrade(w.trade) === canonicalTrade(job.trade))
     .map(w => {
+      // Reallocation rules: a worker currently on another booking can only be
+      // offered this job if their booking is winding down (no extension) AND
+      // this job starts on/after their estimated end date. Otherwise they're
+      // matchable only when generally available.
+      const otherBooking = state.jobs.find(j =>
+        j.id !== job.id && j.assignedWorkerId === w.id && !j.completed);
+      let availabilityLabel = "";
+      let soonBonus = 0;
+      if (otherBooking) {
+        if (!isReallocatable(otherBooking)) return null; // still firmly booked
+        const endDate = otherBooking.estimatedEndDate || otherBooking.endDate;
+        if (job.start && endDate && new Date(job.start) < new Date(endDate)) return null;
+        availabilityLabel = `Available from ${formatDate(endDate)}`;
+        // 7-day window workers are prioritised for future matching.
+        if (otherBooking.workerAvailabilityStatus === "available_soon") soonBonus = 6;
+      } else if (w.availability !== "available") {
+        return null;
+      }
+
       const stats      = getWorkerStats(w.id);
       const reliability = stats.totalShifts > 0 ? stats.reliability : w.reliability;
       const punctuality = stats.punctuality ?? 100;
@@ -1847,9 +2240,10 @@ function getMatches(job) {
       }
 
       // Composite: 50% reliability + 30% punctuality + 20% qual bonus (normalised)
-      const composite = Math.round(reliability * 0.5 + punctuality * 0.3 + qualBonus * 0.2 * 5);
-      return { ...w, _reliability: reliability, _punctuality: punctuality, _qualBonus: qualBonus, _composite: composite };
+      const composite = Math.round(reliability * 0.5 + punctuality * 0.3 + qualBonus * 0.2 * 5) + soonBonus;
+      return { ...w, _reliability: reliability, _punctuality: punctuality, _qualBonus: qualBonus, _composite: composite, _availabilityLabel: availabilityLabel };
     })
+    .filter(Boolean)
     .sort((a, b) => b._composite - a._composite);
 }
 

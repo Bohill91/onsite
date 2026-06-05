@@ -1,0 +1,77 @@
+Add a project extension and worker reallocation workflow to OnSite.
+
+Goal:
+Companies must give a start date and estimated end date for every project booking. Because construction projects often run longer than planned, the app should automatically check whether companies want to extend workers before the booking ends. Workers should also be automatically prepared for reassignment to another project if no extension is confirmed.
+
+Booking fields:
+- startDate
+- estimatedEndDate
+- agreedDayRate
+- noticePeriodDays
+- extensionStatus: pending / extended / ending_as_planned / declined_by_worker / declined_by_company
+- extensionRequestedAt
+- extensionResponseDeadline
+- newProposedEndDate
+- workerAvailabilityStatus: booked / available_soon / available_from_end_date / reassigned
+
+Company extension workflow:
+1. 14 days before estimatedEndDate:
+Send company/admin a reminder:
+“This booking is due to end in 14 days. Do you want to extend these workers?”
+
+Company options:
+- Extend all workers
+- Extend selected workers
+- Reduce number of workers
+- End booking as planned
+
+2. 7 days before estimatedEndDate:
+If no response, send second reminder.
+
+3. 5 working days before estimatedEndDate:
+If no extension has been confirmed, automatically set extensionStatus to ending_as_planned.
+Set the worker as available_from_end_date.
+Allow OnSite matching system to offer the worker future bookings starting after their current estimatedEndDate.
+
+4. If company extends:
+Company must choose:
+- new estimated end date
+- selected workers to extend
+- confirm same rate or updated rate
+
+Worker extension workflow:
+When company requests extension, notify each selected worker:
+“[Company] wants to extend your booking until [newEndDate] at [dayRate].”
+
+Worker options:
+- Accept extension
+- Decline extension
+
+If worker accepts:
+- Update booking estimatedEndDate
+- Set extensionStatus to extended
+- Keep worker booked
+
+If worker declines:
+- Keep current booking ending on original estimatedEndDate
+- Set worker as available_from_end_date
+- Add worker back into matching for future projects
+
+Worker reallocation workflow:
+14 days before end date:
+- Mark worker as available_soon if no extension confirmed
+
+7 days before end date:
+- Prioritise worker for future matching if no extension confirmed
+
+5 working days before end date:
+- If no confirmed extension, worker can be matched to new bookings starting after current estimatedEndDate
+
+Important rules:
+- A company cannot hold a worker past the estimated end date unless the worker accepts the extension.
+- A worker cannot be auto-extended without accepting.
+- If the company fails to respond before the notice deadline, the worker becomes available for future projects.
+- Do not affect worker reliability score if they decline an extension.
+- Do not add company reliability scores.
+- Keep it simple for MVP.
+- Make the UI mobile-friendly and clear.

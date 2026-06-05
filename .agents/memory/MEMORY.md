@@ -2,3 +2,4 @@
 - [Booking Protection cancellation rules](booking-protection.md) — all un-assignment must route through cancelBooking(); cancellations[] is source of truth; company cancel doesn't hit reliability.
 - [Reliability gating & attendance statuses](reliability-gating.md) — self-reported/QR records never move score until supervisorConfirmed; only COUNTABLE_STATUSES count; keep notRequired in SUPERVISOR_DECISIONS.
 - [Worker identity & duplicate prevention](worker-identity.md) — permanent identity records (onsite_identities_v1) survive deletion; getWorkerStats aggregates by linkedAccountIds; admin views self-clear + run every render.
+- [Booking extension lifecycle](extension-lifecycle.md) — accepting an extension must reset status to "pending" (re-arm), never a terminal "extended"; decline never touches reliability; matching gates reallocatable workers on start>=end date.

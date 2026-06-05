@@ -500,6 +500,7 @@
         <!-- DASHBOARD TAB -->
         <div class="tab-panel active" id="tab-dashboard">
           <div class="stats-row" id="statsRow"></div>
+          <div id="extensionReminders"></div>
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Match Dashboard</h2>
@@ -673,8 +674,16 @@
                   <input id="jobStart" type="datetime-local" required />
                 </label>
                 <label class="field-label">
+                  Estimated End Date
+                  <input id="jobEndDate" type="date" required />
+                </label>
+                <label class="field-label">
                   Duration
                   <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
+                </label>
+                <label class="field-label">
+                  Notice Period (working days)
+                  <input id="jobNoticeDays" type="number" min="1" value="5" placeholder="e.g. 5" />
                 </label>
                 <label class="field-label">
                   Workers Required
@@ -985,6 +994,41 @@
           <div class="cancel-booking-actions">
             <button id="keepBookingBtn" class="secondary-btn wide" type="button">Keep Booking</button>
             <button id="confirmCancelBookingBtn" class="danger-btn wide" type="button">Confirm Cancellation</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="extensionModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Extend booking">
+      <div class="dispute-sheet">
+        <div class="dispute-sheet-header">
+          <div>
+            <h3 class="dispute-sheet-title">Extend Booking</h3>
+            <p class="dispute-sheet-sub" id="extModalWho">The worker must accept before the extension takes effect.</p>
+          </div>
+          <button id="closeExtensionBtn" class="modal-close-btn" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dispute-sheet-body">
+          <label class="field-label">
+            New Estimated End Date
+            <input id="extNewEnd" type="date" />
+          </label>
+          <label class="field-label">
+            Day Rate
+            <select id="extRateChoice">
+              <option value="same">Keep the same rate</option>
+              <option value="new">Set a new rate</option>
+            </select>
+          </label>
+          <label class="field-label hidden" id="extNewRateWrap">
+            New Day Rate (£)
+            <input id="extNewRate" type="number" min="0" placeholder="e.g. 260" />
+          </label>
+          <div class="cancel-booking-actions">
+            <button id="cancelExtensionBtn" class="secondary-btn wide" type="button">Cancel</button>
+            <button id="confirmExtensionBtn" class="primary-btn wide" type="button">Send to Worker</button>
           </div>
         </div>
       </div>

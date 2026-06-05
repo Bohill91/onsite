@@ -4668,3 +4668,159 @@ button, input, select, textarea {
 @media (min-width: 560px) {
   .dupe-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ─── Project Extension & Reallocation ───────────────────── */
+.ext-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin: 14px 0 4px;
+}
+.ext-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.ext-panel-head svg { color: var(--orange); }
+.ext-panel-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 2px 0 10px;
+}
+.ext-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.ext-card:last-child { margin-bottom: 0; }
+.ext-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ext-card-name { font-weight: 700; font-size: 0.9rem; color: var(--text); }
+.ext-card-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; }
+.ext-card-dates {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+.ext-end { font-weight: 600; }
+.ext-days {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.ext-status {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ext-status.ext-ok       { background: #e8f0ff; color: #1d4ed8; }
+.ext-status.ext-pending  { background: #fff4e0; color: #b45309; }
+.ext-status.ext-extended { background: #e6f6ec; color: #15803d; }
+.ext-status.ext-ending   { background: #fdecec; color: #b91c1c; }
+.ext-status.ext-declined { background: #f1f0f4; color: #6b6b78; }
+.ext-actions { display: flex; gap: 8px; margin-top: 4px; }
+.ext-btn {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 9px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.15s;
+}
+.ext-btn:active { transform: scale(0.98); }
+.ext-btn-extend { background: var(--orange); color: #fff; }
+.ext-btn-extend:hover { filter: brightness(0.95); }
+.ext-btn-end {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.ext-await {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+
+/* Worker-side extension UI */
+.wh-booking-end {
+  font-size: 0.8rem;
+  color: var(--text);
+  margin-top: 6px;
+}
+.wh-ext-request {
+  margin-top: 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 11px;
+  padding: 11px;
+}
+.wh-ext-req-title {
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: #b45309;
+  margin-bottom: 3px;
+}
+.wh-ext-req-body { font-size: 0.82rem; color: var(--text); line-height: 1.4; }
+.wh-ext-actions { display: flex; gap: 8px; margin-top: 10px; }
+.wh-ext-btn {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.15s;
+}
+.wh-ext-btn:active { transform: scale(0.98); }
+.wh-ext-accept { background: var(--green-text, #15803d); color: #fff; }
+.wh-ext-decline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.wh-ext-note {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.wh-ext-note.ext-extended { background: #e6f6ec; border-color: #bbf7d0; color: #15803d; }
+.wh-ext-note.ext-ending,
+.wh-ext-note.ext-declined { background: #f8fafc; }
+
+/* Match list availability pill */
+.match-avail-pill {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fff4e0;
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
