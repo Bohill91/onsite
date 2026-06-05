@@ -547,6 +547,8 @@ function buildAgreementRecord(job, { worker, companyName, dayRate, docs, opts = 
       trade: job.trade || "—",
       role: job.role || job.trade || "—",
       payRate: dayRate ? `${formatMoney(dayRate)}/day` : (job.payRate || "—"),
+      workerPay: job.pricing?.workerPay != null ? job.pricing.workerPay : (dayRate || null),
+      companyCharge: job.companyCharge != null ? job.companyCharge : (job.pricing?.companyCharge != null ? job.pricing.companyCharge : jobBudget(job) || null),
       startDate: job.startDate || job.start || "",
       duration: job.duration || "—",
       attendanceRequirements: AGREEMENT_DEFAULTS.attendanceRequirements,
@@ -805,6 +807,16 @@ function signatureBlockHtml(label, sig) {
 function buildAgreementBody(agr) {
   const t = agr.terms;
   const meta = agreementStatusMeta(agr);
+  // Role-appropriate rate line: the company sees only the all-in charge; the
+  // worker sees only their guaranteed pay; admin/recruiter sees both.
+  const viewerType = getSessionUser()?.type;
+  const rateLine = viewerType === "company"
+    ? (t.companyCharge != null ? `${formatMoney(t.companyCharge)}/day (all-in)` : (t.payRate || "—"))
+    : viewerType === "worker"
+      ? (t.workerPay != null ? `${formatMoney(t.workerPay)}/day guaranteed` : (t.payRate || "—"))
+      : (t.workerPay != null || t.companyCharge != null
+          ? `Worker ${t.workerPay != null ? formatMoney(t.workerPay) : "—"} · Charge ${t.companyCharge != null ? formatMoney(t.companyCharge) : "—"}`
+          : (t.payRate || "—"));
   const term = (title, body) => `
     <div class="agr-term">
       <div class="agr-term-title">${escapeHtml(title)}</div>
@@ -841,7 +853,7 @@ function buildAgreementBody(agr) {
       ${fact("Site", t.siteName)}
       ${fact("Role", t.role)}
       ${fact("Trade", t.trade)}
-      ${fact("Day rate", t.payRate)}
+      ${fact(viewerType === "company" ? "Charge rate" : "Day rate", rateLine)}
       ${fact("Start", t.startDate ? formatDate(t.startDate) : "—")}
       ${fact("Duration", t.duration)}
     </div>
@@ -935,15 +947,56 @@ document.getElementById("agreementModal")?.addEventListener("click", e => {
   if (e.target === document.getElementById("agreementModal")) closeAgreementModal();
 });
 
+// The budget ceiling for a job — the all-in day rate the company is willing to
+// pay. Falls back to any legacy free-text pay rate.
+function jobBudget(job) {
+  if (job?.budgetMax != null) return job.budgetMax;
+  return parseDayRate(job?.payRate) || 0;
+}
+
+// Role-appropriate rate displays.
+// Companies only ever see the all-in charge (their budget / agreed charge),
+// never the worker's pay or OnSite's margin.
+function companyChargeDisplay(job) {
+  if (job?.companyCharge != null) return job.companyCharge;
+  return jobBudget(job);
+}
+// Workers only ever see their own guaranteed pay. For a confirmed booking this
+// is the stored worker pay; for an open job it's derived from the viewing
+// worker's private minimum against the company budget.
+function workerPayDisplay(job, worker) {
+  if (job?.pricing?.workerPay != null &&
+      (job.assignedWorkerId === worker?.id || !worker)) return job.pricing.workerPay;
+  if (job?.agreedDayRate != null && job.assignedWorkerId === worker?.id) return job.agreedDayRate;
+  const p = computeBookingPricing({ workerMin: workerMinRate(worker), budget: jobBudget(job) });
+  return p.viable ? p.workerPay : null;
+}
+
 // Confirm a worker onto a job — this is the moment a Protected Booking begins.
+// Returns { ok, reason, pricing }. A booking is refused when the company's
+// budget cannot cover the worker's private minimum plus the 15% margin floor.
 function confirmBooking(job, workerId) {
-  if (!job) return;
+  if (!job) return { ok: false, reason: "No job" };
+  if (job.companyId && isCompanySuspended(job.companyId)) {
+    return { ok: false, reason: "Company account suspended for overdue payments" };
+  }
+  if (job.companyId && isCompanyRestricted(job.companyId)) {
+    return { ok: false, reason: "Company restricted for overdue payments — settle outstanding invoices to book labour" };
+  }
+  const worker  = findWorker(workerId);
+  const pricing = computeBookingPricing({ workerMin: workerMinRate(worker), budget: jobBudget(job) });
+  if (!pricing.viable) return { ok: false, reason: pricing.reason, pricing };
+
   job.assignedWorkerId = workerId;
   job.workerId         = workerId;
   job.bookingStatus    = "confirmed";
   job.confirmedAt      = new Date().toISOString();
   job.startDate        = job.start;
-  job.agreedDayRate    = parseDayRate(job.payRate);
+  // OnSite-derived figures. agreedDayRate tracks the worker's guaranteed pay
+  // (used by downstream cancellation/extension logic).
+  job.pricing       = { workerPay: pricing.workerPay, companyCharge: pricing.companyCharge, margin: pricing.margin, marginPct: pricing.marginPct };
+  job.companyCharge = pricing.companyCharge;
+  job.agreedDayRate = pricing.workerPay;
   if (!job.estimatedEndDate && job.endDate) job.estimatedEndDate = job.endDate;
   initExtensionFields(job);
   const sess = getSessionUser();
@@ -1168,6 +1221,13 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+// Date-only formatter for date strings like "2026-06-01" (no time component).
+function formatDateOnly(value) {
+  if (!value) return "No date set";
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + "T00:00:00") : new Date(value);
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(d);
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" })[c]);
 }
@@ -1243,20 +1303,320 @@ function renderActivity() {
   `).join("");
 }
 
+// ─── Rate Structure & Payments System ─────────────────────
+// Pricing model: a company requests labour with a BUDGET (the all-in day rate it
+// is willing to pay). Each worker keeps a PRIVATE minimum day rate that
+// companies never see. For every confirmed booking OnSite derives three figures:
+//   • Worker Pay     — guaranteed, always ≥ the worker's private minimum
+//   • OnSite Margin  — never below 15% of Worker Pay
+//   • Company Charge — the all-in rate the company pays (Worker Pay + Margin)
+// If the company's budget cannot cover the worker's minimum plus the 15% margin
+// floor, the booking is rejected with "Budget too low to secure verified
+// workers". Surplus budget is distributed to keep Worker Pay attractive while
+// targeting a healthy margin.
+const PRICING = {
+  MIN_MARGIN_PCT:     0.15, // margin floor, as a fraction of worker pay
+  TARGET_MARGIN_PCT:  0.20, // preferred margin when the budget allows
+  DEFAULT_WORKER_MIN: 150,  // fallback private minimum when none recorded
+  BUDGET_TOO_LOW_MSG: "Budget too low to secure verified workers",
+};
+
+// A worker's private minimum day rate (companies never see this value).
+function workerMinRate(worker) {
+  const r = Number(worker?.minRate);
+  return Number.isFinite(r) && r > 0 ? Math.round(r) : PRICING.DEFAULT_WORKER_MIN;
+}
+
+// Pure pricing calculation — no access to the global state, fully deterministic
+// so it can run at booking time and during migration. `budget` is the company's
+// all-in day-rate ceiling; `workerMin` is the worker's private minimum.
+function computeBookingPricing({ workerMin, budget }) {
+  const minRate = Math.max(0, Math.round(Number(workerMin) || 0));
+  const cap     = Math.max(0, Math.round(Number(budget)    || 0));
+  if (!minRate) {
+    return { viable: false, reason: "Worker minimum day rate not set",
+             companyCharge: 0, workerPay: 0, margin: 0, marginPct: 0, minChargeNeeded: 0 };
+  }
+  const minCharge = Math.ceil(minRate * (1 + PRICING.MIN_MARGIN_PCT));
+  if (!cap || cap < minCharge) {
+    return { viable: false, reason: PRICING.BUDGET_TOO_LOW_MSG,
+             companyCharge: cap, workerPay: 0, margin: 0, marginPct: 0, minChargeNeeded: minCharge };
+  }
+  const companyCharge = cap; // company pays its agreed all-in rate
+  // Highest worker pay that still preserves the 15% margin floor.
+  const maxWorkerPay    = Math.floor(companyCharge / (1 + PRICING.MIN_MARGIN_PCT));
+  // Worker pay at the preferred (target) margin.
+  const targetWorkerPay = Math.round(companyCharge / (1 + PRICING.TARGET_MARGIN_PCT));
+  let workerPay = Math.min(maxWorkerPay, Math.max(minRate, targetWorkerPay));
+  workerPay = Math.max(workerPay, minRate);
+  const margin    = companyCharge - workerPay;
+  const marginPct = workerPay ? margin / workerPay : 0;
+  return { viable: true, reason: "", companyCharge, workerPay, margin, marginPct, minChargeNeeded: minCharge };
+}
+
+// ─── Working-day & weekly-period helpers ──────────────────
+function _isWeekend(d) { const g = d.getDay(); return g === 0 || g === 6; }
+function addWorkingDays(fromISODate, n) {
+  const d = new Date(fromISODate + "T00:00:00");
+  let added = 0;
+  while (added < n) { d.setDate(d.getDate() + 1); if (!_isWeekend(d)) added++; }
+  return d.toISOString().slice(0, 10);
+}
+function mondayOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const g = d.getDay();                 // 0 Sun .. 6 Sat
+  d.setDate(d.getDate() + (g === 0 ? -6 : 1 - g));
+  return d.toISOString().slice(0, 10);
+}
+function fridayOf(dateStr) {
+  const mon = new Date(mondayOf(dateStr) + "T00:00:00");
+  mon.setDate(mon.getDate() + 4);
+  return mon.toISOString().slice(0, 10);
+}
+
+// ─── Payment terms, statuses & restriction thresholds ─────
+const PAYMENT_TERMS = {
+  standard: { days: 3,  label: "3 working days",  adminOnly: false },
+  trusted:  { days: 7,  label: "7 working days",  adminOnly: false },
+  net14:    { days: 14, label: "14 working days", adminOnly: true  },
+  net30:    { days: 30, label: "30 working days", adminOnly: true  },
+};
+const DEFAULT_PAYMENT_TERM   = "standard";
+const SUSPEND_OVERDUE_LIMIT  = 2; // suspended once overdue invoices exceed this
+
+const INVOICE_STATUS = {
+  generated:        { label: "Generated",        tone: "neutral" },
+  awaiting_payment: { label: "Awaiting Payment", tone: "amber"   },
+  overdue:          { label: "Overdue",          tone: "red"     },
+  paid:             { label: "Paid",             tone: "green"   },
+};
+const WORKER_PAYMENT_STATUS = {
+  awaiting_funds: { label: "Awaiting Client Funds", tone: "neutral" },
+  ready:          { label: "Ready to Pay",          tone: "amber"   },
+  paid:           { label: "Paid",                  tone: "green"   },
+  held:           { label: "On Hold",               tone: "red"     },
+};
+
+// ─── Company billing records ──────────────────────────────
+function getCompanyBilling(companyId) {
+  if (!state.companyBilling || typeof state.companyBilling !== "object") state.companyBilling = {};
+  const key = companyId || "__unassigned__";
+  if (!state.companyBilling[key]) {
+    state.companyBilling[key] = {
+      companyId: companyId || "",
+      paymentTerm: DEFAULT_PAYMENT_TERM,
+      trusted: false,
+      restricted: false,
+      suspended: false,
+      manualRestriction: false,
+    };
+  }
+  return state.companyBilling[key];
+}
+function companyTermDays(companyId) {
+  const b = getCompanyBilling(companyId);
+  return (PAYMENT_TERMS[b.paymentTerm] || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM]).days;
+}
+
+// ─── Invoice builders & status derivation ─────────────────
+// Pure builder: assemble a weekly invoice from approved attendance lines. Each
+// line is { workerId, workerName, jobId, jobTrade, jobLocation, days, workerPay,
+// companyCharge, margin }.
+function buildInvoiceRecord({ companyId, companyName, weekStart, weekEnd, lines, termDays, createdAt }) {
+  const created = createdAt || new Date().toISOString();
+  const ls = (lines || []).map(l => ({ ...l }));
+  const totalWorkerPay = ls.reduce((s, l) => s + (l.workerPay    || 0) * (l.days || 0), 0);
+  const totalCharge    = ls.reduce((s, l) => s + (l.companyCharge || 0) * (l.days || 0), 0);
+  return {
+    id: createId(),
+    companyId: companyId || "",
+    companyName: companyName || "Contractor",
+    weekStart, weekEnd,
+    createdAt: created,
+    dueDate: addWorkingDays(created.slice(0, 10), termDays || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM].days),
+    termDays: termDays || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM].days,
+    status: "awaiting_payment",
+    totalCharge,
+    totalWorkerPay,
+    totalMargin: totalCharge - totalWorkerPay,
+    lines: ls,
+    paidAt: null,
+    workerPaymentsReleased: false,
+  };
+}
+
+// Effective status — recomputes "overdue" on the fly from the due date.
+function invoiceEffectiveStatus(inv) {
+  if (!inv) return "generated";
+  if (inv.status === "paid")      return "paid";
+  if (inv.status === "generated") return "generated";
+  if (inv.dueDate && todayDateStr() > inv.dueDate) return "overdue";
+  return "awaiting_payment";
+}
+
+// Worker payment status for one invoice line — workers are paid ONLY after the
+// company's funds for that invoice have been received.
+function workerPaymentStatusForLine(inv, line) {
+  if (line?.held)       return "held";
+  if (line?.workerPaid) return "paid";
+  if (inv?.status === "paid") return "ready";
+  return "awaiting_funds";
+}
+
+// ─── Company payment reliability & auto-restrictions ──────
+function computeCompanyPaymentReliability(companyId) {
+  const invs    = (state.invoices || []).filter(i => i.companyId === companyId);
+  const settled = invs.filter(i => i.status === "paid");
+  const onTime  = settled.filter(i => i.paidAt && i.paidAt.slice(0, 10) <= i.dueDate);
+  const overdue = invs.filter(i => invoiceEffectiveStatus(i) === "overdue");
+  return {
+    score:   settled.length ? Math.round(onTime.length / settled.length * 100) : null,
+    settled: settled.length,
+    onTime:  onTime.length,
+    overdue: overdue.length,
+    totalInvoices: invs.length,
+  };
+}
+
+// Recompute restriction/suspension flags from outstanding invoices. An overdue
+// invoice restricts new posts/bookings; beyond the limit the account is
+// suspended (admin must reinstate).
+function refreshCompanyRestrictions(companyId) {
+  const b   = getCompanyBilling(companyId);
+  const rel = computeCompanyPaymentReliability(companyId);
+  b.restricted = !!b.manualRestriction || rel.overdue > 0;
+  if (rel.overdue > SUSPEND_OVERDUE_LIMIT) b.suspended = true;
+  return b;
+}
+function isCompanySuspended(companyId)  { return refreshCompanyRestrictions(companyId).suspended; }
+function isCompanyRestricted(companyId) { const b = refreshCompanyRestrictions(companyId); return b.restricted || b.suspended; }
+function canCompanyPost(companyId)      { return !isCompanyRestricted(companyId); }
+
+// ─── Weekly invoice generation ────────────────────────────
+// An attendance record is invoiceable only when it represents APPROVED, worked
+// days: supervisor-confirmed on-time/late attendance with no pending dispute.
+// No Show, disputed and under-review days are excluded entirely.
+function isInvoiceableAttendance(r) {
+  if (!r || !r.jobId) return false;
+  if (!(r.status === "onTime" || r.status === "late")) return false;
+  if (r.selfReported && !r.supervisorConfirmed) return false; // under review
+  if (r.disputeStatus === "pending") return false;             // disputed
+  return true;
+}
+
+// Generate any missing Mon–Fri weekly invoices from approved attendance.
+// Idempotent: a company+week invoice is only created once. Returns the number
+// of new invoices generated.
+function generateWeeklyInvoices() {
+  if (!Array.isArray(state.invoices)) state.invoices = [];
+  const today = todayDateStr();
+  // Group invoiceable records by company + week, but only for weeks that have
+  // already ended (we invoice completed weeks, never the in-progress one).
+  const groups = {};
+  attendanceRecords.filter(isInvoiceableAttendance).forEach(r => {
+    const weekStart = mondayOf(r.date);
+    const weekEnd   = fridayOf(r.date);
+    if (today <= weekEnd) return; // week not finished yet
+    const cid = r.companyId || "__unassigned__";
+    const key = `${cid}::${weekStart}`;
+    if (!groups[key]) groups[key] = { companyId: r.companyId || "", companyName: r.companyName || "Contractor", weekStart, weekEnd, recs: [] };
+    groups[key].recs.push(r);
+  });
+
+  let created = 0;
+  Object.values(groups).forEach(g => {
+    const exists = state.invoices.some(i =>
+      (i.companyId || "") === (g.companyId || "") && i.weekStart === g.weekStart);
+    if (exists) return;
+    // Roll records up into one line per worker+job.
+    const lineMap = {};
+    g.recs.forEach(r => {
+      const lk = `${r.workerId}::${r.jobId}`;
+      if (!lineMap[lk]) {
+        const w = findWorker(r.workerId);
+        lineMap[lk] = {
+          workerId: r.workerId, workerName: w?.name || r.workerName || "Worker",
+          jobId: r.jobId, jobTrade: r.jobTrade || "", jobLocation: r.jobLocation || "",
+          days: 0, workerPay: r.workerPay || 0, companyCharge: r.companyCharge || 0,
+          margin: (r.companyCharge || 0) - (r.workerPay || 0),
+        };
+      }
+      lineMap[lk].days += 1;
+    });
+    const lines = Object.values(lineMap);
+    if (!lines.length) return;
+    const inv = buildInvoiceRecord({
+      companyId: g.companyId, companyName: g.companyName,
+      weekStart: g.weekStart, weekEnd: g.weekEnd, lines,
+      termDays: companyTermDays(g.companyId),
+    });
+    state.invoices.push(inv);
+    created++;
+  });
+  if (created) {
+    state.invoices.forEach(i => { i.status = i.status === "paid" ? "paid" : invoiceEffectiveStatus(i); });
+  }
+  return created;
+}
+
 // ─── Demo Data ────────────────────────────────────────────
 const _demoWorkers = [
-  { id: createId(), name: "Sam Taylor",    trade: "Electrical",  qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92 },
-  { id: createId(), name: "Aisha Khan",    trade: "Groundworks", qualifications: "CSCS green card",         availability: "available",     reliability: 84 },
-  { id: createId(), name: "Mark Evans",    trade: "Plumbing",    qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78 },
-  { id: createId(), name: "Grace Miller",  trade: "Electrical",  qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88 },
-  { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95 },
+  { id: createId(), name: "Sam Taylor",    trade: "Electrical",  qualifications: "ECS, IPAF, 18th Edition", availability: "available",     reliability: 92, minRate: 200 },
+  { id: createId(), name: "Aisha Khan",    trade: "Groundworks", qualifications: "CSCS green card",         availability: "available",     reliability: 84, minRate: 160 },
+  { id: createId(), name: "Mark Evans",    trade: "Plumbing",    qualifications: "JIB PMES, CSCS",          availability: "not available", reliability: 78, minRate: 180 },
+  { id: createId(), name: "Grace Miller",  trade: "Electrical",  qualifications: "ECS, Testing & Inspection", availability: "available",   reliability: 88, minRate: 190 },
+  { id: createId(), name: "Liam Chen",     trade: "Carpentry",   qualifications: "CSCS, NVQ Level 2",       availability: "available",     reliability: 95, minRate: 175 },
 ];
 const _isoDate = ms => new Date(Date.now() + ms).toISOString().slice(0, 10);
+
+// Build a seeded demo invoice with an explicit age/status so the admin console
+// and company reliability views have realistic history on first load.
+function _demoInvoice({ companyId, companyName, agedDays, termDays, lines, status }) {
+  const created = new Date(Date.now() - agedDays * 86400000).toISOString();
+  const inv = buildInvoiceRecord({
+    companyId, companyName,
+    weekStart: mondayOf(created.slice(0, 10)),
+    weekEnd:   fridayOf(created.slice(0, 10)),
+    lines, termDays, createdAt: created,
+  });
+  if (status === "paid") {
+    inv.status = "paid";
+    inv.paidAt = new Date(Date.now() - Math.max(0, agedDays - 2) * 86400000).toISOString();
+    inv.workerPaymentsReleased = true;
+    inv.lines.forEach(l => { l.workerPaid = true; });
+  } else if (status === "generated") {
+    inv.status = "generated";
+  } // "awaiting_payment" left as built (becomes overdue automatically if aged past terms)
+  return inv;
+}
+
+const _demoInvoices = [
+  // Apex Construction Ltd — claimable by the logged-in company (no companyId yet).
+  _demoInvoice({ companyId: "", companyName: "Apex Construction Ltd", agedDays: 11, termDays: 3, status: "paid",
+    lines: [{ workerId: _demoWorkers[0].id, workerName: "Sam Taylor",  jobTrade: "Electrical", jobLocation: "Manchester", days: 5, workerPay: 260, companyCharge: 310, margin: 50 }] }),
+  _demoInvoice({ companyId: "", companyName: "Apex Construction Ltd", agedDays: 1,  termDays: 3, status: "awaiting_payment",
+    lines: [{ workerId: _demoWorkers[0].id, workerName: "Sam Taylor",  jobTrade: "Electrical", jobLocation: "Manchester", days: 4, workerPay: 260, companyCharge: 310, margin: 50 }] }),
+  // Brightwork Builders — one overdue invoice → auto-restricted.
+  _demoInvoice({ companyId: "demo-brightwork", companyName: "Brightwork Builders", agedDays: 18, termDays: 3, status: "awaiting_payment",
+    lines: [{ workerId: _demoWorkers[2].id, workerName: "Mark Evans",  jobTrade: "Plumbing",   jobLocation: "Leeds",      days: 5, workerPay: 180, companyCharge: 215, margin: 35 }] }),
+  // Old Oak Developments — three overdue invoices → suspended (beyond the limit).
+  _demoInvoice({ companyId: "demo-oldoak", companyName: "Old Oak Developments", agedDays: 30, termDays: 3, status: "awaiting_payment",
+    lines: [{ workerId: _demoWorkers[1].id, workerName: "Aisha Khan",  jobTrade: "Groundworks", jobLocation: "Bristol",  days: 5, workerPay: 160, companyCharge: 195, margin: 35 }] }),
+  _demoInvoice({ companyId: "demo-oldoak", companyName: "Old Oak Developments", agedDays: 23, termDays: 3, status: "awaiting_payment",
+    lines: [{ workerId: _demoWorkers[1].id, workerName: "Aisha Khan",  jobTrade: "Groundworks", jobLocation: "Bristol",  days: 5, workerPay: 160, companyCharge: 195, margin: 35 }] }),
+  _demoInvoice({ companyId: "demo-oldoak", companyName: "Old Oak Developments", agedDays: 16, termDays: 3, status: "awaiting_payment",
+    lines: [{ workerId: _demoWorkers[4].id, workerName: "Liam Chen",   jobTrade: "Carpentry",   jobLocation: "Bristol",  days: 4, workerPay: 175, companyCharge: 210, margin: 35 }] }),
+];
+
+const _demoBilling = {
+  "demo-brightwork": { companyId: "demo-brightwork", paymentTerm: "standard", trusted: false, restricted: true,  suspended: false, manualRestriction: false },
+  "demo-oldoak":     { companyId: "demo-oldoak",     paymentTerm: "standard", trusted: false, restricted: true,  suspended: true,  manualRestriction: false },
+};
 const demoData = {
   workers: _demoWorkers,
   jobs: [
-    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16),  estimatedEndDate: _isoDate(6 * 86400000),  duration: "3 days",  payRate: "£250/day", assignedWorkerId: "" },
-    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), estimatedEndDate: _isoDate(9 * 86400000),  duration: "5 days",  payRate: "£220/day", assignedWorkerId: "" },
+    { id: createId(), trade: "Electrical", location: "Birmingham", start: new Date(Date.now() + 86400000).toISOString().slice(0, 16),  estimatedEndDate: _isoDate(6 * 86400000),  duration: "3 days",  budgetMin: 240, budgetMax: 300, assignedWorkerId: "" },
+    { id: createId(), trade: "Carpentry",  location: "Leeds",      start: new Date(Date.now() + 172800000).toISOString().slice(0, 16), estimatedEndDate: _isoDate(9 * 86400000),  duration: "5 days",  budgetMin: 200, budgetMax: 260, assignedWorkerId: "" },
     // Active booking nearing its estimated end — demonstrates extension reminders.
     // Its agreement is seeded as "active" (both parties already accepted).
     {
@@ -1266,6 +1626,8 @@ const demoData = {
       start: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
       estimatedEndDate: _isoDate(9 * 86400000),
       duration: "3 weeks", payRate: "£260/day",
+      budgetMin: 290, budgetMax: 310,
+      pricing: { workerPay: 260, companyCharge: 310, margin: 50, marginPct: 0.19 },
       assignedWorkerId: _demoWorkers[0].id, workerId: _demoWorkers[0].id,
       companyName: "Apex Construction Ltd",
       bookingStatus: "confirmed", confirmedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
@@ -1283,6 +1645,8 @@ const demoData = {
       start: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16),
       estimatedEndDate: _isoDate(20 * 86400000),
       duration: "4 weeks", payRate: "£230/day",
+      budgetMin: 270, budgetMax: 280,
+      pricing: { workerPay: 230, companyCharge: 280, margin: 50, marginPct: 0.22 },
       assignedWorkerId: _demoWorkers[4].id, workerId: _demoWorkers[4].id,
       companyName: "Apex Construction Ltd",
       bookingStatus: "confirmed", confirmedAt: new Date(Date.now() - 86400000).toISOString(),
@@ -1296,6 +1660,8 @@ const demoData = {
   siteCodes: [],
   agreements: [],
   companyDocuments: {},
+  invoices: _demoInvoices,
+  companyBilling: _demoBilling,
 };
 
 // ─── State ────────────────────────────────────────────────
@@ -1314,6 +1680,16 @@ function migrateState(s) {
   if (!s || typeof s !== "object") return structuredClone(demoData);
   if (!Array.isArray(s.cancellations)) s.cancellations = [];
   if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
+  if (!Array.isArray(s.invoices)) s.invoices = [];
+  if (!s.companyBilling || typeof s.companyBilling !== "object") s.companyBilling = {};
+  // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
+  // rate, so the pricing engine has something to work with.
+  (s.jobs || []).forEach(j => {
+    if (j.budgetMax == null && j.payRate) {
+      const r = parseDayRate(j.payRate);
+      if (r) j.budgetMax = r;
+    }
+  });
   (s.jobs || []).forEach(j => {
     if (j.assignedWorkerId && !j.bookingStatus) {
       j.bookingStatus = "confirmed";
@@ -1844,6 +2220,7 @@ function renderWorkerHome(user) {
   const recJobsHtml = recommended.length ? `
     <div class="wh-section-label">Recommended for You</div>
     ${recommended.map(job => {
+      const recPay = workerPayDisplay(job, user);
       const daysUntil = job.start ? Math.ceil((new Date(job.start) - new Date()) / 86400000) : null;
       const urgency = daysUntil !== null
         ? daysUntil <= 0  ? `<span class="wjc-urgency urgency-now">Today</span>`
@@ -1858,7 +2235,7 @@ function renderWorkerHome(user) {
           <div class="wh-rec-loc">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             ${escapeHtml(job.location)}
-            ${job.payRate ? ` · <strong>${escapeHtml(job.payRate)}</strong>` : ""}
+            ${recPay != null ? ` · <strong>${formatMoney(recPay)}/day</strong>` : ""}
           </div>
         </div>
         <div class="wh-rec-right">${urgency}<svg class="wh-rec-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
@@ -1997,6 +2374,8 @@ function renderWorkerProfile(user) {
       </div>
     </div>
 
+    ${workerPaymentsSection(user)}
+
     ${agreementHistorySection(state.agreements.filter(a => a.workerId === user.id))}
 
     <div class="prof-section">
@@ -2013,6 +2392,52 @@ function renderWorkerProfile(user) {
   if (delBtn) delBtn.addEventListener("click", () => {
     if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
   });
+}
+
+// Worker-facing payments panel. Workers see only their own guaranteed pay and
+// its payment status — never the company charge or OnSite margin. They are paid
+// only after the company's funds for that invoice have been received.
+function workerPaymentsSection(user) {
+  const lines = [];
+  (state.invoices || []).forEach(inv => {
+    (inv.lines || []).forEach(line => {
+      if (line.workerId !== user.id) return;
+      lines.push({ inv, line });
+    });
+  });
+  lines.sort((a, b) => (b.inv.weekStart || "").localeCompare(a.inv.weekStart || ""));
+
+  const totalPaid = lines
+    .filter(x => workerPaymentStatusForLine(x.inv, x.line) === "paid")
+    .reduce((s, x) => s + (x.line.workerPay || 0) * (x.line.days || 0), 0);
+  const totalPending = lines
+    .filter(x => ["awaiting_funds", "ready"].includes(workerPaymentStatusForLine(x.inv, x.line)))
+    .reduce((s, x) => s + (x.line.workerPay || 0) * (x.line.days || 0), 0);
+
+  const rows = lines.length ? lines.map(({ inv, line }) => {
+    const st = workerPaymentStatusForLine(inv, line);
+    const meta = WORKER_PAYMENT_STATUS[st] || WORKER_PAYMENT_STATUS.awaiting_funds;
+    const amount = (line.workerPay || 0) * (line.days || 0);
+    return `<div class="bill-inv-row">
+      <div class="bill-inv-main">
+        <div class="bill-inv-week">${escapeHtml(line.jobTrade || "Work")} · ${formatDateOnly(inv.weekStart)} – ${formatDateOnly(inv.weekEnd)}</div>
+        <div class="bill-inv-sub">${line.days} day${line.days !== 1 ? "s" : ""} · ${formatMoney(line.workerPay)}/day guaranteed</div>
+      </div>
+      <div class="bill-inv-amt">${formatMoney(amount)}</div>
+      <span class="bill-status bill-status--${meta.tone}">${meta.label}</span>
+    </div>`;
+  }).join("") : `<div class="att-empty">No payments yet. Earnings appear here once your worked weeks are invoiced.</div>`;
+
+  return `
+    <div class="prof-section">
+      <div class="prof-section-title">My Payments</div>
+      <div class="prof-stats-grid">
+        <div class="prof-stat"><div class="prof-stat-val">${formatMoney(totalPaid)}</div><div class="prof-stat-lbl">Paid</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${formatMoney(totalPending)}</div><div class="prof-stat-lbl">Upcoming</div></div>
+      </div>
+      <p class="prof-section-hint">Your pay is guaranteed and released once the contractor's invoice is settled.</p>
+      <div class="bill-inv-list">${rows}</div>
+    </div>`;
 }
 
 // Permanent agreement history list (used in worker + contractor accounts).
@@ -2069,13 +2494,14 @@ function renderContractorHome(user) {
 
   const reqHtml = activeJobs.length ? activeJobs.slice(0, 4).map(job => {
     const assigned = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+    const charge = companyChargeDisplay(job);
     return `<div class="ch-req-row">
       <div class="ch-req-trade">${escapeHtml(job.trade)}</div>
       <div class="ch-req-meta">
         ${escapeHtml(job.location)}
         ${job.start ? ` · ${new Date(job.start).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}` : ""}
         ${job.quantity && job.quantity > 1 ? ` · ${job.quantity} workers` : ""}
-        ${job.payRate ? ` · ${escapeHtml(job.payRate)}` : ""}
+        ${charge ? ` · ${formatMoney(charge)}/day` : ""}
       </div>
       <span class="ch-req-status ${assigned ? "status-assigned" : "status-open"}">${assigned ? `✓ ${escapeHtml(assigned.name)}` : "Open"}</span>
     </div>`;
@@ -2166,6 +2592,7 @@ function renderContractorAccount(user) {
         <div class="prof-stat"><div class="prof-stat-val">${state.jobs.filter(j=>j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
       </div>
     </div>
+    ${companyBillingSection(user)}
     ${companyDocsSection(user)}
     ${agreementHistorySection(state.agreements.filter(a => a.companyId === user.id || !a.companyId))}
     <button class="ch-logout-btn" type="button" id="accLogoutBtn">
@@ -2178,6 +2605,50 @@ function renderContractorAccount(user) {
   document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
     document.getElementById("logoutBtn")?.click();
   });
+}
+
+// Company-facing billing & payment-reliability panel. Companies see their
+// payment terms, reliability score and outstanding invoices — never any
+// worker pay or OnSite margin figures.
+function companyBillingSection(user) {
+  const billing = getCompanyBilling(user.id);
+  refreshCompanyRestrictions(user.id);
+  const rel  = computeCompanyPaymentReliability(user.id);
+  const term = PAYMENT_TERMS[billing.paymentTerm] || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM];
+  const invs = (state.invoices || [])
+    .filter(i => i.companyId === user.id)
+    .sort((a, b) => (b.weekStart || "").localeCompare(a.weekStart || ""));
+
+  const banner = billing.suspended
+    ? `<div class="bill-banner bill-banner--red">Account suspended — ${rel.overdue} overdue invoice${rel.overdue !== 1 ? "s" : ""}. Clear outstanding payments and contact OnSite to reinstate posting and bookings.</div>`
+    : billing.restricted
+      ? `<div class="bill-banner bill-banner--amber">Posting & bookings paused — you have ${rel.overdue} overdue invoice${rel.overdue !== 1 ? "s" : ""}. Settle to restore full access.</div>`
+      : "";
+
+  const rows = invs.length ? invs.map(i => {
+    const st = invoiceEffectiveStatus(i);
+    const meta = INVOICE_STATUS[st] || INVOICE_STATUS.generated;
+    return `<div class="bill-inv-row">
+      <div class="bill-inv-main">
+        <div class="bill-inv-week">${formatDateOnly(i.weekStart)} – ${formatDateOnly(i.weekEnd)}</div>
+        <div class="bill-inv-sub">Due ${formatDateOnly(i.dueDate)} · ${i.termDays} working days</div>
+      </div>
+      <div class="bill-inv-amt">${formatMoney(i.totalCharge)}</div>
+      <span class="bill-status bill-status--${meta.tone}">${meta.label}</span>
+    </div>`;
+  }).join("") : `<div class="att-empty">No invoices yet. Invoices are raised weekly from approved attendance.</div>`;
+
+  return `
+    <div class="prof-section">
+      <div class="prof-section-title">Billing &amp; Payments</div>
+      ${banner}
+      <div class="prof-fields">
+        <div class="prof-field"><div class="prof-field-label">Payment Terms</div><div class="prof-field-val">${term.label}${billing.trusted ? " · Trusted" : ""}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Payment Reliability</div><div class="prof-field-val">${rel.score != null ? rel.score + "%" : "No history yet"}${rel.settled ? ` (${rel.onTime}/${rel.settled} on time)` : ""}</div></div>
+      </div>
+      <p class="prof-section-hint">You're charged a single all-in day rate per worker. OnSite pays workers once your invoice is settled.</p>
+      <div class="bill-inv-list">${rows}</div>
+    </div>`;
 }
 
 // Company site-documents manager. Documents are snapshotted into each new
@@ -2302,6 +2773,7 @@ function renderWorkerJobBoard(user) {
 
 function workerJobCard(job, user) {
   const hasPin  = job.sitePin && job.sitePin.lat !== null;
+  const guaranteedPay = workerPayDisplay(job, user);
   const daysUntil = job.start
     ? Math.ceil((new Date(job.start) - new Date()) / 86400000)
     : null;
@@ -2338,9 +2810,9 @@ function workerJobCard(job, user) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         ${escapeHtml(job.duration)}
       </div>` : ""}
-      ${job.payRate ? `<div class="wjc-detail-item wjc-pay-rate">
+      ${guaranteedPay != null ? `<div class="wjc-detail-item wjc-pay-rate">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        ${escapeHtml(job.payRate)}
+        ${formatMoney(guaranteedPay)}/day guaranteed
       </div>` : ""}
       ${job.quantity && job.quantity > 1 ? `<div class="wjc-detail-item">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2378,6 +2850,7 @@ workerForm.addEventListener("submit", e => {
   const name  = document.querySelector("#workerName").value.trim();
   const trade = document.querySelector("#workerTrade").value.trim();
   const score = clampScore(document.querySelector("#workerReliability").value);
+  const minRateRaw = Number(document.querySelector("#workerMinRate")?.value);
   state.workers.push({
     id: createId(),
     name,
@@ -2385,6 +2858,7 @@ workerForm.addEventListener("submit", e => {
     qualifications:  document.querySelector("#workerQualifications").value.trim(),
     availability:    document.querySelector("#workerAvailability").value,
     reliability:     score,
+    minRate:         Number.isFinite(minRateRaw) && minRateRaw > 0 ? Math.round(minRateRaw) : undefined,
   });
   logActivity("worker", `<strong>${escapeHtml(name)}</strong> added to roster as ${escapeHtml(trade)} (score ${score})`);
   workerForm.reset();
@@ -2396,12 +2870,24 @@ workerForm.addEventListener("submit", e => {
 
 jobForm.addEventListener("submit", e => {
   e.preventDefault();
+  // Block new labour requests from companies with outstanding overdue invoices.
+  const poster = getSessionUser();
+  if (poster?.type === "company" && isCompanyRestricted(poster.id)) {
+    showToast(isCompanySuspended(poster.id)
+      ? "Account suspended for overdue payments — contact OnSite to reinstate"
+      : "Overdue invoices must be cleared before posting new labour requests");
+    return;
+  }
   const trade    = document.querySelector("#jobTrade").value.trim();
   const location = document.querySelector("#jobLocation").value.trim();
   const duration = document.querySelector("#jobDuration").value.trim();
 
   const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
-  const payRate  = document.querySelector("#jobPayRate")?.value.trim() || "";
+
+  const budgetMinRaw = Number(document.querySelector("#jobBudgetMin")?.value);
+  const budgetMaxRaw = Number(document.querySelector("#jobBudgetMax")?.value);
+  const budgetMax = Number.isFinite(budgetMaxRaw) && budgetMaxRaw > 0 ? Math.round(budgetMaxRaw) : null;
+  const budgetMin = Number.isFinite(budgetMinRaw) && budgetMinRaw > 0 ? Math.round(budgetMinRaw) : null;
 
   const endDate  = document.querySelector("#jobEndDate")?.value || "";
   const noticeRaw = Number(document.querySelector("#jobNoticeDays")?.value);
@@ -2414,16 +2900,27 @@ jobForm.addEventListener("submit", e => {
     estimatedEndDate: endDate,
     duration,
     quantity,
-    payRate,
+    budgetMin,
+    budgetMax,
     noticePeriodDays: Number.isFinite(noticeRaw) && noticeRaw > 0 ? noticeRaw : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
   };
 
+  // Labour requirement details
+  const grade = document.querySelector("#jobGrade")?.value;
+  if (grade) job.grade = grade;
+  const roleMain = document.querySelector("#jobRoleMain")?.value.trim();
+  if (roleMain) job.role = roleMain;
+  const reqQuals = document.querySelector("#jobReqQuals")?.value.trim();
+  if (reqQuals) job.requiredQualifications = reqQuals;
+  const urgency = document.querySelector("#jobUrgency")?.value;
+  if (urgency) job.urgency = urgency;
+
   // Capture optional site location fields
   const siteName = document.querySelector("#jobSiteName")?.value.trim();
   if (siteName) job.siteName = siteName;
-  const role = document.querySelector("#jobRole")?.value.trim();
-  if (role) job.role = role;
+  const siteRef = document.querySelector("#jobSiteRef")?.value.trim();
+  if (siteRef) job.siteRef = siteRef;
   const siteAddr = document.querySelector("#jobSiteAddress")?.value.trim();
   if (siteAddr) job.siteAddress = siteAddr;
   if (currentJobPin.lat !== null) job.sitePin = { ...currentJobPin };
@@ -2478,6 +2975,8 @@ function render() {
 
   // Advance any booking extension/reallocation states before drawing.
   if (processExtensionLifecycle()) saveState();
+  // Roll up any newly-completed weeks into invoices and refresh restrictions.
+  if (generateWeeklyInvoices()) saveState();
 
   // Update counts (elements may not exist after nav rebuild)
   const wcEl = document.getElementById("workerCount");
@@ -2507,6 +3006,9 @@ function render() {
     renderAttendance();
     renderCancelledBookings();
   }
+
+  // Payments console is admin-only (self-clears for other sessions).
+  renderAdminPayments(role);
 
   // Identity/duplicate review is admin-only. Always run it so the panel is
   // cleared for worker/contractor sessions and never leaks across logins.
@@ -2686,7 +3188,8 @@ function renderJobs() {
       const job = findJob(sel.dataset.assignJob);
       if (sel.value) {
         const w = findWorker(sel.value);
-        confirmBooking(job, sel.value);
+        const res = confirmBooking(job, sel.value);
+        if (!res.ok) { sel.value = ""; showToast(res.reason); return; }
         logActivity("assign", `<strong>${escapeHtml(w.name)}</strong> manually assigned to ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}`);
         showToast("Protected Booking confirmed");
         saveAndRender();
@@ -2814,7 +3317,8 @@ function renderMatches() {
       const job = findJob(btn.dataset.autoAssign);
       const [best] = getMatches(job);
       if (!best) return;
-      confirmBooking(job, best.id);
+      const res = confirmBooking(job, best.id);
+      if (!res.ok) { showToast(res.reason); return; }
       logActivity("assign", `<strong>${escapeHtml(best.name)}</strong> auto-assigned as best match for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} (score ${best.reliability})`);
       saveAndRender();
       showToast(`Protected Booking confirmed for ${best.name}`);
@@ -3420,11 +3924,23 @@ function submitDayAttendance() {
     if (!data.status) return;
     // Preserve any check-in / reported-issue context the worker logged today.
     const prevRec = attendanceRecords.find(r => r.workerId === wid && r.date === today);
+    const linkedJob = state.jobs.find(j => j.assignedWorkerId === wid);
     const rec = {
       id: createId(), workerId: wid, date: today,
       status: data.status, rating: data.rating || 0, recordedAt: Date.now(),
       supervisorConfirmed: true, supervisorDecision: data.status, confirmedAt: Date.now(),
     };
+    // Snapshot the booking + pricing so weekly invoices can be built from
+    // approved attendance even if the job is later edited or completed.
+    if (linkedJob) {
+      rec.jobId         = linkedJob.id;
+      rec.companyId     = linkedJob.companyId || "";
+      rec.companyName   = linkedJob.companyName || "Contractor";
+      rec.jobTrade      = linkedJob.trade || "";
+      rec.jobLocation   = linkedJob.location || "";
+      rec.workerPay     = linkedJob.pricing?.workerPay != null ? linkedJob.pricing.workerPay : (linkedJob.agreedDayRate || 0);
+      rec.companyCharge = linkedJob.companyCharge != null ? linkedJob.companyCharge : companyChargeDisplay(linkedJob);
+    }
     if (prevRec) {
       if (prevRec.checkInTime)     rec.checkInTime     = prevRec.checkInTime;
       if (prevRec.suggestedStatus) rec.suggestedStatus = prevRec.suggestedStatus;
@@ -4178,6 +4694,205 @@ function statusBadge(status) {
   };
   const s = map[status] || map.active;
   return `<span class="dupe-status dupe-status--${s.cls}">${s.label}</span>`;
+}
+
+// ─── Admin Payments Console ───────────────────────────────
+// Admin sees everything: company charge, worker pay and OnSite margin, plus
+// controls to confirm invoice payment, release worker payouts, set payment
+// terms and restrict/suspend/reinstate companies.
+function renderAdminPayments(role) {
+  const el = document.getElementById("paymentsContent");
+  if (!el) return;
+  if (role) { el.innerHTML = ""; return; } // admin/demo only
+
+  const invoices = [...(state.invoices || [])]
+    .sort((a, b) => (b.weekStart || "").localeCompare(a.weekStart || ""));
+
+  // Platform totals.
+  const totalCharge = invoices.reduce((s, i) => s + (i.totalCharge || 0), 0);
+  const totalMargin = invoices.reduce((s, i) => s + (i.totalMargin || 0), 0);
+  const overdueCount = invoices.filter(i => invoiceEffectiveStatus(i) === "overdue").length;
+  const awaitingPayout = invoices.filter(i => i.status === "paid" && !i.workerPaymentsReleased).length;
+
+  const summary = `
+    <div class="pay-summary">
+      <div class="pay-sum-card"><div class="pay-sum-val">${formatMoney(totalCharge)}</div><div class="pay-sum-lbl">Billed</div></div>
+      <div class="pay-sum-card"><div class="pay-sum-val">${formatMoney(totalMargin)}</div><div class="pay-sum-lbl">OnSite Margin</div></div>
+      <div class="pay-sum-card"><div class="pay-sum-val ${overdueCount ? "pay-red" : ""}">${overdueCount}</div><div class="pay-sum-lbl">Overdue</div></div>
+      <div class="pay-sum-card"><div class="pay-sum-val ${awaitingPayout ? "pay-amber" : ""}">${awaitingPayout}</div><div class="pay-sum-lbl">Payouts Due</div></div>
+    </div>`;
+
+  // Company terms & restrictions controls.
+  const companies = getCompaniesForBilling();
+  const companyRows = companies.length ? companies.map(c => {
+    const b   = getCompanyBilling(c.id);
+    refreshCompanyRestrictions(c.id);
+    const rel = computeCompanyPaymentReliability(c.id);
+    const stateLabel = b.suspended
+      ? `<span class="bill-status bill-status--red">Suspended</span>`
+      : b.restricted
+        ? `<span class="bill-status bill-status--amber">Restricted</span>`
+        : `<span class="bill-status bill-status--green">Active</span>`;
+    const termOpts = Object.entries(PAYMENT_TERMS).map(([k, t]) =>
+      `<option value="${k}" ${b.paymentTerm === k ? "selected" : ""}>${t.label}${t.adminOnly ? " (admin)" : ""}</option>`).join("");
+    return `<div class="pay-company">
+      <div class="pay-company-head">
+        <div class="pay-company-name">${escapeHtml(c.name)}</div>
+        ${stateLabel}
+      </div>
+      <div class="pay-company-meta">Reliability: ${rel.score != null ? rel.score + "%" : "—"} · ${rel.overdue} overdue · ${rel.totalInvoices} invoice${rel.totalInvoices !== 1 ? "s" : ""}</div>
+      <div class="pay-company-controls">
+        <label class="pay-term-label">Terms
+          <select class="pay-term-select" data-pay-term="${c.id}">${termOpts}</select>
+        </label>
+        <label class="pay-trusted-label"><input type="checkbox" data-pay-trusted="${c.id}" ${b.trusted ? "checked" : ""}/> Trusted</label>
+        ${b.suspended || b.restricted
+          ? `<button class="pay-btn pay-btn-green" type="button" data-pay-reinstate="${c.id}">Reinstate</button>`
+          : `<button class="pay-btn pay-btn-amber" type="button" data-pay-restrict="${c.id}">Restrict</button>`}
+        ${b.suspended ? "" : `<button class="pay-btn pay-btn-red" type="button" data-pay-suspend="${c.id}">Suspend</button>`}
+      </div>
+    </div>`;
+  }).join("") : `<div class="att-empty">No companies with billing activity yet.</div>`;
+
+  // Invoice list with worker-payout controls.
+  const invRows = invoices.length ? invoices.map(inv => {
+    const st = invoiceEffectiveStatus(inv);
+    const meta = INVOICE_STATUS[st] || INVOICE_STATUS.generated;
+    const lineRows = (inv.lines || []).map(line => {
+      const ws = workerPaymentStatusForLine(inv, line);
+      const wmeta = WORKER_PAYMENT_STATUS[ws] || WORKER_PAYMENT_STATUS.awaiting_funds;
+      const canRelease = inv.status === "paid" && !line.workerPaid && !line.held;
+      return `<div class="pay-line">
+        <div class="pay-line-info">
+          <div class="pay-line-name">${escapeHtml(line.workerName)} · ${escapeHtml(line.jobTrade || "")}</div>
+          <div class="pay-line-sub">${line.days}d · pay ${formatMoney(line.workerPay)} · charge ${formatMoney(line.companyCharge)} · margin ${formatMoney(line.margin)}</div>
+        </div>
+        <span class="bill-status bill-status--${wmeta.tone}">${wmeta.label}</span>
+        ${canRelease ? `<button class="pay-btn pay-btn-green" type="button" data-pay-release="${inv.id}::${line.workerId}::${line.jobId}">Release</button>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="pay-invoice">
+      <div class="pay-inv-head">
+        <div class="pay-inv-co">${escapeHtml(inv.companyName)}</div>
+        <span class="bill-status bill-status--${meta.tone}">${meta.label}</span>
+      </div>
+      <div class="pay-inv-meta">${formatDateOnly(inv.weekStart)} – ${formatDateOnly(inv.weekEnd)} · Due ${formatDateOnly(inv.dueDate)} · Charge ${formatMoney(inv.totalCharge)} · Margin ${formatMoney(inv.totalMargin)}</div>
+      <div class="pay-lines">${lineRows}</div>
+      <div class="pay-inv-actions">
+        ${inv.status !== "paid"
+          ? `<button class="pay-btn pay-btn-green" type="button" data-pay-confirm="${inv.id}">Confirm Payment Received</button>`
+          : `<span class="pay-paid-note">Paid ${inv.paidAt ? formatDate(inv.paidAt) : ""}${inv.workerPaymentsReleased ? " · workers released" : ""}</span>`}
+        ${inv.status === "paid" && !inv.workerPaymentsReleased
+          ? `<button class="pay-btn pay-btn-amber" type="button" data-pay-release-all="${inv.id}">Release All Workers</button>` : ""}
+      </div>
+    </div>`;
+  }).join("") : `<div class="att-empty">No invoices yet. They are raised weekly from approved attendance.</div>`;
+
+  el.innerHTML = `
+    ${summary}
+    <div class="pay-section-title">Companies &amp; Payment Terms</div>
+    <div class="pay-company-list">${companyRows}</div>
+    <div class="pay-section-title">Invoices &amp; Worker Payouts</div>
+    <div class="pay-invoice-list">${invRows}</div>
+    <p class="pay-foot-note">Stripe-ready: payment confirmation is recorded manually here; connect Stripe to automate funds-received events. Workers are paid only after client funds are confirmed.</p>`;
+
+  bindAdminPaymentEvents(el);
+}
+
+// Collect every company that has billing or invoice history, plus any
+// registered company accounts, for the admin terms/restrictions panel.
+function getCompaniesForBilling() {
+  const map = new Map();
+  (state.invoices || []).forEach(i => {
+    if (i.companyId) map.set(i.companyId, i.companyName || "Contractor");
+  });
+  Object.values(state.companyBilling || {}).forEach(b => {
+    if (b.companyId && !map.has(b.companyId)) map.set(b.companyId, b.companyName || "Contractor");
+  });
+  if (typeof getUsers === "function") {
+    try { getUsers().filter(u => u.type === "company").forEach(u => {
+      if (!map.has(u.id)) map.set(u.id, u.companyName || u.name || "Contractor");
+    }); } catch (_) {}
+  }
+  return [...map.entries()].map(([id, name]) => ({ id, name }));
+}
+
+function bindAdminPaymentEvents(el) {
+  el.querySelectorAll("[data-pay-confirm]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = (state.invoices || []).find(i => i.id === btn.dataset.payConfirm);
+    if (!inv) return;
+    inv.status = "paid";
+    inv.paidAt = new Date().toISOString();
+    refreshCompanyRestrictions(inv.companyId);
+    logActivity("payment", `Payment received for <strong>${escapeHtml(inv.companyName)}</strong> invoice (${formatMoney(inv.totalCharge)})`);
+    saveAndRender();
+    showToast("Payment confirmed — worker payouts unlocked");
+  }));
+
+  el.querySelectorAll("[data-pay-release-all]").forEach(btn => btn.addEventListener("click", () => {
+    const inv = (state.invoices || []).find(i => i.id === btn.dataset.payReleaseAll);
+    if (!inv || inv.status !== "paid") return;
+    inv.lines.forEach(l => { if (!l.held) l.workerPaid = true; });
+    inv.workerPaymentsReleased = inv.lines.every(l => l.workerPaid || l.held);
+    logActivity("payment", `Worker payouts released for <strong>${escapeHtml(inv.companyName)}</strong> invoice`);
+    saveAndRender();
+    showToast("Worker payouts released");
+  }));
+
+  el.querySelectorAll("[data-pay-release]").forEach(btn => btn.addEventListener("click", () => {
+    const [invId, workerId, jobId] = btn.dataset.payRelease.split("::");
+    const inv = (state.invoices || []).find(i => i.id === invId);
+    if (!inv || inv.status !== "paid") return;
+    const line = inv.lines.find(l => l.workerId === workerId && l.jobId === jobId);
+    if (!line) return;
+    line.workerPaid = true;
+    inv.workerPaymentsReleased = inv.lines.every(l => l.workerPaid || l.held);
+    saveAndRender();
+    showToast("Worker payment released");
+  }));
+
+  el.querySelectorAll("[data-pay-term]").forEach(sel => sel.addEventListener("change", () => {
+    const b = getCompanyBilling(sel.dataset.payTerm);
+    b.paymentTerm = sel.value;
+    saveAndRender();
+    showToast("Payment terms updated");
+  }));
+
+  el.querySelectorAll("[data-pay-trusted]").forEach(cb => cb.addEventListener("change", () => {
+    const b = getCompanyBilling(cb.dataset.payTrusted);
+    b.trusted = cb.checked;
+    if (cb.checked && b.paymentTerm === "standard") b.paymentTerm = "trusted";
+    saveAndRender();
+    showToast(cb.checked ? "Marked as trusted" : "Trusted status removed");
+  }));
+
+  el.querySelectorAll("[data-pay-restrict]").forEach(btn => btn.addEventListener("click", () => {
+    const b = getCompanyBilling(btn.dataset.payRestrict);
+    b.manualRestriction = true;
+    b.restricted = true;
+    saveAndRender();
+    showToast("Company restricted from posting & bookings");
+  }));
+
+  el.querySelectorAll("[data-pay-suspend]").forEach(btn => btn.addEventListener("click", () => {
+    const b = getCompanyBilling(btn.dataset.paySuspend);
+    b.suspended = true;
+    b.restricted = true;
+    saveAndRender();
+    showToast("Company account suspended");
+  }));
+
+  el.querySelectorAll("[data-pay-reinstate]").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.payReinstate;
+    const b = getCompanyBilling(id);
+    b.manualRestriction = false;
+    b.suspended = false;
+    b.restricted = false;
+    // If invoices are still overdue, refreshCompanyRestrictions will re-flag.
+    refreshCompanyRestrictions(id);
+    saveAndRender();
+    showToast(b.restricted ? "Cleared manual hold — overdue invoices still restrict this company" : "Company reinstated");
+  }));
 }
 
 function renderAdminDuplicateReview() {

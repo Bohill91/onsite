@@ -5030,3 +5030,119 @@ button, input, select, textarea {
 }
 .doc-del-btn:hover { background: var(--red-bg); }
 .doc-add-form { display: flex; flex-direction: column; gap: 10px; }
+
+/* ══════════════════════════════════════════════════════════
+   Rate Structure & Payments System
+   ════════════════════════════════════════════════════════ */
+
+/* Shared status pill (worker payment & invoice status) */
+.bill-status {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+  background: var(--surface-3); color: var(--ink-2);
+}
+.bill-status--green   { background: var(--green-bg); color: var(--green-text); }
+.bill-status--amber   { background: var(--amber-bg); color: var(--amber-text); }
+.bill-status--red     { background: var(--red-bg);   color: var(--red-text);   }
+.bill-status--neutral { background: var(--surface-3); color: var(--ink-2);     }
+
+/* Company billing banner (contractor account / worker profile) */
+.bill-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--ink-3);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 14px;
+  font-size: 0.78rem; color: var(--ink-2); line-height: 1.45;
+}
+.bill-banner--amber { background: var(--amber-bg); border-left-color: var(--amber); color: var(--amber-text); }
+.bill-banner--red   { background: var(--red-bg);   border-left-color: var(--red);   color: var(--red-text);   }
+
+/* Invoice list (contractor billing + worker payments) */
+.bill-inv-list { display: flex; flex-direction: column; gap: 8px; }
+.bill-inv-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 13px;
+}
+.bill-inv-main { flex: 1; min-width: 0; }
+.bill-inv-week { font-size: 0.8rem; font-weight: 700; color: var(--ink); }
+.bill-inv-sub  { font-size: 0.7rem; color: var(--ink-3); margin-top: 2px; }
+.bill-inv-amt  { font-size: 0.86rem; font-weight: 800; color: var(--ink); flex-shrink: 0; }
+
+/* Admin payments console — summary cards */
+.pay-summary {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 18px;
+}
+.pay-sum-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; text-align: center;
+}
+.pay-sum-val { font-size: 1.2rem; font-weight: 800; color: var(--ink); }
+.pay-sum-val.pay-red   { color: var(--red-text); }
+.pay-sum-val.pay-amber { color: var(--amber-text); }
+.pay-sum-lbl { font-size: 0.66rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 3px; }
+
+.pay-section-title {
+  font-size: 0.72rem; font-weight: 800; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin: 20px 0 10px;
+}
+
+/* Company rows with terms & restriction controls */
+.pay-company-list { display: flex; flex-direction: column; gap: 10px; }
+.pay-company {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 14px;
+}
+.pay-company-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pay-company-name { font-size: 0.86rem; font-weight: 800; color: var(--ink); }
+.pay-company-meta { font-size: 0.72rem; color: var(--ink-3); margin-top: 4px; }
+.pay-company-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 11px;
+}
+.pay-term-label { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; color: var(--ink-2); }
+.pay-term-select {
+  font-size: 0.74rem; padding: 5px 8px; border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs); background: var(--surface-2); color: var(--ink);
+}
+.pay-trusted-label { display: flex; align-items: center; gap: 5px; font-size: 0.74rem; font-weight: 700; color: var(--ink-2); cursor: pointer; }
+
+/* Invoice cards */
+.pay-invoice-list { display: flex; flex-direction: column; gap: 12px; }
+.pay-invoice {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 14px;
+}
+.pay-inv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pay-inv-co   { font-size: 0.86rem; font-weight: 800; color: var(--ink); }
+.pay-inv-meta { font-size: 0.71rem; color: var(--ink-3); margin-top: 4px; }
+.pay-lines { display: flex; flex-direction: column; gap: 6px; margin: 11px 0; }
+.pay-line {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 8px 11px;
+}
+.pay-line-info { flex: 1; min-width: 0; }
+.pay-line-name { font-size: 0.77rem; font-weight: 700; color: var(--ink); }
+.pay-line-sub  { font-size: 0.68rem; color: var(--ink-3); margin-top: 2px; }
+.pay-inv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 4px; }
+.pay-paid-note { font-size: 0.72rem; font-weight: 600; color: var(--green-text); }
+
+/* Action buttons */
+.pay-btn {
+  flex-shrink: 0; font-size: 0.72rem; font-weight: 800; cursor: pointer;
+  padding: 6px 12px; border-radius: var(--radius-xs); border: 1px solid transparent;
+  transition: filter 0.15s ease;
+}
+.pay-btn:hover { filter: brightness(0.95); }
+.pay-btn-green { background: var(--green-bg); color: var(--green-text); border-color: var(--green); }
+.pay-btn-amber { background: var(--amber-bg); color: var(--amber-text); border-color: var(--amber); }
+.pay-btn-red   { background: var(--red-bg);   color: var(--red-text);   border-color: var(--red);   }
+
+.pay-foot-note {
+  font-size: 0.7rem; color: var(--ink-3); line-height: 1.5;
+  margin-top: 18px; padding: 11px 13px;
+  background: var(--surface-2); border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+}
