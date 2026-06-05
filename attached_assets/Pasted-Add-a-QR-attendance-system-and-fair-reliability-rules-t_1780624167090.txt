@@ -1,0 +1,181 @@
+Add a QR attendance system and fair reliability rules to the OnSite app.
+
+Goal:
+Companies need an easy way to record attendance for large numbers of workers across multiple sites, without office admin manually tracking everyone.
+
+Build this MVP feature:
+
+1. User roles
+Add/recognise these company-side roles:
+- Company Admin: can post jobs, manage bookings, view all projects and reports.
+- Site Supervisor: can only view assigned project/site workers and record attendance.
+
+2. Daily site QR code
+For each project/job, allow the Site Supervisor to generate a daily attendance QR code.
+
+QR code must be linked to:
+- projectId
+- jobId
+- siteId
+- date
+- startTime
+- expiryTime
+
+QR code should refresh daily and expire after the attendance window.
+
+3. Worker check-in flow
+Worker opens the app and taps “Check In”.
+Worker scans the site QR code.
+
+After scan, record:
+- workerId
+- projectId
+- jobId
+- siteId
+- scanTime
+- date
+- preliminaryStatus
+
+Do not immediately update reliability score.
+
+Set status to:
+“Checked In - Pending Approval”
+
+4. Suggested attendance status
+The app should suggest a status based on scan time:
+
+- If scanned before start time or within the grace period, suggest “On Time”.
+- If scanned after the grace period, suggest “Late”.
+- If no scan exists after cutoff time, set worker as “Unconfirmed”, not automatic No Show.
+
+Use simple MVP values:
+- Grace period: 10 minutes after start time.
+- Cutoff time: 60 minutes after start time.
+
+5. Supervisor approval
+Add a mobile-friendly supervisor attendance screen.
+
+For each worker assigned today, show:
+- Worker name
+- Trade
+- Booking/job
+- Scan time, if available
+- Suggested status
+- Current attendance status
+
+Supervisor can select:
+- On Time
+- Late
+- No Show Confirmed
+- Excused
+- Not Required / Sent Home
+
+Supervisor can also bulk approve all checked-in workers.
+
+6. Reliability score rules
+Only update reliability score after supervisor confirmation.
+
+Do NOT update reliability from QR scan alone.
+
+Reliability impact:
+- On Time: no deduction
+- Late: small deduction
+- No Show Confirmed: larger deduction
+- Excused: no immediate deduction
+- Not Required / Sent Home: no deduction
+- Unconfirmed: no deduction until supervisor confirms
+
+7. Worker delay / absence reporting
+Add a worker button:
+“Report Delay / Absence”
+
+Worker can select:
+- Running late
+- Vehicle breakdown
+- Public transport disruption
+- Medical emergency
+- Family emergency
+- Wrong site location / access issue
+- Other
+
+Worker must enter:
+- Expected arrival time OR “Unable to attend”
+- Optional note
+
+When submitted:
+- Notify/show alert to Site Supervisor
+- Store the report against the booking
+- Mark attendance as “Reported Issue - Pending Review”
+- Do not apply reliability deduction automatically
+
+8. Abuse prevention
+Excused issues should not be unlimited.
+
+Track attendance exceptions privately:
+- excusedLateCount
+- excusedAbsenceCount
+- reportedIssueCount
+- last90DaysExceptionCount
+
+Rules:
+- First 3 excused incidents in 90 days: no reliability deduction
+- 4th to 6th excused incidents in 90 days: show admin warning / flag for review
+- 7th+ excused incidents in 90 days: flag account as “Attendance Review Required”
+
+Do not publicly show this as a company reliability score.
+Keep this internal/admin only.
+
+9. Disputes
+If a worker is marked Late or No Show Confirmed, allow them to dispute.
+
+Dispute should include:
+- reason
+- optional note
+- submittedAt
+
+While disputed:
+- Attendance status becomes “Disputed”
+- Reliability score impact is paused until admin reviews
+
+10. Admin attendance review
+Add admin view showing:
+- Worker
+- Company
+- Project
+- Date
+- Attendance status
+- Scan time
+- Supervisor decision
+- Worker reported issue
+- Dispute status
+- Exception count in last 90 days
+
+Admin can:
+- approve attendance decision
+- change status
+- remove reliability impact
+- resolve dispute
+
+11. Important MVP rules
+- Keep it simple.
+- Do not add real payment processing.
+- Do not add GPS yet.
+- Do not add company reliability scores.
+- Make it mobile-first because supervisors will use it on site.
+- Make it work with the existing worker profiles, job requests, bookings, matching, and reliability score.
+
+12. UI requirements
+Use OnSite branding:
+- clean modern construction-tech design
+- orange accent colour
+- card-based mobile layout
+- clear buttons for site supervisors
+- simple worker check-in screen
+
+Test scenarios:
+- Worker scans before start time → suggested On Time → supervisor approves → no deduction.
+- Worker scans late → suggested Late → supervisor approves → reliability deduction.
+- Worker does not scan → Unconfirmed only → no deduction until supervisor confirms No Show.
+- Worker reports vehicle breakdown before start → Reported Issue Pending Review → no automatic deduction.
+- Worker has 7 excused incidents in 90 days → admin flag appears.
+- Worker disputes No Show → reliability impact paused until admin resolves.
