@@ -2330,6 +2330,35 @@ button, input, select, textarea {
 .ts-self-badge { background: rgba(249,115,22,0.1); color: var(--orange); }
 .ts-co-badge   { background: var(--surface-3);     color: var(--ink-3); }
 
+/* Timesheet row highlight — company marked late/no-show (disputable) */
+.ts-row--co-neg {
+  background: rgba(239,68,68,0.04);
+  border-left: 3px solid rgba(239,68,68,0.35);
+  padding-left: 11px;
+}
+
+/* Dispute button in worker timesheet */
+.ts-raise-dispute {
+  background: none;
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 10px;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 0.67rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.ts-raise-dispute:hover {
+  background: rgba(239,68,68,0.08);
+  border-color: #dc2626;
+}
+
+/* Dispute badge inside worker timesheet (keeps margin-left:auto off to stay inline) */
+.ts-dispute-badge { margin-left: 0; }
+
 /* ─── GPS Attendance Row ─────────────────────────────────── */
 .att-gps-row {
   border-top: 1px solid var(--border-light);
@@ -2414,6 +2443,33 @@ button, input, select, textarea {
 
 .att-dispute-badge--pending  { background: rgba(245,158,11,0.12); color: #d97706; }
 .att-dispute-badge--resolved { background: rgba(34,197,94,0.1); color: #16a34a; }
+
+/* ─── Company Attendance Required Banner ─────────────────── */
+.att-required-banner {
+  align-items: center;
+  border-radius: var(--radius);
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+}
+
+.att-req-pending {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: #92400e;
+}
+
+.att-req-complete {
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.25);
+  color: #166534;
+}
+
+.att-req-pending svg { color: #d97706; flex-shrink: 0; }
+.att-req-complete svg { color: #16a34a; flex-shrink: 0; }
 
 /* ─── Dispute Modal ─────────────────────────────────────── */
 .dispute-sheet {

@@ -2051,19 +2051,36 @@ function renderWorkerTimesheet(uid, user, histEl) {
     const job   = state.jobs.find(j => j.assignedWorkerId === uid);
     const site  = job ? `<span class="ts-site">${escapeHtml(job.location)}</span>` : "";
     const gps   = rec.gpsLat ? `<span class="ts-gps" title="GPS recorded">📍</span>` : "";
-    const self  = rec.selfReported ? `<span class="ts-self-badge">Self</span>` : `<span class="ts-co-badge">Co</span>`;
+    const coMarked = !rec.selfReported;
+    const source = coMarked ? `<span class="ts-co-badge">Company</span>` : `<span class="ts-self-badge">Self</span>`;
+
+    // Dispute: only for company-marked late or no-show records
+    const canDispute = coMarked && (rec.status === "late" || rec.status === "noShow");
+    const disputed   = rec.disputeStatus === "pending";
+    const resolved   = rec.disputeStatus === "resolved";
+    const disputeEl  = canDispute
+      ? disputed  ? `<span class="att-dispute-badge att-dispute-badge--pending ts-dispute-badge">⏳ Under Review</span>`
+      : resolved  ? `<span class="att-dispute-badge att-dispute-badge--resolved ts-dispute-badge">✓ Resolved</span>`
+      :             `<button class="ts-raise-dispute" data-dispute-record="${rec.id}" type="button">Raise Dispute</button>`
+      : "";
+
     return `
-      <div class="ts-row">
+      <div class="ts-row${canDispute && !disputed && !resolved ? " ts-row--co-neg" : ""}">
         <div class="ts-row-date">${formatAttDate(rec.date)}</div>
         <div class="ts-row-status">
           <span class="ts-status-dot" style="background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.border}">${cfg.icon}</span>
           <span class="ts-status-lbl" style="color:${cfg.color}">${cfg.label}</span>
         </div>
-        <div class="ts-row-right">${site}${stars}${gps}${self}</div>
+        <div class="ts-row-right">${site}${stars}${gps}${source}${disputeEl}</div>
       </div>`;
   }).join("");
 
   histEl.innerHTML = summaryBar + `<div class="ts-rows">${rows}</div>`;
+
+  // Wire dispute buttons for workers
+  histEl.querySelectorAll("[data-dispute-record]").forEach(btn => {
+    btn.addEventListener("click", () => openDisputeModal(btn.dataset.disputeRecord));
+  });
 }
 
 // ─── Render Attendance Tab ─────────────────────────────────
@@ -2077,7 +2094,7 @@ function renderAttendance() {
   const attTitle = document.querySelector("#tab-attendance .panel-title");
   const attSub   = document.querySelector("#tab-attendance .panel-subtitle");
   if (attTitle) attTitle.textContent = "Attendance";
-  if (attSub)   attSub.textContent   = "Record today's workforce — tap a status for each worker";
+  if (attSub)   attSub.textContent   = "Required daily — mark every worker's status before end of day";
   const histTitle = document.getElementById("attHistoryTitle");
   const histSub   = document.getElementById("attHistorySub");
   if (histTitle) histTitle.textContent = "History";
@@ -2097,9 +2114,24 @@ function renderAttendance() {
     if (!todayAttendanceMap[r.workerId]) todayAttendanceMap[r.workerId] = { status: r.status, rating: r.rating };
   });
 
-  container.innerHTML = state.workers.length
-    ? state.workers.map(w => attendanceCard(w, today)).join("")
-    : emptyState("No workers in the roster. Add workers first.");
+  // Required banner — count workers without a company-marked record today
+  const companyMarkedToday = new Set(
+    attendanceRecords.filter(r => r.date === today && !r.selfReported).map(r => r.workerId)
+  );
+  const unmarkedCount = state.workers.filter(w => !companyMarkedToday.has(w.id)).length;
+  const requiredBanner = state.workers.length > 0 ? `
+    <div class="att-required-banner ${unmarkedCount === 0 ? "att-req-complete" : "att-req-pending"}">
+      ${unmarkedCount === 0
+        ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+           All ${state.workers.length} workers marked for today`
+        : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+           <strong>${unmarkedCount} worker${unmarkedCount !== 1 ? "s" : ""} not yet marked today</strong> — attendance is required daily`}
+    </div>` : "";
+
+  container.innerHTML = (state.workers.length > 0 ? requiredBanner : "") +
+    (state.workers.length
+      ? state.workers.map(w => attendanceCard(w, today)).join("")
+      : emptyState("No workers in the roster. Add workers first."));
   if (state.workers.length) bindAttendanceEvents(container);
 
   // ── History ──
@@ -2138,7 +2170,9 @@ function renderAttendance() {
             ${r.gpsLat ? `<span class="att-gps-badge" title="GPS recorded">📍</span>` : ""}
             ${disputed ? `<span class="att-dispute-badge att-dispute-badge--pending">⏳ Under Review</span>`
               : resolved ? `<span class="att-dispute-badge att-dispute-badge--resolved">✓ Resolved</span>`
-              : `<button class="att-raise-dispute" data-dispute-record="${r.id}" type="button">Raise Dispute</button>`}
+              : (r.status === "late" || r.status === "noShow")
+                ? `<button class="att-raise-dispute" data-dispute-record="${r.id}" type="button">Raise Dispute</button>`
+                : ""}
           </div>`;
         }).join("")}
       </div>
