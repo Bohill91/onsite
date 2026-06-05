@@ -251,6 +251,13 @@
                     <span class="auth-hint">Your 10-digit UTR from HMRC — found on tax returns or the HMRC app.</span>
                   </div>
 
+                  <p class="auth-section-heading">Date of Birth</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regDOB">Date of birth</label>
+                    <input class="auth-input" id="regDOB" type="date" required />
+                    <span class="auth-hint">Used to verify your identity and protect against duplicate accounts.</span>
+                  </div>
+
                   <p class="auth-section-heading">Right to Work in the UK</p>
                   <div class="auth-field">
                     <label class="auth-label" for="regRightToWork">Document Type</label>
@@ -271,6 +278,13 @@
                       <option value="Passport">Passport</option>
                       <option value="Driving Licence">Driving Licence</option>
                     </select>
+                  </div>
+
+                  <p class="auth-section-heading">Trade Card Number</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regCscsCard">CSCS / ECS card number</label>
+                    <input class="auth-input" id="regCscsCard" type="text" placeholder="e.g. 12345678" />
+                    <span class="auth-hint">Optional, but helps confirm your identity and protect your reliability record.</span>
                   </div>
 
                   <p class="auth-section-heading">Trade Cards &amp; Certifications</p>
@@ -308,6 +322,7 @@
             </div>
             <ul class="completion-checklist" id="completionChecklist"></ul>
           </div>
+          <div class="returning-worker-note" id="returningWorkerNote" style="display:none"></div>
           <button class="cta-btn" type="button" id="workerSuccessContinueBtn">Continue to OnSite</button>
         </div>
       </div>
@@ -518,6 +533,7 @@
               <p class="panel-subtitle">Manage profiles, availability &amp; reliability ratings</p>
             </div>
           </div>
+          <div id="adminDupeReview"></div>
           <div class="workers-toolbar">
             <div class="search-wrap">
               <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

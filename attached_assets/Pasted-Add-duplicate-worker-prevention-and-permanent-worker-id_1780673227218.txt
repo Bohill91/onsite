@@ -1,0 +1,55 @@
+Add duplicate worker prevention and permanent worker identity records to OnSite.
+
+Goal:
+Stop workers with poor reliability records from deleting their account and creating a new account with a different email or phone number.
+
+Create a WorkerIdentityRecord that is separate from the user login account.
+
+Each worker identity record should include:
+- workerIdentityId
+- fullLegalName
+- dateOfBirth
+- UTR number
+- CSCS/ECS card number
+- rightToWorkReference
+- phone numbers used
+- emails used
+- currentUserAccountId
+- previousUserAccountIds
+- reliabilityScore
+- attendanceHistory
+- bookingHistory
+- accountStatus: active / deleted / suspended / under_review
+- createdAt
+- updatedAt
+
+When a worker signs up:
+1. Check exact matches on UTR number.
+2. Check exact matches on CSCS/ECS card number.
+3. Check date of birth + legal name match.
+4. Check phone/email history.
+5. If match found, do not create a fresh reliability profile.
+6. Link the new login to the existing WorkerIdentityRecord.
+7. Restore existing reliability score and history.
+8. Show admin flag: “Possible returning worker / duplicate account.”
+
+If worker deletes their account:
+- Remove or disable their login access.
+- Do not delete the WorkerIdentityRecord immediately.
+- Keep limited identity and reliability history for fraud prevention, dispute handling, and platform integrity.
+- Mark accountStatus as deleted.
+- Allow admin to reactivate or link future accounts.
+
+Do not publicly expose old emails, old phone numbers, or sensitive ID details.
+
+Add admin duplicate review screen:
+- Show possible duplicate accounts
+- Show matched fields
+- Allow admin to confirm same person
+- Allow admin to reject false match
+- Allow admin to merge records
+
+Add privacy note:
+“OnSite may retain limited identity and booking history after account deletion where necessary to prevent fraud, protect platform integrity, resolve disputes, and maintain accurate reliability records.”
+
+Keep this simple for MVP and do not add real ID verification APIs yet.

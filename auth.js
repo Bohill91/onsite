@@ -177,6 +177,8 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     location: workerRegData.location,
     minRate:  workerRegData.minRate,
     utr,
+    dateOfBirth:      document.getElementById('regDOB').value,
+    cscsCard:         document.getElementById('regCscsCard').value.trim(),
     rightToWork:      document.getElementById('regRightToWork').value,
     photoId:          document.getElementById('regPhotoId').value,
     certifications:   certs,
@@ -184,11 +186,23 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     createdAt: Date.now(),
   };
 
+  // ── Permanent identity record + duplicate/returning-worker check ──
+  let dupeResult = null;
+  if (typeof registerWorkerIdentity === 'function') {
+    dupeResult = registerWorkerIdentity(user);
+    if (dupeResult && dupeResult.identity) {
+      user.identityId = dupeResult.identity.workerIdentityId;
+      if (dupeResult.isDuplicate && typeof dupeResult.restoredScore === 'number') {
+        user.reliability = dupeResult.restoredScore;
+      }
+    }
+  }
+
   const users = getUsers();
   users.push(user);
   saveUsers(users);
   setCurrentUser(user);
-  showWorkerSuccess(user);
+  showWorkerSuccess(user, dupeResult);
 });
 
 function setWorkerStep(step) {
@@ -211,13 +225,55 @@ function setWorkerStep(step) {
   authOverlay.scrollTop = 0;
 }
 
-function showWorkerSuccess(user) {
+function showWorkerSuccess(user, dupeResult) {
   const completion = calcCompletion(user);
   document.getElementById('workerSuccessName').textContent = user.name.split(' ')[0];
   document.getElementById('workerCompletionPct').textContent = completion + '%';
   document.getElementById('workerCompletionBar').style.width = completion + '%';
   renderCompletionChecklist(user);
+  const note = document.getElementById('returningWorkerNote');
+  if (note) {
+    if (dupeResult && dupeResult.isDuplicate) {
+      note.style.display = 'block';
+      note.innerHTML =
+        '<strong>Welcome back.</strong> We matched this sign-up to an existing worker profile, ' +
+        'so your reliability record (' + (dupeResult.restoredScore != null ? dupeResult.restoredScore + '%' : 'previous score') +
+        ') and history have been restored. Our team may review the match.';
+    } else {
+      note.style.display = 'none';
+    }
+  }
   showScreen('worker-success');
+}
+
+// ── Worker account deletion (keeps permanent identity record) ──
+function deleteWorkerAccount() {
+  const user = getCurrentUser();
+  if (!user || user.type !== 'worker') return;
+  const ok = confirm(
+    'Delete your account?\n\n' +
+    'Your login will be removed, but OnSite keeps a limited identity and ' +
+    'reliability record for fraud prevention and dispute handling. ' +
+    'You cannot create a fresh reliability profile by signing up again.'
+  );
+  if (!ok) return;
+
+  if (typeof markIdentityDeleted === 'function') markIdentityDeleted(user.id);
+
+  // Remove the login account (disable access) but retain the identity record.
+  saveUsers(getUsers().filter(function (u) { return u.id !== user.id; }));
+  clearCurrentUser();
+  workerRegData = {};
+  companyRegData = {};
+
+  const userSection = document.getElementById('topbar-user');
+  const resetBtn    = document.getElementById('resetDemoBtn');
+  if (userSection) userSection.style.display = 'none';
+  if (resetBtn)    resetBtn.style.display = '';
+  if (typeof applyRoleView === 'function') applyRoleView(null);
+
+  showAuthOverlay();
+  showScreen('welcome');
 }
 
 function calcCompletion(user) {

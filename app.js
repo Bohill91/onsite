@@ -466,6 +466,283 @@ function saveAndRender() {
   render();
 }
 
+// ─── Worker Identity Records (duplicate / returning-worker prevention) ──
+// A WorkerIdentityRecord is a PERMANENT record kept separately from the login
+// account. It survives account deletion so a worker with a poor reliability
+// record cannot wipe it by deleting and re-registering under a new email/phone.
+const IDENTITY_KEY = "onsite_identities_v1";
+
+function getIdentities() {
+  try { return JSON.parse(localStorage.getItem(IDENTITY_KEY)) || []; } catch (_) { return []; }
+}
+function saveIdentities(list) {
+  try { localStorage.setItem(IDENTITY_KEY, JSON.stringify(list)); } catch (_) {}
+}
+function findIdentityById(wid) {
+  return getIdentities().find(i => i.workerIdentityId === wid) || null;
+}
+
+// Normalisers used for matching
+function idNormName(s)   { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+function idNormDigits(s) { return String(s || "").replace(/\D/g, ""); }
+function idNormEmail(s)  { return String(s || "").trim().toLowerCase(); }
+function idNormCard(s)   { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+
+// Privacy-preserving masks — never expose full old emails / phones / IDs
+function maskTail(s, keep = 3) {
+  s = String(s || "");
+  if (!s) return "—";
+  if (s.length <= keep) return "•".repeat(s.length);
+  return "•".repeat(Math.max(2, s.length - keep)) + s.slice(-keep);
+}
+function maskEmail(e) {
+  e = String(e || "");
+  const at = e.indexOf("@");
+  if (at < 1) return maskTail(e);
+  return e[0] + "•••" + e.slice(at);
+}
+
+// Collect every field on which a candidate matches an identity record.
+function collectMatchedFields(id, c) {
+  const out = [];
+  const utr = idNormDigits(c.utr);
+  const card = idNormCard(c.cscsCard);
+  const dob = String(c.dateOfBirth || "").trim();
+  const nm = idNormName(c.fullLegalName || c.name);
+  const phone = idNormDigits(c.phone);
+  const email = idNormEmail(c.email);
+  if (utr && idNormDigits(id.utr) === utr) out.push("UTR number");
+  if (card && idNormCard(id.cscsCard) === card) out.push("CSCS/ECS card");
+  if (dob && nm && id.dateOfBirth === dob && idNormName(id.fullLegalName) === nm) out.push("Name + date of birth");
+  if (phone && (id.phones || []).some(p => idNormDigits(p) === phone)) out.push("Phone number");
+  if (email && (id.emails || []).some(e => idNormEmail(e) === email)) out.push("Email address");
+  return out;
+}
+
+// Find an existing identity matching the candidate, honouring match priority:
+// 1) UTR  2) CSCS/ECS card  3) DOB + legal name  4) phone/email history.
+function findIdentityMatch(c) {
+  const ids = getIdentities();
+  const utr = idNormDigits(c.utr);
+  const card = idNormCard(c.cscsCard);
+  const dob = String(c.dateOfBirth || "").trim();
+  const nm = idNormName(c.fullLegalName || c.name);
+  const phone = idNormDigits(c.phone);
+  const email = idNormEmail(c.email);
+
+  let hit = null;
+  const pick = (pred) => { if (!hit) { const m = ids.find(pred); if (m) hit = m; } };
+  if (utr)        pick(id => idNormDigits(id.utr) === utr);
+  if (card)       pick(id => idNormCard(id.cscsCard) === card);
+  if (dob && nm)  pick(id => id.dateOfBirth === dob && idNormName(id.fullLegalName) === nm);
+  if (phone)      pick(id => (id.phones || []).some(p => idNormDigits(p) === phone));
+  if (email)      pick(id => (id.emails || []).some(e => idNormEmail(e) === email));
+
+  if (!hit) return null;
+  return { identity: hit, matchedFields: collectMatchedFields(hit, c) };
+}
+
+// Called at sign-up. Links the new login to an existing identity if a match is
+// found (restoring reliability + history) or creates a fresh identity record.
+function registerWorkerIdentity(user) {
+  const ids = getIdentities();
+  const now = Date.now();
+  const match = findIdentityMatch(user);
+
+  if (match) {
+    const id = ids.find(x => x.workerIdentityId === match.identity.workerIdentityId);
+    if (id.currentUserAccountId && id.currentUserAccountId !== user.id) {
+      id.previousUserAccountIds = id.previousUserAccountIds || [];
+      if (!id.previousUserAccountIds.includes(id.currentUserAccountId)) {
+        id.previousUserAccountIds.push(id.currentUserAccountId);
+      }
+    }
+    id.currentUserAccountId = user.id;
+    id.phones = Array.from(new Set([...(id.phones || []), user.phone].filter(Boolean)));
+    id.emails = Array.from(new Set([...(id.emails || []), user.email].filter(Boolean)));
+    id.fullLegalName        = id.fullLegalName        || user.name;
+    id.dateOfBirth          = id.dateOfBirth          || user.dateOfBirth || "";
+    id.utr                  = id.utr                  || user.utr || "";
+    id.cscsCard             = id.cscsCard             || user.cscsCard || "";
+    id.rightToWorkReference = id.rightToWorkReference || user.rightToWork || "";
+    id.flagged       = true;
+    id.flagReason    = "Possible returning worker / duplicate account";
+    id.matchedFields = match.matchedFields;
+    id.pendingAccountId = user.id;
+    if (id.accountStatus === "deleted" || id.accountStatus === "suspended") {
+      id.accountStatus = "under_review";
+    }
+    id.updatedAt = now;
+    saveIdentities(ids);
+    return { identity: id, isDuplicate: true, matchedFields: match.matchedFields, restoredScore: id.reliabilityScore };
+  }
+
+  const rec = {
+    workerIdentityId: "wid-" + now + "-" + Math.random().toString(16).slice(2),
+    fullLegalName: user.name,
+    dateOfBirth: user.dateOfBirth || "",
+    utr: user.utr || "",
+    cscsCard: user.cscsCard || "",
+    rightToWorkReference: user.rightToWork || "",
+    phones: [user.phone].filter(Boolean),
+    emails: [user.email].filter(Boolean),
+    currentUserAccountId: user.id,
+    previousUserAccountIds: [],
+    reliabilityScore: 100,
+    attendanceHistory: [],
+    bookingHistory: [],
+    accountStatus: "active",
+    flagged: false,
+    flagReason: "",
+    matchedFields: [],
+    pendingAccountId: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  ids.push(rec);
+  saveIdentities(ids);
+  return { identity: rec, isDuplicate: false, matchedFields: [], restoredScore: null };
+}
+
+// Persist a worker's latest reliability onto their permanent identity record so
+// it can be restored if they later delete and re-register.
+function syncIdentityReliability(userId, score) {
+  if (!userId || typeof score !== "number") return;
+  const ids = getIdentities();
+  const id = ids.find(x => x.currentUserAccountId === userId);
+  if (!id) return;
+  id.reliabilityScore = clampScore(score);
+  id.updatedAt = Date.now();
+  saveIdentities(ids);
+}
+
+// Called when a worker deletes their account. Keeps the identity record.
+function markIdentityDeleted(userId) {
+  const ids = getIdentities();
+  const id = ids.find(x => x.currentUserAccountId === userId);
+  if (!id) return;
+  id.previousUserAccountIds = id.previousUserAccountIds || [];
+  if (id.currentUserAccountId && !id.previousUserAccountIds.includes(id.currentUserAccountId)) {
+    id.previousUserAccountIds.push(id.currentUserAccountId);
+  }
+  id.accountStatus = "deleted";
+  id.currentUserAccountId = null;
+  id.updatedAt = Date.now();
+  saveIdentities(ids);
+}
+
+// ── Admin actions on identity records ──
+function confirmIdentityMatch(wid) {
+  const ids = getIdentities();
+  const id = ids.find(x => x.workerIdentityId === wid);
+  if (!id) return;
+  id.flagged = false;
+  id.flagReason = "";
+  id.pendingAccountId = null;
+  if (id.accountStatus === "under_review") id.accountStatus = "active";
+  id.updatedAt = Date.now();
+  saveIdentities(ids);
+  logActivity("worker", `Admin confirmed duplicate match for <strong>${escapeHtml(id.fullLegalName || "worker")}</strong>`);
+  showToast("Confirmed — accounts linked as the same person");
+  render();
+}
+
+function rejectIdentityMatch(wid) {
+  const ids = getIdentities();
+  const id = ids.find(x => x.workerIdentityId === wid);
+  if (!id) return;
+  const pending = id.pendingAccountId;
+  if (pending) {
+    const u = (typeof getUsers === "function" ? getUsers() : []).find(x => x.id === pending) || null;
+    if (id.currentUserAccountId === pending) {
+      id.currentUserAccountId = (id.previousUserAccountIds || []).pop() || null;
+    } else {
+      id.previousUserAccountIds = (id.previousUserAccountIds || []).filter(p => p !== pending);
+    }
+    const now = Date.now();
+    const rec = {
+      workerIdentityId: "wid-" + now + "-" + Math.random().toString(16).slice(2),
+      fullLegalName: u ? u.name : "Unknown worker",
+      dateOfBirth: u ? (u.dateOfBirth || "") : "",
+      utr: u ? (u.utr || "") : "",
+      cscsCard: u ? (u.cscsCard || "") : "",
+      rightToWorkReference: u ? (u.rightToWork || "") : "",
+      phones: u ? [u.phone].filter(Boolean) : [],
+      emails: u ? [u.email].filter(Boolean) : [],
+      currentUserAccountId: pending,
+      previousUserAccountIds: [],
+      reliabilityScore: 100,
+      attendanceHistory: [],
+      bookingHistory: [],
+      accountStatus: "active",
+      flagged: false,
+      flagReason: "",
+      matchedFields: [],
+      pendingAccountId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    ids.push(rec);
+    if (u && typeof getUsers === "function" && typeof saveUsers === "function") {
+      u.reliability = 100;
+      u.identityId = rec.workerIdentityId;
+      saveUsers(getUsers().map(x => x.id === u.id ? u : x));
+    }
+  }
+  id.flagged = false;
+  id.flagReason = "";
+  id.matchedFields = [];
+  id.pendingAccountId = null;
+  if (id.accountStatus === "under_review") id.accountStatus = "active";
+  id.updatedAt = Date.now();
+  saveIdentities(ids);
+  logActivity("worker", `Admin rejected a duplicate match — created a separate identity record`);
+  showToast("Rejected — treated as a different person");
+  render();
+}
+
+function mergeIdentities(keepWid, mergeWid) {
+  if (keepWid === mergeWid) return;
+  const ids = getIdentities();
+  const keep = ids.find(x => x.workerIdentityId === keepWid);
+  const merge = ids.find(x => x.workerIdentityId === mergeWid);
+  if (!keep || !merge) return;
+  keep.phones = Array.from(new Set([...(keep.phones || []), ...(merge.phones || [])].filter(Boolean)));
+  keep.emails = Array.from(new Set([...(keep.emails || []), ...(merge.emails || [])].filter(Boolean)));
+  keep.previousUserAccountIds = Array.from(new Set([
+    ...(keep.previousUserAccountIds || []),
+    ...(merge.previousUserAccountIds || []),
+    merge.currentUserAccountId,
+  ].filter(Boolean).filter(aid => aid !== keep.currentUserAccountId)));
+  keep.reliabilityScore = Math.min(keep.reliabilityScore ?? 100, merge.reliabilityScore ?? 100);
+  keep.utr = keep.utr || merge.utr;
+  keep.cscsCard = keep.cscsCard || merge.cscsCard;
+  keep.dateOfBirth = keep.dateOfBirth || merge.dateOfBirth;
+  keep.rightToWorkReference = keep.rightToWorkReference || merge.rightToWorkReference;
+  keep.flagged = false;
+  keep.flagReason = "";
+  keep.pendingAccountId = null;
+  keep.updatedAt = Date.now();
+  const remaining = ids.filter(x => x.workerIdentityId !== mergeWid);
+  saveIdentities(remaining);
+  logActivity("worker", `Admin merged two identity records for <strong>${escapeHtml(keep.fullLegalName || "worker")}</strong>`);
+  showToast("Records merged");
+  render();
+}
+
+function reactivateIdentity(wid) {
+  const ids = getIdentities();
+  const id = ids.find(x => x.workerIdentityId === wid);
+  if (!id) return;
+  id.accountStatus = "active";
+  id.flagged = false;
+  id.updatedAt = Date.now();
+  saveIdentities(ids);
+  logActivity("worker", `Admin reactivated identity record for <strong>${escapeHtml(id.fullLegalName || "worker")}</strong>`);
+  showToast("Identity record reactivated");
+  render();
+}
+
 // ─── DOM References ───────────────────────────────────────
 const workerForm    = document.querySelector("#workerForm");
 const jobForm       = document.querySelector("#jobForm");
@@ -747,6 +1024,10 @@ function renderWorkerProfile(user) {
   const reliability = stats.totalShifts > 0 ? (stats.reliability ?? 100) : (user.reliability ?? 100);
   const pct = calcWorkerCompletion(user);
 
+  // Keep the permanent identity record's score in sync so it can be restored
+  // if this worker ever deletes and re-registers.
+  syncIdentityReliability(user.id, reliability);
+
   const certs = (user.certifications || []).map(c => {
     const expStatus = c.expiry ? certExpiryStatus(c.expiry) : "valid";
     return `<span class="cert-chip cert-chip--${expStatus}">${escapeHtml(c.name)}${c.expiry ? ` · ${c.expiry}` : ""}</span>`;
@@ -798,7 +1079,21 @@ function renderWorkerProfile(user) {
         <div class="prof-stat"><div class="prof-stat-val">${stats.punctuality ?? "—"}%</div><div class="prof-stat-lbl">On-Time %</div></div>
         <div class="prof-stat"><div class="prof-stat-val">${stats.noShow}</div><div class="prof-stat-lbl">No Shows</div></div>
       </div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Account</div>
+      <p class="privacy-note">OnSite may retain limited identity and booking history after account deletion where necessary to prevent fraud, protect platform integrity, resolve disputes, and maintain accurate reliability records.</p>
+      <button class="delete-account-btn" id="deleteAccountBtn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Delete my account
+      </button>
     </div>`;
+
+  const delBtn = el.querySelector("#deleteAccountBtn");
+  if (delBtn) delBtn.addEventListener("click", () => {
+    if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
+  });
 }
 
 // ─── Contractor Home ──────────────────────────────────────
@@ -1170,6 +1465,10 @@ function render() {
     renderAttendance();
     renderCancelledBookings();
   }
+
+  // Identity/duplicate review is admin-only. Always run it so the panel is
+  // cleared for worker/contractor sessions and never leaks across logins.
+  renderAdminDuplicateReview();
 }
 
 function renderStats() {
@@ -1972,8 +2271,25 @@ function getExceptionInfo(workerId) {
 }
 
 // ─── Worker Stats from Attendance Records ─────────────────
+// All account IDs that belong to the same permanent identity as `workerId`
+// (current + previous logins). Ensures a worker can't shed historical
+// attendance impact by deleting and re-registering under a new account.
+function linkedAccountIds(workerId) {
+  if (!workerId) return [];
+  const id = getIdentities().find(i =>
+    i.currentUserAccountId === workerId ||
+    (i.previousUserAccountIds || []).includes(workerId));
+  if (!id) return [workerId];
+  return Array.from(new Set([
+    workerId,
+    id.currentUserAccountId,
+    ...(id.previousUserAccountIds || []),
+  ].filter(Boolean)));
+}
+
 function getWorkerStats(workerId) {
-  const recs      = attendanceRecords.filter(r => r.workerId === workerId);
+  const accountIds = linkedAccountIds(workerId);
+  const recs      = attendanceRecords.filter(r => accountIds.includes(r.workerId));
   // Records under active dispute are frozen — don't apply penalty until resolved
   const scoreable = recs.filter(r => r.disputeStatus !== "pending");
   // Only confirmed attendance statuses affect reliability. A worker's own scan /
@@ -2746,6 +3062,119 @@ function renderAdminAttendanceReview() {
       resolveDispute(btn.dataset.revResolve, btn.dataset.revRes);
     });
   });
+}
+
+// ─── Admin: Duplicate / Returning-Worker Review ───────────
+function statusBadge(status) {
+  const map = {
+    active:       { cls: "active",   label: "Active" },
+    deleted:      { cls: "deleted",  label: "Deleted" },
+    suspended:    { cls: "suspended",label: "Suspended" },
+    under_review: { cls: "review",   label: "Under review" },
+  };
+  const s = map[status] || map.active;
+  return `<span class="dupe-status dupe-status--${s.cls}">${s.label}</span>`;
+}
+
+function renderAdminDuplicateReview() {
+  const el = document.getElementById("adminDupeReview");
+  if (!el) return;
+  // Admin (demo) only — workers and contractors never see identity records.
+  if (getSessionUser()) { el.innerHTML = ""; return; }
+
+  const ids = getIdentities();
+  const flagged = ids.filter(i => i.flagged);
+  const inactive = ids.filter(i => !i.flagged && (i.accountStatus === "deleted" || i.accountStatus === "suspended" || i.accountStatus === "under_review"));
+
+  if (!ids.length) { el.innerHTML = ""; return; }
+
+  const linkedCount = id => 1 + (id.previousUserAccountIds ? id.previousUserAccountIds.length : 0);
+
+  const dupeCard = (id) => {
+    const matched = (id.matchedFields && id.matchedFields.length)
+      ? id.matchedFields.map(f => `<span class="dupe-match">${escapeHtml(f)}</span>`).join("")
+      : `<span class="dupe-match">Identity details</span>`;
+    // Other identity records that share a strong identifier — candidates to merge.
+    const mergeCandidates = ids.filter(o =>
+      o.workerIdentityId !== id.workerIdentityId &&
+      ((id.utr && idNormDigits(o.utr) === idNormDigits(id.utr)) ||
+       (id.cscsCard && idNormCard(o.cscsCard) === idNormCard(id.cscsCard)) ||
+       (id.dateOfBirth && o.dateOfBirth === id.dateOfBirth && idNormName(o.fullLegalName) === idNormName(id.fullLegalName))));
+    const mergeBtns = mergeCandidates.map(o =>
+      `<button class="dupe-btn dupe-btn--ghost" data-dupe-merge-keep="${id.workerIdentityId}" data-dupe-merge-from="${o.workerIdentityId}" type="button">Merge with ${escapeHtml(o.fullLegalName || "record")}</button>`
+    ).join("");
+    return `
+      <div class="dupe-card dupe-card--flag">
+        <div class="dupe-card-head">
+          <div>
+            <div class="dupe-name">${escapeHtml(id.fullLegalName || "Unknown worker")}</div>
+            <div class="dupe-flag-reason">${escapeHtml(id.flagReason || "Possible returning worker / duplicate account")}</div>
+          </div>
+          ${statusBadge(id.accountStatus)}
+        </div>
+        <div class="dupe-matched">${matched}</div>
+        <div class="dupe-detail-grid">
+          <div><span class="dupe-lbl">UTR</span>${maskTail(id.utr)}</div>
+          <div><span class="dupe-lbl">CSCS/ECS</span>${id.cscsCard ? maskTail(id.cscsCard) : "—"}</div>
+          <div><span class="dupe-lbl">DOB</span>${id.dateOfBirth ? "•• ••• " + escapeHtml(String(id.dateOfBirth).slice(0, 4)) : "—"}</div>
+          <div><span class="dupe-lbl">Emails on file</span>${(id.emails || []).map(maskEmail).join(", ") || "—"}</div>
+          <div><span class="dupe-lbl">Phones on file</span>${(id.phones || []).map(p => maskTail(p, 3)).join(", ") || "—"}</div>
+          <div><span class="dupe-lbl">Linked accounts</span>${linkedCount(id)}</div>
+          <div><span class="dupe-lbl">Reliability kept</span>${id.reliabilityScore ?? "—"}%</div>
+        </div>
+        <div class="dupe-actions">
+          <button class="dupe-btn dupe-btn--ok" data-dupe-confirm="${id.workerIdentityId}" type="button">Confirm same person</button>
+          <button class="dupe-btn dupe-btn--warn" data-dupe-reject="${id.workerIdentityId}" type="button">Reject false match</button>
+          ${mergeBtns}
+        </div>
+      </div>`;
+  };
+
+  const inactiveCard = (id) => `
+    <div class="dupe-card">
+      <div class="dupe-card-head">
+        <div>
+          <div class="dupe-name">${escapeHtml(id.fullLegalName || "Unknown worker")}</div>
+          <div class="dupe-flag-reason">Reliability on file: ${id.reliabilityScore ?? "—"}% · ${linkedCount(id)} account(s) over time</div>
+        </div>
+        ${statusBadge(id.accountStatus)}
+      </div>
+      <div class="dupe-actions">
+        <button class="dupe-btn dupe-btn--ok" data-dupe-reactivate="${id.workerIdentityId}" type="button">Reactivate / allow link</button>
+      </div>
+    </div>`;
+
+  if (!flagged.length && !inactive.length) {
+    el.innerHTML = `
+      <div class="dupe-panel">
+        <div class="dupe-panel-head">
+          <h3 class="dupe-panel-title">Identity &amp; Duplicate Review</h3>
+          <span class="dupe-panel-sub">${ids.length} identity record${ids.length !== 1 ? "s" : ""} on file · no duplicates flagged</span>
+        </div>
+        <p class="privacy-note">OnSite may retain limited identity and booking history after account deletion where necessary to prevent fraud, protect platform integrity, resolve disputes, and maintain accurate reliability records.</p>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="dupe-panel">
+      <div class="dupe-panel-head">
+        <h3 class="dupe-panel-title">Identity &amp; Duplicate Review</h3>
+        <span class="dupe-panel-sub">${flagged.length} possible duplicate${flagged.length !== 1 ? "s" : ""} · ${inactive.length} deleted/suspended</span>
+      </div>
+      ${flagged.length ? `<div class="dupe-group-label">Possible returning workers / duplicate accounts</div>${flagged.map(dupeCard).join("")}` : ""}
+      ${inactive.length ? `<div class="dupe-group-label">Deleted &amp; suspended identities</div>${inactive.map(inactiveCard).join("")}` : ""}
+      <p class="privacy-note">OnSite may retain limited identity and booking history after account deletion where necessary to prevent fraud, protect platform integrity, resolve disputes, and maintain accurate reliability records.</p>
+    </div>`;
+
+  el.querySelectorAll("[data-dupe-confirm]").forEach(b =>
+    b.addEventListener("click", () => confirmIdentityMatch(b.dataset.dupeConfirm)));
+  el.querySelectorAll("[data-dupe-reject]").forEach(b =>
+    b.addEventListener("click", () => rejectIdentityMatch(b.dataset.dupeReject)));
+  el.querySelectorAll("[data-dupe-reactivate]").forEach(b =>
+    b.addEventListener("click", () => reactivateIdentity(b.dataset.dupeReactivate)));
+  el.querySelectorAll("[data-dupe-merge-keep]").forEach(b =>
+    b.addEventListener("click", () => mergeIdentities(b.dataset.dupeMergeKeep, b.dataset.dupeMergeFrom)));
 }
 
 // ─── GPS & Geofence Helpers ───────────────────────────────

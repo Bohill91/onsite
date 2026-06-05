@@ -4512,3 +4512,159 @@ button, input, select, textarea {
   .rev-worker { grid-column: 1 / -1; }
   .rev-actions { grid-column: 1 / -1; }
 }
+
+/* ─── Worker Identity / Duplicate Prevention ─────────────── */
+.returning-worker-note {
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 153, 0, 0.10);
+  border: 1px solid rgba(255, 153, 0, 0.35);
+  color: var(--ink-1);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.privacy-note {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface, rgba(0,0,0,0.03));
+  border: 1px solid var(--border);
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.delete-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: var(--red-text, #dc2626);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.delete-account-btn:hover { background: rgba(220, 38, 38, 0.14); }
+
+/* Admin duplicate review panel */
+.dupe-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border);
+}
+.dupe-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.dupe-panel-title { font-size: 16px; font-weight: 700; color: var(--ink-1); margin: 0; }
+.dupe-panel-sub { font-size: 12px; color: var(--ink-3); }
+.dupe-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 14px 0 8px;
+}
+
+.dupe-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface, rgba(0,0,0,0.02));
+  margin-bottom: 10px;
+}
+.dupe-card--flag {
+  border-color: rgba(255, 153, 0, 0.45);
+  background: rgba(255, 153, 0, 0.06);
+}
+.dupe-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.dupe-name { font-size: 15px; font-weight: 700; color: var(--ink-1); }
+.dupe-flag-reason { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+.dupe-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.dupe-status--active   { background: rgba(16,185,129,0.15); color: var(--green-text, #059669); }
+.dupe-status--deleted  { background: rgba(220,38,38,0.12);  color: var(--red-text, #dc2626); }
+.dupe-status--suspended{ background: rgba(220,38,38,0.12);  color: var(--red-text, #dc2626); }
+.dupe-status--review   { background: rgba(255,153,0,0.18);  color: var(--orange, #d97706); }
+
+.dupe-matched {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.dupe-match {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255,153,0,0.16);
+  color: var(--orange, #d97706);
+}
+
+.dupe-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--ink-1);
+}
+.dupe-lbl {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin-bottom: 1px;
+}
+
+.dupe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.dupe-btn {
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--card, #fff);
+  color: var(--ink-1);
+}
+.dupe-btn--ok   { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: var(--green-text, #059669); }
+.dupe-btn--warn { background: rgba(220,38,38,0.10);  border-color: rgba(220,38,38,0.4);  color: var(--red-text, #dc2626); }
+.dupe-btn--ghost{ background: transparent; color: var(--ink-2); }
+.dupe-btn:hover { filter: brightness(0.97); }
+
+@media (min-width: 560px) {
+  .dupe-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
