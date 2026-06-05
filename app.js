@@ -555,7 +555,6 @@ function renderWorkerProfile(user) {
       </div>
       <div class="prof-ring">
         ${reliabilityBadge(reliability, 56)}
-        ${completionRingHTML(pct)}
       </div>
     </div>
 
