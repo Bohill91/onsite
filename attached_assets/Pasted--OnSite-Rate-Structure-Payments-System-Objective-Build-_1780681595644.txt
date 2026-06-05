@@ -1,0 +1,319 @@
+# OnSite Rate Structure & Payments System
+
+## Objective
+
+Build OnSite’s rate and payment structure before adding market pricing data.
+
+The system must:
+
+* Let workers set a minimum acceptable day rate
+* Let companies request labour
+* Allow OnSite to set final pricing
+* Keep OnSite margin hidden
+* Never allow OnSite margin below 15%
+* Generate weekly invoices from attendance
+* Pay workers only after client funds are received
+* Track company payment reliability
+
+---
+
+# 1. Worker Minimum Rate
+
+During worker registration, add:
+
+**Minimum Day Rate**
+
+Example:
+
+* £220/day
+* £250/day
+* £300/day
+
+Rules:
+
+* Worker must enter a minimum day rate
+* OnSite must never offer work below this rate
+* This rate is private
+* Companies must not see the worker minimum rate
+
+---
+
+# 2. Company Job Request
+
+When creating a job, company enters:
+
+* Trade required
+* Role / Grade
+* Location
+* Start date
+* Duration
+* Number of workers required
+* Required qualifications
+* Urgency
+* Optional budget range
+
+The company does not directly set the worker pay.
+
+---
+
+# 3. OnSite Pricing Calculation
+
+For every booking, calculate:
+
+## Worker Pay
+
+Amount paid to worker.
+
+## Company Charge Rate
+
+All-in day rate charged to company.
+
+## OnSite Margin
+
+Company Charge Rate - Worker Pay = OnSite Margin
+
+---
+
+# 4. Minimum Margin Rule
+
+OnSite margin must never go below:
+
+**15% of worker pay**
+
+Example:
+
+Worker Pay:
+£250/day
+
+Minimum OnSite Margin:
+£37.50/day
+
+Minimum Company Charge:
+£287.50/day
+
+If company budget is too low, display:
+
+**Budget too low to secure verified workers.**
+
+---
+
+# 5. Value Distribution Rule
+
+When additional budget exists, distribute value in this order:
+
+1. Increase worker pay
+2. Increase OnSite margin
+3. Keep company pricing attractive versus traditional recruiters
+
+The objective is:
+
+* Workers earn more
+* OnSite earns healthy margin
+* Companies still prefer OnSite over traditional recruiters
+
+---
+
+# 6. Visibility Rules
+
+## Worker Sees
+
+Only show:
+
+* Job details
+* Guaranteed pay rate
+* Payment status
+
+Do not show:
+
+* Company charge rate
+* OnSite margin
+
+---
+
+## Company Sees
+
+Only show:
+
+* Worker profile
+* Compliance status
+* Reliability score
+* All-in day rate
+
+Do not show:
+
+* Worker minimum rate
+* Worker pay
+* OnSite margin
+
+---
+
+# 7. Weekly Attendance Cycle
+
+Workers work Monday to Friday.
+
+Attendance is recorded daily.
+
+Statuses:
+
+* On Time
+* Late
+* No Show
+* Not Required Today
+* Site Cancelled
+* Under Review
+
+---
+
+# 8. Weekly Invoice Generation
+
+Every Friday, generate company invoice from approved attendance records.
+
+Invoice includes:
+
+* Company name
+* Job
+* Site
+* Worker count
+* Days worked
+* Charge rate
+* Total amount due
+
+Do not generate payment for:
+
+* No Show
+* Disputed attendance
+* Attendance Under Review
+
+---
+
+# 9. Company Payment Terms
+
+Default for new companies:
+
+**Payment due within 3 working days of invoice**
+
+Trusted companies:
+
+**7-day terms**
+
+Future admin-approved options:
+
+* 14-day terms
+* 30-day terms
+
+Do not give 14 or 30 day terms automatically.
+
+---
+
+# 10. Worker Payment Rule
+
+Workers are paid only when:
+
+* Attendance is approved
+* Company funds have been received
+* No active dispute exists
+
+OnSite must not fund payroll from its own cash reserves.
+
+---
+
+# 11. Worker Payment Statuses
+
+Show workers:
+
+* Earnings Pending
+* Awaiting Client Payment
+* Scheduled for Payment
+* Paid
+* On Hold Due to Dispute
+
+This must be clear so workers understand payment depends on client funds being received.
+
+---
+
+# 12. Company Invoice Statuses
+
+Show companies:
+
+* Invoice Generated
+* Payment Pending
+* Payment Received
+* Overdue
+* Account Restricted
+
+---
+
+# 13. Company Payment Reliability Score
+
+Every company should have a payment reliability score.
+
+Track:
+
+* Number of invoices issued
+* Number of invoices paid
+* Average days to pay
+* Number of overdue invoices
+* Total overdue amount
+
+Example display:
+
+Payment Reliability:
+98%
+
+Average Payment Time:
+2.3 days
+
+---
+
+# 14. Automatic Restrictions
+
+If a company has an overdue invoice:
+
+Automatically:
+
+* Block new job posts
+* Block new bookings
+* Notify admin
+* Mark account as restricted
+
+If overdue beyond admin-set limit:
+
+* Suspend company account
+
+---
+
+# 15. Admin Controls
+
+Admin can:
+
+* View invoices
+* Mark invoice as paid
+* Adjust payment status
+* Set company payment terms
+* Restrict company account
+* Suspend company account
+* View worker payment statuses
+* Release worker payments after client funds clear
+
+---
+
+# 16. Payment Provider Preparation
+
+Build architecture so Stripe can be added later.
+
+Prepare for:
+
+* Stripe invoices
+* Stripe payment links
+* Stripe Connect worker payouts
+* Webhooks for payment success/failure
+
+But for now, allow manual admin confirmation of payments received into the business bank account.
+
+---
+
+# Core Rule
+
+OnSite should never release worker payments unless client funds have been received.
+
+The platform must protect cashflow while still making payments transparent and reliable for workers.
