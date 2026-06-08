@@ -606,11 +606,6 @@
         </div>
 
         <!-- ADD TAB -->
-        <div class="tab-panel" id="tab-add">
-          <div class="add-toggle">
-            <button class="add-toggle-btn active" data-form="worker" type="button">Add Worker</button>
-            <button class="add-toggle-btn" data-form="job" type="button">Add Job</button>
-          </div>
 
           <div id="formWorker" class="form-section">
             <div class="form-card">
@@ -630,7 +625,41 @@
                 </label>
                 <label class="field-label">
                   Trade
-                  <input id="workerTrade" type="text" required placeholder="e.g. Electrician" />
+<select id="workerTrade" required>
+  <option value="">Select a trade</option>
+ <option value="">Select a trade</option>
+<option value="Electrical">Electrical</option>
+<option value="Mechanical">Mechanical</option>
+<option value="Plumbing">Plumbing</option>
+<option value="Pipefitting">Pipefitting</option>
+<option value="HVAC">HVAC</option>
+<option value="Fire & Security">Fire & Security</option>
+<option value="Data & Telecoms">Data & Telecoms</option>
+<option value="Carpentry & Joinery">Carpentry & Joinery</option>
+<option value="Drylining">Drylining</option>
+<option value="Ceilings & Partitions">Ceilings & Partitions</option>
+<option value="Bricklaying">Bricklaying</option>
+<option value="Groundworks">Groundworks</option>
+<option value="Concrete & Formwork">Concrete & Formwork</option>
+<option value="Steel Fixing">Steel Fixing</option>
+<option value="Welding & Fabrication">Welding & Fabrication</option>
+<option value="Scaffolding">Scaffolding</option>
+<option value="Roofing">Roofing</option>
+<option value="Cladding">Cladding</option>
+<option value="Glazing">Glazing</option>
+<option value="Painting & Decorating">Painting & Decorating</option>
+<option value="Plastering & Rendering">Plastering & Rendering</option>
+<option value="Flooring">Flooring</option>
+<option value="Tiling">Tiling</option>
+<option value="Labouring">Labouring</option>
+<option value="Plant Operations">Plant Operations</option>
+<option value="Logistics">Logistics</option>
+<option value="Traffic Management">Traffic Management</option>
+<option value="Management & Supervision">Management & Supervision</option>
+<option value="Health & Safety">Health & Safety</option>
+<option value="Cleaning">Cleaning</option>
+<option value="Other">Other</option>
+</select>
                 </label>
                 <label class="field-label wide">
                   Qualifications &amp; Tickets
@@ -675,184 +704,182 @@
               </div>
               <form id="jobForm" class="form-grid">
                 <label class="field-label">
-                  Trade Required
-                  <select id="jobTrade" required>
-                    <option value="">Select a trade</option>
-                    <option value="Electrical">Electrical</option>
-                    <option value="Plumbing">Plumbing</option>
-                    <option value="Carpentry">Carpentry</option>
-                    <option value="Groundworks">Groundworks</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </label>
+  Job Number *
+  <input id="jobNumber" type="text"
+  placeholder="e.g. HS2-001" required />
+</label>
+
                 <label class="field-label">
-                  Location
-                  <input id="jobLocation" type="text" required placeholder="e.g. Manchester" />
-                </label>
+  Project Name *
+  <input id="projectName" type="text"
+  placeholder="e.g. Northgate Tower" required />
+</label>
                 <label class="field-label">
-                  Start Date &amp; Time
-                  <input id="jobStart" type="datetime-local" required />
-                </label>
+  Location *
+  <input
+    id="jobLocation"
+    list="locationOptions"
+    type="text"
+    required
+    placeholder="Start typing e.g. Manchester"
+  />
+
+  <datalist id="locationOptions"></datalist>
+</label>
+               <div class="field-spacer"></div>
+<label class="field-label">
+Trade *
+  <select id="jobTrade" required>
+<option value="">Select trade</option>    <option value="Electrical">Electrical</option>
+    <option value="Mechanical">Mechanical</option>
+    <option value="Plumbing">Plumbing</option>
+    <option value="Pipefitting">Pipefitting</option>
+    <option value="HVAC">HVAC</option>
+    <option value="Fire & Security">Fire & Security</option>
+    <option value="Data & Telecoms">Data & Telecoms</option>
+    <option value="Carpentry & Joinery">Carpentry & Joinery</option>
+    <option value="Drylining">Drylining</option>
+    <option value="Ceilings & Partitions">Ceilings & Partitions</option>
+    <option value="Bricklaying">Bricklaying</option>
+    <option value="Groundworks">Groundworks</option>
+    <option value="Concrete & Formwork">Concrete & Formwork</option>
+    <option value="Steel Fixing">Steel Fixing</option>
+    <option value="Welding & Fabrication">Welding & Fabrication</option>
+    <option value="Scaffolding">Scaffolding</option>
+    <option value="Roofing">Roofing</option>
+    <option value="Cladding">Cladding</option>
+    <option value="Glazing">Glazing</option>
+    <option value="Painting & Decorating">Painting & Decorating</option>
+    <option value="Plastering & Rendering">Plastering & Rendering</option>
+    <option value="Flooring">Flooring</option>
+    <option value="Tiling">Tiling</option>
+    <option value="Labouring">Labouring</option>
+    <option value="Plant Operations">Plant Operations</option>
+    <option value="Logistics">Logistics</option>
+    <option value="Traffic Management">Traffic Management</option>
+    <option value="Management & Supervision">Management & Supervision</option>
+    <option value="Health & Safety">Health & Safety</option>
+    <option value="Cleaning">Cleaning</option>
+    <option value="Other">Other</option>
+  </select>
+</label>
                 <label class="field-label">
-                  Estimated End Date
+  Role / Specialism *
+  <select id="jobSpecialism" required>
+    <option value="">Select a trade first</option>
+  </select>
+</label>
+   <label class="field-label">
+  Experience Level *
+  <select id="jobGrade">
+    <option value="">Select experience level</option>
+    <option value="Apprentice">Apprentice</option>
+    <option value="Improver">Improver</option>
+    <option value="Skilled">Skilled</option>
+    <option value="Advanced / Supervisor">Advanced / Supervisor</option>
+  </select>
+</label>
+
+             <label class="field-label">
+  Work Activity *
+  <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
+</label>
+                                 <label class="field-label">
+                  No. Of Workers Required *
+                  <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required/>
+                </label>
+                
+<label class="field-label" style="grid-column: 1 / -1;">
+  Required Qualifications & Tickets *
+  <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />
+</label>
+                
+  <label class="field-label">
+  Start Date & Time *
+  <input id="jobStart" type="datetime-local" required />
+</label>
+                <label class="field-label">
+                  Estimated End Date *
                   <input id="jobEndDate" type="date" required />
                 </label>
-                <label class="field-label">
-                  Duration
-                  <input id="jobDuration" type="text" placeholder="e.g. 2 days" />
-                </label>
-                <label class="field-label">
-                  Notice Period (working days)
-                  <input id="jobNoticeDays" type="number" min="1" value="5" placeholder="e.g. 5" />
-                </label>
-                <label class="field-label">
-                  Workers Required
-                  <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" />
-                </label>
-                <label class="field-label">
-                  Grade Required
-                  <select id="jobGrade">
-                    <option value="">Any grade</option>
-                    <option value="Apprentice">Apprentice</option>
-                    <option value="Improver">Improver</option>
-                    <option value="Skilled">Skilled</option>
-                    <option value="Advanced / Supervisor">Advanced / Supervisor</option>
-                  </select>
-                </label>
-                <label class="field-label">
-                  Role / Position
-                  <input id="jobRoleMain" type="text" placeholder="e.g. Site Electrician" />
-                </label>
-                <label class="field-label wide">
-                  Required Qualifications &amp; Tickets
-                  <input id="jobReqQuals" type="text" placeholder="e.g. CSCS, ECS, 18th Edition" />
-                </label>
-                <label class="field-label">
-                  Urgency
-                  <select id="jobUrgency">
-                    <option value="standard">Standard</option>
-                    <option value="soon">Soon — within a week</option>
-                    <option value="urgent">Urgent — ASAP</option>
-                  </select>
-                </label>
-                <label class="field-label">
-                  Budget — Min (£/day)
-                  <input id="jobBudgetMin" type="number" min="0" placeholder="e.g. 240" />
-                </label>
-                <label class="field-label">
-                  Budget — Max (£/day)
-                  <input id="jobBudgetMax" type="number" min="0" required placeholder="e.g. 300" />
-                </label>
-                <p class="field-hint wide" style="margin:-2px 0 2px;">OnSite secures verified workers and handles their pay within your budget — you're charged a single all-in day rate.</p>
+<label class="field-label">
+  Shift Start Time *
+  <input id="jobShiftStart" type="time" required />
+</label>
 
-                <!-- Site Location Section -->
-                <div class="site-loc-toggle-wrap">
-                  <button type="button" id="toggleSiteLocBtn" class="site-loc-toggle-btn">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    Add Site Location Details
-                    <svg id="siteLocChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;margin-left:auto"><polyline points="6 9 12 15 18 9"/></svg>
-                  </button>
-                </div>
+<label class="field-label">
+  Shift Finish Time *
+  <input id="jobShiftFinish" type="time" required />
+</label>
+                
+              
+                <label class="field-label"required>
+                  Budget — Min (£/day) *
+                  <input id="jobBudgetMin" type="number" min="0" placeholder="e.g. 240" required/>
+                </label>
+                <label class="field-label">
+                  Budget — Max (£/day) *
+                  <input id="jobBudgetMax" type="number" min="0" required placeholder="e.g. 300" required/>
+                </label>
+                <p class="field-help">
+ <p class="form-helper">This is your total daily labour budget, including OnSite service fee.</p>
 
-                <div id="siteLocFields" class="site-loc-fields hidden">
-                  <div class="form-grid-2">
-                    <label class="field-label">
-                      Site Name
-                      <input id="jobSiteName" type="text" placeholder="e.g. Northgate Tower" />
-                    </label>
-                    <label class="field-label">
-                      Site Reference
-                      <input id="jobSiteRef" type="text" placeholder="e.g. Block C — Level 2" />
-                    </label>
-                  </div>
-                  <label class="field-label">
-                    Site Address
-                    <div class="geocode-row">
-                      <input id="jobSiteAddress" type="text" placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" />
-                      <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
-                    </div>
-                  </label>
+<div class="site-details-card" style="grid-column: 1 / -1;">
+  <h3>Site Details</h3>
+<p class="form-helper">Exact arrival point and site instructions.</p>
 
-                  <div class="field-label">
-                    Exact Entrance Pin
-                    <p class="field-hint">Click the map to place the precise worker arrival point</p>
-                    <div id="jobPickerMap" class="picker-map"></div>
-                    <div id="pinCoordsDisplay" class="pin-coords-display hidden">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                      Pin set: <span id="pinCoordsText"></span>
-                    </div>
-                  </div>
+  <label class="field-label">
+    Site Address *
+    <div class="geocode-row">
+      <input id="jobSiteAddress" type="text" required placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" />
+      <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
+    </div>
+  </label>
 
-                  <div class="form-grid-2">
-                    <label class="field-label">
-                      Site Contact Name
-                      <input id="jobContactName" type="text" placeholder="e.g. John Smith" />
-                    </label>
-                    <label class="field-label">
-                      Site Contact Number
-                      <input id="jobContactPhone" type="tel" placeholder="e.g. 07700 900123" />
-                    </label>
-                  </div>
-                  <label class="field-label">
-                    Arrival Instructions
-                    <textarea id="jobArrivalInstructions" rows="2" placeholder='e.g. "Enter via Gate 3 on Eastern Road. Report to Site Office Cabin B."'></textarea>
-                  </label>
-                  <label class="field-label">
-                    Parking Information
-                    <input id="jobParking" type="text" placeholder="e.g. Free parking on site, enter via main gate" />
-                  </label>
-                  <label class="field-label">
-                    PPE Requirements
-                    <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis vest, steel toe boots" />
-                  </label>
-                  <label class="field-label">
-                    Gate / Access Instructions
-                    <input id="jobGateAccess" type="text" placeholder="e.g. Call site manager on arrival for gate code" />
-                  </label>
+  <div class="field-label">
+    Exact Entrance Pin *
+    <p class="field-hint">Click the map to place the precise worker arrival point.</p>
+    <div id="jobPickerMap" class="picker-map"></div>
+    <div id="pinCoordsDisplay" class="pin-coords-display hidden">
+      Pin set: <span id="pinCoordsText"></span>
+    </div>
+  </div>
 
-                  <!-- Reference Photos -->
-                  <div>
-                    <div class="field-label" style="margin-bottom:8px;">
-                      Reference Photos
-                      <span style="font-weight:400;color:var(--ink-3)"> — optional, help workers find the site</span>
-                    </div>
-                    <div class="site-photo-grid">
-                      <label class="photo-card" for="photoGate">
-                        <input type="file" id="photoGate" accept="image/*" class="photo-file-input" data-photo-key="gate" />
-                        <div class="photo-placeholder" id="phGate">
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                          <span>Gate</span>
-                        </div>
-                        <img class="photo-preview" id="prvGate" alt="Gate photo" />
-                      </label>
-                      <label class="photo-card" for="photoEntrance">
-                        <input type="file" id="photoEntrance" accept="image/*" class="photo-file-input" data-photo-key="entrance" />
-                        <div class="photo-placeholder" id="phEntrance">
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                          <span>Entrance</span>
-                        </div>
-                        <img class="photo-preview" id="prvEntrance" alt="Site entrance photo" />
-                      </label>
-                      <label class="photo-card" for="photoWelfare">
-                        <input type="file" id="photoWelfare" accept="image/*" class="photo-file-input" data-photo-key="welfare" />
-                        <div class="photo-placeholder" id="phWelfare">
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                          <span>Welfare</span>
-                        </div>
-                        <img class="photo-preview" id="prvWelfare" alt="Welfare cabin photo" />
-                      </label>
-                    </div>
-                  </div>
-                </div>
+  <div class="form-grid-2">
+    <label class="field-label">
+      Site Contact Name *
+      <input id="jobContactName" type="text" required placeholder="e.g. John Smith" />
+    </label>
 
-                <button class="primary-btn wide" type="submit">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Find Labour
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
+    <label class="field-label">
+      Site Contact Number *
+      <input id="jobContactPhone" type="tel" required placeholder="e.g. 07700 900123" />
+    </label>
+  </div>
+
+  <label class="field-label">
+    Arrival Instructions
+    <textarea id="jobArrivalInstructions" rows="2" placeholder="e.g. Enter via Gate 3 and report to the site office."></textarea>
+  </label>
+
+  <label class="field-label">
+    Parking Information
+    <input id="jobParking" type="text" placeholder="e.g. Free parking on site, enter via main gate" />
+  </label>
+
+  <label class="field-label">
+    PPE Requirements
+    <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis, safety boots" />
+  </label>
+
+  <label class="field-label">
+    Gate / Access Instructions
+    <input id="jobGateAccess" type="text" placeholder="e.g. Call site manager on arrival for gate code" />
+  </label>
+</div>
+     <button type="submit" class="primary-btn full-width">
+  Find Labour
+</button>
 
         <!-- PROFILE TAB (Worker) -->
         <div class="tab-panel" id="tab-profile">
