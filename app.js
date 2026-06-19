@@ -4960,6 +4960,10 @@ function initPickerMap() {
     }
     updatePinCoords();
   });
+  
+setTimeout(() => {
+  pickerMap.invalidateSize();
+}, 300);}
 
 function updatePinCoords() {
   const el = document.getElementById("pinCoordsDisplay");

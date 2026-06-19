@@ -5166,32 +5166,59 @@ margin-bottom: 12px;
   border-radius: var(--radius-sm);
 }
 .site-details-card {
+  grid-column: 1 / -1;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  .site-details-card {
-  padding: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.site-details-card h3 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.site-details-card .form-helper {
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+.site-details-card .field-label {
+  gap: 8px;
+}
+
+.geocode-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.geocode-row input {
+  flex: 1;
+}
+
+.geocode-btn {
+  min-width: 114px;
+}
+
+.form-grid-2 {
   display: grid;
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-.site-details-card .field-help {
-  margin: -8px 0 4px;
-}
-
-.site-details-card .field-help {
-  margin: 0 0 4px;
-}
-
-.picker-map {
-  height: 220px;
-}
 .picker-map {
   width: 100%;
-  height: 220px;
+  height: 240px;
+  min-height: 240px;
+  display: block;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: #f3f4f6;
-  margin-top: 12px;
   overflow: hidden;
+}
+
+.primary-btn.full-width {
+  width: 100%;
 }
