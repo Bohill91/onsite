@@ -2242,6 +2242,51 @@ margin-bottom: 12px;
 
 .wsa-rating { padding: 0 14px 12px; }
 
+.wh-signin-panel {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid rgba(249,115,22,0.24);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 14px 0;
+  padding: 14px;
+}
+
+.wh-signin-copy { min-width: 0; }
+.wh-signin-title {
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 800;
+  margin-top: 2px;
+}
+.wh-signin-sub {
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  margin-top: 3px;
+}
+
+.wh-signin-btn {
+  align-items: center;
+  background: var(--orange);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 16px;
+}
+.wh-signin-btn:hover { background: var(--orange-dark); }
+
 /* ─── Timesheet ─────────────────────────────────────────── */
 .ts-summary {
   background: var(--surface-2);
@@ -4829,6 +4874,120 @@ margin-bottom: 12px;
 .wsa-state--issue .wsa-state-icon { color: var(--amber-text); }
 .wsa-state-title { font-size: 0.92rem; font-weight: 700; color: var(--ink); }
 .wsa-state-sub { font-size: 0.78rem; color: var(--ink-2); margin-top: 2px; }
+
+.qr-scan-modal {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 3000;
+}
+
+.qr-scan-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+  max-width: 390px;
+  padding: 20px;
+  position: relative;
+  width: 100%;
+}
+
+.qr-scan-close {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: flex;
+  font-size: 1.3rem;
+  height: 32px;
+  justify-content: center;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  width: 32px;
+}
+
+.qr-scan-kicker {
+  color: var(--orange);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.qr-scan-title {
+  color: var(--ink);
+  font-size: 1.25rem;
+  margin: 4px 40px 14px 0;
+}
+
+.qr-scan-frame {
+  align-items: center;
+  aspect-ratio: 1;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 14px;
+  max-width: 230px;
+  overflow: hidden;
+  position: relative;
+}
+
+.qr-scan-line {
+  background: rgba(249,115,22,0.75);
+  box-shadow: 0 0 16px rgba(249,115,22,0.45);
+  height: 2px;
+  left: 18px;
+  position: absolute;
+  right: 18px;
+  top: 50%;
+}
+
+.qr-scan-corner {
+  border-color: var(--orange);
+  border-style: solid;
+  height: 34px;
+  position: absolute;
+  width: 34px;
+}
+.qr-scan-corner--tl { border-width: 3px 0 0 3px; left: 18px; top: 18px; }
+.qr-scan-corner--tr { border-width: 3px 3px 0 0; right: 18px; top: 18px; }
+.qr-scan-corner--bl { border-width: 0 0 3px 3px; bottom: 18px; left: 18px; }
+.qr-scan-corner--br { border-width: 0 3px 3px 0; bottom: 18px; right: 18px; }
+
+.qr-scan-site {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.qr-scan-copy {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 6px 0 16px;
+  text-align: center;
+}
+
+.qr-scan-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.qr-scan-actions button {
+  flex: 1;
+  justify-content: center;
+}
 
 /* Admin attendance review */
 .adminrev {

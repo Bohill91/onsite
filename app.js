@@ -2549,6 +2549,8 @@ const demoData = {
       trade: "Electrical",
       location: "Birmingham",
       start: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
+      shiftStartTime: "08:00",
+      shiftFinishTime: "16:30",
       estimatedEndDate: _isoDate(6 * 86400000),
       duration: "3 days",
       budgetMin: 240,
@@ -2560,6 +2562,8 @@ const demoData = {
       trade: "Carpentry",
       location: "Leeds",
       start: new Date(Date.now() + 172800000).toISOString().slice(0, 16),
+      shiftStartTime: "08:00",
+      shiftFinishTime: "16:30",
       estimatedEndDate: _isoDate(9 * 86400000),
       duration: "5 days",
       budgetMin: 200,
@@ -2576,6 +2580,8 @@ const demoData = {
       siteAddress: "Northgate Tower, 12 Cross St, Manchester, M2 1WS",
       role: "Site Electrician",
       start: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 16),
+      shiftStartTime: "08:00",
+      shiftFinishTime: "16:30",
       estimatedEndDate: _isoDate(9 * 86400000),
       duration: "3 weeks",
       payRate: "£260/day",
@@ -2609,6 +2615,8 @@ const demoData = {
       siteAddress: "Riverside Mill, Dock St, Leeds, LS10 1JF",
       role: "Site Carpenter",
       start: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16),
+      shiftStartTime: "08:00",
+      shiftFinishTime: "16:30",
       estimatedEndDate: _isoDate(20 * 86400000),
       duration: "4 weeks",
       payRate: "£230/day",
@@ -2671,13 +2679,63 @@ function migrateState(s) {
   });
   (s.applications || []).forEach((a) => {
     if (!a.status) a.status = "interested";
+    if (!a.createdAt) a.createdAt = a.offeredAt || new Date().toISOString();
+    if (a.workerDeclineReason == null) a.workerDeclineReason = "";
+    if (a.workerDeclineComment == null) a.workerDeclineComment = "";
+    if (a.companyDeclineReason == null) a.companyDeclineReason = "";
+    if (a.companyDeclineComment == null) a.companyDeclineComment = "";
+    if (a.workerRespondedAt == null) a.workerRespondedAt = "";
+    if (a.companyReviewedAt == null) a.companyReviewedAt = "";
+    if (a.companyDecision == null) a.companyDecision = "";
+    if (a.confirmedAt == null) a.confirmedAt = "";
+    if (a.supersededAt == null) a.supersededAt = "";
+    if (a.workerNotifiedAt == null) a.workerNotifiedAt = "";
+    if (a.workerNotificationId == null) a.workerNotificationId = "";
     if (a.status === "offered" && !a.expiresAt && a.offeredAt) {
       a.expiresAt = new Date(new Date(a.offeredAt).getTime() + OFFER_EXPIRY_MS).toISOString();
+    }
+    if (!a.matchSnapshot) {
+      const job = (s.jobs || []).find((j) => j.id === a.jobId);
+      const worker = (s.workers || []).find((w) => w.id === a.workerId);
+      if (job && worker) {
+        a.matchSnapshot = {
+          reliabilityRating: "New / Unproven",
+          punctualityRating: "New / Unproven",
+          attendanceDays: 0,
+          reliabilityScore: null,
+          punctualityScore: null,
+          trade: worker.trade || "",
+          specialism: worker.grade || worker.specialism || "",
+          qualifications: worker.qualifications || "",
+          certifications: worker.certifications || [],
+          travelRadiusMiles: worker.travelRadiusMiles ?? null,
+          travelFurtherWithAccommodation: !!worker.travelFurtherWithAccommodation,
+          nextAvailableDate: worker.nextAvailableDate || "",
+          plannedAbsenceSummary: Array.isArray(worker.plannedAbsences)
+            ? worker.plannedAbsences.map((pa) => ({
+                startDate: pa.startDate,
+                endDate: pa.endDate,
+              }))
+            : [],
+          previousDeclineReasons: [],
+          rankAtOffer: a.rankAtOffer ?? null,
+          jobTrade: job.trade || "",
+          jobLocation: job.location || "",
+          jobStart: job.start || "",
+        };
+      }
     }
   });
   // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
   // rate, so the pricing engine has something to work with.
   (s.jobs || []).forEach((j) => {
+    if (!j.shiftStartTime) {
+      j.shiftStartTime =
+        j.start && String(j.start).includes("T")
+          ? String(j.start).split("T")[1].slice(0, 5)
+          : "08:00";
+    }
+    if (!j.shiftFinishTime) j.shiftFinishTime = "";
     if (j.budgetMax == null && j.payRate) {
       const r = parseDayRate(j.payRate);
       if (r) j.budgetMax = r;
@@ -2907,9 +2965,20 @@ function previousDeclineReasonsForWorker(workerId) {
 
 function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
   const stats = getWorkerStats(worker?.id || "");
+  const rating = buildWorkerRating(worker?.id || "");
   return {
+    reliabilityRating: rating.reliabilityRating,
+    punctualityRating: rating.punctualityRating,
+    attendanceDays: rating.evidence?.attendanceDays || 0,
+    reliabilityScore: rating.reliabilityScore,
+    punctualityScore: rating.punctualityScore,
     reliability:
-      stats.totalShifts > 0 ? stats.reliability : worker?.reliability ?? 100,
+      rating.reliabilityScore != null
+        ? rating.reliabilityScore
+        : stats.totalShifts > 0
+          ? stats.reliability
+          : worker?.reliability ?? 100,
+    punctuality: rating.punctualityScore,
     trade: worker?.trade || "",
     specialism: worker?.grade || worker?.specialism || "",
     qualifications: worker?.qualifications || "",
@@ -2992,6 +3061,19 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
     supersededAt: "",
     matchSnapshot: buildOfferMatchSnapshot(job, worker, rankAtOffer),
   });
+  if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
+  const notice = {
+    id: createId(),
+    type: "job_offer_sent",
+    applicationId: app.id,
+    jobId: job.id,
+    message: `New job offer: ${job.trade} in ${job.location}.`,
+    createdAt: now.toISOString(),
+    readAt: "",
+  };
+  worker.offerNotifications.unshift(notice);
+  app.workerNotifiedAt = now.toISOString();
+  app.workerNotificationId = notice.id;
   logActivity(
     "assign",
     `Job offer sent to <strong>${escapeHtml(worker.name)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.`,
@@ -3160,10 +3242,10 @@ function offerNextBestWorker(jobId) {
       )
       .map((a) => a.workerId),
   );
-  const matches = getMatches(job).filter((w) => !usedWorkerIds.has(w.id));
-  const [next] = matches;
+  const rankedMatches = getMatches(job);
+  const next = rankedMatches.find((w) => !usedWorkerIds.has(w.id));
   if (!next) return { ok: false, reason: "No matched worker available" };
-  return createJobOffer(job.id, next.id, "next_best", matches.indexOf(next) + 1);
+  return createJobOffer(job.id, next.id, "next_best", rankedMatches.indexOf(next) + 1);
 }
 
 // ─── Worker Identity Records (duplicate / returning-worker prevention) ──
@@ -3852,6 +3934,21 @@ function renderWorkerHome(user) {
       ${offerHistoryHtml}
     </div>`
       : "";
+  const signInPanel =
+    booking && bookingLive
+      ? `
+    <div class="wh-signin-panel">
+      <div class="wh-signin-copy">
+        <div class="wh-section-label">Site Sign In</div>
+        <div class="wh-signin-title">${escapeHtml(booking.trade)} · ${escapeHtml(booking.location)}</div>
+        <div class="wh-signin-sub">Camera scanner-ready sign in for today's site QR code.</div>
+      </div>
+      <button class="wh-signin-btn" type="button" data-worker-home-signin="${user.id}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Sign In
+      </button>
+    </div>`
+      : "";
   const activeBookingHtml = booking
     ? `
     <div class="wh-booking-card">
@@ -3961,6 +4058,7 @@ function renderWorkerHome(user) {
     <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
     ${offersPanel}
+    ${signInPanel}
     ${activeBookingHtml}
     ${recJobsHtml}`;
 
@@ -4007,6 +4105,11 @@ function renderWorkerHome(user) {
   el.querySelectorAll("[data-worker-offer-decline]").forEach((btn) => {
     btn.addEventListener("click", () =>
       openOfferDecisionModal("worker", btn.dataset.workerOfferDecline),
+    );
+  });
+  el.querySelectorAll("[data-worker-home-signin]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openWorkerQrScanner(btn.dataset.workerHomeSignin, workerProfile || user),
     );
   });
 
@@ -4406,6 +4509,8 @@ function companyOfferReviewPanelHTML(user) {
         <div class="ch-offer-meta">
           ${escapeHtml(job?.location || "")}
           ${rating ? ` · Reliability ${escapeHtml(rating.reliabilityRating)}` : ""}
+          ${rating ? ` · Punctuality ${escapeHtml(rating.punctualityRating)}` : ""}
+          ${rating ? ` · ${rating.evidence.attendanceDays} attendance days` : ""}
           ${worker?.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}
         </div>
         ${rating ? ratingEvidenceHTML(rating, true) : ""}
@@ -4907,6 +5012,9 @@ jobForm.addEventListener("submit", (e) => {
 
   const endDate = document.querySelector("#jobEndDate")?.value || "";
   const noticeRaw = Number(document.querySelector("#jobNoticeDays")?.value);
+  const jobStartValue = document.querySelector("#jobStart").value;
+  const shiftStartTime = document.querySelector("#jobShiftStart")?.value || "";
+  const shiftFinishTime = document.querySelector("#jobShiftFinish")?.value || "";
 
   const job = {
     id: createId(),
@@ -4919,7 +5027,13 @@ jobForm.addEventListener("submit", (e) => {
         : "",
     trade,
     location,
-    start: document.querySelector("#jobStart").value,
+    start: jobStartValue,
+    shiftStartTime:
+      shiftStartTime ||
+      (jobStartValue && jobStartValue.includes("T")
+        ? jobStartValue.split("T")[1].slice(0, 5)
+        : "08:00"),
+    shiftFinishTime,
     estimatedEndDate: endDate,
     duration,
     quantity,
@@ -6180,6 +6294,7 @@ function isPastCutoff(startMs) {
 function jobExpectedStartTime(job) {
   const code = job?.id ? activeSiteCode(job.id) : null;
   if (code?.startTime) return code.startTime;
+  if (job?.shiftStartTime) return job.shiftStartTime;
   if (job?.start && String(job.start).includes("T")) {
     return String(job.start).split("T")[1].slice(0, 5);
   }
@@ -6237,8 +6352,11 @@ function getSiteCode(jobId, date) {
   );
 }
 function activeSiteCode(jobId) {
-  const code = getSiteCode(jobId, todayDateStr());
-  return code && Date.now() < code.expiresAt ? code : null;
+  const today = todayDateStr();
+  const code = getSiteCode(jobId, today);
+  return code && code.date === today && Date.now() < code.expiresAt
+    ? code
+    : null;
 }
 function generateSiteCode(jobId) {
   const job = findJob(jobId);
@@ -6249,10 +6367,7 @@ function generateSiteCode(jobId) {
   state.siteCodes = state.siteCodes.filter(
     (c) => !(c.jobId === jobId && c.date === today),
   );
-  const startTime =
-    job.start && job.start.includes("T")
-      ? job.start.split("T")[1].slice(0, 5)
-      : "08:00";
+  const startTime = job.shiftStartTime || jobExpectedStartTime(job);
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 0);
   const code = {
@@ -7058,7 +7173,7 @@ function workerSelfAttCard(worker, today) {
 function bindWorkerAttEvents(container, uid, workerObj) {
   const scanBtn = container.querySelector(`[data-att-scan="${uid}"]`);
   if (scanBtn)
-    scanBtn.addEventListener("click", () => workerScanCheckIn(uid, workerObj));
+    scanBtn.addEventListener("click", () => openWorkerQrScanner(uid, workerObj));
   const reportBtn = container.querySelector(`[data-att-report="${uid}"]`);
   if (reportBtn)
     reportBtn.addEventListener("click", () => openReportModal(uid, workerObj));
@@ -7078,8 +7193,51 @@ function refreshWorkerAttCard(uid, workerObj) {
   );
 }
 
-// Simulated QR scan — validates today's active site code for the worker's job.
-function workerScanCheckIn(uid, workerObj) {
+function closeWorkerQrScanner() {
+  document.getElementById("workerQrScanModal")?.remove();
+}
+
+function openWorkerQrScanner(uid, workerObj) {
+  closeWorkerQrScanner();
+  const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+  const modal = document.createElement("div");
+  modal.id = "workerQrScanModal";
+  modal.className = "qr-scan-modal";
+  modal.innerHTML = `
+    <div class="qr-scan-sheet" role="dialog" aria-modal="true" aria-labelledby="qrScanTitle">
+      <button class="qr-scan-close" type="button" aria-label="Close" data-qr-scan-close>&times;</button>
+      <div class="qr-scan-kicker">Site Sign In</div>
+      <h3 id="qrScanTitle" class="qr-scan-title">Scan Site QR</h3>
+      <div class="qr-scan-frame" aria-hidden="true">
+        <span class="qr-scan-corner qr-scan-corner--tl"></span>
+        <span class="qr-scan-corner qr-scan-corner--tr"></span>
+        <span class="qr-scan-corner qr-scan-corner--bl"></span>
+        <span class="qr-scan-corner qr-scan-corner--br"></span>
+        <span class="qr-scan-line"></span>
+      </div>
+      <div class="qr-scan-site">${job ? `${escapeHtml(job.trade)} · ${escapeHtml(job.location)}` : "No active site assigned"}</div>
+      <p class="qr-scan-copy">Camera scanner-ready flow. This MVP validates today's active site QR token.</p>
+      <div class="qr-scan-actions">
+        <button class="secondary-btn" type="button" data-qr-scan-close>Cancel</button>
+        <button class="primary-btn" type="button" data-qr-scan-use>Use Today's Site QR</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-qr-scan-close]").forEach((btn) =>
+    btn.addEventListener("click", closeWorkerQrScanner),
+  );
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeWorkerQrScanner();
+  });
+  modal.querySelector("[data-qr-scan-use]")?.addEventListener("click", async () => {
+    await workerScanCheckIn(uid, workerObj);
+    closeWorkerQrScanner();
+  });
+}
+
+// camera-scanner-ready / future QR camera integration:
+// validates today's active site token without opening a real camera yet.
+async function workerScanCheckIn(uid, workerObj) {
   const today = todayDateStr();
   const job = state.jobs.find((j) => j.assignedWorkerId === uid);
   if (!job) {
@@ -7105,6 +7263,16 @@ function workerScanCheckIn(uid, workerObj) {
   const scanMs = Date.now();
   const startMs = siteStartMs(code.startTime);
   const suggested = suggestStatusForScan(scanMs, startMs);
+  let gps = null;
+  let gpsDistance = null;
+  try {
+    gps = await getGPS();
+    if (gps && job.sitePin?.lat != null && job.sitePin?.lng != null) {
+      gpsDistance = haversine(gps.lat, gps.lng, job.sitePin.lat, job.sitePin.lng);
+    }
+  } catch (_) {
+    gps = null;
+  }
   const previous = attendanceRecords.find(
     (r) => r.workerId === uid && r.date === today,
   );
@@ -7121,7 +7289,15 @@ function workerScanCheckIn(uid, workerObj) {
   const rec = {
     id: createId(),
     workerId: uid,
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "",
+    jobTrade: job.trade || "",
+    jobLocation: job.location || "",
+    projectName: job.projectName || job.siteName || "",
+    siteName: job.siteName || "",
     date: today,
+    scanDate: today,
     status: "checkedIn",
     rating: 0,
     recordedAt: scanMs,
@@ -7129,8 +7305,21 @@ function workerScanCheckIn(uid, workerObj) {
     supervisorConfirmed: false,
     checkInTime: scanMs,
     suggestedStatus: suggested,
+    expectedStartTime: code.startTime || jobExpectedStartTime(job),
+    scanTime: new Date(scanMs).toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    qrCodeId: code.id,
+    qrDate: code.date,
     scanToken: code.token,
   };
+  if (gps) {
+    rec.gpsLat = gps.lat;
+    rec.gpsLng = gps.lng;
+    rec.gpsTimestamp = scanMs;
+    if (gpsDistance != null) rec.gpsDistance = gpsDistance;
+  }
   if (lateReport) {
     rec.lateReport = lateReport;
     rec.reportedIssue = previous.reportedIssue;
