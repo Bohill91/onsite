@@ -217,9 +217,45 @@
                       <input class="auth-input" id="regMinRate" type="number" min="0" placeholder="e.g. 200" required />
                     </div>
                   </div>
+                  <p class="auth-section-heading">Travel Preferences</p>
                   <div class="auth-field">
-                    <label class="auth-label" for="regLocation">Location</label>
-                    <input class="auth-input" id="regLocation" type="text" placeholder="e.g. Manchester" required />
+                    <label class="auth-label" for="regLocation">Home town or postcode</label>
+                    <div class="auth-inline-action">
+                      <input class="auth-input" id="regLocation" type="text" placeholder="e.g. Leeds or LS1 4AP" required />
+                      <button class="auth-mini-btn" id="useCurrentLocationBtn" type="button">Use current location</button>
+                    </div>
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regTravelRadius">Willing to travel</label>
+                    <select class="auth-input auth-select" id="regTravelRadius" required>
+                      <option value="2">Within 2 miles</option>
+                      <option value="5">Within 5 miles</option>
+                      <option value="7">Within 7 miles</option>
+                      <option value="10">Within 10 miles</option>
+                      <option value="15" selected>Within 15 miles</option>
+                      <option value="20">Within 20 miles</option>
+                      <option value="25">Within 25 miles</option>
+                      <option value="35">Within 35 miles</option>
+                      <option value="50">Within 50 miles</option>
+                      <option value="75">Within 75 miles</option>
+                      <option value="100">Within 100 miles</option>
+                      <option value="250">Within 250 miles</option>
+                      <option value="500">Within 500 miles</option>
+                      <option value="750">Within 750 miles</option>
+                    </select>
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label">Longer-distance work</label>
+                    <div class="auth-choice-list">
+                      <label class="auth-choice">
+                        <input type="radio" name="regTravelFurther" value="yes" />
+                        <span>Willing to travel further if accommodation is paid</span>
+                      </label>
+                      <label class="auth-choice">
+                        <input type="radio" name="regTravelFurther" value="no" checked />
+                        <span>Only interested in work within my selected travel distance</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <button class="auth-submit-btn" type="submit">

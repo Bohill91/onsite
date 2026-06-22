@@ -75,6 +75,10 @@ function updateTopbarUser(user) {
   userSection.style.display = 'flex';
   if (resetBtn) resetBtn.style.display = 'none';
 
+  if (user.type === 'worker' && typeof ensureWorkerProfileForUser === 'function') {
+    ensureWorkerProfileForUser(user);
+  }
+
   // Apply role-specific UI
   if (typeof applyRoleView === 'function') applyRoleView(user);
 }
@@ -141,6 +145,9 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
   workerRegData.yearsExp = document.getElementById('regYearsExp').value;
   workerRegData.location = document.getElementById('regLocation').value.trim();
   workerRegData.minRate  = document.getElementById('regMinRate').value;
+  workerRegData.travelRadiusMiles = Number(document.getElementById('regTravelRadius').value) || 15;
+  workerRegData.travelFurtherWithAccommodation =
+    document.querySelector('input[name="regTravelFurther"]:checked')?.value === 'yes';
   setWorkerStep(3);
 });
 
@@ -176,6 +183,8 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     yearsExp: workerRegData.yearsExp,
     location: workerRegData.location,
     minRate:  workerRegData.minRate,
+    travelRadiusMiles: workerRegData.travelRadiusMiles || 15,
+    travelFurtherWithAccommodation: !!workerRegData.travelFurtherWithAccommodation,
     utr,
     dateOfBirth:      document.getElementById('regDOB').value,
     cscsCard:         document.getElementById('regCscsCard').value.trim(),
@@ -201,6 +210,9 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
   const users = getUsers();
   users.push(user);
   saveUsers(users);
+  if (typeof ensureWorkerProfileForUser === 'function') {
+    ensureWorkerProfileForUser(user);
+  }
   setCurrentUser(user);
   showWorkerSuccess(user, dupeResult);
 });
@@ -440,6 +452,24 @@ document.getElementById('logoutBtn').addEventListener('click', function() {
 
   // Populate initial grades
   populateGrades(document.getElementById('regTrade').value);
+
+  document.getElementById('useCurrentLocationBtn')?.addEventListener('click', async function() {
+    const btn = this;
+    const input = document.getElementById('regLocation');
+    if (!input || typeof getGPS !== 'function') return;
+    const prev = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Locating…';
+    try {
+      const gps = await getGPS();
+      input.value = gps.lat.toFixed(5) + ', ' + gps.lng.toFixed(5);
+    } catch (_) {
+      input.placeholder = 'Location unavailable — enter town or postcode';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
+  });
 
   // Check existing session
   const user = getCurrentUser();

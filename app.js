@@ -655,6 +655,10 @@ function bookingsNeedingExtension() {
   });
 }
 
+function companyOwnsJob(job, companyId) {
+  return !!companyId && job?.companyId === companyId;
+}
+
 function extensionReminderCard(job) {
   const w = findWorker(job.assignedWorkerId);
   const endDate = job.estimatedEndDate || job.endDate;
@@ -705,8 +709,10 @@ function extensionReminderCard(job) {
   </div>`;
 }
 
-function extensionPanelHTML() {
-  const list = bookingsNeedingExtension();
+function extensionPanelHTML(companyId = null) {
+  const list = bookingsNeedingExtension().filter((job) =>
+    companyId ? companyOwnsJob(job, companyId) : true,
+  );
   if (!list.length) return "";
   return `
   <div class="ext-panel">
@@ -2535,6 +2541,7 @@ const demoData = {
   cancellations: [],
   siteCodes: [],
   agreements: [],
+  applications: [],
   companyDocuments: {},
   invoices: _demoInvoices,
   companyBilling: _demoBilling,
@@ -2557,6 +2564,7 @@ function migrateState(s) {
   if (!Array.isArray(s.cancellations)) s.cancellations = [];
   if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
   if (!Array.isArray(s.invoices)) s.invoices = [];
+  if (!Array.isArray(s.applications)) s.applications = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
   // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
@@ -2597,6 +2605,98 @@ function saveState() {
 function saveAndRender() {
   saveState();
   render();
+}
+
+function travelRadiusLabel(miles) {
+  return `Within ${Number(miles) || 15} miles`;
+}
+
+function ensureWorkerProfileForUser(user) {
+  if (!user || user.type !== "worker") return null;
+  if (!Array.isArray(state.workers)) state.workers = [];
+
+  let worker = state.workers.find((w) => w.id === user.id);
+  const certNames = (user.certifications || []).map((c) =>
+    typeof c === "object" ? c.name : c,
+  );
+  const minRateRaw = Number(user.minRate);
+  const radiusRaw = Number(user.travelRadiusMiles ?? worker?.travelRadiusMiles ?? 15);
+  const base = {
+    id: user.id,
+    userAccountId: user.id,
+    identityId: user.identityId || "",
+    name: user.name || "",
+    trade: user.trade || "",
+    grade: user.grade || "",
+    location: user.location || "",
+    qualifications: certNames.filter(Boolean).join(", "),
+    certifications: user.certifications || [],
+    availability: user.availability || "available",
+    minRate:
+      Number.isFinite(minRateRaw) && minRateRaw > 0
+        ? Math.round(minRateRaw)
+        : undefined,
+    travelRadiusMiles:
+      Number.isFinite(radiusRaw) && radiusRaw > 0 ? Math.round(radiusRaw) : 15,
+    travelFurtherWithAccommodation: !!(
+      user.travelFurtherWithAccommodation ??
+      worker?.travelFurtherWithAccommodation ??
+      false
+    ),
+    verificationStatus: user.verificationStatus || "pending",
+  };
+
+  if (worker) {
+    Object.assign(worker, base, {
+      reliability: worker.reliability ?? user.reliability ?? 100,
+    });
+  } else {
+    worker = {
+      ...base,
+      reliability: user.reliability ?? 100,
+    };
+    state.workers.push(worker);
+  }
+
+  saveState();
+  return worker;
+}
+
+function applicationFor(jobId, workerId) {
+  return (state.applications || []).find(
+    (a) => a.jobId === jobId && a.workerId === workerId,
+  );
+}
+
+function registerInterest(jobId, user) {
+  const job = findJob(jobId);
+  if (!job || !user?.id) return { ok: false, reason: "Job not found" };
+  if (job.assignedWorkerId || job.completed)
+    return { ok: false, reason: "This job is no longer open" };
+  if (!Array.isArray(state.applications)) state.applications = [];
+
+  const existing = applicationFor(job.id, user.id);
+  if (existing) return { ok: true, application: existing, duplicate: true };
+
+  const worker = findWorker(user.id) || ensureWorkerProfileForUser(user);
+  const application = {
+    id: createId(),
+    jobId: job.id,
+    workerId: user.id,
+    workerName: user.name || worker?.name || "Worker",
+    workerTrade: user.trade || worker?.trade || "",
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    status: "interested",
+    createdAt: new Date().toISOString(),
+  };
+  state.applications.push(application);
+  logActivity(
+    "assign",
+    `<strong>${escapeHtml(application.workerName)}</strong> registered interest in ${escapeHtml(job.trade)} at ${escapeHtml(job.location)}`,
+  );
+  saveAndRender();
+  return { ok: true, application };
 }
 
 // ─── Worker Identity Records (duplicate / returning-worker prevention) ──
@@ -3384,6 +3484,26 @@ function renderWorkerProfile(user) {
     )
     .join("");
 
+  const travelFields = [
+    { label: "Home town or postcode", val: user.location },
+    { label: "Willing to travel", val: travelRadiusLabel(user.travelRadiusMiles) },
+    {
+      label: "Longer-distance work",
+      val: user.travelFurtherWithAccommodation
+        ? "Willing to travel further if accommodation is paid"
+        : "Only interested in work within my selected travel distance",
+    },
+  ]
+    .filter((f) => f.val)
+    .map(
+      (f) => `
+    <div class="prof-field">
+      <div class="prof-field-label">${f.label}</div>
+      <div class="prof-field-val">${escapeHtml(String(f.val))}</div>
+    </div>`,
+    )
+    .join("");
+
   el.innerHTML = `
     <div class="prof-header">
       <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "?")}</div>
@@ -3402,6 +3522,11 @@ function renderWorkerProfile(user) {
     <div class="prof-section">
       <div class="prof-section-title">Profile Details</div>
       <div class="prof-fields">${fields}</div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Travel Preferences</div>
+      <div class="prof-fields">${travelFields}</div>
     </div>
 
     ${
@@ -3534,23 +3659,26 @@ function renderContractorHome(user) {
   if (!el) return;
 
   const today = todayDateStr();
-  const todayRecs = attendanceRecords.filter((r) => r.date === today);
+  const todayRecs = attendanceRecords.filter(
+    (r) => r.date === today && r.companyId === user.id,
+  );
   const att = {
     on: todayRecs.filter((r) => r.status === "onTime").length,
     late: todayRecs.filter((r) => r.status === "late").length,
     ns: todayRecs.filter((r) => r.status === "noShow").length,
   };
 
-  const activeJobs = state.jobs.filter((j) => !j.completed);
+  const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
+  const activeJobs = companyJobs.filter((j) => !j.completed);
   const bookedWorkers = state.workers.filter((w) =>
-    state.jobs.some((j) => j.assignedWorkerId === w.id),
+    companyJobs.some((j) => j.assignedWorkerId === w.id),
   );
 
   const bookedHtml = bookedWorkers.length
     ? bookedWorkers
         .slice(0, 5)
         .map((w) => {
-          const job = state.jobs.find((j) => j.assignedWorkerId === w.id);
+          const job = companyJobs.find((j) => j.assignedWorkerId === w.id);
           const stats = getWorkerStats(w.id);
           const rel = stats.totalShifts > 0 ? stats.reliability : w.reliability;
           return `<div class="ch-worker-row">
@@ -3573,6 +3701,9 @@ function renderContractorHome(user) {
             ? findWorker(job.assignedWorkerId)
             : null;
           const charge = companyChargeDisplay(job);
+          const appCount = (state.applications || []).filter(
+            (a) => a.jobId === job.id,
+          ).length;
           return `<div class="ch-req-row">
       <div class="ch-req-trade">${escapeHtml(job.trade)}</div>
       <div class="ch-req-meta">
@@ -3580,6 +3711,7 @@ function renderContractorHome(user) {
         ${job.start ? ` · ${new Date(job.start).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
         ${job.quantity && job.quantity > 1 ? ` · ${job.quantity} workers` : ""}
         ${charge ? ` · ${formatMoney(charge)}/day` : ""}
+        ${appCount ? ` · ${appCount} interested` : ""}
       </div>
       <span class="ch-req-status ${assigned ? "status-assigned" : "status-open"}">${assigned ? `✓ ${escapeHtml(assigned.name)}` : "Open"}</span>
     </div>`;
@@ -3600,7 +3732,7 @@ function renderContractorHome(user) {
       <div class="ch-att-item late"><span class="ch-att-num">${att.late}</span><span class="ch-att-lbl">Late</span></div>
       <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
     </div>
-    ${extensionPanelHTML()}
+    ${extensionPanelHTML(user.id)}
     ${companyAgreementPanelHTML(user)}
     <div class="ch-section-label">Active Requests</div>
     <div class="ch-req-list">${reqHtml}</div>
@@ -3627,9 +3759,7 @@ function renderContractorHome(user) {
 function companyAgreementPanelHTML(user) {
   const pending = (state.agreements || []).filter(
     (a) =>
-      (a.companyId === user.id || !a.companyId) &&
-      a.status === "pending" &&
-      !a.company?.accepted,
+      a.companyId === user.id && a.status === "pending" && !a.company?.accepted,
   );
   if (!pending.length) return "";
   const rows = pending
@@ -3837,7 +3967,12 @@ function renderWorkerJobBoard(user) {
 
   // Filter to only jobs matching this worker's trade, sorted by start date
   const sorted = [...state.jobs]
-    .filter((job) => !trade || canonicalTrade(job.trade) === trade)
+    .filter(
+      (job) =>
+        !job.assignedWorkerId &&
+        !job.completed &&
+        (!trade || canonicalTrade(job.trade) === trade),
+    )
     .sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0));
 
   const stats = getWorkerStats(user?.id || "");
@@ -3884,11 +4019,15 @@ function renderWorkerJobBoard(user) {
 
   jobsList.querySelectorAll("[data-apply-job]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      btn.textContent = "✓ Interest Registered";
-      btn.disabled = true;
-      btn.classList.add("applied");
+      const result = registerInterest(btn.dataset.applyJob, user);
+      if (!result.ok) {
+        showToast(result.reason);
+        return;
+      }
       showToast(
-        "Your interest has been registered — you'll be contacted shortly.",
+        result.duplicate
+          ? "You've already registered interest in this job."
+          : "Your interest has been registered — you'll be contacted shortly.",
       );
     });
   });
@@ -3901,6 +4040,7 @@ function renderWorkerJobBoard(user) {
 function workerJobCard(job, user) {
   const hasPin = job.sitePin && job.sitePin.lat !== null;
   const guaranteedPay = workerPayDisplay(job, user);
+  const applied = !!applicationFor(job.id, user?.id);
   const daysUntil = job.start
     ? Math.ceil((new Date(job.start) - new Date()) / 86400000)
     : null;
@@ -3976,7 +4116,7 @@ function workerJobCard(job, user) {
     </div>
     ${job.arrivalInstructions ? `<div class="wjc-arrival">${escapeHtml(job.arrivalInstructions)}</div>` : ""}
     <div class="wjc-footer">
-      <button class="wjc-apply-btn" type="button" data-apply-job="${job.id}">Register Interest</button>
+      <button class="wjc-apply-btn${applied ? " applied" : ""}" type="button" data-apply-job="${job.id}" ${applied ? "disabled" : ""}>${applied ? "✓ Interest Registered" : "Register Interest"}</button>
       ${
         hasPin
           ? `<button class="wjc-map-btn" type="button" data-map-job="${job.id}">
@@ -4086,6 +4226,11 @@ jobForm.addEventListener("submit", (e) => {
     id: createId(),
     jobNumber,
     projectName,
+    companyId: poster?.type === "company" ? poster.id : "",
+    companyName:
+      poster?.type === "company"
+        ? poster.companyName || poster.name || "Company"
+        : "",
     trade,
     location,
     start: document.querySelector("#jobStart").value,
