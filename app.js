@@ -2815,6 +2815,164 @@ function plannedAbsenceNoticeMessage(absence) {
     : "";
 }
 
+const WORKER_DOCUMENT_TYPES = [
+  { value: "cv", label: "CV/PDF", accepts: "PDF" },
+  { value: "cscs_ecs", label: "CSCS/ECS card image", accepts: "Image" },
+  { value: "ipaf", label: "IPAF certificate/card", accepts: "PDF or image" },
+  { value: "pasma", label: "PASMA certificate/card", accepts: "PDF or image" },
+  { value: "sssts_smsts", label: "SSSTS/SMSTS certificate", accepts: "PDF or image" },
+  { value: "jib", label: "JIB card/grade evidence", accepts: "PDF or image" },
+  { value: "other", label: "Other qualification/certificate", accepts: "PDF or image" },
+];
+
+const WORKER_DOCUMENT_STATUSES = ["unverified", "pending", "verified", "rejected"];
+
+function workerDocumentTypeLabel(type) {
+  return WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.label || "Document";
+}
+
+function normalizeWorkerDocument(doc) {
+  const documentType = doc?.documentType || "other";
+  const verificationStatus = WORKER_DOCUMENT_STATUSES.includes(doc?.verificationStatus)
+    ? doc.verificationStatus
+    : "unverified";
+  const fileName = String(doc?.fileName || "").trim();
+  if (!fileName) return null;
+  return {
+    documentId: doc?.documentId || doc?.id || createId(),
+    documentType,
+    fileName,
+    fileType: doc?.fileType || WORKER_DOCUMENT_TYPES.find((d) => d.value === documentType)?.accepts || "",
+    uploadedAt: doc?.uploadedAt || new Date().toISOString(),
+    expiryDate: formatDateInput(doc?.expiryDate || ""),
+    verificationStatus,
+    notes: String(doc?.notes || "").trim(),
+  };
+}
+
+function workerDocumentsFor(worker) {
+  return (Array.isArray(worker?.documents) ? worker.documents : [])
+    .map(normalizeWorkerDocument)
+    .filter(Boolean)
+    .sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
+}
+
+function workerDocumentExpiryStatus(expiryDate) {
+  if (!expiryDate) return { cls: "unknown", label: "No expiry" };
+  const ms = dateOnlyMs(expiryDate);
+  const today = dateOnlyMs(todayDateStr());
+  if (!ms || !today) return { cls: "unknown", label: "No expiry" };
+  if (ms < today) return { cls: "expired", label: "Expired" };
+  const days = Math.ceil((ms - today) / 86400000);
+  if (days <= 30) return { cls: "expiring", label: `Expires in ${days}d` };
+  return { cls: "valid", label: formatDateOnly(expiryDate) };
+}
+
+function upsertWorkerDocument(workerId, doc) {
+  const worker = findWorker(workerId);
+  const record = normalizeWorkerDocument(doc);
+  if (!worker || !record) return { ok: false, reason: "Add a file name or upload label" };
+  worker.documents = workerDocumentsFor(worker);
+  const idx = worker.documents.findIndex((d) => d.documentId === record.documentId);
+  if (idx === -1) worker.documents.unshift(record);
+  else worker.documents[idx] = record;
+  saveState();
+  return { ok: true, document: record };
+}
+
+function removeWorkerDocument(workerId, documentId) {
+  const worker = findWorker(workerId);
+  if (!worker || !documentId) return { ok: false, reason: "Document not found" };
+  worker.documents = workerDocumentsFor(worker).filter((d) => d.documentId !== documentId);
+  saveState();
+  return { ok: true };
+}
+
+function workerDocumentsHTML(worker, opts = {}) {
+  const docs = workerDocumentsFor(worker);
+  if (!docs.length) {
+    return `<div class="att-empty">No worker documents added yet.</div>`;
+  }
+  return `<div class="worker-doc-list">
+    ${docs
+      .map((doc) => {
+        const expiry = workerDocumentExpiryStatus(doc.expiryDate);
+        return `
+      <div class="worker-doc-row ${expiry.cls === "expired" ? "expired" : ""}">
+        <div class="worker-doc-main">
+          <div class="worker-doc-title">${escapeHtml(workerDocumentTypeLabel(doc.documentType))}</div>
+          <div class="worker-doc-meta">
+            ${escapeHtml(doc.fileName)}
+            ${doc.expiryDate ? ` · expires ${formatDateOnly(doc.expiryDate)}` : " · no expiry"}
+          </div>
+          ${doc.notes ? `<div class="worker-doc-notes">${escapeHtml(doc.notes)}</div>` : ""}
+        </div>
+        <div class="worker-doc-side">
+          <span class="worker-doc-status ${escapeHtml(doc.verificationStatus)}">${escapeHtml(doc.verificationStatus)}</span>
+          <span class="worker-doc-expiry ${expiry.cls}">${escapeHtml(expiry.label)}</span>
+          ${
+            opts.manage
+              ? `<button class="doc-del-btn" type="button" data-worker-doc-remove="${doc.documentId}">Remove</button>`
+              : ""
+          }
+        </div>
+      </div>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function requiredDocumentWarnings(worker, job) {
+  const docs = workerDocumentsFor(worker);
+  const docText = docs
+    .map((d) => `${d.documentType} ${workerDocumentTypeLabel(d.documentType)} ${d.fileName}`)
+    .join(" ")
+    .toLowerCase();
+  const required = [
+    ...(job?.requiredQualifications || "").split(","),
+    job?.trade || "",
+    job?.grade || "",
+    job?.specialism || "",
+  ]
+    .map((v) => String(v || "").trim().toLowerCase())
+    .filter(Boolean);
+  const checks = [
+    { token: "cscs", label: "CSCS/ECS card" },
+    { token: "ecs", label: "CSCS/ECS card" },
+    { token: "ipaf", label: "IPAF certificate/card" },
+    { token: "pasma", label: "PASMA certificate/card" },
+    { token: "sssts", label: "SSSTS/SMSTS certificate" },
+    { token: "smsts", label: "SSSTS/SMSTS certificate" },
+    { token: "jib", label: "JIB card/grade evidence" },
+  ];
+  const missing = [];
+  checks.forEach((check) => {
+    if (required.some((r) => r.includes(check.token)) && !docText.includes(check.token)) {
+      if (!missing.includes(check.label)) missing.push(check.label);
+    }
+  });
+  const expired = docs
+    .filter((d) => workerDocumentExpiryStatus(d.expiryDate).cls === "expired")
+    .map((d) => workerDocumentTypeLabel(d.documentType));
+  return { missing, expired };
+}
+
+function companyWorkerDocumentsHTML(worker, job = null) {
+  const warnings = requiredDocumentWarnings(worker, job);
+  return `
+    <div class="worker-doc-company">
+      ${
+        warnings.missing.length || warnings.expired.length
+          ? `<div class="worker-doc-warning">
+              ${warnings.missing.length ? `Missing: ${escapeHtml(warnings.missing.join(", "))}` : ""}
+              ${warnings.expired.length ? `${warnings.missing.length ? " · " : ""}Expired: ${escapeHtml(warnings.expired.join(", "))}` : ""}
+            </div>`
+          : ""
+      }
+      ${workerDocumentsHTML(worker)}
+    </div>`;
+}
+
 function ensureWorkerProfileForUser(user) {
   if (!user || user.type !== "worker") return null;
   if (!Array.isArray(state.workers)) state.workers = [];
@@ -2856,6 +3014,7 @@ function ensureWorkerProfileForUser(user) {
       : [],
     lateReports: Array.isArray(worker?.lateReports) ? worker.lateReports : [],
     plannedAbsences: plannedAbsencesForWorker(worker || user),
+    documents: workerDocumentsFor(worker || user),
     verificationStatus: user.verificationStatus || "pending",
   };
 
@@ -4457,6 +4616,12 @@ function renderWorkerProfile(user) {
         )
         .join("")
     : `<div class="prof-field"><div class="prof-field-label">Status</div><div class="prof-field-val">No Planned Absence added</div></div>`;
+  const documentTypeOptions = WORKER_DOCUMENT_TYPES.map(
+    (d) => `<option value="${d.value}">${escapeHtml(d.label)}</option>`,
+  ).join("");
+  const documentStatusOptions = WORKER_DOCUMENT_STATUSES.map(
+    (s) => `<option value="${s}">${escapeHtml(s)}</option>`,
+  ).join("");
 
   el.innerHTML = `
     <div class="prof-header">
@@ -4498,6 +4663,34 @@ function renderWorkerProfile(user) {
     }
 
     <div class="prof-section">
+      <div class="prof-section-title">Documents &amp; Certifications</div>
+      <p class="prof-section-hint">Prototype only: this stores document metadata in localStorage, not real files.</p>
+      ${workerDocumentsHTML(workerProfile || user, { manage: true })}
+      <div class="worker-doc-form">
+        <div class="form-grid-2">
+          <label class="field-label">Document Type
+            <select id="workerDocType">${documentTypeOptions}</select>
+          </label>
+          <label class="field-label">File Name / Upload Label
+            <input id="workerDocFileName" type="text" placeholder="e.g. cscs-card-front.jpg" />
+          </label>
+        </div>
+        <div class="form-grid-2">
+          <label class="field-label">Expiry Date
+            <input id="workerDocExpiry" type="date" />
+          </label>
+          <label class="field-label">Verification Status
+            <select id="workerDocStatus">${documentStatusOptions}</select>
+          </label>
+        </div>
+        <label class="field-label">Notes
+          <textarea id="workerDocNotes" rows="2" placeholder="Optional notes for future admin review"></textarea>
+        </label>
+        <button class="primary-btn wide" type="button" id="workerDocAddBtn">Add Document Record</button>
+      </div>
+    </div>
+
+    <div class="prof-section">
       <div class="prof-section-title">Reliability &amp; Punctuality</div>
       <div class="rating-summary">
         <div class="rating-summary-item">
@@ -4531,6 +4724,36 @@ function renderWorkerProfile(user) {
     delBtn.addEventListener("click", () => {
       if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
     });
+
+  el.querySelector("#workerDocAddBtn")?.addEventListener("click", () => {
+    const type = el.querySelector("#workerDocType")?.value || "other";
+    const res = upsertWorkerDocument(user.id, {
+      documentType: type,
+      fileName: el.querySelector("#workerDocFileName")?.value || "",
+      fileType: WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.accepts || "",
+      expiryDate: el.querySelector("#workerDocExpiry")?.value || "",
+      verificationStatus: el.querySelector("#workerDocStatus")?.value || "unverified",
+      notes: el.querySelector("#workerDocNotes")?.value || "",
+    });
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    render();
+    showToast("Document record added");
+  });
+
+  el.querySelectorAll("[data-worker-doc-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = removeWorkerDocument(user.id, btn.dataset.workerDocRemove);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      render();
+      showToast("Document record removed");
+    });
+  });
 }
 
 // Worker-facing payments panel. Workers see only their own guaranteed pay and
@@ -4806,6 +5029,7 @@ function companyOfferReviewPanelHTML(user) {
           ${worker?.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}
         </div>
         ${rating ? ratingEvidenceHTML(rating, true) : ""}
+        ${worker ? companyWorkerDocumentsHTML(worker, job) : ""}
       </div>
       <div class="ch-offer-actions">
         <button class="secondary-btn ch-offer-btn" type="button" data-company-offer-decline="${app.id}">Decline</button>
@@ -5590,6 +5814,8 @@ function workerCard(worker) {
   const absenceSummary = nextAbsence
     ? `<span class="worker-next-available">Planned Absence ${formatDateOnly(nextAbsence.startDate)}</span>`
     : "";
+  const docCount = workerDocumentsFor(worker).length;
+  const docSummary = `<span class="worker-next-available">${docCount} document${docCount === 1 ? "" : "s"}</span>`;
 
   const statsRow = `
     <div class="worker-rating-block">
@@ -5611,6 +5837,7 @@ function workerCard(worker) {
           <span class="status-pill ${statusCls}">${worker.availability}</span>
           ${nextAvailable}
           ${absenceSummary}
+          ${docSummary}
           ${certChipsHTML(worker)}
         </div>
       </div>
