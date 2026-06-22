@@ -3701,8 +3701,11 @@ function renderWorkerHome(user) {
   if (!el) return;
 
   const stats = getWorkerStats(user.id || "");
+  const rating = buildWorkerRating(user.id || "");
   const reliability =
-    stats.totalShifts > 0
+    rating.reliabilityScore != null
+      ? rating.reliabilityScore
+      : stats.totalShifts > 0
       ? (stats.reliability ?? 100)
       : (user.reliability ?? 100);
   const pct = calcWorkerCompletion(user);
@@ -3938,16 +3941,16 @@ function renderWorkerHome(user) {
     <div class="wh-greeting">${greet}, <strong>${escapeHtml((user.name || "").split(" ")[0])}</strong> 👋</div>
     <div class="wh-hero">
       <div class="wh-hero-left">
-        ${reliabilityBadge(reliability, 72)}
+        ${ratingBadgeHTML(rating.reliabilityRating)}
       </div>
       <div class="wh-hero-stats">
         <div class="wh-stat-card">
           <div class="wh-stat-val">${stats.totalShifts}</div>
-          <div class="wh-stat-lbl">Jobs Done</div>
+          <div class="wh-stat-lbl">Attendance Days</div>
         </div>
         <div class="wh-stat-card">
-          <div class="wh-stat-val" style="color:${reliability >= 90 ? "var(--orange)" : reliability >= 75 ? "var(--green-text)" : "var(--red-text)"}">${reliability}%</div>
-          <div class="wh-stat-lbl">Reliability</div>
+          <div class="wh-stat-val wh-stat-rating">${escapeHtml(rating.punctualityRating)}</div>
+          <div class="wh-stat-lbl">Punctuality</div>
         </div>
         <div class="wh-stat-card">
           <div class="wh-stat-val">${daysThisMonth}</div>
@@ -3955,6 +3958,7 @@ function renderWorkerHome(user) {
         </div>
       </div>
     </div>
+    <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
     ${offersPanel}
     ${activeBookingHtml}
@@ -4032,8 +4036,11 @@ function renderWorkerProfile(user) {
   if (!el) return;
 
   const stats = getWorkerStats(user.id || "");
+  const rating = buildWorkerRating(user.id || "");
   const reliability =
-    stats.totalShifts > 0
+    rating.reliabilityScore != null
+      ? rating.reliabilityScore
+      : stats.totalShifts > 0
       ? (stats.reliability ?? 100)
       : (user.reliability ?? 100);
   const pct = calcWorkerCompletion(user);
@@ -4102,7 +4109,7 @@ function renderWorkerProfile(user) {
         </div>
       </div>
       <div class="prof-ring">
-        ${reliabilityBadge(reliability, 56)}
+        ${ratingBadgeHTML(rating.reliabilityRating)}
       </div>
     </div>
 
@@ -4126,13 +4133,18 @@ function renderWorkerProfile(user) {
     }
 
     <div class="prof-section">
-      <div class="prof-section-title">Reliability Stats</div>
-      <div class="prof-stats-grid">
-        <div class="prof-stat"><div class="prof-stat-val" style="color:${reliability >= 90 ? "var(--orange)" : reliability >= 75 ? "var(--green-text)" : "var(--red-text)"}">${reliability}%</div><div class="prof-stat-lbl">Reliability</div></div>
-        <div class="prof-stat"><div class="prof-stat-val">${stats.totalShifts}</div><div class="prof-stat-lbl">Jobs Done</div></div>
-        <div class="prof-stat"><div class="prof-stat-val">${stats.punctuality ?? "—"}%</div><div class="prof-stat-lbl">On-Time %</div></div>
-        <div class="prof-stat"><div class="prof-stat-val">${stats.noShow}</div><div class="prof-stat-lbl">No Shows</div></div>
+      <div class="prof-section-title">Reliability &amp; Punctuality</div>
+      <div class="rating-summary">
+        <div class="rating-summary-item">
+          <span>Reliability</span>
+          ${ratingBadgeHTML(rating.reliabilityRating)}
+        </div>
+        <div class="rating-summary-item">
+          <span>Punctuality</span>
+          ${ratingBadgeHTML(rating.punctualityRating)}
+        </div>
       </div>
+      ${ratingEvidenceHTML(rating)}
     </div>
 
     ${workerPaymentsSection(user)}
@@ -4386,19 +4398,17 @@ function companyOfferReviewPanelHTML(user) {
     .map((app) => {
       const job = applicationJob(app);
       const worker = applicationWorker(app);
-      const rel =
-        worker && getWorkerStats(worker.id).totalShifts > 0
-          ? getWorkerStats(worker.id).reliability
-          : worker?.reliability;
+      const rating = worker ? buildWorkerRating(worker.id) : null;
       return `
     <div class="ch-offer-row">
       <div class="ch-offer-info">
         <div class="ch-offer-title">${escapeHtml(app.workerName)} accepted · ${escapeHtml(job?.trade || "Job")}</div>
         <div class="ch-offer-meta">
           ${escapeHtml(job?.location || "")}
-          ${rel != null ? ` · Reliability ${rel}%` : ""}
+          ${rating ? ` · Reliability ${escapeHtml(rating.reliabilityRating)}` : ""}
           ${worker?.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}
         </div>
+        ${rating ? ratingEvidenceHTML(rating, true) : ""}
       </div>
       <div class="ch-offer-actions">
         <button class="secondary-btn ch-offer-btn" type="button" data-company-offer-decline="${app.id}">Decline</button>
@@ -4654,11 +4664,8 @@ function renderWorkerJobBoard(user) {
     )
     .sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0));
 
-  const stats = getWorkerStats(user?.id || "");
-  const reliability =
-    stats.totalShifts > 0 ? stats.reliability : (user?.reliability ?? 100);
+  const rating = buildWorkerRating(user?.id || "");
   const pct = calcWorkerCompletion(user || {});
-  const tier = reliabilityTier(reliability);
 
   const statusCard = `
     <div class="worker-status-card">
@@ -4680,7 +4687,7 @@ function renderWorkerJobBoard(user) {
         </div>
       </div>
       <div class="wsc-right">
-        ${reliabilityBadge(reliability, 44)}
+        ${ratingBadgeHTML(rating.reliabilityRating)}
         ${completionRingHTML(pct)}
       </div>
     </div>`;
@@ -5113,9 +5120,9 @@ function renderWorkers() {
       activeFilter === "all"
         ? true
         : activeFilter === "available"
-          ? w.availability === "available"
-          : activeFilter === "elite"
-            ? w.reliability >= 90
+        ? w.availability === "available"
+        : activeFilter === "elite"
+            ? buildWorkerRating(w.id).reliabilityRating === "Excellent"
             : true;
     return matchesSearch && matchesFilter;
   });
@@ -5188,24 +5195,20 @@ function workerCard(worker) {
   const avCls = avatarColor(worker.name);
   const statusCls =
     worker.availability === "available" ? "available" : "unavailable";
-  const stats = getWorkerStats(worker.id);
+  const rating = buildWorkerRating(worker.id);
   const completion = calcWorkerCompletion(worker);
   const nextAvailable = worker.nextAvailableDate
     ? `<span class="worker-next-available">Next available ${formatDateOnly(worker.nextAvailableDate)}</span>`
     : "";
 
-  const statsRow =
-    stats.totalShifts > 0
-      ? `
-    <div class="worker-att-stats">
-      <span class="w-stat"><span style="color:${stats.reliability >= 90 ? "var(--orange)" : stats.reliability >= 75 ? "var(--green-text)" : "var(--red-text)"};font-weight:700">${stats.reliability}%</span> reliability</span>
-      <span class="w-stat-sep">·</span>
-      <span class="w-stat"><span style="font-weight:700">${stats.punctuality ?? 100}%</span> punctuality</span>
-      ${stats.performance ? `<span class="w-stat-sep">·</span><span class="w-stat"><span style="color:var(--amber);font-weight:700">★${stats.performance}</span></span>` : ""}
-      <span class="w-stat-sep">·</span>
-      <span class="w-stat">${stats.totalShifts} shift${stats.totalShifts !== 1 ? "s" : ""}</span>
-    </div>`
-      : "";
+  const statsRow = `
+    <div class="worker-rating-block">
+      <div class="worker-rating-row">
+        <span>Reliability ${ratingBadgeHTML(rating.reliabilityRating)}</span>
+        <span>Punctuality ${ratingBadgeHTML(rating.punctualityRating)}</span>
+      </div>
+      ${ratingEvidenceHTML(rating, true)}
+    </div>`;
 
   return `
   <article class="worker-card">
@@ -5221,7 +5224,6 @@ function workerCard(worker) {
         </div>
       </div>
       <div class="worker-card-scores">
-        ${reliabilityBadge(worker.reliability)}
         ${completionRingHTML(completion)}
       </div>
     </div>
@@ -5478,14 +5480,7 @@ function matchCard(job) {
 function matchWorkerRow(worker, index) {
   const avCls = avatarColor(worker.name);
   const rankCls = index === 0 ? "rank-1" : "rank-other";
-  const rel = worker._reliability ?? worker.reliability;
-  const punc = worker._punctuality ?? 100;
-  const puncColor =
-    punc >= 90
-      ? "var(--green-text)"
-      : punc >= 70
-        ? "var(--amber-text)"
-        : "var(--red-text)";
+  const rating = worker._rating || buildWorkerRating(worker.id);
   return `
   <div class="match-worker-row">
     <div class="match-rank ${rankCls}">${index + 1}</div>
@@ -5494,12 +5489,12 @@ function matchWorkerRow(worker, index) {
       <div class="match-worker-name">${index === 0 ? "⭐ " : ""}${escapeHtml(worker.name)}${worker._availabilityLabel ? `<span class="match-avail-pill">${escapeHtml(worker._availabilityLabel)}</span>` : ""}</div>
       <div class="match-worker-quals">${escapeHtml(worker.qualifications || worker.trade)}</div>
       <div class="match-worker-meta">
-        <span class="match-meta-item">Reliability <b>${rel}%</b></span>
+        <span class="match-meta-item">Reliability <b>${escapeHtml(rating.reliabilityRating)}</b></span>
         <span class="match-meta-sep">·</span>
-        <span class="match-meta-item" style="color:${puncColor}">Punctuality <b>${punc}%</b></span>
+        <span class="match-meta-item">Punctuality <b>${escapeHtml(rating.punctualityRating)}</b></span>
       </div>
+      ${ratingEvidenceHTML(rating, true)}
     </div>
-    ${miniBadge(worker._composite ?? worker.reliability)}
   </div>`;
 }
 
@@ -5535,10 +5530,10 @@ function getMatches(job) {
         return null;
       }
 
-      const stats = getWorkerStats(w.id);
+      const rating = buildWorkerRating(w.id);
       const reliability =
-        stats.totalShifts > 0 ? stats.reliability : w.reliability;
-      const punctuality = stats.punctuality ?? 100;
+        rating.reliabilityScore != null ? rating.reliabilityScore : w.reliability;
+      const punctuality = rating.punctualityScore ?? 100;
 
       // Qualification match: how many job-required quals does worker have?
       let qualBonus = 10; // neutral if no specific quals required
@@ -5569,6 +5564,7 @@ function getMatches(job) {
         _qualBonus: qualBonus,
         _composite: composite,
         _availabilityLabel: availabilityLabel,
+        _rating: rating,
       };
     })
     .filter(Boolean)
@@ -6359,6 +6355,15 @@ function getWorkerStats(workerId) {
   const lateRecords = countable.filter((r) => r.status === "late");
   const reportedLate = lateRecords.filter((r) => r.lateReport);
   const unreportedLate = lateRecords.filter((r) => !r.lateReport);
+  const validReportedLate = reportedLate.filter(
+    (r) => r.lateReport?.supervisorDecision === "valid_reason",
+  );
+  const invalidReportedLate = reportedLate.filter(
+    (r) => r.lateReport?.supervisorDecision === "invalid_reason",
+  );
+  const didNotArriveAfterLateReport = countable.filter(
+    (r) => r.lateReport?.supervisorDecision === "worker_did_not_arrive",
+  );
   const punctualityPoints = attended.reduce((sum, r) => {
     if (r.status === "onTime") return sum + 1;
     if (r.status !== "late") return sum;
@@ -6375,8 +6380,19 @@ function getWorkerStats(workerId) {
   }, {});
   const ratings = recs.filter((r) => r.rating > 0).map((r) => r.rating);
   const disputed = recs.filter((r) => r.disputeStatus === "pending").length;
+  const completedProjectIds = new Set(
+    countable
+      .filter((r) => r.status === "onTime" || r.status === "late")
+      .map((r) => r.jobId)
+      .filter(Boolean),
+  );
+  state.jobs
+    .filter((j) => j.assignedWorkerId === workerId && j.completed)
+    .forEach((j) => completedProjectIds.add(j.id));
   return {
     totalShifts: countable.length,
+    attendanceDays: countable.length,
+    completedProjects: completedProjectIds.size,
     attended: attended.length,
     onTime: onTime.length,
     late: attended.length - onTime.length,
@@ -6390,12 +6406,91 @@ function getWorkerStats(workerId) {
       : null,
     reportedLateCount: reportedLate.length,
     unreportedLateCount: unreportedLate.length,
+    validReportedLateCount: validReportedLate.length,
+    invalidReportedLateCount: invalidReportedLate.length,
+    didNotArriveAfterLateReport: didNotArriveAfterLateReport.length,
     lateReportsByReason,
     performance: ratings.length
       ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
       : null,
     ratingCount: ratings.length,
   };
+}
+
+function ratingLabelFromScore(score) {
+  if (score >= 90) return "Excellent";
+  if (score >= 80) return "Very Good";
+  if (score >= 70) return "Good";
+  return "Needs Improvement";
+}
+
+function buildWorkerRating(workerId) {
+  const stats = getWorkerStats(workerId);
+  const evidence = {
+    attendanceDays: stats.attendanceDays || 0,
+    completedProjects: stats.completedProjects || 0,
+    noShows: stats.noShow || 0,
+    reportedLateEvents: stats.reportedLateCount || 0,
+    unreportedLateEvents: stats.unreportedLateCount || 0,
+    validReportedLateness: stats.validReportedLateCount || 0,
+    invalidReportedLateness: stats.invalidReportedLateCount || 0,
+  };
+  if (evidence.attendanceDays < 30) {
+    return {
+      isRated: false,
+      reliabilityRating: "New / Unproven",
+      punctualityRating: "New / Unproven",
+      reliabilityScore: null,
+      punctualityScore: null,
+      evidence,
+      stats,
+    };
+  }
+
+  const noShowPenalty = evidence.noShows * 12;
+  const didNotArrivePenalty = (stats.didNotArriveAfterLateReport || 0) * 8;
+  const invalidLatePenalty = evidence.invalidReportedLateness * 2;
+  const completionBonus = Math.min(5, evidence.completedProjects);
+  const reliabilityScore = clampScore(
+    Math.round(100 - noShowPenalty - didNotArrivePenalty - invalidLatePenalty + completionBonus),
+  );
+
+  const punctualityScore = clampScore(stats.punctuality ?? 100);
+  return {
+    isRated: true,
+    reliabilityRating: ratingLabelFromScore(reliabilityScore),
+    punctualityRating: ratingLabelFromScore(punctualityScore),
+    reliabilityScore,
+    punctualityScore,
+    evidence,
+    stats,
+  };
+}
+
+function ratingEvidenceHTML(rating, compact = false) {
+  const e = rating.evidence;
+  const items = [
+    ["Attendance days", e.attendanceDays],
+    ["Completed projects", e.completedProjects],
+    ["No-shows", e.noShows],
+    ["Reported late events", e.reportedLateEvents],
+    ["Unreported late events", e.unreportedLateEvents],
+    ["Valid reported lateness", e.validReportedLateness],
+    ["Invalid reported lateness", e.invalidReportedLateness],
+  ];
+  return `<div class="rating-evidence${compact ? " rating-evidence--compact" : ""}">
+    ${items
+      .map(
+        ([label, value]) => `
+      <span class="rating-evidence-item"><strong>${value}</strong>${escapeHtml(label)}</span>`,
+      )
+      .join("")}
+  </div>`;
+}
+
+function ratingBadgeHTML(label) {
+  const cls = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `<span class="rating-label rating-label--${cls}">${escapeHtml(label)}</span>`;
 }
 
 // ─── Submit Day Attendance ─────────────────────────────────
@@ -6541,6 +6636,7 @@ function attendanceCard(worker, today) {
   const avCls = avatarColor(worker.name);
   const saved = todayAttendanceMap[worker.id] || {};
   const stats = getWorkerStats(worker.id);
+  const rating = buildWorkerRating(worker.id);
   const job = state.jobs.find((j) => j.assignedWorkerId === worker.id);
 
   const statusBtns = SUPERVISOR_DECISIONS.map((key) => {
@@ -6634,12 +6730,13 @@ function attendanceCard(worker, today) {
     stats.totalShifts > 0
       ? `
     <div class="att-worker-stats">
-      <span class="att-stat"><span class="att-stat-val" style="color:${stats.reliability >= 90 ? "var(--orange)" : stats.reliability >= 75 ? "var(--green-text)" : "var(--red-text)"}">${stats.reliability}%</span> Reliability</span>
+      <span class="att-stat">Reliability ${ratingBadgeHTML(rating.reliabilityRating)}</span>
       <span class="att-sep">·</span>
-      <span class="att-stat"><span class="att-stat-val">${stats.punctuality ?? 100}%</span> Punctuality</span>
+      <span class="att-stat">Punctuality ${ratingBadgeHTML(rating.punctualityRating)}</span>
       ${stats.performance ? `<span class="att-sep">·</span><span class="att-stat"><span class="att-stat-val" style="color:var(--amber)">★${stats.performance}</span></span>` : ""}
       <span class="att-sep">·</span>
       <span class="att-stat">${stats.totalShifts} shift${stats.totalShifts !== 1 ? "s" : ""}</span>
+      ${ratingEvidenceHTML(rating, true)}
     </div>`
       : "";
 

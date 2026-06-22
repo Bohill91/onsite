@@ -3713,6 +3713,97 @@ margin-bottom: 12px;
   padding-inline: 12px;
 }
 
+.rating-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rating-summary-item,
+.worker-rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rating-summary-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+.rating-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rating-label--excellent { color: var(--green-text); background: var(--green-bg); border-color: rgba(22,163,74,0.28); }
+.rating-label--very-good { color: var(--orange-dark); background: var(--orange-light); border-color: var(--orange-muted); }
+.rating-label--good { color: var(--amber-text); background: var(--amber-bg); border-color: rgba(217,119,6,0.24); }
+.rating-label--needs-improvement { color: var(--red-text); background: var(--red-bg); border-color: rgba(220,38,38,0.22); }
+.rating-label--new-unproven { color: var(--ink-3); background: var(--surface-3); }
+
+.rating-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rating-evidence--compact {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rating-evidence-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  padding: 7px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.rating-evidence-item strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.worker-rating-block {
+  margin-top: 10px;
+}
+
+.worker-rating-row {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  font-weight: 800;
+  flex-wrap: wrap;
+}
+
+.wh-rating-evidence {
+  margin: 0 16px 12px;
+}
+
 .ch-late-panel,
 .att-late-report {
   background: var(--surface);
