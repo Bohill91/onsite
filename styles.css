@@ -653,43 +653,6 @@ button, input, select, textarea {
   color: var(--orange);
 }
 
-.score-action-btn {
-  border: none;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  font-size: 0.77rem;
-  font-weight: 600;
-  padding: 7px 11px;
-  transition: all 0.15s;
-}
-
-.score-action-btn.on-time {
-  background: rgba(34, 197, 94, 0.1);
-  color: var(--green-text);
-}
-
-.score-action-btn.on-time:hover {
-  background: rgba(34, 197, 94, 0.2);
-}
-
-.score-action-btn.late {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--amber-text);
-}
-
-.score-action-btn.late:hover {
-  background: rgba(245, 158, 11, 0.2);
-}
-
-.score-action-btn.no-show {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--red-text);
-}
-
-.score-action-btn.no-show:hover {
-  background: rgba(239, 68, 68, 0.2);
-}
-
 .delete-btn {
   background: transparent;
   border: 1px solid var(--border);

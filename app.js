@@ -4643,8 +4643,6 @@ function renderContractorHome(user) {
         .slice(0, 5)
         .map((w) => {
           const job = companyJobs.find((j) => j.assignedWorkerId === w.id);
-          const stats = getWorkerStats(w.id);
-          const rel = stats.totalShifts > 0 ? stats.reliability : w.reliability;
           return `<div class="ch-worker-row">
       <div class="worker-avatar ${avatarColor(w.name)}" style="width:34px;height:34px;font-size:0.78rem;flex-shrink:0">${initials(w.name)}</div>
       <div class="ch-wrow-info">

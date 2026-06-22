@@ -3,8 +3,9 @@ const fs     = require('fs');
 const path   = require('path');
 const OpenAI = require('openai');
 
-const PORT = 5000;
-const HOST = '0.0.0.0';
+const parsedPort = Number.parseInt(process.env.PORT || '', 10);
+const PORT = Number.isFinite(parsedPort) ? parsedPort : 5000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 const mimeTypes = {
   '.html': 'text/html',
