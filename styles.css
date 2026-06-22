@@ -58,6 +58,19 @@ button, input, select, textarea {
   color: inherit;
 }
 
+.checkbox-row {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  accent-color: var(--orange);
+}
+
 /* ─── App Root ─────────────────────────────────────────── */
 .app-root {
   display: flex;

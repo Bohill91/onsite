@@ -2736,6 +2736,7 @@ function migrateState(s) {
           : "08:00";
     }
     if (!j.shiftFinishTime) j.shiftFinishTime = "";
+    if (j.accommodationPaid == null) j.accommodationPaid = false;
     if (j.budgetMax == null && j.payRate) {
       const r = parseDayRate(j.payRate);
       if (r) j.budgetMax = r;
@@ -2966,6 +2967,7 @@ function previousDeclineReasonsForWorker(workerId) {
 function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
   const stats = getWorkerStats(worker?.id || "");
   const rating = buildWorkerRating(worker?.id || "");
+  const scored = getMatches(job).find((w) => w.id === worker?.id);
   return {
     reliabilityRating: rating.reliabilityRating,
     punctualityRating: rating.punctualityRating,
@@ -2993,6 +2995,8 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
         }))
       : [],
     previousDeclineReasons: previousDeclineReasonsForWorker(worker?.id),
+    matchScore: scored?._composite ?? null,
+    matchBreakdown: scored?._matchBreakdown || null,
     rankAtOffer,
     jobTrade: job?.trade || "",
     jobLocation: job?.location || "",
@@ -3112,6 +3116,13 @@ function expireJobOffers() {
         `<strong>${escapeHtml(worker.name)}</strong> missed 2 job offers and was set to unavailable.`,
       );
     }
+    const next = offerNextBestWorker(app.jobId);
+    if (next.ok) {
+      logActivity(
+        "assign",
+        `Offer expired for <strong>${escapeHtml(app.workerName || worker.name)}</strong>. Next best worker offered.`,
+      );
+    }
   });
   return changed;
 }
@@ -3161,12 +3172,17 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
   app.workerDeclineReason = reason;
   app.workerDeclineComment = comment.trim();
   if (worker) worker.consecutiveMissedOffers = 0;
+  const next = job ? offerNextBestWorker(job.id) : { ok: false };
   logActivity(
     "assign",
-    `<strong>${escapeHtml(app.workerName)}</strong> declined the offer for ${escapeHtml(job?.trade || "the job")} — ${escapeHtml(reason)}. Reliability is unaffected.`,
+    `<strong>${escapeHtml(app.workerName)}</strong> declined the offer for ${escapeHtml(job?.trade || "the job")} — ${escapeHtml(reason)}. Reliability is unaffected.${next.ok ? " Next best worker offered." : ""}`,
   );
   saveAndRender();
-  showToast("Offer declined — your reliability is unaffected");
+  showToast(
+    next.ok
+      ? "Offer declined — next best worker offered"
+      : "Offer declined — your reliability is unaffected",
+  );
 }
 
 function companyAcceptWorker(applicationId) {
@@ -3225,6 +3241,12 @@ function offerNextBestWorker(jobId) {
   const job = findJob(jobId);
   if (!job || job.assignedWorkerId || job.completed)
     return { ok: false, reason: "Job unavailable" };
+  const activeOffer = (state.applications || []).find(
+    (a) =>
+      a.jobId === jobId &&
+      ["offered", "under_company_review", "confirmed"].includes(a.status),
+  );
+  if (activeOffer) return { ok: false, reason: "Offer already active" };
   const usedWorkerIds = new Set(
     (state.applications || [])
       .filter(
@@ -3246,6 +3268,23 @@ function offerNextBestWorker(jobId) {
   const next = rankedMatches.find((w) => !usedWorkerIds.has(w.id));
   if (!next) return { ok: false, reason: "No matched worker available" };
   return createJobOffer(job.id, next.id, "next_best", rankedMatches.indexOf(next) + 1);
+}
+
+function autoOfferBestMatch(jobId, source = "auto_match") {
+  const job = findJob(jobId);
+  if (!job || job.assignedWorkerId || job.completed)
+    return { ok: false, reason: "Job unavailable" };
+  const activeOffer = (state.applications || []).find(
+    (a) =>
+      a.jobId === jobId &&
+      ["offered", "under_company_review", "confirmed"].includes(a.status),
+  );
+  if (activeOffer) return { ok: false, reason: "Offer already active" };
+  const matches = getMatches(job);
+  const [best] = matches;
+  if (!best) return { ok: false, reason: "No matched worker available" };
+  const res = createJobOffer(job.id, best.id, source, 1);
+  return { ...res, worker: best };
 }
 
 // ─── Worker Identity Records (duplicate / returning-worker prevention) ──
@@ -4996,6 +5035,7 @@ jobForm.addEventListener("submit", (e) => {
   const trade = document.querySelector("#jobTrade").value.trim();
   const location = document.querySelector("#jobLocation").value.trim();
   const duration = document.querySelector("#jobDuration").value.trim();
+  const specialism = document.querySelector("#jobSpecialism")?.value || "";
 
   const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
 
@@ -5026,6 +5066,7 @@ jobForm.addEventListener("submit", (e) => {
         ? poster.companyName || poster.name || "Company"
         : "",
     trade,
+    specialism,
     location,
     start: jobStartValue,
     shiftStartTime:
@@ -5044,6 +5085,7 @@ jobForm.addEventListener("submit", (e) => {
         ? noticeRaw
         : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
+    accommodationPaid: !!document.querySelector("#jobAccommodationPaid")?.checked,
   };
 
   // Labour requirement details
@@ -5092,9 +5134,10 @@ jobForm.addEventListener("submit", (e) => {
   if (gate) job.gateAccess = gate;
 
   state.jobs.push(job);
+  const autoOffer = autoOfferBestMatch(job.id);
   logActivity(
     "job",
-    `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}`,
+    `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
 
@@ -5613,72 +5656,248 @@ function matchWorkerRow(worker, index) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────
-function getMatches(job) {
-  const jobQualList = (job.requiredQualifications || "")
+function splitMatchTokens(value) {
+  return String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2);
+}
+
+function workerSearchText(worker) {
+  return [
+    worker.trade,
+    worker.grade,
+    worker.specialism,
+    worker.qualifications,
+    ...(worker.certifications || []).map((c) =>
+      typeof c === "object" ? c.name : c,
+    ),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function dateOnlyMs(value) {
+  if (!value) return null;
+  const date = String(value).slice(0, 10);
+  const ms = new Date(date + "T00:00:00").getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function jobDateWindow(job) {
+  const startMs = dateOnlyMs(job?.start);
+  const endMs = dateOnlyMs(job?.estimatedEndDate || job?.endDate || job?.start);
+  return {
+    startMs,
+    endMs: endMs && startMs ? Math.max(startMs, endMs) : startMs,
+  };
+}
+
+function plannedAbsenceImpact(worker, job) {
+  const absences = Array.isArray(worker?.plannedAbsences)
+    ? worker.plannedAbsences
+    : [];
+  if (!absences.length) return { exclude: false, penalty: 0, label: "" };
+  const { startMs, endMs } = jobDateWindow(job);
+  if (!startMs || !endMs) return { exclude: false, penalty: 0, label: "" };
+  const dayMs = 86400000;
+  const jobDays = Math.max(1, Math.round((endMs - startMs) / dayMs) + 1);
+  let conflictDays = 0;
+  let startConflict = false;
+  absences.forEach((absence) => {
+    const aStart = dateOnlyMs(absence.startDate || absence.date);
+    const aEnd = dateOnlyMs(absence.endDate || absence.startDate || absence.date);
+    if (!aStart || !aEnd || aEnd < startMs || aStart > endMs) return;
+    if (aStart <= startMs && aEnd >= startMs) startConflict = true;
+    const overlapStart = Math.max(startMs, aStart);
+    const overlapEnd = Math.min(endMs, aEnd);
+    conflictDays += Math.max(1, Math.round((overlapEnd - overlapStart) / dayMs) + 1);
+  });
+  if (!conflictDays) return { exclude: false, penalty: 0, label: "" };
+  if (startConflict || conflictDays >= Math.ceil(jobDays / 2)) {
+    return { exclude: true, penalty: 0, label: "Planned absence conflict" };
+  }
+  return {
+    exclude: false,
+    penalty: Math.min(25, 10 + conflictDays * 5),
+    label: `${conflictDays} planned absence day${conflictDays === 1 ? "" : "s"}`,
+  };
+}
+
+function matchQualificationScore(job, workerText) {
+  const required = (job.requiredQualifications || "")
     .split(",")
     .map((q) => q.trim().toLowerCase())
     .filter(Boolean);
+  if (!required.length) return { score: 12, matched: 0, total: 0 };
+  const matched = required.filter((q) => workerText.includes(q)).length;
+  return {
+    score: Math.round((matched / required.length) * 15),
+    matched,
+    total: required.length,
+  };
+}
+
+function tokenFitScore(value, workerText, maxScore, neutralScore = 0) {
+  const tokens = splitMatchTokens(value);
+  if (!tokens.length) return neutralScore;
+  const matched = tokens.filter((t) => workerText.includes(t)).length;
+  return Math.round((matched / tokens.length) * maxScore);
+}
+
+function ratingScore(label, maxScore, unprovenScore) {
+  return {
+    Excellent: maxScore,
+    "Very Good": Math.round(maxScore * 0.85),
+    Good: Math.round(maxScore * 0.7),
+    "Needs Improvement": Math.round(maxScore * 0.35),
+    "New / Unproven": unprovenScore,
+  }[label] ?? unprovenScore;
+}
+
+function travelMatch(job, worker) {
+  const radius = Number(worker.travelRadiusMiles || 15);
+  const workerPin =
+    worker.homePin || worker.locationPin || worker.currentLocation || worker.sitePin;
+  const jobPin = job?.sitePin;
+  if (
+    workerPin?.lat == null ||
+    workerPin?.lng == null ||
+    jobPin?.lat == null ||
+    jobPin?.lng == null
+  ) {
+    return { exclude: false, score: 7, label: "Travel distance unverified" };
+  }
+  const miles = haversine(workerPin.lat, workerPin.lng, jobPin.lat, jobPin.lng) / 1609.344;
+  if (miles <= radius) {
+    return { exclude: false, score: 10, label: `${Math.round(miles)} miles` };
+  }
+  if (job.accommodationPaid && worker.travelFurtherWithAccommodation) {
+    return { exclude: false, score: 7, label: "Outside radius, accommodation paid" };
+  }
+  return { exclude: true, score: 0, label: "Outside travel radius" };
+}
+
+function previousDeclinePenalty(workerId, job) {
+  const declines = previousDeclineReasonsForWorker(workerId);
+  let penalty = 0;
+  declines.forEach((d) => {
+    const reason = d.workerReason || d.companyReason || "";
+    if (reason === "Rate Too Low") penalty += 8;
+    if (reason === "Location / Travel" && job.location) penalty += 8;
+    if (
+      reason === "Work Activity Not Suitable" &&
+      job.workActivity &&
+      splitMatchTokens(job.workActivity).length
+    ) {
+      penalty += 6;
+    }
+    if (reason === "Start Date Not Suitable") penalty += 4;
+    if (reason === "Project Duration Not Suitable") penalty += 4;
+  });
+  return Math.min(15, penalty);
+}
+
+function getMatches(job) {
+  if (!job || job.assignedWorkerId || job.completed) return [];
+  const { startMs } = jobDateWindow(job);
 
   return state.workers
     .filter((w) => canonicalTrade(w.trade) === canonicalTrade(job.trade))
     .map((w) => {
-      // Reallocation rules: a worker currently on another booking can only be
-      // offered this job if their booking is winding down (no extension) AND
-      // this job starts on/after their estimated end date. Otherwise they're
-      // matchable only when generally available.
+      const pricing = computeBookingPricing({
+        workerMin: workerMinRate(w),
+        budget: jobBudget(job),
+      });
+      if (!pricing.viable) return null;
+
       const otherBooking = state.jobs.find(
         (j) => j.id !== job.id && j.assignedWorkerId === w.id && !j.completed,
       );
       let availabilityLabel = "";
-      let soonBonus = 0;
+      let availabilityScore = 8;
       if (otherBooking) {
-        if (!isReallocatable(otherBooking)) return null; // still firmly booked
+        if (!isReallocatable(otherBooking)) return null;
         const endDate = otherBooking.estimatedEndDate || otherBooking.endDate;
         if (job.start && endDate && new Date(job.start) < new Date(endDate))
           return null;
         availabilityLabel = `Available from ${formatDate(endDate)}`;
-        // 7-day window workers are prioritised for future matching.
-        if (otherBooking.workerAvailabilityStatus === "available_soon")
-          soonBonus = 6;
-      } else if (w.availability !== "available") {
-        return null;
+        availabilityScore = otherBooking.workerAvailabilityStatus === "available_soon" ? 8 : 6;
+      } else {
+        if (w.availability !== "available") return null;
+        const nextMs = dateOnlyMs(w.nextAvailableDate);
+        if (nextMs && startMs && nextMs > startMs) return null;
+        if (nextMs && startMs && nextMs === startMs)
+          availabilityLabel = "Available from start date";
       }
+
+      const absence = plannedAbsenceImpact(w, job);
+      if (absence.exclude) return null;
+      const travel = travelMatch(job, w);
+      if (travel.exclude) return null;
 
       const rating = buildWorkerRating(w.id);
-      const reliability =
-        rating.reliabilityScore != null ? rating.reliabilityScore : w.reliability;
-      const punctuality = rating.punctualityScore ?? 100;
-
-      // Qualification match: how many job-required quals does worker have?
-      let qualBonus = 10; // neutral if no specific quals required
-      if (jobQualList.length) {
-        const workerQualStr = [
-          w.qualifications || "",
-          ...(w.certifications || []).map((c) =>
-            typeof c === "object" ? c.name : c,
-          ),
-        ]
-          .join(" ")
-          .toLowerCase();
-        const matched = jobQualList.filter((q) =>
-          workerQualStr.includes(q),
-        ).length;
-        qualBonus = Math.round((matched / jobQualList.length) * 20);
-      }
-
-      // Composite: 50% reliability + 30% punctuality + 20% qual bonus (normalised)
-      const composite =
-        Math.round(
-          reliability * 0.5 + punctuality * 0.3 + qualBonus * 0.2 * 5,
-        ) + soonBonus;
+      const workerText = workerSearchText(w);
+      const qual = matchQualificationScore(job, workerText);
+      const specialismScore = tokenFitScore(
+        [job.specialism, job.grade].filter(Boolean).join(" "),
+        workerText,
+        10,
+        5,
+      );
+      const workActivityScore = tokenFitScore(job.workActivity, workerText, 8, 4);
+      const reliabilityPoints = ratingScore(rating.reliabilityRating, 15, 5);
+      const punctualityPoints = ratingScore(rating.punctualityRating, 10, 3);
+      const attendanceDays = rating.evidence?.attendanceDays || 0;
+      const experienceScore =
+        attendanceDays >= 30 ? Math.min(8, Math.floor(attendanceDays / 8) + 4) : Math.min(3, Math.floor(attendanceDays / 10));
+      const declinePenalty = previousDeclinePenalty(w.id, job);
+      const composite = Math.max(
+        0,
+        Math.min(
+          100,
+          20 +
+            specialismScore +
+            workActivityScore +
+            qual.score +
+            reliabilityPoints +
+            punctualityPoints +
+            experienceScore +
+            availabilityScore +
+            travel.score -
+            absence.penalty -
+            declinePenalty,
+        ),
+      );
+      const notes = [
+        availabilityLabel,
+        absence.label,
+        travel.label,
+        declinePenalty ? "Previous decline pattern" : "",
+      ].filter(Boolean);
       return {
         ...w,
-        _reliability: reliability,
-        _punctuality: punctuality,
-        _qualBonus: qualBonus,
+        _reliability:
+          rating.reliabilityScore != null ? rating.reliabilityScore : w.reliability,
+        _punctuality: rating.punctualityScore ?? null,
+        _qualBonus: qual.score,
         _composite: composite,
-        _availabilityLabel: availabilityLabel,
+        _availabilityLabel: notes.join(" · "),
         _rating: rating,
+        _matchBreakdown: {
+          trade: 20,
+          specialism: specialismScore,
+          workActivity: workActivityScore,
+          qualifications: qual.score,
+          reliability: reliabilityPoints,
+          punctuality: punctualityPoints,
+          attendance: experienceScore,
+          availability: availabilityScore,
+          travel: travel.score,
+          plannedAbsencePenalty: absence.penalty,
+          previousDeclinePenalty: declinePenalty,
+        },
       };
     })
     .filter(Boolean)
