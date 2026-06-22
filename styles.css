@@ -804,6 +804,16 @@ button, input, select, textarea {
   border-top: 1px solid var(--border);
 }
 
+.job-offer-note {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 9px 10px;
+}
+
 .job-assign-select {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -3639,6 +3649,44 @@ margin-bottom: 12px;
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.4;
+}
+
+.wh-planned-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0 16px 12px;
+  padding: 12px;
+}
+
+.wh-planned-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wh-planned-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wh-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: var(--radius-sm);
+  background: var(--red-bg);
+  color: var(--red-text);
+  padding: 9px 10px;
+  font-size: 0.82rem;
+}
+
+.wh-planned-row strong {
+  font-size: 0.78rem;
 }
 
 .wh-offers-panel {

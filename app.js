@@ -2783,6 +2783,25 @@ function formatDateInput(value) {
   return String(value).slice(0, 10);
 }
 
+function normalizePlannedAbsence(absence) {
+  const startDate = formatDateInput(absence?.startDate || absence?.date);
+  const endDate = formatDateInput(absence?.endDate || startDate);
+  if (!startDate) return null;
+  return {
+    id: absence?.id || createId(),
+    startDate,
+    endDate: endDate && endDate >= startDate ? endDate : startDate,
+    createdAt: absence?.createdAt || new Date().toISOString(),
+  };
+}
+
+function plannedAbsencesForWorker(worker) {
+  return (Array.isArray(worker?.plannedAbsences) ? worker.plannedAbsences : [])
+    .map(normalizePlannedAbsence)
+    .filter(Boolean)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
 function ensureWorkerProfileForUser(user) {
   if (!user || user.type !== "worker") return null;
   if (!Array.isArray(state.workers)) state.workers = [];
@@ -2823,6 +2842,7 @@ function ensureWorkerProfileForUser(user) {
       ? worker.offerNotifications
       : [],
     lateReports: Array.isArray(worker?.lateReports) ? worker.lateReports : [],
+    plannedAbsences: plannedAbsencesForWorker(worker || user),
     verificationStatus: user.verificationStatus || "pending",
   };
 
@@ -2840,6 +2860,21 @@ function ensureWorkerProfileForUser(user) {
 
   saveState();
   return worker;
+}
+
+function addWorkerPlannedAbsence(userId, startDate, endDate = "") {
+  const worker = findWorker(userId);
+  const absence = normalizePlannedAbsence({ startDate, endDate });
+  if (!worker || !absence) return { ok: false, reason: "Add a start date" };
+  worker.plannedAbsences = plannedAbsencesForWorker(worker);
+  worker.plannedAbsences.push(absence);
+  worker.plannedAbsences = plannedAbsencesForWorker(worker);
+  logActivity(
+    "avail",
+    `<strong>${escapeHtml(worker.name || "Worker")}</strong> added Planned Absence for ${formatDateOnly(absence.startDate)}${absence.endDate !== absence.startDate ? ` to ${formatDateOnly(absence.endDate)}` : ""}`,
+  );
+  saveState();
+  return { ok: true, absence };
 }
 
 function updateWorkerAvailability(userId, availability, nextAvailableDate = "") {
@@ -3032,6 +3067,12 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
     return { ok: false, reason: "This job is no longer open" };
   if (worker.availability !== "available")
     return { ok: false, reason: "Worker is unavailable" };
+  if (
+    source === "manual" &&
+    !getMatches(job).some((match) => match.id === worker.id)
+  ) {
+    return { ok: false, reason: "Worker is not eligible for this job offer" };
+  }
   const pricing = computeBookingPricing({
     workerMin: workerMinRate(worker),
     budget: jobBudget(job),
@@ -3216,7 +3257,7 @@ function companyAcceptWorker(applicationId) {
     `<strong>${escapeHtml(worker.name)}</strong> confirmed for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} after offer review.`,
   );
   saveAndRender();
-  showToast("Worker confirmed — Job Agreement created");
+  showToast("Worker confirmed — Job Agreement signing is required before QR Sign In becomes active");
 }
 
 function companyDeclineWorker(applicationId, reason, comment = "") {
@@ -3736,7 +3777,7 @@ const NAV_LG = Object.fromEntries(
 const WORKER_TABS = [
   { id: "dashboard", icon: "home", label: "Home" },
   { id: "jobs", icon: "jobs", label: "Jobs" },
-  { id: "attendance", icon: "bookings", label: "Bookings" },
+  { id: "attendance", icon: "bookings", label: "Timesheet" },
   { id: "profile", icon: "profile", label: "Profile" },
 ];
 
@@ -3896,6 +3937,38 @@ function renderWorkerHome(user) {
   const missedNotice = (workerProfile?.offerNotifications || []).find(
     (n) => n.type === "missed_2_offers" && !n.readAt,
   );
+  const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
+  const plannedAbsencePanel = `
+    <div class="wh-section-label">Planned Absence</div>
+    <div class="wh-planned-panel">
+      <div class="wh-planned-form">
+        <label class="wh-next-date">
+          <span>Start Date</span>
+          <input id="whAbsenceStart" type="date" />
+        </label>
+        <label class="wh-next-date">
+          <span>End Date</span>
+          <input id="whAbsenceEnd" type="date" />
+        </label>
+        <button class="wh-next-save" id="whAbsenceSave" type="button">Add</button>
+      </div>
+      ${
+        plannedAbsences.length
+          ? `<div class="wh-planned-list">
+              ${plannedAbsences
+                .slice(0, 5)
+                .map(
+                  (absence) => `
+                <div class="wh-planned-row">
+                  <span>${formatDateOnly(absence.startDate)}</span>
+                  <strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable"}</strong>
+                </div>`,
+                )
+                .join("")}
+            </div>`
+          : `<div class="att-empty">No Planned Absence added.</div>`
+      }
+    </div>`;
   const availabilityPanel = `
     <div class="wh-availability-panel">
       <div class="wh-availability-main">
@@ -4096,6 +4169,7 @@ function renderWorkerHome(user) {
     </div>
     <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
+    ${plannedAbsencePanel}
     ${offersPanel}
     ${signInPanel}
     ${activeBookingHtml}
@@ -4138,6 +4212,18 @@ function renderWorkerHome(user) {
       showToast("Next available date saved");
     });
 
+  document.getElementById("whAbsenceSave")?.addEventListener("click", () => {
+    const startDate = document.getElementById("whAbsenceStart")?.value || "";
+    const endDate = document.getElementById("whAbsenceEnd")?.value || "";
+    const res = addWorkerPlannedAbsence(user.id, startDate, endDate);
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    render();
+    showToast("Planned Absence added");
+  });
+
   el.querySelectorAll("[data-worker-offer-accept]").forEach((btn) => {
     btn.addEventListener("click", () => workerAcceptOffer(btn.dataset.workerOfferAccept));
   });
@@ -4177,6 +4263,7 @@ function renderWorkerProfile(user) {
   const el = document.getElementById("profileContent");
   if (!el) return;
 
+  const workerProfile = findWorker(user.id) || ensureWorkerProfileForUser(user);
   const stats = getWorkerStats(user.id || "");
   const rating = buildWorkerRating(user.id || "");
   const reliability =
@@ -4239,6 +4326,18 @@ function renderWorkerProfile(user) {
     </div>`,
     )
     .join("");
+  const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
+  const plannedAbsenceHtml = plannedAbsences.length
+    ? plannedAbsences
+        .map(
+          (absence) => `
+    <div class="prof-field">
+      <div class="prof-field-label">${formatDateOnly(absence.startDate)}</div>
+      <div class="prof-field-val">${escapeHtml(absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable")}</div>
+    </div>`,
+        )
+        .join("")
+    : `<div class="prof-field"><div class="prof-field-label">Status</div><div class="prof-field-val">No Planned Absence added</div></div>`;
 
   el.innerHTML = `
     <div class="prof-header">
@@ -4263,6 +4362,11 @@ function renderWorkerProfile(user) {
     <div class="prof-section">
       <div class="prof-section-title">Travel Preferences</div>
       <div class="prof-fields">${travelFields}</div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Planned Absence</div>
+      <div class="prof-fields">${plannedAbsenceHtml}</div>
     </div>
 
     ${
@@ -5236,15 +5340,11 @@ function renderStats() {
   ).length;
   const open = state.jobs.filter((j) => !j.assignedWorkerId).length;
   const assigned = state.jobs.filter((j) => j.assignedWorkerId).length;
-  const avgScore = total
-    ? Math.round(state.workers.reduce((s, w) => s + w.reliability, 0) / total)
-    : 0;
-
   statsRow.innerHTML = `
     <div class="stat-card">
       <span class="stat-label">Total Workers</span>
       <span class="stat-value">${total}</span>
-      <span class="stat-sub">Avg score ${avgScore}/100</span>
+      <span class="stat-sub">Evidence-based ratings</span>
     </div>
     <div class="stat-card stat-available">
       <span class="stat-label">Available</span>
@@ -5321,31 +5421,6 @@ function renderWorkers() {
     });
   });
 
-  workersList.querySelectorAll("[data-score-action]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const w = findWorker(btn.dataset.workerId);
-      const action = btn.dataset.scoreAction;
-      const delta = { onTime: 5, late: -8, noShow: -15 }[action];
-      const prev = w.reliability;
-      w.reliability = clampScore(prev + delta);
-      const labels = {
-        onTime: "completed on time",
-        late: "was late",
-        noShow: "no-showed",
-      };
-      const sign = delta > 0 ? `+${delta}` : `${delta}`;
-      logActivity(
-        "score",
-        `<strong>${escapeHtml(w.name)}</strong> ${labels[action]} — score ${prev} → ${w.reliability} (${sign})`,
-      );
-      saveAndRender();
-      showToast(
-        action === "onTime"
-          ? `+5 reliability for ${w.name}`
-          : `Score updated for ${w.name}`,
-      );
-    });
-  });
 }
 
 function workerCard(worker) {
@@ -5391,9 +5466,6 @@ function workerCard(worker) {
         <option value="available"     ${worker.availability === "available" ? "selected" : ""}>Available</option>
         <option value="not available" ${worker.availability === "not available" ? "selected" : ""}>Not available</option>
       </select>
-      <button class="score-action-btn on-time" type="button" data-score-action="onTime"  data-worker-id="${worker.id}">✓ On time</button>
-      <button class="score-action-btn late"    type="button" data-score-action="late"    data-worker-id="${worker.id}">⚡ Late</button>
-      <button class="score-action-btn no-show" type="button" data-score-action="noShow"  data-worker-id="${worker.id}">✕ No-show</button>
       <button class="delete-btn" type="button" data-delete-worker="${worker.id}" aria-label="Remove ${escapeHtml(worker.name)}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
       </button>
@@ -5419,29 +5491,6 @@ function renderJobs() {
       state.jobs = state.jobs.filter((j) => j.id !== job.id);
       saveAndRender();
       showToast("Job request removed");
-    });
-  });
-
-  jobsList.querySelectorAll("[data-assign-job]").forEach((sel) => {
-    sel.addEventListener("change", () => {
-      const job = findJob(sel.dataset.assignJob);
-      if (sel.value) {
-        const res = createJobOffer(job.id, sel.value, "manual");
-        if (!res.ok) {
-          sel.value = "";
-          showToast(res.reason);
-          return;
-        }
-        showToast(res.duplicate ? "Offer already active" : "Job offer sent");
-        saveAndRender();
-      } else if (job.assignedWorkerId) {
-        // Unassigning a confirmed Protected Booking must go through cancellation
-        // so the 3-working-day rule is applied and a record is created.
-        sel.value = job.assignedWorkerId; // revert select until cancellation is confirmed
-        openCancelBookingModal(job.id);
-      } else {
-        saveAndRender();
-      }
     });
   });
 
@@ -5561,17 +5610,11 @@ function jobCard(job) {
       </button>`
           : ""
       }
-      <select class="job-assign-select" aria-label="Send job offer" data-assign-job="${job.id}">
-        <option value="">Send offer...</option>
-        ${state.workers
-          .map(
-            (w) =>
-              `<option value="${w.id}" ${job.assignedWorkerId === w.id ? "selected" : ""}>
-            ${escapeHtml(w.name)} (${escapeHtml(w.trade)}, ${w.reliability}/100)
-          </option>`,
-          )
-          .join("")}
-      </select>
+      ${
+        !assigned
+          ? `<div class="job-offer-note">Send offers from Matches so availability, travel, Planned Absence, and ratings are checked.</div>`
+          : ""
+      }
       <button class="delete-btn delete-btn--job" type="button" data-delete-job="${job.id}" aria-label="Remove job">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         Remove
@@ -7225,10 +7268,10 @@ function renderWorkerAttendance(user) {
   // Restyle the attendance header for worker context
   const attTitle = document.querySelector("#tab-attendance .panel-title");
   const attSub = document.querySelector("#tab-attendance .panel-subtitle");
-  if (attTitle) attTitle.textContent = "My Attendance";
+  if (attTitle) attTitle.textContent = "My Timesheet";
   if (attSub)
     attSub.textContent =
-      "Mark your status for today — this feeds your timesheet";
+      "Worker Home is your main Sign In entry. This area shows your attendance record and backup check-in status.";
 
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
