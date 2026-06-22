@@ -637,6 +637,22 @@ button, input, select, textarea {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
 }
 
+.worker-calendar-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 11px;
+}
+
+.worker-calendar-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
 .score-action-btn {
   border: none;
   border-radius: var(--radius-xs);
@@ -2585,6 +2601,110 @@ margin-bottom: 12px;
 
 .modal-overlay.hidden { display: none; }
 
+.planned-calendar-sheet {
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  bottom: 0;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.14);
+  left: 0;
+  max-height: 88vh;
+  overflow: auto;
+  padding: 16px;
+  position: absolute;
+  right: 0;
+}
+
+.planned-calendar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.planned-calendar-title {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.planned-calendar-sub {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.planned-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.planned-calendar-day {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 4px;
+  text-align: center;
+}
+
+.planned-calendar-day span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.planned-calendar-day strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.planned-calendar-day.unavailable {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: var(--red-bg);
+  color: var(--red-text);
+}
+
+.planned-calendar-day.unavailable strong {
+  color: var(--red-text);
+}
+
+.planned-calendar-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.planned-calendar-row {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: var(--radius-sm);
+  background: var(--red-bg);
+  color: var(--red-text);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+@media (min-width: 640px) {
+  .planned-calendar-sheet {
+    border-radius: var(--radius-lg);
+    bottom: auto;
+    left: auto;
+    margin: auto;
+    max-width: 520px;
+    position: relative;
+    right: auto;
+    width: min(520px, calc(100vw - 32px));
+  }
+}
+
 .dispute-sheet {
   background: var(--surface);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -3685,8 +3805,49 @@ margin-bottom: 12px;
   font-size: 0.82rem;
 }
 
+.wh-planned-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
 .wh-planned-row strong {
   font-size: 0.78rem;
+}
+
+.wh-planned-row small {
+  color: var(--red-text);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.wh-planned-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wh-planned-actions button,
+.wh-planned-cancel {
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--red-text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 7px 9px;
+}
+
+.wh-planned-warning {
+  margin-top: 10px;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--amber-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 9px 10px;
 }
 
 .wh-offers-panel {

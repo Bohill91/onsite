@@ -2791,7 +2791,9 @@ function normalizePlannedAbsence(absence) {
     id: absence?.id || createId(),
     startDate,
     endDate: endDate && endDate >= startDate ? endDate : startDate,
+    noticeWarning: !!absence?.noticeWarning || plannedAbsenceInsideNotice(startDate),
     createdAt: absence?.createdAt || new Date().toISOString(),
+    updatedAt: absence?.updatedAt || absence?.createdAt || new Date().toISOString(),
   };
 }
 
@@ -2800,6 +2802,17 @@ function plannedAbsencesForWorker(worker) {
     .map(normalizePlannedAbsence)
     .filter(Boolean)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+function plannedAbsenceInsideNotice(startDate) {
+  const days = workingDaysUntil(startDate);
+  return days !== null && days <= 5;
+}
+
+function plannedAbsenceNoticeMessage(absence) {
+  return absence?.noticeWarning
+    ? "This planned absence is inside the 5 working day notice period. Please inform your site supervisor directly as soon as possible."
+    : "";
 }
 
 function ensureWorkerProfileForUser(user) {
@@ -2862,16 +2875,67 @@ function ensureWorkerProfileForUser(user) {
   return worker;
 }
 
-function addWorkerPlannedAbsence(userId, startDate, endDate = "") {
+function notifyPlannedAbsenceChange(worker, absence, action) {
+  const job = state.jobs.find((j) => j.assignedWorkerId === worker?.id && !j.completed);
+  if (!worker || !job || !absence) return;
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  const range =
+    absence.endDate !== absence.startDate
+      ? `${formatDateOnly(absence.startDate)} to ${formatDateOnly(absence.endDate)}`
+      : formatDateOnly(absence.startDate);
+  state.notifications.unshift({
+    id: createId(),
+    type: "worker_planned_absence",
+    workerId: worker.id,
+    workerName: worker.name || "Worker",
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    attendanceManager: job.attendanceManager || null,
+    action,
+    startDate: absence.startDate,
+    endDate: absence.endDate,
+    noticeWarning: !!absence.noticeWarning,
+    message: `${worker.name || "Worker"} ${action} Planned Absence for ${range}.`,
+    createdAt: new Date().toISOString(),
+    readAt: "",
+  });
+}
+
+function upsertWorkerPlannedAbsence(userId, absenceId, startDate, endDate = "") {
   const worker = findWorker(userId);
-  const absence = normalizePlannedAbsence({ startDate, endDate });
+  const absence = normalizePlannedAbsence({ id: absenceId || createId(), startDate, endDate });
   if (!worker || !absence) return { ok: false, reason: "Add a start date" };
   worker.plannedAbsences = plannedAbsencesForWorker(worker);
-  worker.plannedAbsences.push(absence);
+  const idx = worker.plannedAbsences.findIndex((a) => a.id === absence.id);
+  const action = idx === -1 ? "added" : "changed";
+  if (idx === -1) worker.plannedAbsences.push(absence);
+  else worker.plannedAbsences[idx] = { ...worker.plannedAbsences[idx], ...absence, updatedAt: new Date().toISOString() };
   worker.plannedAbsences = plannedAbsencesForWorker(worker);
+  notifyPlannedAbsenceChange(worker, absence, action);
   logActivity(
     "avail",
-    `<strong>${escapeHtml(worker.name || "Worker")}</strong> added Planned Absence for ${formatDateOnly(absence.startDate)}${absence.endDate !== absence.startDate ? ` to ${formatDateOnly(absence.endDate)}` : ""}`,
+    `<strong>${escapeHtml(worker.name || "Worker")}</strong> ${action} Planned Absence for ${formatDateOnly(absence.startDate)}${absence.endDate !== absence.startDate ? ` to ${formatDateOnly(absence.endDate)}` : ""}`,
+  );
+  saveState();
+  return { ok: true, absence };
+}
+
+function addWorkerPlannedAbsence(userId, startDate, endDate = "") {
+  return upsertWorkerPlannedAbsence(userId, "", startDate, endDate);
+}
+
+function removeWorkerPlannedAbsence(userId, absenceId) {
+  const worker = findWorker(userId);
+  if (!worker || !absenceId) return { ok: false, reason: "Planned Absence not found" };
+  const absences = plannedAbsencesForWorker(worker);
+  const absence = absences.find((a) => a.id === absenceId);
+  if (!absence) return { ok: false, reason: "Planned Absence not found" };
+  worker.plannedAbsences = absences.filter((a) => a.id !== absenceId);
+  notifyPlannedAbsenceChange(worker, absence, "removed");
+  logActivity(
+    "avail",
+    `<strong>${escapeHtml(worker.name || "Worker")}</strong> removed Planned Absence for ${formatDateOnly(absence.startDate)}${absence.endDate !== absence.startDate ? ` to ${formatDateOnly(absence.endDate)}` : ""}`,
   );
   saveState();
   return { ok: true, absence };
@@ -3942,6 +4006,7 @@ function renderWorkerHome(user) {
     <div class="wh-section-label">Planned Absence</div>
     <div class="wh-planned-panel">
       <div class="wh-planned-form">
+        <input id="whAbsenceEditId" type="hidden" value="" />
         <label class="wh-next-date">
           <span>Start Date</span>
           <input id="whAbsenceStart" type="date" />
@@ -3951,17 +4016,27 @@ function renderWorkerHome(user) {
           <input id="whAbsenceEnd" type="date" />
         </label>
         <button class="wh-next-save" id="whAbsenceSave" type="button">Add</button>
+        <button class="wh-planned-cancel hidden" id="whAbsenceCancel" type="button">Cancel</button>
+      </div>
+      <div class="wh-planned-warning hidden" id="whAbsenceWarning">
+        This planned absence is inside the 5 working day notice period. Please inform your site supervisor directly as soon as possible.
       </div>
       ${
         plannedAbsences.length
           ? `<div class="wh-planned-list">
               ${plannedAbsences
-                .slice(0, 5)
                 .map(
                   (absence) => `
                 <div class="wh-planned-row">
-                  <span>${formatDateOnly(absence.startDate)}</span>
-                  <strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable"}</strong>
+                  <div>
+                    <span>${formatDateOnly(absence.startDate)}</span>
+                    <strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable"}</strong>
+                    ${plannedAbsenceNoticeMessage(absence) ? `<small>${escapeHtml(plannedAbsenceNoticeMessage(absence))}</small>` : ""}
+                  </div>
+                  <div class="wh-planned-actions">
+                    <button type="button" data-absence-edit="${absence.id}">Edit</button>
+                    <button type="button" data-absence-remove="${absence.id}">Remove</button>
+                  </div>
                 </div>`,
                 )
                 .join("")}
@@ -4213,15 +4288,59 @@ function renderWorkerHome(user) {
     });
 
   document.getElementById("whAbsenceSave")?.addEventListener("click", () => {
+    const editId = document.getElementById("whAbsenceEditId")?.value || "";
     const startDate = document.getElementById("whAbsenceStart")?.value || "";
     const endDate = document.getElementById("whAbsenceEnd")?.value || "";
-    const res = addWorkerPlannedAbsence(user.id, startDate, endDate);
+    const res = upsertWorkerPlannedAbsence(user.id, editId, startDate, endDate);
     if (!res.ok) {
       showToast(res.reason);
       return;
     }
+    const warning = plannedAbsenceNoticeMessage(res.absence);
     render();
-    showToast("Planned Absence added");
+    if (warning) alert(warning);
+    showToast(editId ? "Planned Absence updated" : "Planned Absence added");
+  });
+
+  document.getElementById("whAbsenceCancel")?.addEventListener("click", () => {
+    render();
+  });
+
+  const updateAbsenceWarning = () => {
+    const startDate = document.getElementById("whAbsenceStart")?.value || "";
+    document
+      .getElementById("whAbsenceWarning")
+      ?.classList.toggle("hidden", !plannedAbsenceInsideNotice(startDate));
+  };
+  document.getElementById("whAbsenceStart")?.addEventListener("change", updateAbsenceWarning);
+
+  el.querySelectorAll("[data-absence-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const absence = plannedAbsences.find((a) => a.id === btn.dataset.absenceEdit);
+      if (!absence) return;
+      const idInput = document.getElementById("whAbsenceEditId");
+      const startInput = document.getElementById("whAbsenceStart");
+      const endInput = document.getElementById("whAbsenceEnd");
+      if (idInput) idInput.value = absence.id;
+      if (startInput) startInput.value = absence.startDate;
+      if (endInput) endInput.value = absence.endDate;
+      const saveBtn = document.getElementById("whAbsenceSave");
+      if (saveBtn) saveBtn.textContent = "Update";
+      document.getElementById("whAbsenceCancel")?.classList.remove("hidden");
+      updateAbsenceWarning();
+    });
+  });
+
+  el.querySelectorAll("[data-absence-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = removeWorkerPlannedAbsence(user.id, btn.dataset.absenceRemove);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      render();
+      showToast("Planned Absence removed");
+    });
   });
 
   el.querySelectorAll("[data-worker-offer-accept]").forEach((btn) => {
@@ -4578,6 +4697,7 @@ function renderContractorHome(user) {
       <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
     </div>
     ${companyLateReportPanelHTML(user)}
+    ${companyPlannedAbsencePanelHTML(user)}
     ${companyOfferReviewPanelHTML(user)}
     ${extensionPanelHTML(user.id)}
     ${companyAgreementPanelHTML(user)}
@@ -4627,6 +4747,37 @@ function companyLateReportPanelHTML(user) {
           return `<div class="ch-late-row">
             <div class="ch-late-msg">${escapeHtml(n.message || "Worker reported running late")}</div>
             <div class="ch-late-meta">${escapeHtml(when)}${mgr}</div>
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
+function companyPlannedAbsencePanelHTML(user) {
+  const notices = (state.notifications || [])
+    .filter(
+      (n) =>
+        n.type === "worker_planned_absence" &&
+        (n.companyId === user.id || (!n.companyId && user.type === "company")),
+    )
+    .slice(0, 3);
+  if (!notices.length) return "";
+  return `
+    <div class="ch-late-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Planned Absence</span>
+        <span class="ch-agr-panel-count">${notices.length}</span>
+      </div>
+      ${notices
+        .map((n) => {
+          const when = n.createdAt ? formatDate(n.createdAt) : "";
+          const mgr = n.attendanceManager?.name
+            ? ` · ${escapeHtml(n.attendanceManager.name)} notified`
+            : "";
+          const warning = n.noticeWarning ? " · inside 5 working day notice period" : "";
+          return `<div class="ch-late-row">
+            <div class="ch-late-msg">${escapeHtml(n.message || "Worker updated Planned Absence")}</div>
+            <div class="ch-late-meta">${escapeHtml(when)}${mgr}${warning}</div>
           </div>`;
         })
         .join("")}
@@ -5421,6 +5572,10 @@ function renderWorkers() {
     });
   });
 
+  workersList.querySelectorAll("[data-worker-calendar]").forEach((btn) => {
+    btn.addEventListener("click", () => openWorkerPlannedAbsenceCalendar(btn.dataset.workerCalendar));
+  });
+
 }
 
 function workerCard(worker) {
@@ -5431,6 +5586,11 @@ function workerCard(worker) {
   const completion = calcWorkerCompletion(worker);
   const nextAvailable = worker.nextAvailableDate
     ? `<span class="worker-next-available">Next available ${formatDateOnly(worker.nextAvailableDate)}</span>`
+    : "";
+  const plannedAbsences = plannedAbsencesForWorker(worker);
+  const nextAbsence = plannedAbsences.find((a) => dateOnlyMs(a.endDate) >= dateOnlyMs(todayDateStr()));
+  const absenceSummary = nextAbsence
+    ? `<span class="worker-next-available">Planned Absence ${formatDateOnly(nextAbsence.startDate)}</span>`
     : "";
 
   const statsRow = `
@@ -5452,6 +5612,7 @@ function workerCard(worker) {
         <div class="worker-quals">
           <span class="status-pill ${statusCls}">${worker.availability}</span>
           ${nextAvailable}
+          ${absenceSummary}
           ${certChipsHTML(worker)}
         </div>
       </div>
@@ -5466,11 +5627,92 @@ function workerCard(worker) {
         <option value="available"     ${worker.availability === "available" ? "selected" : ""}>Available</option>
         <option value="not available" ${worker.availability === "not available" ? "selected" : ""}>Not available</option>
       </select>
+      <button class="worker-calendar-btn" type="button" data-worker-calendar="${worker.id}">Calendar</button>
       <button class="delete-btn" type="button" data-delete-worker="${worker.id}" aria-label="Remove ${escapeHtml(worker.name)}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
       </button>
     </div>
   </article>`;
+}
+
+function plannedAbsenceDateSet(absences) {
+  const dates = new Set();
+  absences.forEach((absence) => {
+    const start = dateOnlyMs(absence.startDate);
+    const end = dateOnlyMs(absence.endDate || absence.startDate);
+    if (!start || !end) return;
+    for (let ms = start; ms <= end; ms += 86400000) {
+      dates.add(new Date(ms).toISOString().slice(0, 10));
+    }
+  });
+  return dates;
+}
+
+function openWorkerPlannedAbsenceCalendar(workerId) {
+  const worker = findWorker(workerId);
+  if (!worker) return;
+  closeWorkerPlannedAbsenceCalendar();
+  const absences = plannedAbsencesForWorker(worker);
+  const unavailableDates = plannedAbsenceDateSet(absences);
+  const today = todayDateStr();
+  const startMs = dateOnlyMs(today);
+  const days = Array.from({ length: 35 }, (_, i) => {
+    const iso = new Date(startMs + i * 86400000).toISOString().slice(0, 10);
+    return {
+      iso,
+      unavailable: unavailableDates.has(iso),
+    };
+  });
+  const modal = document.createElement("div");
+  modal.id = "workerPlannedAbsenceModal";
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="planned-calendar-sheet" role="dialog" aria-modal="true" aria-label="Worker Planned Absence calendar">
+      <div class="planned-calendar-head">
+        <div>
+          <div class="planned-calendar-title">${escapeHtml(worker.name || "Worker")}</div>
+          <div class="planned-calendar-sub">Planned Absence calendar</div>
+        </div>
+        <button class="modal-close-btn" type="button" data-planned-calendar-close aria-label="Close">×</button>
+      </div>
+      <div class="planned-calendar-grid">
+        ${days
+          .map(
+            (day) => `
+          <div class="planned-calendar-day ${day.unavailable ? "unavailable" : ""}">
+            <span>${new Date(day.iso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" })}</span>
+            <strong>${new Date(day.iso + "T00:00:00").getDate()}</strong>
+          </div>`,
+          )
+          .join("")}
+      </div>
+      <div class="planned-calendar-list">
+        ${
+          absences.length
+            ? absences
+                .map(
+                  (absence) => `
+            <div class="planned-calendar-row">
+              <span>${formatDateOnly(absence.startDate)}</span>
+              <strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable"}</strong>
+            </div>`,
+                )
+                .join("")
+            : `<div class="att-empty">No Planned Absence added.</div>`
+        }
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-planned-calendar-close]").forEach((btn) =>
+    btn.addEventListener("click", closeWorkerPlannedAbsenceCalendar),
+  );
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeWorkerPlannedAbsenceCalendar();
+  });
+}
+
+function closeWorkerPlannedAbsenceCalendar() {
+  document.getElementById("workerPlannedAbsenceModal")?.remove();
 }
 
 // ─── Job Cards ────────────────────────────────────────────
@@ -5738,9 +5980,7 @@ function jobDateWindow(job) {
 }
 
 function plannedAbsenceImpact(worker, job) {
-  const absences = Array.isArray(worker?.plannedAbsences)
-    ? worker.plannedAbsences
-    : [];
+  const absences = plannedAbsencesForWorker(worker);
   if (!absences.length) return { exclude: false, penalty: 0, label: "" };
   const { startMs, endMs } = jobDateWindow(job);
   if (!startMs || !endMs) return { exclude: false, penalty: 0, label: "" };
