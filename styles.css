@@ -580,6 +580,17 @@ button, input, select, textarea {
   background: var(--red);
 }
 
+.worker-next-available {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 9px;
+}
+
 /* ─── Worker Card Actions ──────────────────────────────── */
 .worker-card-actions {
   display: flex;
@@ -3508,6 +3519,288 @@ margin-bottom: 12px;
   text-align: center;
 }
 
+.wh-availability-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: -4px 16px 12px;
+  padding: 12px;
+}
+
+.wh-availability-main {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wh-next-date {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 170px;
+}
+
+.wh-next-date span {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wh-next-date input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.86rem;
+}
+
+.wh-next-save {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wh-unavailable-note {
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--red-bg);
+  color: var(--red-text);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.wh-offers-panel {
+  margin: 0 16px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.wh-offer-notice {
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  background: var(--red-bg);
+  color: var(--red-text);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.wh-offer-card,
+.wh-offer-history {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.wh-offer-head,
+.wh-offer-actions,
+.wh-offer-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wh-offer-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--orange-dark);
+}
+
+.wh-offer-expiry {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--red-text);
+}
+
+.wh-offer-title {
+  margin-top: 6px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.wh-offer-meta,
+.wh-offer-site {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  line-height: 1.35;
+}
+
+.wh-offer-actions {
+  margin-top: 12px;
+}
+
+.wh-offer-actions .secondary-btn,
+.wh-offer-actions .primary-btn {
+  flex: 1;
+}
+
+.wh-offer-history {
+  display: grid;
+  gap: 8px;
+}
+
+.wh-offer-history-row {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+
+.wh-offer-history-row strong {
+  color: var(--ink);
+  text-align: right;
+}
+
+.ch-offer-panel {
+  margin: 12px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.ch-offer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-light);
+}
+
+.ch-offer-info {
+  min-width: 0;
+}
+
+.ch-offer-title {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.ch-offer-meta,
+.ch-offer-pending {
+  margin-top: 3px;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.ch-offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ch-offer-btn {
+  padding-inline: 12px;
+}
+
+.ch-late-panel,
+.att-late-report {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ch-late-panel {
+  margin: 12px 0;
+  padding: 12px;
+}
+
+.ch-late-row {
+  border-top: 1px solid var(--border-light);
+  padding: 10px 0 0;
+  margin-top: 10px;
+}
+
+.ch-late-msg {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ch-late-meta {
+  margin-top: 3px;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
+.att-late-report {
+  margin: 10px 0;
+  padding: 11px;
+  background: var(--amber-bg);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+
+.att-late-report-main {
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+
+.att-late-report-main strong {
+  color: var(--amber-text);
+  font-size: 0.86rem;
+}
+
+.att-late-report-main em {
+  color: var(--ink-3);
+  font-style: normal;
+}
+
+.att-late-decision {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.att-late-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.att-late-actions button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.att-late-actions button:hover {
+  background: var(--surface-2);
+}
+
 .wh-hero-stats {
   flex: 1;
   display: grid;
@@ -4445,18 +4738,6 @@ margin-bottom: 12px;
 .wsa-state--issue .wsa-state-icon { color: var(--amber-text); }
 .wsa-state-title { font-size: 0.92rem; font-weight: 700; color: var(--ink); }
 .wsa-state-sub { font-size: 0.78rem; color: var(--ink-2); margin-top: 2px; }
-
-/* Report modal */
-.report-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  color: var(--ink);
-  margin: 4px 0 8px;
-  cursor: pointer;
-}
-.report-check input { width: 16px; height: 16px; accent-color: var(--orange); }
 
 /* Admin attendance review */
 .adminrev {

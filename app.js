@@ -61,6 +61,28 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const OFFER_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const MISSED_OFFERS_LIMIT = 2;
+const MISSED_OFFERS_NOTICE =
+  "You've missed 2 job offers and have been set to unavailable. Toggle yourself back to available when you're ready to receive new offers.";
+const WORKER_DECLINE_REASONS = [
+  "Unavailable / In Work",
+  "Rate Too Low",
+  "Location / Travel",
+  "Start Date Not Suitable",
+  "Project Duration Not Suitable",
+  "Work Activity Not Suitable",
+  "Other",
+];
+const COMPANY_DECLINE_REASONS = [
+  "Reliability Score",
+  "Experience Level",
+  "Qualifications",
+  "Trade / Specialism Fit",
+  "Availability / Planned Absence",
+  "Other",
+];
+
 function clampScore(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
@@ -1408,6 +1430,79 @@ document.getElementById("agreementModal")?.addEventListener("click", (e) => {
     closeAgreementModal();
 });
 
+let currentOfferDecision = null;
+
+function openOfferDecisionModal(role, applicationId) {
+  const modal = document.getElementById("offerDecisionModal");
+  const reasonSelect = document.getElementById("offerDecisionReason");
+  const comment = document.getElementById("offerDecisionComment");
+  const commentWrap = document.getElementById("offerDecisionCommentWrap");
+  const title = document.getElementById("offerDecisionTitle");
+  const sub = document.getElementById("offerDecisionSub");
+  if (!modal || !reasonSelect) return;
+
+  const isCompany = role === "company";
+  currentOfferDecision = { role, applicationId };
+  if (title)
+    title.textContent = isCompany ? "Decline Worker" : "Decline Job Offer";
+  if (sub)
+    sub.textContent = isCompany
+      ? "Choose a reason before offering the role to the next best worker."
+      : "Choose a reason before declining this job offer.";
+  reasonSelect.innerHTML =
+    `<option value="">Select a reason...</option>` +
+    (isCompany ? COMPANY_DECLINE_REASONS : WORKER_DECLINE_REASONS)
+      .map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`)
+      .join("");
+  if (comment) comment.value = "";
+  commentWrap?.classList.add("hidden");
+  modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeOfferDecisionModal() {
+  currentOfferDecision = null;
+  document.getElementById("offerDecisionModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+document
+  .getElementById("offerDecisionReason")
+  ?.addEventListener("change", (e) => {
+    document
+      .getElementById("offerDecisionCommentWrap")
+      ?.classList.toggle("hidden", !e.target.value);
+  });
+document
+  .getElementById("closeOfferDecisionBtn")
+  ?.addEventListener("click", closeOfferDecisionModal);
+document
+  .getElementById("cancelOfferDecisionBtn")
+  ?.addEventListener("click", closeOfferDecisionModal);
+document
+  .getElementById("offerDecisionModal")
+  ?.addEventListener("click", (e) => {
+    if (e.target === document.getElementById("offerDecisionModal"))
+      closeOfferDecisionModal();
+  });
+document
+  .getElementById("confirmOfferDecisionBtn")
+  ?.addEventListener("click", () => {
+    const decision = currentOfferDecision;
+    const reason = document.getElementById("offerDecisionReason")?.value || "";
+    const comment = document.getElementById("offerDecisionComment")?.value || "";
+    if (!decision || !reason) {
+      showToast("Choose a decline reason");
+      return;
+    }
+    closeOfferDecisionModal();
+    if (decision.role === "company") {
+      companyDeclineWorker(decision.applicationId, reason, comment);
+    } else {
+      workerDeclineOffer(decision.applicationId, reason, comment);
+    }
+  });
+
 // The budget ceiling for a job — the all-in day rate the company is willing to
 // pay. Falls back to any legacy free-text pay rate.
 function jobBudget(job) {
@@ -2542,6 +2637,7 @@ const demoData = {
   siteCodes: [],
   agreements: [],
   applications: [],
+  notifications: [],
   companyDocuments: {},
   invoices: _demoInvoices,
   companyBilling: _demoBilling,
@@ -2565,8 +2661,20 @@ function migrateState(s) {
   if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
   if (!Array.isArray(s.invoices)) s.invoices = [];
   if (!Array.isArray(s.applications)) s.applications = [];
+  if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
+  (s.workers || []).forEach((w) => {
+    if (w.consecutiveMissedOffers == null) w.consecutiveMissedOffers = 0;
+    if (!Array.isArray(w.offerNotifications)) w.offerNotifications = [];
+    if (!Array.isArray(w.lateReports)) w.lateReports = [];
+  });
+  (s.applications || []).forEach((a) => {
+    if (!a.status) a.status = "interested";
+    if (a.status === "offered" && !a.expiresAt && a.offeredAt) {
+      a.expiresAt = new Date(new Date(a.offeredAt).getTime() + OFFER_EXPIRY_MS).toISOString();
+    }
+  });
   // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
   // rate, so the pricing engine has something to work with.
   (s.jobs || []).forEach((j) => {
@@ -2611,6 +2719,11 @@ function travelRadiusLabel(miles) {
   return `Within ${Number(miles) || 15} miles`;
 }
 
+function formatDateInput(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
 function ensureWorkerProfileForUser(user) {
   if (!user || user.type !== "worker") return null;
   if (!Array.isArray(state.workers)) state.workers = [];
@@ -2632,6 +2745,9 @@ function ensureWorkerProfileForUser(user) {
     qualifications: certNames.filter(Boolean).join(", "),
     certifications: user.certifications || [],
     availability: user.availability || "available",
+    nextAvailableDate: formatDateInput(
+      user.nextAvailableDate ?? worker?.nextAvailableDate ?? "",
+    ),
     minRate:
       Number.isFinite(minRateRaw) && minRateRaw > 0
         ? Math.round(minRateRaw)
@@ -2643,6 +2759,11 @@ function ensureWorkerProfileForUser(user) {
       worker?.travelFurtherWithAccommodation ??
       false
     ),
+    consecutiveMissedOffers: worker?.consecutiveMissedOffers ?? 0,
+    offerNotifications: Array.isArray(worker?.offerNotifications)
+      ? worker.offerNotifications
+      : [],
+    lateReports: Array.isArray(worker?.lateReports) ? worker.lateReports : [],
     verificationStatus: user.verificationStatus || "pending",
   };
 
@@ -2658,6 +2779,45 @@ function ensureWorkerProfileForUser(user) {
     state.workers.push(worker);
   }
 
+  saveState();
+  return worker;
+}
+
+function updateWorkerAvailability(userId, availability, nextAvailableDate = "") {
+  const cleanAvailability =
+    availability === "not available" ? "not available" : "available";
+  const cleanDate =
+    cleanAvailability === "not available" ? formatDateInput(nextAvailableDate) : "";
+
+  const worker = findWorker(userId);
+  if (worker) {
+    worker.availability = cleanAvailability;
+    worker.nextAvailableDate = cleanDate;
+  }
+
+  try {
+    const session = JSON.parse(localStorage.getItem("onsite_auth_v1") || "null");
+    if (session && session.id === userId) {
+      session.availability = cleanAvailability;
+      session.nextAvailableDate = cleanDate;
+      localStorage.setItem("onsite_auth_v1", JSON.stringify(session));
+    }
+  } catch (_) {}
+
+  try {
+    const users = JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx !== -1) {
+      users[idx].availability = cleanAvailability;
+      users[idx].nextAvailableDate = cleanDate;
+      localStorage.setItem("onsite_users_v1", JSON.stringify(users));
+    }
+  } catch (_) {}
+
+  logActivity(
+    "avail",
+    `<strong>${escapeHtml(worker?.name || "Worker")}</strong> marked as <em>${escapeHtml(cleanAvailability)}</em>${cleanDate ? ` · next available ${formatDateOnly(cleanDate)}` : ""}`,
+  );
   saveState();
   return worker;
 }
@@ -2697,6 +2857,313 @@ function registerInterest(jobId, user) {
   );
   saveAndRender();
   return { ok: true, application };
+}
+
+function offerStatusLabel(status) {
+  return {
+    interested: "Interested",
+    offered: "Offer sent",
+    accepted_by_worker: "Worker accepted",
+    under_company_review: "Worker accepted",
+    declined_by_worker: "Declined by worker",
+    expired: "Expired",
+    confirmed: "Confirmed",
+    declined_by_company: "Declined by company",
+    superseded: "Filled",
+  }[status || "interested"] || "Interested";
+}
+
+function applicationJob(app) {
+  return findJob(app?.jobId);
+}
+
+function applicationWorker(app) {
+  return findWorker(app?.workerId);
+}
+
+function offerExpiryLabel(app) {
+  if (!app?.expiresAt) return "";
+  const ms = new Date(app.expiresAt).getTime() - Date.now();
+  if (ms <= 0) return "Expires now";
+  const hours = Math.max(1, Math.ceil(ms / 3600000));
+  return hours >= 24 ? "Expires in 24 hours" : `Expires in ${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function previousDeclineReasonsForWorker(workerId) {
+  return (state.applications || [])
+    .filter(
+      (a) =>
+        a.workerId === workerId &&
+        (a.workerDeclineReason || a.companyDeclineReason),
+    )
+    .slice(-5)
+    .map((a) => ({
+      jobId: a.jobId,
+      workerReason: a.workerDeclineReason || "",
+      companyReason: a.companyDeclineReason || "",
+      at: a.workerRespondedAt || a.companyReviewedAt || "",
+    }));
+}
+
+function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
+  const stats = getWorkerStats(worker?.id || "");
+  return {
+    reliability:
+      stats.totalShifts > 0 ? stats.reliability : worker?.reliability ?? 100,
+    trade: worker?.trade || "",
+    specialism: worker?.grade || worker?.specialism || "",
+    qualifications: worker?.qualifications || "",
+    certifications: worker?.certifications || [],
+    travelRadiusMiles: worker?.travelRadiusMiles ?? null,
+    travelFurtherWithAccommodation: !!worker?.travelFurtherWithAccommodation,
+    nextAvailableDate: worker?.nextAvailableDate || "",
+    plannedAbsenceSummary: Array.isArray(worker?.plannedAbsences)
+      ? worker.plannedAbsences.map((a) => ({
+          startDate: a.startDate,
+          endDate: a.endDate,
+        }))
+      : [],
+    previousDeclineReasons: previousDeclineReasonsForWorker(worker?.id),
+    rankAtOffer,
+    jobTrade: job?.trade || "",
+    jobLocation: job?.location || "",
+    jobStart: job?.start || "",
+  };
+}
+
+function ensureApplicationForOffer(job, worker) {
+  if (!Array.isArray(state.applications)) state.applications = [];
+  let app = applicationFor(job.id, worker.id);
+  if (!app) {
+    app = {
+      id: createId(),
+      jobId: job.id,
+      workerId: worker.id,
+      workerName: worker.name || "Worker",
+      workerTrade: worker.trade || "",
+      companyId: job.companyId || "",
+      companyName: job.companyName || "Company",
+      status: "interested",
+      createdAt: new Date().toISOString(),
+    };
+    state.applications.push(app);
+  }
+  return app;
+}
+
+function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) {
+  const job = findJob(jobId);
+  const worker = findWorker(workerId);
+  if (!job || !worker) return { ok: false, reason: "Job or worker not found" };
+  if (job.assignedWorkerId || job.completed)
+    return { ok: false, reason: "This job is no longer open" };
+  if (worker.availability !== "available")
+    return { ok: false, reason: "Worker is unavailable" };
+  const pricing = computeBookingPricing({
+    workerMin: workerMinRate(worker),
+    budget: jobBudget(job),
+  });
+  if (!pricing.viable) return { ok: false, reason: pricing.reason };
+
+  const now = new Date();
+  const app = ensureApplicationForOffer(job, worker);
+  if (
+    ["offered", "accepted_by_worker", "under_company_review", "confirmed"].includes(
+      app.status,
+    )
+  ) {
+    return { ok: true, application: app, duplicate: true };
+  }
+
+  Object.assign(app, {
+    status: "offered",
+    source,
+    rankAtOffer,
+    offeredAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + OFFER_EXPIRY_MS).toISOString(),
+    workerRespondedAt: "",
+    workerDeclineReason: "",
+    workerDeclineComment: "",
+    companyReviewedAt: "",
+    companyDecision: "",
+    companyDeclineReason: "",
+    companyDeclineComment: "",
+    confirmedAt: "",
+    supersededAt: "",
+    matchSnapshot: buildOfferMatchSnapshot(job, worker, rankAtOffer),
+  });
+  logActivity(
+    "assign",
+    `Job offer sent to <strong>${escapeHtml(worker.name)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.`,
+  );
+  return { ok: true, application: app };
+}
+
+function expireJobOffers() {
+  let changed = false;
+  const now = Date.now();
+  (state.applications || []).forEach((app) => {
+    if (app.status !== "offered" || !app.expiresAt) return;
+    if (new Date(app.expiresAt).getTime() > now) return;
+    app.status = "expired";
+    app.expiredAt = new Date().toISOString();
+    changed = true;
+
+    const worker = applicationWorker(app);
+    if (!worker) return;
+    worker.consecutiveMissedOffers = (worker.consecutiveMissedOffers || 0) + 1;
+    if (
+      worker.consecutiveMissedOffers >= MISSED_OFFERS_LIMIT &&
+      worker.availability === "available"
+    ) {
+      updateWorkerAvailability(worker.id, "not available", worker.nextAvailableDate || "");
+      if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
+      worker.offerNotifications.unshift({
+        id: createId(),
+        type: "missed_2_offers",
+        message: MISSED_OFFERS_NOTICE,
+        createdAt: new Date().toISOString(),
+        readAt: "",
+      });
+      logActivity(
+        "avail",
+        `<strong>${escapeHtml(worker.name)}</strong> missed 2 job offers and was set to unavailable.`,
+      );
+    }
+  });
+  return changed;
+}
+
+function workerAcceptOffer(applicationId) {
+  const app = (state.applications || []).find((a) => a.id === applicationId);
+  const job = applicationJob(app);
+  const worker = applicationWorker(app);
+  if (!app || !job || !worker) return;
+  if (app.status !== "offered") return;
+  if (new Date(app.expiresAt).getTime() <= Date.now()) {
+    expireJobOffers();
+    saveAndRender();
+    showToast("This offer has expired");
+    return;
+  }
+  app.status = "under_company_review";
+  app.workerRespondedAt = new Date().toISOString();
+  worker.consecutiveMissedOffers = 0;
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  state.notifications.unshift({
+    id: createId(),
+    type: "worker_offer_accepted",
+    applicationId: app.id,
+    jobId: job.id,
+    workerId: worker.id,
+    companyId: app.companyId || job.companyId || "",
+    message: `${worker.name} accepted the offer for ${job.trade} in ${job.location}.`,
+    createdAt: new Date().toISOString(),
+    readAt: "",
+  });
+  logActivity(
+    "assign",
+    `<strong>${escapeHtml(worker.name)}</strong> accepted the offer for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} — awaiting company review.`,
+  );
+  saveAndRender();
+  showToast("Offer accepted — awaiting company review");
+}
+
+function workerDeclineOffer(applicationId, reason, comment = "") {
+  const app = (state.applications || []).find((a) => a.id === applicationId);
+  const job = applicationJob(app);
+  const worker = applicationWorker(app);
+  if (!app || !reason || app.status !== "offered") return;
+  app.status = "declined_by_worker";
+  app.workerRespondedAt = new Date().toISOString();
+  app.workerDeclineReason = reason;
+  app.workerDeclineComment = comment.trim();
+  if (worker) worker.consecutiveMissedOffers = 0;
+  logActivity(
+    "assign",
+    `<strong>${escapeHtml(app.workerName)}</strong> declined the offer for ${escapeHtml(job?.trade || "the job")} — ${escapeHtml(reason)}. Reliability is unaffected.`,
+  );
+  saveAndRender();
+  showToast("Offer declined — your reliability is unaffected");
+}
+
+function companyAcceptWorker(applicationId) {
+  const app = (state.applications || []).find((a) => a.id === applicationId);
+  const job = applicationJob(app);
+  const worker = applicationWorker(app);
+  if (!app || !job || !worker) return;
+  if (app.status !== "under_company_review") return;
+  const res = confirmBooking(job, worker.id);
+  if (!res.ok) {
+    showToast(res.reason);
+    return;
+  }
+  app.status = "confirmed";
+  app.companyDecision = "accepted";
+  app.companyReviewedAt = new Date().toISOString();
+  app.confirmedAt = app.companyReviewedAt;
+  (state.applications || []).forEach((other) => {
+    if (other.jobId !== job.id || other.id === app.id) return;
+    if (
+      ["interested", "offered", "under_company_review", "accepted_by_worker"].includes(
+        other.status,
+      )
+    ) {
+      other.status = "superseded";
+      other.supersededAt = new Date().toISOString();
+    }
+  });
+  logActivity(
+    "assign",
+    `<strong>${escapeHtml(worker.name)}</strong> confirmed for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} after offer review.`,
+  );
+  saveAndRender();
+  showToast("Worker confirmed — Job Agreement created");
+}
+
+function companyDeclineWorker(applicationId, reason, comment = "") {
+  const app = (state.applications || []).find((a) => a.id === applicationId);
+  const job = applicationJob(app);
+  if (!app || !job || !reason || app.status !== "under_company_review") return;
+  app.status = "declined_by_company";
+  app.companyDecision = "declined";
+  app.companyReviewedAt = new Date().toISOString();
+  app.companyDeclineReason = reason;
+  app.companyDeclineComment = comment.trim();
+  const next = offerNextBestWorker(job.id);
+  logActivity(
+    "assign",
+    `${escapeHtml(app.companyName || "Company")} declined <strong>${escapeHtml(app.workerName)}</strong> for ${escapeHtml(job.trade)} — ${escapeHtml(reason)}.${next.ok ? " Next best worker offered." : ""}`,
+  );
+  saveAndRender();
+  showToast(next.ok ? "Worker declined — next best worker offered" : "Worker declined — no other match available");
+}
+
+function offerNextBestWorker(jobId) {
+  const job = findJob(jobId);
+  if (!job || job.assignedWorkerId || job.completed)
+    return { ok: false, reason: "Job unavailable" };
+  const usedWorkerIds = new Set(
+    (state.applications || [])
+      .filter(
+        (a) =>
+          a.jobId === jobId &&
+          [
+            "offered",
+            "under_company_review",
+            "declined_by_worker",
+            "declined_by_company",
+            "expired",
+            "confirmed",
+            "superseded",
+          ].includes(a.status),
+      )
+      .map((a) => a.workerId),
+  );
+  const matches = getMatches(job).filter((w) => !usedWorkerIds.has(w.id));
+  const [next] = matches;
+  if (!next) return { ok: false, reason: "No matched worker available" };
+  return createJobOffer(job.id, next.id, "next_best", matches.indexOf(next) + 1);
 }
 
 // ─── Worker Identity Records (duplicate / returning-worker prevention) ──
@@ -3286,6 +3753,101 @@ function renderWorkerHome(user) {
       </div>
       <button class="wh-agr-review-btn" type="button" data-agr-open="${bookingAgr.id}">${agrState === "pending_worker" ? "Review & Sign" : "View"}</button>
     </div>`
+	      : "";
+  const isUnavailable = user.availability === "not available";
+  const nextAvailable = formatDateInput(user.nextAvailableDate);
+  const workerProfile = findWorker(user.id) || ensureWorkerProfileForUser(user);
+  const workerOffers = (state.applications || []).filter(
+    (a) =>
+      a.workerId === user.id &&
+      ["offered", "under_company_review", "confirmed", "declined_by_worker", "expired"].includes(
+        a.status,
+      ),
+  );
+  const activeOffers = workerOffers.filter((a) => a.status === "offered");
+  const recentOfferHistory = workerOffers
+    .filter((a) => a.status !== "offered")
+    .slice(-3)
+    .reverse();
+  const missedNotice = (workerProfile?.offerNotifications || []).find(
+    (n) => n.type === "missed_2_offers" && !n.readAt,
+  );
+  const availabilityPanel = `
+    <div class="wh-availability-panel">
+      <div class="wh-availability-main">
+        <button class="wh-avail-btn ${isUnavailable ? "unavailable" : "available"}"
+          id="whAvailBtn" type="button">
+          <span class="wh-avail-dot"></span>
+          ${isUnavailable ? "Unavailable" : "Available"}
+        </button>
+        <label class="wh-next-date">
+          <span>Next Available Date</span>
+          <input id="whNextAvailableDate" type="date" value="${escapeHtml(nextAvailable)}" />
+        </label>
+        <button class="wh-next-save" id="whNextAvailableSave" type="button">Save</button>
+      </div>
+      ${
+        isUnavailable
+          ? `<div class="wh-unavailable-note">You’re currently unavailable. Toggle to available when you’re ready to start receiving job offers.</div>`
+          : ""
+      }
+    </div>`;
+  const missedNoticeHtml = missedNotice
+    ? `<div class="wh-offer-notice">${escapeHtml(missedNotice.message)}</div>`
+    : "";
+  const offerCardHtml = (app) => {
+    const job = applicationJob(app);
+    const pay = job ? workerPayDisplay(job, workerProfile || user) : null;
+    if (!job) return "";
+    return `
+      <div class="wh-offer-card">
+        <div class="wh-offer-head">
+          <span class="wh-offer-label">Job Offer</span>
+          <span class="wh-offer-expiry">${escapeHtml(offerExpiryLabel(app))}</span>
+        </div>
+        <div class="wh-offer-title">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</div>
+        <div class="wh-offer-meta">
+          ${job.start ? formatDate(job.start) : "Start date TBC"}
+          ${job.duration ? ` · ${escapeHtml(job.duration)}` : ""}
+          ${pay != null ? ` · ${formatMoney(pay)}/day guaranteed` : ""}
+        </div>
+        ${job.siteName || job.siteAddress ? `<div class="wh-offer-site">${escapeHtml(job.siteName || job.siteAddress)}</div>` : ""}
+        <div class="wh-offer-actions">
+          <button class="secondary-btn wh-offer-decline" type="button" data-worker-offer-decline="${app.id}">Decline</button>
+          <button class="primary-btn wh-offer-accept" type="button" data-worker-offer-accept="${app.id}">Accept</button>
+        </div>
+      </div>`;
+  };
+  const offerHistoryHtml = recentOfferHistory.length
+    ? `<div class="wh-offer-history">
+        ${recentOfferHistory
+          .map((app) => {
+            const job = applicationJob(app);
+            const reason =
+              app.workerDeclineReason || app.companyDeclineReason
+                ? ` · ${escapeHtml(app.workerDeclineReason || app.companyDeclineReason)}`
+                : "";
+            return `<div class="wh-offer-history-row">
+              <span>${escapeHtml(job?.trade || "Job")} · ${escapeHtml(job?.location || "")}</span>
+              <strong>${escapeHtml(offerStatusLabel(app.status))}${reason}</strong>
+            </div>`;
+          })
+          .join("")}
+      </div>`
+    : "";
+  const offersPanel =
+    missedNoticeHtml || activeOffers.length || offerHistoryHtml
+      ? `
+    <div class="wh-section-label">Job Offers</div>
+    <div class="wh-offers-panel">
+      ${missedNoticeHtml}
+      ${
+        activeOffers.length
+          ? activeOffers.map(offerCardHtml).join("")
+          : `<div class="att-empty">No active job offers right now.</div>`
+      }
+      ${offerHistoryHtml}
+    </div>`
       : "";
   const activeBookingHtml = booking
     ? `
@@ -3377,14 +3939,6 @@ function renderWorkerHome(user) {
     <div class="wh-hero">
       <div class="wh-hero-left">
         ${reliabilityBadge(reliability, 72)}
-        <div class="wh-avail-wrap">
-          <button class="wh-avail-btn ${user.availability === "not available" ? "unavailable" : "available"}"
-            id="whAvailBtn" type="button">
-            <span class="wh-avail-dot"></span>
-            ${user.availability === "not available" ? "Unavailable" : "Available"}
-          </button>
-          <div class="wh-avail-hint">Tap to toggle</div>
-        </div>
       </div>
       <div class="wh-hero-stats">
         <div class="wh-stat-card">
@@ -3401,26 +3955,55 @@ function renderWorkerHome(user) {
         </div>
       </div>
     </div>
+    ${availabilityPanel}
+    ${offersPanel}
     ${activeBookingHtml}
     ${recJobsHtml}`;
 
   // Availability toggle
   document.getElementById("whAvailBtn")?.addEventListener("click", () => {
-    const users = JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
     const session = JSON.parse(
       localStorage.getItem("onsite_auth_v1") || "null",
     );
     if (!session) return;
-    session.availability =
+    const nextAvailability =
       session.availability === "not available" ? "available" : "not available";
-    localStorage.setItem("onsite_auth_v1", JSON.stringify(session));
-    const idx = users.findIndex((u) => u.id === session.id);
-    if (idx !== -1) {
-      users[idx].availability = session.availability;
-      localStorage.setItem("onsite_users_v1", JSON.stringify(users));
+    if (nextAvailability === "available") {
+      alert(
+        "By marking yourself as available, you may receive job offers from contractors. If you are currently in work/unavailable, set yourself to unavailable until you are ready for a new assignment.",
+      );
     }
-    renderWorkerHome(session);
-    showToast(`Status set to ${session.availability}`);
+    const nextDate = document.getElementById("whNextAvailableDate")?.value || "";
+    updateWorkerAvailability(session.id, nextAvailability, nextDate);
+    render();
+    showToast(`Status set to ${nextAvailability}`);
+  });
+
+  document
+    .getElementById("whNextAvailableSave")
+    ?.addEventListener("click", () => {
+      const session = JSON.parse(
+        localStorage.getItem("onsite_auth_v1") || "null",
+      );
+      if (!session) return;
+      const nextDate =
+        document.getElementById("whNextAvailableDate")?.value || "";
+      updateWorkerAvailability(
+        session.id,
+        session.availability || "available",
+        nextDate,
+      );
+      render();
+      showToast("Next available date saved");
+    });
+
+  el.querySelectorAll("[data-worker-offer-accept]").forEach((btn) => {
+    btn.addEventListener("click", () => workerAcceptOffer(btn.dataset.workerOfferAccept));
+  });
+  el.querySelectorAll("[data-worker-offer-decline]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openOfferDecisionModal("worker", btn.dataset.workerOfferDecline),
+    );
   });
 
   // Recommended job clicks → go to Jobs tab
@@ -3470,6 +4053,10 @@ function renderWorkerProfile(user) {
     { label: "Trade", val: user.trade },
     { label: "Grade", val: user.grade },
     { label: "Availability", val: user.availability },
+    {
+      label: "Next Available Date",
+      val: user.nextAvailableDate ? formatDateOnly(user.nextAvailableDate) : null,
+    },
     { label: "UTR Number", val: user.utr },
     { label: "Right to Work", val: user.rightToWork ? "Provided" : null },
     { label: "Location", val: user.location },
@@ -3732,6 +4319,8 @@ function renderContractorHome(user) {
       <div class="ch-att-item late"><span class="ch-att-num">${att.late}</span><span class="ch-att-lbl">Late</span></div>
       <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
     </div>
+    ${companyLateReportPanelHTML(user)}
+    ${companyOfferReviewPanelHTML(user)}
     ${extensionPanelHTML(user.id)}
     ${companyAgreementPanelHTML(user)}
     <div class="ch-section-label">Active Requests</div>
@@ -3753,6 +4342,96 @@ function renderContractorHome(user) {
   bindCancelBookingButtons(el);
   bindAgreementOpeners(el);
   bindExtensionButtons(el);
+  bindCompanyOfferButtons(el);
+}
+
+function companyLateReportPanelHTML(user) {
+  const reports = (state.notifications || [])
+    .filter(
+      (n) =>
+        n.type === "worker_late_report" &&
+        (n.companyId === user.id || (!n.companyId && user.type === "company")),
+    )
+    .slice(0, 3);
+  if (!reports.length) return "";
+  return `
+    <div class="ch-late-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Late Reports</span>
+        <span class="ch-agr-panel-count">${reports.length}</span>
+      </div>
+      ${reports
+        .map((n) => {
+          const when = n.createdAt ? formatDate(n.createdAt) : "";
+          const mgr = n.attendanceManager?.name
+            ? ` · ${escapeHtml(n.attendanceManager.name)} notified`
+            : "";
+          return `<div class="ch-late-row">
+            <div class="ch-late-msg">${escapeHtml(n.message || "Worker reported running late")}</div>
+            <div class="ch-late-meta">${escapeHtml(when)}${mgr}</div>
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
+function companyOfferReviewPanelHTML(user) {
+  const companyApps = (state.applications || []).filter(
+    (a) => a.companyId === user.id || (!a.companyId && user.type === "company"),
+  );
+  const review = companyApps.filter((a) => a.status === "under_company_review");
+  const pending = companyApps.filter((a) => a.status === "offered");
+  if (!review.length && !pending.length) return "";
+  const rows = review
+    .map((app) => {
+      const job = applicationJob(app);
+      const worker = applicationWorker(app);
+      const rel =
+        worker && getWorkerStats(worker.id).totalShifts > 0
+          ? getWorkerStats(worker.id).reliability
+          : worker?.reliability;
+      return `
+    <div class="ch-offer-row">
+      <div class="ch-offer-info">
+        <div class="ch-offer-title">${escapeHtml(app.workerName)} accepted · ${escapeHtml(job?.trade || "Job")}</div>
+        <div class="ch-offer-meta">
+          ${escapeHtml(job?.location || "")}
+          ${rel != null ? ` · Reliability ${rel}%` : ""}
+          ${worker?.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}
+        </div>
+      </div>
+      <div class="ch-offer-actions">
+        <button class="secondary-btn ch-offer-btn" type="button" data-company-offer-decline="${app.id}">Decline</button>
+        <button class="primary-btn ch-offer-btn" type="button" data-company-offer-accept="${app.id}">Accept</button>
+      </div>
+    </div>`;
+    })
+    .join("");
+  const pendingRows = pending.length
+    ? `<div class="ch-offer-pending">${pending.length} offer${pending.length === 1 ? "" : "s"} awaiting worker response.</div>`
+    : "";
+  return `
+    <div class="ch-offer-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Job Offers — Company Review</span>
+        <span class="ch-agr-panel-count">${review.length}</span>
+      </div>
+      ${rows || ""}
+      ${pendingRows}
+    </div>`;
+}
+
+function bindCompanyOfferButtons(scope) {
+  scope.querySelectorAll("[data-company-offer-accept]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      companyAcceptWorker(btn.dataset.companyOfferAccept),
+    );
+  });
+  scope.querySelectorAll("[data-company-offer-decline]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openOfferDecisionModal("company", btn.dataset.companyOfferDecline),
+    );
+  });
 }
 
 // Company panel: agreements awaiting the company's confirmation.
@@ -4338,6 +5017,7 @@ function render() {
 
   // Advance any booking extension/reallocation states before drawing.
   if (processExtensionLifecycle()) saveState();
+  if (expireJobOffers()) saveState();
   // Roll up any newly-completed weeks into invoices and refresh restrictions.
   if (generateWeeklyInvoices()) saveState();
 
@@ -4468,10 +5148,10 @@ function renderWorkers() {
   workersList.querySelectorAll("[data-worker-avail]").forEach((sel) => {
     sel.addEventListener("change", () => {
       const w = findWorker(sel.dataset.workerAvail);
-      w.availability = sel.value;
-      logActivity(
-        "avail",
-        `<strong>${escapeHtml(w.name)}</strong> marked as <em>${escapeHtml(sel.value)}</em>`,
+      updateWorkerAvailability(
+        sel.dataset.workerAvail,
+        sel.value,
+        sel.value === "not available" ? w?.nextAvailableDate || "" : "",
       );
       saveAndRender();
     });
@@ -4510,6 +5190,9 @@ function workerCard(worker) {
     worker.availability === "available" ? "available" : "unavailable";
   const stats = getWorkerStats(worker.id);
   const completion = calcWorkerCompletion(worker);
+  const nextAvailable = worker.nextAvailableDate
+    ? `<span class="worker-next-available">Next available ${formatDateOnly(worker.nextAvailableDate)}</span>`
+    : "";
 
   const statsRow =
     stats.totalShifts > 0
@@ -4533,6 +5216,7 @@ function workerCard(worker) {
         <div class="worker-trade">${escapeHtml(worker.trade)}</div>
         <div class="worker-quals">
           <span class="status-pill ${statusCls}">${worker.availability}</span>
+          ${nextAvailable}
           ${certChipsHTML(worker)}
         </div>
       </div>
@@ -4583,18 +5267,13 @@ function renderJobs() {
     sel.addEventListener("change", () => {
       const job = findJob(sel.dataset.assignJob);
       if (sel.value) {
-        const w = findWorker(sel.value);
-        const res = confirmBooking(job, sel.value);
+        const res = createJobOffer(job.id, sel.value, "manual");
         if (!res.ok) {
           sel.value = "";
           showToast(res.reason);
           return;
         }
-        logActivity(
-          "assign",
-          `<strong>${escapeHtml(w.name)}</strong> manually assigned to ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}`,
-        );
-        showToast("Protected Booking confirmed");
+        showToast(res.duplicate ? "Offer already active" : "Job offer sent");
         saveAndRender();
       } else if (job.assignedWorkerId) {
         // Unassigning a confirmed Protected Booking must go through cancellation
@@ -4723,8 +5402,8 @@ function jobCard(job) {
       </button>`
           : ""
       }
-      <select class="job-assign-select" aria-label="Assign worker" data-assign-job="${job.id}">
-        <option value="">Manual assignment…</option>
+      <select class="job-assign-select" aria-label="Send job offer" data-assign-job="${job.id}">
+        <option value="">Send offer...</option>
         ${state.workers
           .map(
             (w) =>
@@ -4754,17 +5433,13 @@ function renderMatches() {
       const job = findJob(btn.dataset.autoAssign);
       const [best] = getMatches(job);
       if (!best) return;
-      const res = confirmBooking(job, best.id);
+      const res = createJobOffer(job.id, best.id, "best_match", 1);
       if (!res.ok) {
         showToast(res.reason);
         return;
       }
-      logActivity(
-        "assign",
-        `<strong>${escapeHtml(best.name)}</strong> auto-assigned as best match for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} (score ${best.reliability})`,
-      );
       saveAndRender();
-      showToast(`Protected Booking confirmed for ${best.name}`);
+      showToast(res.duplicate ? "Offer already active" : `Job offer sent to ${best.name}`);
     });
   });
 }
@@ -4785,7 +5460,7 @@ function matchCard(job) {
           ${assigned ? ` · <span style="color:var(--orange);font-weight:600;">Assigned: ${escapeHtml(assigned.name)}</span>` : ""}
         </div>
       </div>
-      ${matches.length ? `<button class="auto-assign-btn" type="button" data-auto-assign="${job.id}">⚡ Best match</button>` : ""}
+      ${matches.length ? `<button class="auto-assign-btn" type="button" data-auto-assign="${job.id}">Offer best match</button>` : ""}
     </div>
     <div class="match-workers-list">
       ${
@@ -5249,9 +5924,6 @@ document.getElementById("reportModal")?.addEventListener("click", (e) => {
 document
   .getElementById("submitReportBtn")
   ?.addEventListener("click", submitReport);
-document
-  .getElementById("reportUnable")
-  ?.addEventListener("change", syncReportEta);
 
 // ─── Photo Lightbox ────────────────────────────────────────
 let lightboxEl = null;
@@ -5474,6 +6146,21 @@ const SUPERVISOR_DECISIONS = [
   "siteCancelled",
 ];
 
+const LATE_REPORT_REASONS = [
+  "Public transport disruption",
+  "Road traffic",
+  "Vehicle breakdown",
+  "Family emergency",
+  "Medical appointment",
+  "Other",
+];
+
+const LATE_CLASSIFICATION = {
+  valid_reason: "Valid reason",
+  invalid_reason: "Invalid reason",
+  worker_did_not_arrive: "Worker did not arrive",
+};
+
 // ─── Attendance timing rules ──────────────────────────────
 const GRACE_MIN = 10; // within this many minutes of start = On Time
 const CUTOFF_MIN = 60; // no scan after this many minutes = Unconfirmed
@@ -5492,6 +6179,58 @@ function suggestStatusForScan(scanMs, startMs) {
 }
 function isPastCutoff(startMs) {
   return Date.now() > startMs + CUTOFF_MIN * 60000;
+}
+
+function jobExpectedStartTime(job) {
+  const code = job?.id ? activeSiteCode(job.id) : null;
+  if (code?.startTime) return code.startTime;
+  if (job?.start && String(job.start).includes("T")) {
+    return String(job.start).split("T")[1].slice(0, 5);
+  }
+  return "08:00";
+}
+
+function lateReportFor(workerId, date = todayDateStr()) {
+  return attendanceRecords.find(
+    (r) => r.workerId === workerId && r.date === date && r.lateReport,
+  );
+}
+
+function upsertWorkerLateReport(workerId, lateReport, date) {
+  const worker = findWorker(workerId);
+  if (!worker || !lateReport) return;
+  if (!Array.isArray(worker.lateReports)) worker.lateReports = [];
+  const snapshot = {
+    id: lateReport.id,
+    date,
+    jobId: lateReport.jobId || "",
+    project: lateReport.jobLocation || lateReport.jobTrade || "",
+    reason: lateReport.reason || "",
+    expectedStartTime: lateReport.expectedStartTime || "",
+    estimatedArrivalTime: lateReport.estimatedArrivalTime || "",
+    actualArrivalTime: lateReport.actualArrivalTime || "",
+    supervisorDecision: lateReport.supervisorDecision || "",
+  };
+  const idx = worker.lateReports.findIndex((r) => r.id === snapshot.id);
+  if (idx === -1) worker.lateReports.unshift(snapshot);
+  else worker.lateReports[idx] = snapshot;
+}
+
+function notifyLateReport(worker, job, lateReport) {
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  state.notifications.unshift({
+    id: createId(),
+    type: "worker_late_report",
+    workerId: worker?.id || "",
+    workerName: worker?.name || "Worker",
+    jobId: job?.id || "",
+    companyId: job?.companyId || "",
+    companyName: job?.companyName || "Company",
+    attendanceManager: job?.attendanceManager || null,
+    message: `${worker?.name || "Worker"} reported running late for ${job?.trade || "work"} in ${job?.location || "site"}. ETA ${lateReport.estimatedArrivalTime}.`,
+    createdAt: new Date().toISOString(),
+    readAt: "",
+  });
 }
 
 // ─── Daily Site QR Codes ──────────────────────────────────
@@ -5617,6 +6356,23 @@ function getWorkerStats(workerId) {
     (r) => r.status === "onTime" || r.status === "late",
   );
   const onTime = countable.filter((r) => r.status === "onTime");
+  const lateRecords = countable.filter((r) => r.status === "late");
+  const reportedLate = lateRecords.filter((r) => r.lateReport);
+  const unreportedLate = lateRecords.filter((r) => !r.lateReport);
+  const punctualityPoints = attended.reduce((sum, r) => {
+    if (r.status === "onTime") return sum + 1;
+    if (r.status !== "late") return sum;
+    const decision = r.lateReport?.supervisorDecision;
+    if (decision === "valid_reason") return sum + 1;
+    if (decision === "invalid_reason") return sum + 0.75;
+    if (r.lateReport) return sum + 1;
+    return sum + 0.5;
+  }, 0);
+  const lateReportsByReason = reportedLate.reduce((acc, r) => {
+    const reason = r.lateReport?.reason || "Other";
+    acc[reason] = (acc[reason] || 0) + 1;
+    return acc;
+  }, {});
   const ratings = recs.filter((r) => r.rating > 0).map((r) => r.rating);
   const disputed = recs.filter((r) => r.disputeStatus === "pending").length;
   return {
@@ -5630,8 +6386,11 @@ function getWorkerStats(workerId) {
       ? Math.round((attended.length / countable.length) * 100)
       : null,
     punctuality: attended.length
-      ? Math.round((onTime.length / attended.length) * 100)
+      ? Math.round((punctualityPoints / attended.length) * 100)
       : null,
+    reportedLateCount: reportedLate.length,
+    unreportedLateCount: unreportedLate.length,
+    lateReportsByReason,
     performance: ratings.length
       ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
       : null,
@@ -5674,15 +6433,30 @@ function submitDayAttendance() {
       (r) => r.workerId === wid && r.date === today,
     );
     const linkedJob = state.jobs.find((j) => j.assignedWorkerId === wid);
+    const lateReport = prevRec?.lateReport ? { ...prevRec.lateReport } : null;
+    if (lateReport && data.lateSupervisorDecision) {
+      lateReport.supervisorDecision = data.lateSupervisorDecision;
+      lateReport.supervisorDecisionAt =
+        lateReport.supervisorDecisionAt || new Date().toISOString();
+      lateReport.supervisorDecisionBy =
+        lateReport.supervisorDecisionBy ||
+        getSessionUser()?.companyName ||
+        getSessionUser()?.name ||
+        "Supervisor";
+    }
+    const finalStatus =
+      lateReport?.supervisorDecision === "worker_did_not_arrive"
+        ? "noShow"
+        : data.status;
     const rec = {
       id: createId(),
       workerId: wid,
       date: today,
-      status: data.status,
+      status: finalStatus,
       rating: data.rating || 0,
       recordedAt: Date.now(),
       supervisorConfirmed: true,
-      supervisorDecision: data.status,
+      supervisorDecision: finalStatus,
       confirmedAt: Date.now(),
     };
     // Snapshot the booking + pricing so weekly invoices can be built from
@@ -5708,6 +6482,16 @@ function submitDayAttendance() {
         rec.suggestedStatus = prevRec.suggestedStatus;
       if (prevRec.scanToken) rec.scanToken = prevRec.scanToken;
       if (prevRec.reportedIssue) rec.reportedIssue = prevRec.reportedIssue;
+      if (lateReport) rec.lateReport = lateReport;
+    }
+    if (rec.lateReport) {
+      if (rec.checkInTime && !rec.lateReport.actualArrivalTime) {
+        rec.lateReport.actualArrivalTime = new Date(rec.checkInTime).toLocaleTimeString(
+          "en-GB",
+          { hour: "2-digit", minute: "2-digit" },
+        );
+      }
+      upsertWorkerLateReport(wid, rec.lateReport, today);
     }
     if (data.gps) {
       rec.gpsLat = data.gps.lat;
@@ -5808,6 +6592,28 @@ function attendanceCard(worker, today) {
       </div>`;
   }
 
+  const lr = rec?.lateReport;
+  const lateReportBanner = lr
+    ? `
+    <div class="att-late-report">
+      <div class="att-late-report-main">
+        <strong>Running late reported</strong>
+        <span>${escapeHtml(lr.reason || "Other")} · Start ${escapeHtml(lr.expectedStartTime || "08:00")} · ETA ${escapeHtml(lr.estimatedArrivalTime || "—")}${lr.actualArrivalTime ? ` · Arrived ${escapeHtml(lr.actualArrivalTime)}` : ""}</span>
+        ${lr.comment ? `<em>${escapeHtml(lr.comment)}</em>` : ""}
+        ${lr.supervisorDecision ? `<span class="att-late-decision">Decision: ${escapeHtml(LATE_CLASSIFICATION[lr.supervisorDecision] || lr.supervisorDecision)}</span>` : ""}
+      </div>
+      ${
+        lr.supervisorDecision
+          ? ""
+          : `<div class="att-late-actions">
+              <button type="button" data-late-classify="${worker.id}" data-late-decision="valid_reason">Valid reason</button>
+              <button type="button" data-late-classify="${worker.id}" data-late-decision="invalid_reason">Invalid reason</button>
+              <button type="button" data-late-classify="${worker.id}" data-late-decision="worker_did_not_arrive">Worker did not arrive</button>
+            </div>`
+      }
+    </div>`
+    : "";
+
   const showRating = saved.status === "onTime" || saved.status === "late";
   const ratingRow = showRating
     ? `
@@ -5874,6 +6680,7 @@ function attendanceCard(worker, today) {
       </div>
     </div>
     ${checkInBanner}
+    ${lateReportBanner}
     ${statsRow}
     <div class="att-status-btns att-status-btns--sup">${statusBtns}</div>
     ${ratingRow}
@@ -5932,6 +6739,37 @@ function bindAttendanceEvents(container) {
       }
     });
   });
+  container.querySelectorAll("[data-late-classify]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      classifyLateReport(btn.dataset.lateClassify, btn.dataset.lateDecision);
+    });
+  });
+}
+
+function classifyLateReport(workerId, decision) {
+  const today = todayDateStr();
+  const rec = lateReportFor(workerId, today);
+  if (!rec?.lateReport || !LATE_CLASSIFICATION[decision]) return;
+  const sess = getSessionUser();
+  rec.lateReport.supervisorDecision = decision;
+  rec.lateReport.supervisorDecisionAt = new Date().toISOString();
+  rec.lateReport.supervisorDecisionBy =
+    sess?.companyName || sess?.name || "Supervisor";
+  if (rec.checkInTime && !rec.lateReport.actualArrivalTime) {
+    rec.lateReport.actualArrivalTime = new Date(rec.checkInTime).toLocaleTimeString(
+      "en-GB",
+      { hour: "2-digit", minute: "2-digit" },
+    );
+  }
+  if (!todayAttendanceMap[workerId]) todayAttendanceMap[workerId] = {};
+  todayAttendanceMap[workerId].status =
+    decision === "worker_did_not_arrive" ? "noShow" : "late";
+  todayAttendanceMap[workerId].lateSupervisorDecision = decision;
+  upsertWorkerLateReport(workerId, rec.lateReport, today);
+  saveAttendanceRecords();
+  saveState();
+  refreshAttCard(workerId);
+  showToast(`Late report classified: ${LATE_CLASSIFICATION[decision]}`);
 }
 
 function refreshAttCard(wid) {
@@ -6087,31 +6925,28 @@ function workerSelfAttCard(worker, today) {
           <div class="wsa-state-title">Checked in${t ? ` at ${t}` : ""}</div>
           <div class="wsa-state-sub">Pending supervisor approval${sug ? ` · suggested ${sug.label}` : ""}</div>
         </div>
-      </div>
-      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report a problem</button>`;
+      </div>`;
   } else if (rec && rec.status === "reportedIssue") {
-    const ri = rec.reportedIssue || {};
-    const detail = ri.unableToAttend
-      ? "Unable to attend"
-      : ri.expectedArrival
-        ? `ETA ${escapeHtml(ri.expectedArrival)}`
-        : "";
+    const ri = rec.lateReport || rec.reportedIssue || {};
+    const detail = ri.estimatedArrivalTime || ri.expectedArrival
+      ? `ETA ${escapeHtml(ri.estimatedArrivalTime || ri.expectedArrival)}`
+      : "";
     body = `
       <div class="wsa-state wsa-state--issue">
         <span class="wsa-state-icon">${ATT_CFG.reportedIssue.icon}</span>
         <div>
-          <div class="wsa-state-title">Reported: ${escapeHtml(ri.reason || "Issue")}</div>
+          <div class="wsa-state-title">Running late: ${escapeHtml(ri.reason || "Issue")}</div>
           <div class="wsa-state-sub">${detail ? detail + " · " : ""}Pending supervisor review</div>
         </div>
       </div>
-      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Update report</button>`;
+      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Update late report</button>`;
   } else {
     body = `
       <button class="wsa-checkin-btn" data-att-scan="${worker.id}" type="button">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/></svg>
         Scan site QR to check in
       </button>
-      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report delay or absence</button>`;
+      <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report running late</button>`;
   }
 
   return `
@@ -6173,6 +7008,18 @@ function workerScanCheckIn(uid, workerObj) {
   const scanMs = Date.now();
   const startMs = siteStartMs(code.startTime);
   const suggested = suggestStatusForScan(scanMs, startMs);
+  const previous = attendanceRecords.find(
+    (r) => r.workerId === uid && r.date === today,
+  );
+  const lateReport = previous?.lateReport
+    ? {
+        ...previous.lateReport,
+        actualArrivalTime: new Date(scanMs).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }
+    : null;
 
   const rec = {
     id: createId(),
@@ -6187,6 +7034,12 @@ function workerScanCheckIn(uid, workerObj) {
     suggestedStatus: suggested,
     scanToken: code.token,
   };
+  if (lateReport) {
+    rec.lateReport = lateReport;
+    rec.reportedIssue = previous.reportedIssue;
+    upsertWorkerLateReport(uid, lateReport, today);
+    saveState();
+  }
   attendanceRecords = attendanceRecords.filter(
     (r) => !(r.workerId === uid && r.date === today),
   );
@@ -6340,6 +7193,17 @@ function renderAttendance() {
     .filter((r) => r.date === today)
     .forEach((r) => {
       if (todayAttendanceMap[r.workerId]) return;
+      if (r.lateReport?.supervisorDecision) {
+        todayAttendanceMap[r.workerId] = {
+          status:
+            r.lateReport.supervisorDecision === "worker_did_not_arrive"
+              ? "noShow"
+              : "late",
+          rating: r.rating || 0,
+          lateSupervisorDecision: r.lateReport.supervisorDecision,
+        };
+        return;
+      }
       if (
         r.status === "checkedIn" ||
         r.status === "reportedIssue" ||
@@ -7216,13 +8080,12 @@ async function submitDispute() {
   showToast("Dispute submitted — attendance frozen pending review");
 }
 
-// ─── Report Delay / Absence (worker) ──────────────────────
+// ─── Report Running Late (worker) ──────────────────────────
 let currentReportWorkerId = null;
 
 function syncReportEta() {
-  const unable = document.getElementById("reportUnable")?.checked;
   const wrap = document.getElementById("reportEtaWrap");
-  if (wrap) wrap.style.display = unable ? "none" : "";
+  if (wrap) wrap.style.display = "";
 }
 
 function openReportModal(uid) {
@@ -7232,16 +8095,14 @@ function openReportModal(uid) {
     (r) => r.workerId === uid && r.date === today,
   );
   const ri =
-    rec && rec.status === "reportedIssue" ? rec.reportedIssue || {} : {};
+    rec && rec.lateReport ? rec.lateReport : {};
 
   const reasonSel = document.getElementById("reportReason");
   if (reasonSel && ri.reason) reasonSel.value = ri.reason;
-  const unable = document.getElementById("reportUnable");
-  if (unable) unable.checked = !!ri.unableToAttend;
   const eta = document.getElementById("reportEta");
-  if (eta) eta.value = ri.expectedArrival || "";
+  if (eta) eta.value = ri.estimatedArrivalTime || "";
   const note = document.getElementById("reportNote");
-  if (note) note.value = ri.note || "";
+  if (note) note.value = ri.comment || "";
   syncReportEta();
 
   document.getElementById("reportModal")?.classList.remove("hidden");
@@ -7259,12 +8120,49 @@ function submitReport() {
   if (!uid) return;
   const today = todayDateStr();
   const reason = document.getElementById("reportReason")?.value || "Other";
-  const unable = !!document.getElementById("reportUnable")?.checked;
   const eta = document.getElementById("reportEta")?.value || "";
   const note = document.getElementById("reportNote")?.value.trim() || "";
+  if (!eta) {
+    showToast("Enter your estimated arrival time");
+    return;
+  }
+
+  const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+  if (!job) {
+    showToast("You're not assigned to a site today");
+    return;
+  }
+  const expectedStartTime = jobExpectedStartTime(job);
+  if (Date.now() >= siteStartMs(expectedStartTime)) {
+    showToast("Late reports must be sent before your shift starts");
+    return;
+  }
+
+  const previous = attendanceRecords.find(
+    (r) => r.workerId === uid && r.date === today,
+  );
+  const lateReport = {
+    id: previous?.lateReport?.id || createId(),
+    type: "runningLate",
+    reason: LATE_REPORT_REASONS.includes(reason) ? reason : "Other",
+    estimatedArrivalTime: eta,
+    comment: note,
+    reportedAt: new Date().toISOString(),
+    reportedBeforeShift: true,
+    expectedStartTime,
+    actualArrivalTime: previous?.lateReport?.actualArrivalTime || "",
+    supervisorDecision: previous?.lateReport?.supervisorDecision || "",
+    supervisorDecisionAt: previous?.lateReport?.supervisorDecisionAt || "",
+    supervisorDecisionBy: previous?.lateReport?.supervisorDecisionBy || "",
+    jobId: job.id,
+    jobTrade: job.trade || "",
+    jobLocation: job.location || "",
+    companyId: job.companyId || "",
+    attendanceManager: job.attendanceManager || null,
+  };
 
   const rec = {
-    id: createId(),
+    id: previous?.id || createId(),
     workerId: uid,
     date: today,
     status: "reportedIssue",
@@ -7272,13 +8170,22 @@ function submitReport() {
     recordedAt: Date.now(),
     selfReported: true,
     supervisorConfirmed: false,
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    jobTrade: job.trade || "",
+    jobLocation: job.location || "",
+    lateReport,
     reportedIssue: {
-      reason,
-      unableToAttend: unable,
-      expectedArrival: unable ? "" : eta,
+      reason: lateReport.reason,
+      unableToAttend: false,
+      expectedArrival: eta,
       note,
     },
   };
+  if (previous?.checkInTime) rec.checkInTime = previous.checkInTime;
+  if (previous?.suggestedStatus) rec.suggestedStatus = previous.suggestedStatus;
+  if (previous?.scanToken) rec.scanToken = previous.scanToken;
   attendanceRecords = attendanceRecords.filter(
     (r) => !(r.workerId === uid && r.date === today),
   );
@@ -7286,9 +8193,12 @@ function submitReport() {
   saveAttendanceRecords();
 
   const w = findWorker(uid);
+  upsertWorkerLateReport(uid, lateReport, today);
+  notifyLateReport(w, job, lateReport);
+  saveState();
   logActivity(
     "attend",
-    `<strong>${escapeHtml(w?.name || "Worker")}</strong> reported: ${escapeHtml(reason)}${unable ? " (unable to attend)" : eta ? ` (ETA ${escapeHtml(eta)})` : ""}`,
+    `<strong>${escapeHtml(w?.name || "Worker")}</strong> reported running late for ${escapeHtml(job.trade || "work")} in ${escapeHtml(job.location || "site")} (ETA ${escapeHtml(eta)})`,
   );
 
   closeReportModal();
