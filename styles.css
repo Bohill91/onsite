@@ -4939,6 +4939,16 @@ margin-bottom: 12px;
   width: auto;
 }
 
+.weekend-work-group {
+  gap: 8px;
+}
+
+.weekend-day-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
 .replacement-panel {
   border-color: rgba(185, 28, 28, 0.22);
 }

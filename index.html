@@ -257,6 +257,30 @@
                       </label>
                     </div>
                   </div>
+                  <p class="auth-section-heading">Weekend Work Preferences</p>
+                  <div class="auth-input-row">
+                    <div class="auth-field">
+                      <label class="auth-label" for="regWeekendSaturday">Saturdays</label>
+                      <select class="auth-input auth-select" id="regWeekendSaturday">
+                        <option value="no" selected>No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </div>
+                    <div class="auth-field">
+                      <label class="auth-label" for="regWeekendSunday">Sundays</label>
+                      <select class="auth-input auth-select" id="regWeekendSunday">
+                        <option value="no" selected>No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regWeekendOnly">Weekend-only work</label>
+                    <select class="auth-input auth-select" id="regWeekendOnly">
+                      <option value="no" selected>No</option>
+                      <option value="yes">Yes</option>
+                    </select>
+                  </div>
                 </div>
                 <button class="auth-submit-btn" type="submit">
                   Continue
@@ -860,6 +884,19 @@ Trade *
   <input id="jobAccommodationPaid" type="checkbox" />
   <span>Accommodation paid for work-away roles</span>
 </label>
+
+<div class="field-label weekend-work-group" style="grid-column: 1 / -1;">
+  Working Days *
+  <div class="weekend-day-grid">
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="monday" checked /> <span>Monday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="tuesday" checked /> <span>Tuesday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="wednesday" checked /> <span>Wednesday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="thursday" checked /> <span>Thursday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="friday" checked /> <span>Friday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="saturday" /> <span>Saturday</span></label>
+    <label class="checkbox-row"><input type="checkbox" name="jobWorkingDays" value="sunday" /> <span>Sunday</span></label>
+  </div>
+</div>
                 
   <label class="field-label">
   Start Date & Time *
@@ -887,6 +924,14 @@ Trade *
                 <label class="field-label">
                   Budget — Max (£/day) *
                   <input id="jobBudgetMax" type="number" min="0" required placeholder="e.g. 300" required/>
+                </label>
+                <label class="field-label">
+                  Saturday Offered Rate (£/day)
+                  <input id="jobSaturdayRate" type="number" min="0" placeholder="Defaults to standard daily rate" />
+                </label>
+                <label class="field-label">
+                  Sunday Offered Rate (£/day)
+                  <input id="jobSundayRate" type="number" min="0" placeholder="Defaults to standard daily rate" />
                 </label>
                 <p class="field-help">
  <p class="form-helper">This is your total daily labour budget, including OnSite service fee.</p>

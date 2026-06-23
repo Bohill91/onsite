@@ -148,6 +148,11 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
   workerRegData.travelRadiusMiles = Number(document.getElementById('regTravelRadius').value) || 15;
   workerRegData.travelFurtherWithAccommodation =
     document.querySelector('input[name="regTravelFurther"]:checked')?.value === 'yes';
+  workerRegData.weekendPreferences = {
+    saturday: document.getElementById('regWeekendSaturday')?.value === 'yes',
+    sunday: document.getElementById('regWeekendSunday')?.value === 'yes',
+    weekendOnly: document.getElementById('regWeekendOnly')?.value === 'yes',
+  };
   setWorkerStep(3);
 });
 
@@ -185,6 +190,11 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     minRate:  workerRegData.minRate,
     travelRadiusMiles: workerRegData.travelRadiusMiles || 15,
     travelFurtherWithAccommodation: !!workerRegData.travelFurtherWithAccommodation,
+    weekendPreferences: workerRegData.weekendPreferences || {
+      saturday: false,
+      sunday: false,
+      weekendOnly: false,
+    },
     utr,
     cisStatus:        document.getElementById('regCisStatus').value,
     nationalInsuranceNumber: document.getElementById('regNationalInsurance').value.trim(),

@@ -401,6 +401,16 @@ function formatMoney(n) {
 // The protection window: cancelling within 3 working days of the start date
 // makes 1 day's pay payable to the worker.
 const PROTECTION_WINDOW_DAYS = 3;
+const STANDARD_WORKING_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+const WORKING_DAY_LABELS = {
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
+  sunday: "Sunday",
+};
 
 // ─── Project Extension & Reallocation ─────────────────────
 // Construction projects often overrun, so OnSite checks whether a company
@@ -1584,6 +1594,62 @@ document
 function jobBudget(job) {
   if (job?.budgetMax != null) return job.budgetMax;
   return parseDayRate(job?.payRate) || 0;
+}
+
+function normalizeWorkingDays(days) {
+  const list = Array.isArray(days) ? days : STANDARD_WORKING_DAYS;
+  const valid = list
+    .map((d) => String(d || "").toLowerCase())
+    .filter((d) => WORKING_DAY_LABELS[d]);
+  return valid.length ? Array.from(new Set(valid)) : [...STANDARD_WORKING_DAYS];
+}
+
+function workingDaysLabel(job) {
+  return normalizeWorkingDays(job?.workingDays)
+    .map((day) => WORKING_DAY_LABELS[day])
+    .join(", ");
+}
+
+function workerWeekendPreferences(worker) {
+  const prefs = worker?.weekendPreferences || {};
+  return {
+    saturday: !!prefs.saturday,
+    sunday: !!prefs.sunday,
+    weekendOnly: !!prefs.weekendOnly,
+  };
+}
+
+function weekendRatesForJob(job) {
+  const standard = jobBudget(job);
+  const saturdayRaw = Number(job?.weekendRates?.saturday ?? job?.saturdayRate);
+  const sundayRaw = Number(job?.weekendRates?.sunday ?? job?.sundayRate);
+  return {
+    saturday:
+      Number.isFinite(saturdayRaw) && saturdayRaw > 0
+        ? Math.round(saturdayRaw)
+        : standard,
+    sunday:
+      Number.isFinite(sundayRaw) && sundayRaw > 0
+        ? Math.round(sundayRaw)
+        : standard,
+  };
+}
+
+function weekendRatesLabel(job) {
+  const days = normalizeWorkingDays(job?.workingDays);
+  const rates = weekendRatesForJob(job);
+  const parts = [];
+  if (days.includes("saturday")) parts.push(`Saturday ${formatMoney(rates.saturday)}/day`);
+  if (days.includes("sunday")) parts.push(`Sunday ${formatMoney(rates.sunday)}/day`);
+  return parts.join(" · ");
+}
+
+function weekendRequirementLabel(job) {
+  const days = normalizeWorkingDays(job?.workingDays);
+  const needs = [];
+  if (days.includes("saturday")) needs.push("Saturday");
+  if (days.includes("sunday")) needs.push("Sunday");
+  return needs.length ? `${needs.join(" and ")} required` : "";
 }
 
 // Role-appropriate rate displays.
@@ -3181,6 +3247,7 @@ function migrateState(s) {
     if (w.consecutiveMissedOffers == null) w.consecutiveMissedOffers = 0;
     if (!Array.isArray(w.offerNotifications)) w.offerNotifications = [];
     if (!Array.isArray(w.lateReports)) w.lateReports = [];
+    w.weekendPreferences = workerWeekendPreferences(w);
   });
   (s.applications || []).forEach((a) => {
     if (!a.status) a.status = "interested";
@@ -3215,6 +3282,7 @@ function migrateState(s) {
           certifications: worker.certifications || [],
           travelRadiusMiles: worker.travelRadiusMiles ?? null,
           travelFurtherWithAccommodation: !!worker.travelFurtherWithAccommodation,
+          weekendPreferences: workerWeekendPreferences(worker),
           nextAvailableDate: worker.nextAvailableDate || "",
           plannedAbsenceSummary: Array.isArray(worker.plannedAbsences)
             ? worker.plannedAbsences.map((pa) => ({
@@ -3227,6 +3295,10 @@ function migrateState(s) {
           jobTrade: job.trade || "",
           jobLocation: job.location || "",
           jobStart: job.start || "",
+          workingDays: normalizeWorkingDays(job.workingDays),
+          weekendRates: weekendRatesForJob(job),
+          requiresSaturday: normalizeWorkingDays(job.workingDays).includes("saturday"),
+          requiresSunday: normalizeWorkingDays(job.workingDays).includes("sunday"),
         };
       }
     }
@@ -3234,6 +3306,14 @@ function migrateState(s) {
   // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
   // rate, so the pricing engine has something to work with.
   (s.jobs || []).forEach((j) => {
+    j.workingDays = normalizeWorkingDays(j.workingDays);
+    j.requiresSaturday = j.workingDays.includes("saturday");
+    j.requiresSunday = j.workingDays.includes("sunday");
+    const weekendRates = weekendRatesForJob(j);
+    j.weekendRates = {
+      saturday: weekendRates.saturday,
+      sunday: weekendRates.sunday,
+    };
     if (!j.shiftStartTime) {
       j.shiftStartTime =
         j.start && String(j.start).includes("T")
@@ -3518,6 +3598,7 @@ function ensureWorkerProfileForUser(user) {
   );
   const minRateRaw = Number(user.minRate);
   const radiusRaw = Number(user.travelRadiusMiles ?? worker?.travelRadiusMiles ?? 15);
+  const weekendPrefs = workerWeekendPreferences(user.weekendPreferences ? user : worker);
   const base = {
     id: user.id,
     userAccountId: user.id,
@@ -3543,6 +3624,7 @@ function ensureWorkerProfileForUser(user) {
       worker?.travelFurtherWithAccommodation ??
       false
     ),
+    weekendPreferences: weekendPrefs,
     consecutiveMissedOffers: worker?.consecutiveMissedOffers ?? 0,
     offerNotifications: Array.isArray(worker?.offerNotifications)
       ? worker.offerNotifications
@@ -3796,6 +3878,7 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
     certifications: worker?.certifications || [],
     travelRadiusMiles: worker?.travelRadiusMiles ?? null,
     travelFurtherWithAccommodation: !!worker?.travelFurtherWithAccommodation,
+    weekendPreferences: workerWeekendPreferences(worker),
     nextAvailableDate: worker?.nextAvailableDate || "",
     plannedAbsenceSummary: Array.isArray(worker?.plannedAbsences)
       ? worker.plannedAbsences.map((a) => ({
@@ -3810,6 +3893,10 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
     jobTrade: job?.trade || "",
     jobLocation: job?.location || "",
     jobStart: job?.start || "",
+    workingDays: normalizeWorkingDays(job?.workingDays),
+    weekendRates: weekendRatesForJob(job),
+    requiresSaturday: normalizeWorkingDays(job?.workingDays).includes("saturday"),
+    requiresSunday: normalizeWorkingDays(job?.workingDays).includes("sunday"),
   };
 }
 
@@ -4801,6 +4888,11 @@ function renderWorkerHome(user) {
           ${job.duration ? ` · ${escapeHtml(job.duration)}` : ""}
           ${pay != null ? ` · ${formatMoney(pay)}/day guaranteed` : ""}
         </div>
+        <div class="wh-offer-site">
+          Working days: ${escapeHtml(workingDaysLabel(job))}
+          ${weekendRequirementLabel(job) ? ` · ${escapeHtml(weekendRequirementLabel(job))}` : ""}
+          ${weekendRatesLabel(job) ? ` · ${escapeHtml(weekendRatesLabel(job))}` : ""}
+        </div>
         ${job.siteName || job.siteAddress ? `<div class="wh-offer-site">${escapeHtml(job.siteName || job.siteAddress)}</div>` : ""}
         <div class="wh-offer-actions">
           ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Site Details</button>` : ""}
@@ -5201,15 +5293,19 @@ function renderWorkerProfile(user) {
     )
     .join("");
 
+  const weekendPrefs = workerWeekendPreferences(workerProfile || user);
   const travelFields = [
-    { label: "Home town or postcode", val: user.location },
-    { label: "Willing to travel", val: travelRadiusLabel(user.travelRadiusMiles) },
+    { label: "Home town or postcode", val: workerProfile?.location || user.location },
+    { label: "Willing to travel", val: travelRadiusLabel(workerProfile?.travelRadiusMiles || user.travelRadiusMiles) },
     {
       label: "Longer-distance work",
-      val: user.travelFurtherWithAccommodation
+      val: (workerProfile?.travelFurtherWithAccommodation ?? user.travelFurtherWithAccommodation)
         ? "Willing to travel further if accommodation is paid"
         : "Only interested in work within my selected travel distance",
     },
+    { label: "Saturday work", val: weekendPrefs.saturday ? "Yes" : "No" },
+    { label: "Sunday work", val: weekendPrefs.sunday ? "Yes" : "No" },
+    { label: "Weekend-only work", val: weekendPrefs.weekendOnly ? "Yes" : "No" },
   ]
     .filter((f) => f.val)
     .map(
@@ -6053,11 +6149,23 @@ function workerJobCard(job, user) {
       </div>`
           : ""
       }
+      <div class="wjc-detail-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${escapeHtml(workingDaysLabel(job))}
+      </div>
       ${
         guaranteedPay != null
           ? `<div class="wjc-detail-item wjc-pay-rate">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         ${formatMoney(guaranteedPay)}/day guaranteed
+      </div>`
+          : ""
+      }
+      ${
+        weekendRatesLabel(job)
+          ? `<div class="wjc-detail-item wjc-pay-rate">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        ${escapeHtml(weekendRatesLabel(job))}
       </div>`
           : ""
       }
@@ -6189,6 +6297,21 @@ jobForm.addEventListener("submit", (e) => {
   const jobStartValue = document.querySelector("#jobStart").value;
   const shiftStartTime = document.querySelector("#jobShiftStart")?.value || "";
   const shiftFinishTime = document.querySelector("#jobShiftFinish")?.value || "";
+  const workingDays = normalizeWorkingDays(
+    Array.from(document.querySelectorAll('input[name="jobWorkingDays"]:checked')).map(
+      (input) => input.value,
+    ),
+  );
+  const saturdayRateRaw = Number(document.querySelector("#jobSaturdayRate")?.value);
+  const sundayRateRaw = Number(document.querySelector("#jobSundayRate")?.value);
+  const saturdayRate =
+    Number.isFinite(saturdayRateRaw) && saturdayRateRaw > 0
+      ? Math.round(saturdayRateRaw)
+      : budgetMax;
+  const sundayRate =
+    Number.isFinite(sundayRateRaw) && sundayRateRaw > 0
+      ? Math.round(sundayRateRaw)
+      : budgetMax;
 
   const job = {
     id: createId(),
@@ -6214,6 +6337,13 @@ jobForm.addEventListener("submit", (e) => {
     quantity,
     budgetMin,
     budgetMax,
+    workingDays,
+    requiresSaturday: workingDays.includes("saturday"),
+    requiresSunday: workingDays.includes("sunday"),
+    weekendRates: {
+      saturday: saturdayRate,
+      sunday: sundayRate,
+    },
     noticePeriodDays:
       Number.isFinite(noticeRaw) && noticeRaw > 0
         ? noticeRaw
@@ -6803,6 +6933,8 @@ function matchCard(job) {
         <div class="match-job-title">${escapeHtml(job.trade)} in ${escapeHtml(job.location)}</div>
         <div class="match-job-sub">
           ${formatDate(job.start)}${job.duration ? ` · ${escapeHtml(job.duration)}` : ""}
+          · ${escapeHtml(workingDaysLabel(job))}
+          ${weekendRatesLabel(job) ? ` · ${escapeHtml(weekendRatesLabel(job))}` : ""}
           ${assigned ? ` · <span style="color:var(--orange);font-weight:600;">Assigned: ${escapeHtml(assigned.name)}</span>` : ""}
         </div>
       </div>
@@ -6964,6 +7096,25 @@ function travelMatch(job, worker) {
   return { exclude: true, score: 0, label: "Outside travel radius" };
 }
 
+function weekendMatch(job, worker) {
+  const days = normalizeWorkingDays(job?.workingDays);
+  const requiresSaturday = days.includes("saturday");
+  const requiresSunday = days.includes("sunday");
+  const hasWeekend = requiresSaturday || requiresSunday;
+  const prefs = workerWeekendPreferences(worker);
+  if (requiresSaturday && !prefs.saturday) {
+    return { exclude: true, score: 0, label: "Saturday opted out" };
+  }
+  if (requiresSunday && !prefs.sunday) {
+    return { exclude: true, score: 0, label: "Sunday opted out" };
+  }
+  if (prefs.weekendOnly && !hasWeekend) {
+    return { exclude: true, score: 0, label: "Weekend-only preference" };
+  }
+  if (hasWeekend) return { exclude: false, score: 6, label: "Weekend preference match" };
+  return { exclude: false, score: 4, label: "" };
+}
+
 function previousDeclinePenalty(workerId, job) {
   const declines = previousDeclineReasonsForWorker(workerId);
   let penalty = 0;
@@ -7021,6 +7172,8 @@ function getMatches(job) {
       if (absence.exclude) return null;
       const travel = travelMatch(job, w);
       if (travel.exclude) return null;
+      const weekend = weekendMatch(job, w);
+      if (weekend.exclude) return null;
 
       const rating = buildWorkerRating(w.id);
       const workerText = workerSearchText(w);
@@ -7050,6 +7203,7 @@ function getMatches(job) {
             punctualityPoints +
             experienceScore +
             availabilityScore +
+            weekend.score +
             travel.score -
             absence.penalty -
             declinePenalty,
@@ -7059,6 +7213,7 @@ function getMatches(job) {
         availabilityLabel,
         absence.label,
         travel.label,
+        weekend.label,
         declinePenalty ? "Previous decline pattern" : "",
       ].filter(Boolean);
       return {
@@ -7079,6 +7234,7 @@ function getMatches(job) {
           punctuality: punctualityPoints,
           attendance: experienceScore,
           availability: availabilityScore,
+          weekend: weekend.score,
           travel: travel.score,
           plannedAbsencePenalty: absence.penalty,
           previousDeclinePenalty: declinePenalty,
