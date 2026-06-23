@@ -2868,6 +2868,22 @@ function workerDocumentExpiryStatus(expiryDate) {
   return { cls: "valid", label: formatDateOnly(expiryDate) };
 }
 
+function verificationStatusLabel(status) {
+  return {
+    unverified: "Unverified",
+    pending: "Pending",
+    verified: "Verified",
+    rejected: "Rejected",
+  }[status || "unverified"] || "Unverified";
+}
+
+function maskSensitiveTail(value, keep = 4) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const tail = raw.slice(-keep);
+  return `${"•".repeat(Math.max(4, raw.length - keep))}${tail}`;
+}
+
 function upsertWorkerDocument(workerId, doc) {
   const worker = findWorker(workerId);
   const record = normalizeWorkerDocument(doc);
@@ -2973,6 +2989,20 @@ function companyWorkerDocumentsHTML(worker, job = null) {
     </div>`;
 }
 
+function companyWorkerVerificationHTML(worker) {
+  const docs = workerDocumentsFor(worker).length;
+  const qualifications = Array.isArray(worker?.certifications)
+    ? worker.certifications.length
+    : (worker?.qualifications || "").split(",").filter((q) => q.trim()).length;
+  return `<div class="worker-verify-summary">
+    <span>CIS: <strong>${escapeHtml(worker?.cisStatus || "Unverified")}</strong></span>
+    <span>Worker: <strong>${escapeHtml(verificationStatusLabel(worker?.workerVerificationStatus))}</strong></span>
+    <span>Qualifications: <strong>${escapeHtml(verificationStatusLabel(worker?.qualificationVerificationStatus))}</strong></span>
+    <span>Documents: <strong>${docs}</strong></span>
+    <span>Quals: <strong>${qualifications}</strong></span>
+  </div>`;
+}
+
 function ensureWorkerProfileForUser(user) {
   if (!user || user.type !== "worker") return null;
   if (!Array.isArray(state.workers)) state.workers = [];
@@ -3015,6 +3045,22 @@ function ensureWorkerProfileForUser(user) {
     lateReports: Array.isArray(worker?.lateReports) ? worker.lateReports : [],
     plannedAbsences: plannedAbsencesForWorker(worker || user),
     documents: workerDocumentsFor(worker || user),
+    cisStatus: user.cisStatus || worker?.cisStatus || "unverified",
+    nationalInsuranceNumber:
+      user.nationalInsuranceNumber || worker?.nationalInsuranceNumber || "",
+    rightToWorkStatus:
+      user.rightToWorkStatus || user.rightToWork || worker?.rightToWorkStatus || "",
+    drivingLicenceHolder: !!(
+      user.drivingLicenceHolder ??
+      worker?.drivingLicenceHolder ??
+      (user.photoId === "Driving Licence")
+    ),
+    workerVerificationStatus:
+      user.workerVerificationStatus || worker?.workerVerificationStatus || "pending",
+    qualificationVerificationStatus:
+      user.qualificationVerificationStatus ||
+      worker?.qualificationVerificationStatus ||
+      "pending",
     verificationStatus: user.verificationStatus || "pending",
   };
 
@@ -4584,6 +4630,41 @@ function renderWorkerProfile(user) {
     </div>`,
     )
     .join("");
+  const documentCount = workerDocumentsFor(workerProfile || user).length;
+  const qualificationCount = Array.isArray(user.certifications)
+    ? user.certifications.length
+    : (user.qualifications || "").split(",").filter((q) => q.trim()).length;
+  const verificationFields = [
+    { label: "CIS Status", val: workerProfile?.cisStatus || user.cisStatus || "Unverified" },
+    { label: "UTR Number", val: maskSensitiveTail(user.utr || workerProfile?.utr || "") },
+    {
+      label: "National Insurance Number",
+      val: maskSensitiveTail(user.nationalInsuranceNumber || workerProfile?.nationalInsuranceNumber || "") || "Stored for future verification",
+    },
+    { label: "Right To Work Status", val: workerProfile?.rightToWorkStatus || user.rightToWork || "Not provided" },
+    {
+      label: "Driving Licence Holder",
+      val: (workerProfile?.drivingLicenceHolder ?? user.drivingLicenceHolder) ? "Yes" : "No",
+    },
+    {
+      label: "Worker Verification",
+      val: verificationStatusLabel(workerProfile?.workerVerificationStatus || user.workerVerificationStatus),
+    },
+    {
+      label: "Qualification Verification",
+      val: verificationStatusLabel(workerProfile?.qualificationVerificationStatus || user.qualificationVerificationStatus),
+    },
+    { label: "Documents", val: String(documentCount) },
+    { label: "Qualifications", val: String(qualificationCount) },
+  ]
+    .map(
+      (f) => `
+    <div class="prof-field">
+      <div class="prof-field-label">${f.label}</div>
+      <div class="prof-field-val">${escapeHtml(String(f.val))}</div>
+    </div>`,
+    )
+    .join("");
 
   const travelFields = [
     { label: "Home town or postcode", val: user.location },
@@ -4641,6 +4722,11 @@ function renderWorkerProfile(user) {
     <div class="prof-section">
       <div class="prof-section-title">Profile Details</div>
       <div class="prof-fields">${fields}</div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Verification</div>
+      <div class="prof-fields">${verificationFields}</div>
     </div>
 
     <div class="prof-section">
@@ -5029,6 +5115,7 @@ function companyOfferReviewPanelHTML(user) {
           ${worker?.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}
         </div>
         ${rating ? ratingEvidenceHTML(rating, true) : ""}
+        ${worker ? companyWorkerVerificationHTML(worker) : ""}
         ${worker ? companyWorkerDocumentsHTML(worker, job) : ""}
       </div>
       <div class="ch-offer-actions">
@@ -5816,6 +5903,7 @@ function workerCard(worker) {
     : "";
   const docCount = workerDocumentsFor(worker).length;
   const docSummary = `<span class="worker-next-available">${docCount} document${docCount === 1 ? "" : "s"}</span>`;
+  const verifySummary = `<span class="worker-next-available">${verificationStatusLabel(worker.workerVerificationStatus)}</span>`;
 
   const statsRow = `
     <div class="worker-rating-block">
@@ -5838,6 +5926,7 @@ function workerCard(worker) {
           ${nextAvailable}
           ${absenceSummary}
           ${docSummary}
+          ${verifySummary}
           ${certChipsHTML(worker)}
         </div>
       </div>

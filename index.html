@@ -287,6 +287,23 @@
                     <span class="auth-hint">Your 10-digit UTR from HMRC — found on tax returns or the HMRC app.</span>
                   </div>
 
+                  <p class="auth-section-heading">CIS Status</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regCisStatus">CIS Status</label>
+                    <select class="auth-input auth-select" id="regCisStatus" required>
+                      <option value="">Select status…</option>
+                      <option value="CIS Registered">CIS Registered</option>
+                      <option value="Not CIS Registered">Not CIS Registered</option>
+                    </select>
+                  </div>
+
+                  <p class="auth-section-heading">National Insurance</p>
+                  <div class="auth-field">
+                    <label class="auth-label" for="regNationalInsurance">National Insurance Number</label>
+                    <input class="auth-input" id="regNationalInsurance" type="text" placeholder="Placeholder only" />
+                    <span class="auth-hint">Stored locally as a placeholder for future onboarding checks.</span>
+                  </div>
+
                   <p class="auth-section-heading">Date of Birth</p>
                   <div class="auth-field">
                     <label class="auth-label" for="regDOB">Date of birth</label>
@@ -313,6 +330,15 @@
                       <option value="">Select document…</option>
                       <option value="Passport">Passport</option>
                       <option value="Driving Licence">Driving Licence</option>
+                    </select>
+                  </div>
+
+                  <div class="auth-field">
+                    <label class="auth-label" for="regDrivingLicenceHolder">Driving Licence Holder</label>
+                    <select class="auth-input auth-select" id="regDrivingLicenceHolder" required>
+                      <option value="">Select…</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
                     </select>
                   </div>
 

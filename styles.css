@@ -4656,6 +4656,28 @@ margin-bottom: 12px;
   padding: 8px 10px;
 }
 
+.worker-verify-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.worker-verify-summary span {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.worker-verify-summary strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .prof-stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

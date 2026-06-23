@@ -186,12 +186,17 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     travelRadiusMiles: workerRegData.travelRadiusMiles || 15,
     travelFurtherWithAccommodation: !!workerRegData.travelFurtherWithAccommodation,
     utr,
+    cisStatus:        document.getElementById('regCisStatus').value,
+    nationalInsuranceNumber: document.getElementById('regNationalInsurance').value.trim(),
     dateOfBirth:      document.getElementById('regDOB').value,
     cscsCard:         document.getElementById('regCscsCard').value.trim(),
     rightToWork:      document.getElementById('regRightToWork').value,
     photoId:          document.getElementById('regPhotoId').value,
+    drivingLicenceHolder: document.getElementById('regDrivingLicenceHolder').value === 'yes',
     certifications:   certs,
     verificationStatus: 'pending',
+    workerVerificationStatus: 'pending',
+    qualificationVerificationStatus: 'pending',
     createdAt: Date.now(),
   };
 
