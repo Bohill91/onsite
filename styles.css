@@ -1,6 +1,7 @@
 .primary-btn.full-width {
   width: 100%;
 }
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
@@ -6117,4 +6118,52 @@ margin-bottom: 12px;
 
 .primary-btn.full-width {
   width: 100%;
+}
+
+.preferred-workers-picker {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.preferred-workers-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.preferred-worker-choice {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+.preferred-worker-choice input {
+  accent-color: var(--orange);
+}
+
+.preferred-worker-choice strong,
+.preferred-worker-choice small {
+  display: block;
+}
+
+.preferred-worker-choice strong {
+  font-size: 0.83rem;
+}
+
+.preferred-worker-choice small {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+.preferred-worker-btn.active {
+  background: var(--orange-light);
+  border-color: var(--orange-muted);
+  color: var(--orange-dark);
 }

@@ -885,6 +885,12 @@ Trade *
   <span>Accommodation paid for work-away roles</span>
 </label>
 
+<div id="jobPreferredWorkersWrap" class="field-label preferred-workers-picker hidden" style="grid-column: 1 / -1;">
+  Preferred Workers
+  <p class="form-helper">Selected preferred workers will be offered first if availability and matching rules allow.</p>
+  <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
+</div>
+
 <div class="field-label weekend-work-group" style="grid-column: 1 / -1;">
   Working Days *
   <div class="weekend-day-grid">
@@ -1341,6 +1347,75 @@ Trade *
           <div class="cancel-booking-actions">
             <button id="cancelExtensionBtn" class="secondary-btn wide" type="button">Cancel</button>
             <button id="confirmExtensionBtn" class="primary-btn wide" type="button">Send to Worker</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="projectTransferModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Offer project transfer">
+      <div class="dispute-sheet">
+        <div class="dispute-sheet-header">
+          <div>
+            <h3 class="dispute-sheet-title">Offer Project Transfer</h3>
+            <p class="dispute-sheet-sub">The worker must accept and the company must confirm before assignment.</p>
+          </div>
+          <button id="closeProjectTransferBtn" class="modal-close-btn" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dispute-sheet-body">
+          <input id="projectTransferFromJobId" type="hidden" />
+          <input id="projectTransferWorkerId" type="hidden" />
+          <div id="projectTransferSummary" class="cancel-booking-summary"></div>
+          <label class="field-label">
+            Target Project
+            <select id="projectTransferTargetJob"></select>
+          </label>
+          <div class="cancel-booking-actions">
+            <button id="cancelProjectTransferBtn" class="secondary-btn wide" type="button">Cancel</button>
+            <button id="confirmProjectTransferBtn" class="primary-btn wide" type="button">Send Offer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="shiftChangeModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Offer shift change">
+      <div class="dispute-sheet">
+        <div class="dispute-sheet-header">
+          <div>
+            <h3 class="dispute-sheet-title">Offer Shift Change</h3>
+            <p class="dispute-sheet-sub">Shift changes are offered to the worker and are never forced.</p>
+          </div>
+          <button id="closeShiftChangeBtn" class="modal-close-btn" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dispute-sheet-body">
+          <input id="shiftChangeJobId" type="hidden" />
+          <input id="shiftChangeWorkerId" type="hidden" />
+          <div id="shiftChangeSummary" class="cancel-booking-summary"></div>
+          <label class="field-label">
+            New Shift Pattern
+            <select id="shiftChangePattern">
+              <option>Days</option>
+              <option>Nights</option>
+            </select>
+          </label>
+          <div class="form-grid-2">
+            <label class="field-label">Start Time<input id="shiftChangeStart" type="time" /></label>
+            <label class="field-label">Finish Time<input id="shiftChangeFinish" type="time" /></label>
+          </div>
+          <label class="field-label">
+            Effective Date
+            <input id="shiftChangeEffectiveDate" type="date" />
+          </label>
+          <label class="field-label">
+            Revised Offered Rate (£/day, optional)
+            <input id="shiftChangeRate" type="number" min="0" placeholder="Leave blank if unchanged" />
+          </label>
+          <div class="cancel-booking-actions">
+            <button id="cancelShiftChangeBtn" class="secondary-btn wide" type="button">Cancel</button>
+            <button id="confirmShiftChangeBtn" class="primary-btn wide" type="button">Send Offer</button>
           </div>
         </div>
       </div>

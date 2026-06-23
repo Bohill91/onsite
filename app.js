@@ -2306,6 +2306,66 @@ document.getElementById("extensionModal")?.addEventListener("click", (e) => {
     closeExtensionModal();
 });
 
+document
+  .getElementById("closeProjectTransferBtn")
+  ?.addEventListener("click", closeProjectTransferModal);
+document
+  .getElementById("cancelProjectTransferBtn")
+  ?.addEventListener("click", closeProjectTransferModal);
+document
+  .getElementById("confirmProjectTransferBtn")
+  ?.addEventListener("click", () => {
+    const fromJobId = document.getElementById("projectTransferFromJobId")?.value || "";
+    const workerId = document.getElementById("projectTransferWorkerId")?.value || "";
+    const toJobId = document.getElementById("projectTransferTargetJob")?.value || "";
+    const res = createProjectTransferOffer(fromJobId, toJobId, workerId);
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    closeProjectTransferModal();
+    saveAndRender();
+    showToast("Project transfer offer sent");
+  });
+document.getElementById("projectTransferModal")?.addEventListener("click", (e) => {
+  if (e.target === document.getElementById("projectTransferModal"))
+    closeProjectTransferModal();
+});
+
+document
+  .getElementById("closeShiftChangeBtn")
+  ?.addEventListener("click", closeShiftChangeModal);
+document
+  .getElementById("cancelShiftChangeBtn")
+  ?.addEventListener("click", closeShiftChangeModal);
+document
+  .getElementById("confirmShiftChangeBtn")
+  ?.addEventListener("click", () => {
+    const jobId = document.getElementById("shiftChangeJobId")?.value || "";
+    const revisedRateRaw = Number(document.getElementById("shiftChangeRate")?.value);
+    const res = createShiftChangeOffer(jobId, {
+      proposedShiftPattern: document.getElementById("shiftChangePattern")?.value || "Days",
+      proposedShiftStartTime: document.getElementById("shiftChangeStart")?.value || "",
+      proposedShiftFinishTime: document.getElementById("shiftChangeFinish")?.value || "",
+      effectiveDate: document.getElementById("shiftChangeEffectiveDate")?.value || "",
+      revisedOfferedRate:
+        Number.isFinite(revisedRateRaw) && revisedRateRaw > 0
+          ? Math.round(revisedRateRaw)
+          : "",
+    });
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    closeShiftChangeModal();
+    saveAndRender();
+    showToast("Shift change offer sent");
+  });
+document.getElementById("shiftChangeModal")?.addEventListener("click", (e) => {
+  if (e.target === document.getElementById("shiftChangeModal"))
+    closeShiftChangeModal();
+});
+
 // ─── Profile Completion ────────────────────────────────────
 function calcWorkerCompletion(worker) {
   const checks = [
@@ -3199,6 +3259,9 @@ const demoData = {
   agreements: [],
   applications: [],
   notifications: [],
+  preferredWorkers: [],
+  projectTransfers: [],
+  shiftChangeOffers: [],
   companyDocuments: {},
   invoices: _demoInvoices,
   companyBilling: _demoBilling,
@@ -3227,8 +3290,25 @@ function migrateState(s) {
   if (!Array.isArray(s.invoices)) s.invoices = [];
   if (!Array.isArray(s.applications)) s.applications = [];
   if (!Array.isArray(s.notifications)) s.notifications = [];
+  if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
+  if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
+  if (!Array.isArray(s.shiftChangeOffers)) s.shiftChangeOffers = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
+  (s.preferredWorkers || []).forEach((pref) => {
+    if (!pref.id) pref.id = createId();
+    if (!pref.addedAt) pref.addedAt = new Date().toISOString();
+  });
+  (s.projectTransfers || []).forEach((transfer) => {
+    if (!transfer.id) transfer.id = createId();
+    if (!transfer.status) transfer.status = "offered";
+    if (!transfer.createdAt) transfer.createdAt = new Date().toISOString();
+  });
+  (s.shiftChangeOffers || []).forEach((offer) => {
+    if (!offer.id) offer.id = createId();
+    if (!offer.status) offer.status = "offered";
+    if (!offer.createdAt) offer.createdAt = new Date().toISOString();
+  });
   (s.replacementTasks || []).forEach((task) => {
     if (!task.taskType) task.taskType = "replacement_needed";
     if (task.replacementNeeded == null) task.replacementNeeded = true;
@@ -3855,6 +3935,290 @@ function previousDeclineReasonsForWorker(workerId) {
     }));
 }
 
+function preferredWorkersForCompany(companyId) {
+  if (!companyId) return [];
+  return (state.preferredWorkers || [])
+    .filter((pref) => pref.companyId === companyId)
+    .map((pref) => {
+      const worker = findWorker(pref.workerId);
+      return worker ? { ...pref, worker } : pref;
+    });
+}
+
+function isPreferredWorker(companyId, workerId) {
+  return !!(
+    companyId &&
+    workerId &&
+    (state.preferredWorkers || []).some(
+      (pref) => pref.companyId === companyId && pref.workerId === workerId,
+    )
+  );
+}
+
+function togglePreferredWorker(companyId, workerId) {
+  const worker = findWorker(workerId);
+  if (!companyId || !worker) return { ok: false, reason: "Worker not found" };
+  if (!Array.isArray(state.preferredWorkers)) state.preferredWorkers = [];
+  const existing = state.preferredWorkers.find(
+    (pref) => pref.companyId === companyId && pref.workerId === workerId,
+  );
+  if (existing) {
+    state.preferredWorkers = state.preferredWorkers.filter(
+      (pref) => pref.id !== existing.id,
+    );
+    return { ok: true, preferred: false, worker };
+  }
+  state.preferredWorkers.push({
+    id: createId(),
+    companyId,
+    workerId,
+    workerName: worker.name || "Worker",
+    workerTrade: worker.trade || "",
+    addedAt: new Date().toISOString(),
+  });
+  return { ok: true, preferred: true, worker };
+}
+
+function preferredWorkerIdsFromJobForm() {
+  return Array.from(
+    document.querySelectorAll('input[name="jobPreferredWorkerIds"]:checked'),
+  ).map((input) => input.value);
+}
+
+function renderJobPreferredWorkerChoices(user) {
+  const wrap = document.getElementById("jobPreferredWorkersWrap");
+  const list = document.getElementById("jobPreferredWorkersList");
+  if (!wrap || !list) return;
+  if (user?.type !== "company") {
+    wrap.classList.add("hidden");
+    list.innerHTML = "";
+    return;
+  }
+  const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
+  wrap.classList.remove("hidden");
+  list.innerHTML = prefs.length
+    ? prefs
+        .map(
+          (pref) => `
+        <label class="preferred-worker-choice">
+          <input type="checkbox" name="jobPreferredWorkerIds" value="${pref.workerId}" />
+          <span>
+            <strong>${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</strong>
+            <small>${escapeHtml(pref.worker?.trade || pref.workerTrade || "")}</small>
+          </span>
+        </label>`,
+        )
+        .join("")
+    : `<div class="att-empty">Mark workers as Preferred from the roster to request them first.</div>`;
+}
+
+function tryPreferredWorkerOffers(job) {
+  const ids = Array.isArray(job?.preferredWorkerIds) ? job.preferredWorkerIds : [];
+  if (!job || !ids.length) return { ok: false, reason: "No preferred workers selected" };
+  const matches = getMatches(job);
+  for (const workerId of ids) {
+    const rank = matches.findIndex((match) => match.id === workerId);
+    const res = createJobOffer(
+      job.id,
+      workerId,
+      "preferred_worker",
+      rank >= 0 ? rank + 1 : null,
+    );
+    if (res.ok && !res.duplicate) return res;
+  }
+  return { ok: false, reason: "No selected preferred worker available" };
+}
+
+function openProjectTransferModal(jobId) {
+  const fromJob = findJob(jobId);
+  if (!fromJob || !fromJob.assignedWorkerId) return;
+  const worker = findWorker(fromJob.assignedWorkerId);
+  const targetSelect = document.getElementById("projectTransferTargetJob");
+  const summary = document.getElementById("projectTransferSummary");
+  const targets = (state.jobs || []).filter(
+    (job) =>
+      job.id !== fromJob.id &&
+      !job.assignedWorkerId &&
+      !job.completed &&
+      companyOwnsJob(job, fromJob.companyId || getSessionUser()?.id || ""),
+  );
+  document.getElementById("projectTransferFromJobId").value = fromJob.id;
+  document.getElementById("projectTransferWorkerId").value = worker?.id || "";
+  if (summary) {
+    summary.innerHTML = `
+      <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "Worker")}</span></div>
+      <div class="cbk-row"><span class="cbk-label">From</span><span class="cbk-val">${escapeHtml(fromJob.trade)} · ${escapeHtml(fromJob.location)}</span></div>`;
+  }
+  if (targetSelect) {
+    targetSelect.innerHTML = targets.length
+      ? targets
+          .map(
+            (job) =>
+              `<option value="${job.id}">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}${job.start ? ` · ${formatDateOnly(job.start)}` : ""}</option>`,
+          )
+          .join("")
+      : `<option value="">No open target jobs available</option>`;
+  }
+  document.getElementById("projectTransferModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeProjectTransferModal() {
+  document.getElementById("projectTransferModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function createProjectTransferOffer(fromJobId, toJobId, workerId) {
+  const fromJob = findJob(fromJobId);
+  const toJob = findJob(toJobId);
+  const worker = findWorker(workerId);
+  if (!fromJob || !toJob || !worker)
+    return { ok: false, reason: "Transfer details are incomplete" };
+  if (fromJob.companyId && toJob.companyId && fromJob.companyId !== toJob.companyId)
+    return { ok: false, reason: "Target job must belong to the same company" };
+  if (fromJob.assignedWorkerId !== worker.id)
+    return { ok: false, reason: "Worker is not assigned to the source job" };
+  if (toJob.assignedWorkerId || toJob.completed)
+    return { ok: false, reason: "Target job is not open" };
+
+  const matches = getMatches(toJob);
+  const rank = matches.findIndex((match) => match.id === worker.id);
+  const offered = createJobOffer(
+    toJob.id,
+    worker.id,
+    "project_transfer",
+    rank >= 0 ? rank + 1 : null,
+  );
+  if (!offered.ok) return offered;
+
+  const transfer = {
+    id: createId(),
+    companyId: toJob.companyId || fromJob.companyId || "",
+    workerId: worker.id,
+    fromJobId: fromJob.id,
+    toJobId: toJob.id,
+    applicationId: offered.application?.id || "",
+    createdAt: new Date().toISOString(),
+    status: "offered",
+  };
+  if (!Array.isArray(state.projectTransfers)) state.projectTransfers = [];
+  state.projectTransfers.unshift(transfer);
+  if (offered.application) {
+    offered.application.offerType = "project_transfer";
+    offered.application.transferFromJobId = fromJob.id;
+    offered.application.projectTransferId = transfer.id;
+  }
+  logActivity(
+    "assign",
+    `Project transfer offer sent to <strong>${escapeHtml(worker.name)}</strong> for ${escapeHtml(toJob.trade)} in ${escapeHtml(toJob.location)}.`,
+  );
+  return { ok: true, transfer, application: offered.application };
+}
+
+function openShiftChangeModal(jobId) {
+  const job = findJob(jobId);
+  if (!job || !job.assignedWorkerId) return;
+  const worker = findWorker(job.assignedWorkerId);
+  const summary = document.getElementById("shiftChangeSummary");
+  document.getElementById("shiftChangeJobId").value = job.id;
+  document.getElementById("shiftChangeWorkerId").value = worker?.id || "";
+  document.getElementById("shiftChangePattern").value = job.shiftPattern || "Days";
+  document.getElementById("shiftChangeStart").value = job.shiftStartTime || "";
+  document.getElementById("shiftChangeFinish").value = job.shiftFinishTime || "";
+  document.getElementById("shiftChangeEffectiveDate").value = "";
+  document.getElementById("shiftChangeRate").value = "";
+  if (summary) {
+    summary.innerHTML = `
+      <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "Worker")}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Current job</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Current hours</span><span class="cbk-val">${escapeHtml(job.shiftStartTime || "TBC")} to ${escapeHtml(job.shiftFinishTime || "TBC")}</span></div>`;
+  }
+  document.getElementById("shiftChangeModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeShiftChangeModal() {
+  document.getElementById("shiftChangeModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function createShiftChangeOffer(jobId, fields) {
+  const job = findJob(jobId);
+  const worker = job?.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  if (!job || !worker) return { ok: false, reason: "Assigned worker not found" };
+  if (!fields.effectiveDate)
+    return { ok: false, reason: "Choose an effective date" };
+  if (!fields.proposedShiftStartTime || !fields.proposedShiftFinishTime)
+    return { ok: false, reason: "Add proposed working hours" };
+  if (!Array.isArray(state.shiftChangeOffers)) state.shiftChangeOffers = [];
+  const offer = {
+    id: createId(),
+    companyId: job.companyId || "",
+    workerId: worker.id,
+    jobId: job.id,
+    currentShiftPattern: job.shiftPattern || "Days",
+    proposedShiftPattern: fields.proposedShiftPattern || "Days",
+    proposedShiftStartTime: fields.proposedShiftStartTime,
+    proposedShiftFinishTime: fields.proposedShiftFinishTime,
+    effectiveDate: fields.effectiveDate,
+    revisedOfferedRate: fields.revisedOfferedRate || "",
+    status: "offered",
+    workerRespondedAt: "",
+    declineReason: "",
+    createdAt: new Date().toISOString(),
+  };
+  state.shiftChangeOffers.unshift(offer);
+  if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
+  worker.offerNotifications.unshift({
+    id: createId(),
+    type: "shift_change_offer",
+    shiftChangeOfferId: offer.id,
+    jobId: job.id,
+    message: `Shift change offered for ${job.trade} in ${job.location}.`,
+    createdAt: new Date().toISOString(),
+    readAt: "",
+  });
+  logActivity(
+    "assign",
+    `Shift change offer sent to <strong>${escapeHtml(worker.name)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.`,
+  );
+  return { ok: true, offer };
+}
+
+function respondToShiftChangeOffer(offerId, accepted) {
+  const offer = (state.shiftChangeOffers || []).find((item) => item.id === offerId);
+  const job = offer ? findJob(offer.jobId) : null;
+  const worker = offer ? findWorker(offer.workerId) : null;
+  if (!offer || !job || offer.status !== "offered")
+    return { ok: false, reason: "Shift change offer not available" };
+  offer.status = accepted ? "accepted" : "declined";
+  offer.workerRespondedAt = new Date().toISOString();
+  if (accepted) {
+    job.shiftPattern = offer.proposedShiftPattern;
+    job.shiftStartTime = offer.proposedShiftStartTime;
+    job.shiftFinishTime = offer.proposedShiftFinishTime;
+    job.shiftChangeEffectiveDate = offer.effectiveDate;
+    if (offer.revisedOfferedRate) job.shiftChangeOfferedRate = offer.revisedOfferedRate;
+  }
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  state.notifications.unshift({
+    id: createId(),
+    type: accepted ? "shift_change_accepted" : "shift_change_declined",
+    shiftChangeOfferId: offer.id,
+    jobId: job.id,
+    workerId: offer.workerId,
+    companyId: offer.companyId || job.companyId || "",
+    message: `${worker?.name || "Worker"} ${accepted ? "accepted" : "declined"} the shift change for ${job.trade} in ${job.location}.`,
+    createdAt: new Date().toISOString(),
+    readAt: "",
+  });
+  logActivity(
+    "assign",
+    `Shift change ${accepted ? "accepted" : "declined"} for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.`,
+  );
+  return { ok: true, offer };
+}
+
 function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
   const stats = getWorkerStats(worker?.id || "");
   const rating = buildWorkerRating(worker?.id || "");
@@ -3887,6 +4251,7 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
         }))
       : [],
     previousDeclineReasons: previousDeclineReasonsForWorker(worker?.id),
+    preferredForCompany: isPreferredWorker(job?.companyId || "", worker?.id || ""),
     matchScore: scored?._composite ?? null,
     matchBreakdown: scored?._matchBreakdown || null,
     rankAtOffer,
@@ -3929,7 +4294,7 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
   if (worker.availability !== "available")
     return { ok: false, reason: "Worker is unavailable" };
   if (
-    source === "manual" &&
+    ["manual", "preferred_worker", "project_transfer"].includes(source) &&
     !getMatches(job).some((match) => match.id === worker.id)
   ) {
     return { ok: false, reason: "Worker is not eligible for this job offer" };
@@ -4043,6 +4408,12 @@ function workerAcceptOffer(applicationId) {
   }
   app.status = "under_company_review";
   app.workerRespondedAt = new Date().toISOString();
+  if (app.projectTransferId) {
+    const transfer = (state.projectTransfers || []).find(
+      (item) => item.id === app.projectTransferId,
+    );
+    if (transfer) transfer.status = "worker_accepted";
+  }
   worker.consecutiveMissedOffers = 0;
   if (!Array.isArray(state.notifications)) state.notifications = [];
   state.notifications.unshift({
@@ -4073,6 +4444,12 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
   app.workerRespondedAt = new Date().toISOString();
   app.workerDeclineReason = reason;
   app.workerDeclineComment = comment.trim();
+  if (app.projectTransferId) {
+    const transfer = (state.projectTransfers || []).find(
+      (item) => item.id === app.projectTransferId,
+    );
+    if (transfer) transfer.status = "declined_by_worker";
+  }
   if (worker) worker.consecutiveMissedOffers = 0;
   const next = job ? offerNextBestWorker(job.id) : { ok: false };
   logActivity(
@@ -4102,6 +4479,12 @@ function companyAcceptWorker(applicationId) {
   app.companyDecision = "accepted";
   app.companyReviewedAt = new Date().toISOString();
   app.confirmedAt = app.companyReviewedAt;
+  if (app.projectTransferId) {
+    const transfer = (state.projectTransfers || []).find(
+      (item) => item.id === app.projectTransferId,
+    );
+    if (transfer) transfer.status = "confirmed";
+  }
   (state.applications || []).forEach((other) => {
     if (other.jobId !== job.id || other.id === app.id) return;
     if (
@@ -4130,6 +4513,12 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
   app.companyReviewedAt = new Date().toISOString();
   app.companyDeclineReason = reason;
   app.companyDeclineComment = comment.trim();
+  if (app.projectTransferId) {
+    const transfer = (state.projectTransfers || []).find(
+      (item) => item.id === app.projectTransferId,
+    );
+    if (transfer) transfer.status = "declined_by_company";
+  }
   const next = offerNextBestWorker(job.id);
   logActivity(
     "assign",
@@ -4804,6 +5193,9 @@ function renderWorkerHome(user) {
   const workerHomeNotices = (workerProfile?.offerNotifications || []).filter(
     (n) => ["missed_2_offers", "assignment_release"].includes(n.type) && !n.readAt,
   );
+  const pendingShiftChangeOffers = (state.shiftChangeOffers || []).filter(
+    (offer) => offer.workerId === user.id && offer.status === "offered",
+  );
   const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
   const plannedAbsencePanel = `
     <div class="wh-section-label">Planned Absence</div>
@@ -4869,7 +5261,13 @@ function renderWorkerHome(user) {
     </div>`;
   const missedNoticeHtml = workerHomeNotices.length
     ? workerHomeNotices
-        .map((n) => `<div class="wh-offer-notice">${escapeHtml(n.message)}</div>`)
+        .map(
+          (n) => `<div class="wh-offer-notice">${escapeHtml(n.message)}${
+            n.type === "missed_2_offers"
+              ? " Consider setting a Next Available Date so contractors know when to offer you work again."
+              : ""
+          }</div>`,
+        )
         .join("")
     : "";
   const offerCardHtml = (app) => {
@@ -4932,6 +5330,33 @@ function renderWorkerHome(user) {
       ${offerHistoryHtml}
     </div>`
       : "";
+  const shiftChangePanel = pendingShiftChangeOffers.length
+    ? `
+    <div class="wh-section-label">Shift Change Offers</div>
+    <div class="wh-offers-panel">
+      ${pendingShiftChangeOffers
+        .map((offer) => {
+          const job = findJob(offer.jobId);
+          return `<div class="wh-offer-card">
+            <div class="wh-offer-head">
+              <span class="wh-offer-label">Shift Change Offer</span>
+              <span class="wh-offer-expiry">Worker choice required</span>
+            </div>
+            <div class="wh-offer-title">${escapeHtml(job?.trade || "Assignment")} · ${escapeHtml(job?.location || "")}</div>
+            <div class="wh-offer-meta">
+              ${escapeHtml(offer.proposedShiftPattern || "Shift")} · ${escapeHtml(offer.proposedShiftStartTime)} to ${escapeHtml(offer.proposedShiftFinishTime)}
+              ${offer.effectiveDate ? ` · from ${formatDateOnly(offer.effectiveDate)}` : ""}
+              ${offer.revisedOfferedRate ? ` · ${formatMoney(Number(offer.revisedOfferedRate))}/day offered` : ""}
+            </div>
+            <div class="wh-offer-actions">
+              <button class="secondary-btn wh-offer-decline" type="button" data-shift-change-decline="${offer.id}">Decline</button>
+              <button class="primary-btn wh-offer-accept" type="button" data-shift-change-accept="${offer.id}">Accept</button>
+            </div>
+          </div>`;
+        })
+        .join("")}
+    </div>`
+    : "";
   const signInPanel =
     booking && bookingLive
       ? `
@@ -5068,6 +5493,7 @@ function renderWorkerHome(user) {
     <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
     ${plannedAbsencePanel}
+    ${shiftChangePanel}
     ${offersPanel}
     ${signInPanel}
     ${activeBookingHtml}
@@ -5085,6 +5511,12 @@ function renderWorkerHome(user) {
       alert(
         "By marking yourself as available, you may receive job offers from contractors. If you are currently in work/unavailable, set yourself to unavailable until you are ready for a new assignment.",
       );
+    } else if (confirm("Would you like to set your next available date?")) {
+      setTimeout(() => {
+        const nextDateInput = document.getElementById("whNextAvailableDate");
+        nextDateInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+        nextDateInput?.focus();
+      }, 0);
     }
     const nextDate = document.getElementById("whNextAvailableDate")?.value || "";
     updateWorkerAvailability(session.id, nextAvailability, nextDate);
@@ -5173,6 +5605,28 @@ function renderWorkerHome(user) {
     btn.addEventListener("click", () =>
       openOfferDecisionModal("worker", btn.dataset.workerOfferDecline),
     );
+  });
+  el.querySelectorAll("[data-shift-change-accept]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Shift change accepted");
+    });
+  });
+  el.querySelectorAll("[data-shift-change-decline]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Shift change declined");
+    });
   });
   el.querySelectorAll("[data-worker-home-signin]").forEach((btn) => {
     btn.addEventListener("click", () =>
@@ -5594,6 +6048,8 @@ function renderContractorHome(user) {
         ${release ? `<span class="notice-status-chip">${escapeHtml(releaseTypeLabel(release.releaseType))}: ${formatDateOnly(release.effectiveDate)}</span>` : ""}
       </div>
       ${job ? `<button class="secondary-btn" type="button" data-worker-release="${job.id}">Release / Stand-down</button>` : ""}
+      ${job ? `<button class="secondary-btn" type="button" data-project-transfer="${job.id}">Offer Transfer</button>` : ""}
+      ${job ? `<button class="secondary-btn" type="button" data-shift-change="${job.id}">Offer Shift Change</button>` : ""}
       ${job ? `<button class="ch-cancel-btn" type="button" data-cancel-booking="${job.id}">Cancel</button>` : ""}
     </div>`;
         })
@@ -5641,6 +6097,7 @@ function renderContractorHome(user) {
     </div>
     ${companyLateReportPanelHTML(user)}
     ${companyPlannedAbsencePanelHTML(user)}
+    ${companyPreferredWorkersPanelHTML(user)}
     ${companyOfferReviewPanelHTML(user)}
     ${companyReplacementPanelHTML(user)}
     ${extensionPanelHTML(user.id)}
@@ -5666,6 +6123,29 @@ function renderContractorHome(user) {
   bindAgreementOpeners(el);
   bindExtensionButtons(el);
   bindCompanyOfferButtons(el);
+  bindProjectTransferButtons(el);
+  bindShiftChangeButtons(el);
+}
+
+function companyPreferredWorkersPanelHTML(user) {
+  const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
+  if (!prefs.length) return "";
+  return `
+    <div class="ch-late-panel preferred-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Preferred Workers</span>
+        <span class="ch-agr-panel-count">${prefs.length}</span>
+      </div>
+      ${prefs
+        .slice(0, 5)
+        .map(
+          (pref) => `<div class="ch-late-row">
+            <div class="ch-late-msg">${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</div>
+            <div class="ch-late-meta">${escapeHtml(pref.worker?.trade || pref.workerTrade || "")} · preferred for this company</div>
+          </div>`,
+        )
+        .join("")}
+    </div>`;
 }
 
 function companyLateReportPanelHTML(user) {
@@ -5818,6 +6298,22 @@ function bindCompanyOfferButtons(scope) {
   });
 }
 
+function bindProjectTransferButtons(scope) {
+  scope.querySelectorAll("[data-project-transfer]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openProjectTransferModal(btn.dataset.projectTransfer),
+    );
+  });
+}
+
+function bindShiftChangeButtons(scope) {
+  scope.querySelectorAll("[data-shift-change]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openShiftChangeModal(btn.dataset.shiftChange),
+    );
+  });
+}
+
 // Company panel: agreements awaiting the company's confirmation.
 function companyAgreementPanelHTML(user) {
   const pending = (state.agreements || []).filter(
@@ -5885,6 +6381,7 @@ function renderContractorAccount(user) {
       </div>
     </div>
     ${companyBillingSection(user)}
+    ${companyPreferredAccountSection(user)}
     ${companyDocsSection(user)}
     ${agreementHistorySection(state.agreements.filter((a) => a.companyId === user.id || !a.companyId))}
     <button class="ch-logout-btn" type="button" id="accLogoutBtn">
@@ -5897,6 +6394,28 @@ function renderContractorAccount(user) {
   document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
     document.getElementById("logoutBtn")?.click();
   });
+}
+
+function companyPreferredAccountSection(user) {
+  const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
+  const rows = prefs.length
+    ? prefs
+        .map(
+          (pref) => `<div class="doc-row">
+            <div class="doc-row-info">
+              <div class="doc-row-title">${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</div>
+              <div class="doc-row-cat">${escapeHtml(pref.worker?.trade || pref.workerTrade || "")}</div>
+            </div>
+          </div>`,
+        )
+        .join("")
+    : `<div class="att-empty">No Preferred Workers yet. Add them from the worker roster.</div>`;
+  return `
+    <div class="prof-section">
+      <div class="prof-section-title">Preferred Workers</div>
+      <p class="prof-section-hint">Preferred status is private to this company and is used to offer future requests first where eligibility allows.</p>
+      <div class="doc-list">${rows}</div>
+    </div>`;
 }
 
 // Company-facing billing & payment-reliability panel. Companies see their
@@ -6312,6 +6831,7 @@ jobForm.addEventListener("submit", (e) => {
     Number.isFinite(sundayRateRaw) && sundayRateRaw > 0
       ? Math.round(sundayRateRaw)
       : budgetMax;
+  const preferredWorkerIds = preferredWorkerIdsFromJobForm();
 
   const job = {
     id: createId(),
@@ -6344,6 +6864,8 @@ jobForm.addEventListener("submit", (e) => {
       saturday: saturdayRate,
       sunday: sundayRate,
     },
+    preferredWorkerIds,
+    preferredFirst: preferredWorkerIds.length > 0,
     noticePeriodDays:
       Number.isFinite(noticeRaw) && noticeRaw > 0
         ? noticeRaw
@@ -6413,10 +6935,11 @@ jobForm.addEventListener("submit", (e) => {
   if (Object.keys(photoMeta).length) job.sitePhotoMeta = photoMeta;
 
   state.jobs.push(job);
-  const autoOffer = autoOfferBestMatch(job.id);
+  const preferredOffer = tryPreferredWorkerOffers(job);
+  const autoOffer = preferredOffer.ok ? preferredOffer : autoOfferBestMatch(job.id);
   logActivity(
     "job",
-    `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${autoOffer.ok ? " · best match offered" : ""}`,
+    `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
 
@@ -6473,6 +6996,7 @@ function render() {
     renderWorkers();
     renderAttendance();
     renderContractorAccount(user);
+    renderJobPreferredWorkerChoices(user);
     // Company's add tab: show job form only
     document.querySelector("#formWorker")?.classList.add("hidden");
     document.querySelector("#formJob")?.classList.remove("hidden");
@@ -6484,6 +7008,7 @@ function render() {
     renderMatches();
     renderAttendance();
     renderCancelledBookings();
+    renderJobPreferredWorkerChoices(user);
   }
 
   // Payments console is admin-only (self-clears for other sessions).
@@ -6593,9 +7118,28 @@ function renderWorkers() {
     btn.addEventListener("click", () => openWorkerPlannedAbsenceCalendar(btn.dataset.workerCalendar));
   });
 
+  workersList.querySelectorAll("[data-preferred-worker]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const user = getSessionUser();
+      if (user?.type !== "company") return;
+      const res = togglePreferredWorker(user.id, btn.dataset.preferredWorker);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast(
+        res.preferred
+          ? `${res.worker.name} added to Preferred Workers`
+          : `${res.worker.name} removed from Preferred Workers`,
+      );
+    });
+  });
+
 }
 
 function workerCard(worker) {
+  const session = getSessionUser();
   const avCls = avatarColor(worker.name);
   const statusCls =
     worker.availability === "available" ? "available" : "unavailable";
@@ -6612,6 +7156,8 @@ function workerCard(worker) {
   const docCount = workerDocumentsFor(worker).length;
   const docSummary = `<span class="worker-next-available">${docCount} document${docCount === 1 ? "" : "s"}</span>`;
   const verifySummary = `<span class="worker-next-available">${verificationStatusLabel(worker.workerVerificationStatus)}</span>`;
+  const companyPreferred =
+    session?.type === "company" && isPreferredWorker(session.id, worker.id);
 
   const statsRow = `
     <div class="worker-rating-block">
@@ -6650,6 +7196,11 @@ function workerCard(worker) {
         <option value="not available" ${worker.availability === "not available" ? "selected" : ""}>Not available</option>
       </select>
       <button class="worker-calendar-btn" type="button" data-worker-calendar="${worker.id}">Calendar</button>
+      ${
+        session?.type === "company"
+          ? `<button class="worker-calendar-btn preferred-worker-btn ${companyPreferred ? "active" : ""}" type="button" data-preferred-worker="${worker.id}">${companyPreferred ? "Preferred" : "Mark Preferred"}</button>`
+          : ""
+      }
       <button class="delete-btn" type="button" data-delete-worker="${worker.id}" aria-label="Remove ${escapeHtml(worker.name)}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
       </button>
@@ -6765,6 +7316,8 @@ function renderJobs() {
   bindCancelBookingButtons(jobsList);
   bindWorkerReleaseButtons(jobsList);
   bindLabourAdjustButtons(jobsList);
+  bindProjectTransferButtons(jobsList);
+  bindShiftChangeButtons(jobsList);
 }
 
 // ─── Cancelled Bookings (Admin) ───────────────────────────
@@ -6876,6 +7429,12 @@ function jobCard(job) {
         assigned
           ? `<button class="site-loc-view-btn" type="button" data-worker-release="${job.id}">
         Release / Stand-down
+      </button>
+      <button class="site-loc-view-btn" type="button" data-project-transfer="${job.id}">
+        Offer Transfer
+      </button>
+      <button class="site-loc-view-btn" type="button" data-shift-change="${job.id}">
+        Offer Shift Change
       </button>
       <button class="cancel-booking-btn" type="button" data-cancel-booking="${job.id}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -7190,6 +7749,7 @@ function getMatches(job) {
       const attendanceDays = rating.evidence?.attendanceDays || 0;
       const experienceScore =
         attendanceDays >= 30 ? Math.min(8, Math.floor(attendanceDays / 8) + 4) : Math.min(3, Math.floor(attendanceDays / 10));
+      const preferredScore = isPreferredWorker(job.companyId || "", w.id) ? 8 : 0;
       const declinePenalty = previousDeclinePenalty(w.id, job);
       const composite = Math.max(
         0,
@@ -7204,7 +7764,8 @@ function getMatches(job) {
             experienceScore +
             availabilityScore +
             weekend.score +
-            travel.score -
+            travel.score +
+            preferredScore -
             absence.penalty -
             declinePenalty,
         ),
@@ -7214,6 +7775,7 @@ function getMatches(job) {
         absence.label,
         travel.label,
         weekend.label,
+        preferredScore ? "Preferred worker" : "",
         declinePenalty ? "Previous decline pattern" : "",
       ].filter(Boolean);
       return {
@@ -7236,6 +7798,7 @@ function getMatches(job) {
           availability: availabilityScore,
           weekend: weekend.score,
           travel: travel.score,
+          preferred: preferredScore,
           plannedAbsencePenalty: absence.penalty,
           previousDeclinePenalty: declinePenalty,
         },
