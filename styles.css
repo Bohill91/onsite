@@ -4904,6 +4904,41 @@ margin-bottom: 12px;
   color: var(--ink-2);
 }
 
+.notice-status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-xs);
+  background: rgba(249, 115, 22, 0.09);
+  border: 1px solid rgba(249, 115, 22, 0.24);
+  color: var(--orange-dark);
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 5px 8px;
+  width: fit-content;
+}
+
+.notice-status-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+.release-replacement-row {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.release-replacement-row input {
+  width: auto;
+}
+
 .cancel-booking-actions {
   display: flex;
   gap: 10px;

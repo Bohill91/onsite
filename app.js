@@ -409,6 +409,40 @@ const PROTECTION_WINDOW_DAYS = 3;
 const EXTENSION_REMIND_DAYS = 14; // first reminder window (calendar days)
 const EXTENSION_SECOND_DAYS = 7; // second reminder window (calendar days)
 const DEFAULT_NOTICE_DAYS = 5; // working days before end → auto end-as-planned
+const RELEASE_STAND_DOWN_DAYS = PROTECTION_WINDOW_DAYS;
+
+const RELEASE_REASON_OPTIONS = {
+  standard_release: [
+    "Site no longer requires worker",
+    "Project phase complete",
+    "Reduction in labour required",
+    "Performance concern",
+    "Other",
+  ],
+  pre_start_stand_down: [
+    "Project delayed",
+    "Project cancelled",
+    "Site not ready",
+    "Labour no longer required",
+    "Other",
+  ],
+  site_not_ready: [
+    "Site not ready",
+    "Materials delayed",
+    "Access issue",
+    "Programme changed",
+    "Other",
+  ],
+  immediate_release: [
+    "No-show",
+    "Health & safety breach",
+    "Conduct issue",
+    "Poor workmanship",
+    "Qualifications issue",
+    "Site no longer requires worker",
+    "Other",
+  ],
+};
 
 // Whole calendar days from today (00:00) until the given date. May be negative
 // if the date is in the past. Returns null for an unparseable/empty date.
@@ -570,6 +604,48 @@ function bindCancelBookingButtons(container) {
       btn.addEventListener("click", () =>
         openCancelBookingModal(btn.dataset.cancelBooking),
       );
+    });
+}
+
+function bindWorkerReleaseButtons(container) {
+  (container || document)
+    .querySelectorAll("[data-worker-release]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () =>
+        openWorkerReleaseModal(btn.dataset.workerRelease),
+      );
+    });
+}
+
+function bindLabourAdjustButtons(container) {
+  (container || document)
+    .querySelectorAll("[data-labour-adjust]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const job = findJob(btn.dataset.labourAdjust);
+        if (!job) return;
+        const current = Number(job.quantity || 1);
+        const raw = prompt("Required workers", String(current));
+        if (raw == null) return;
+        const next = Number(raw);
+        if (!Number.isFinite(next) || next < 1) {
+          showToast("Enter at least 1 worker");
+          return;
+        }
+        const reason =
+          prompt("Reason for changing labour requirement") || "Not specified";
+        const res = adjustJobQuantity(job.id, Math.round(next), reason);
+        if (!res.ok) {
+          showToast(res.reason);
+          return;
+        }
+        saveAndRender();
+        showToast(
+          res.adjustment.adjustmentType === "increase"
+            ? "Labour increased — replacement task created"
+            : "Labour decrease logged",
+        );
+      });
     });
 }
 
@@ -1641,6 +1717,247 @@ function cancelBooking(job, reason) {
   return record;
 }
 
+function releaseTypeLabel(type) {
+  return {
+    standard_release: "Release with notice",
+    pre_start_stand_down: "Pre-start stand-down",
+    site_not_ready: "Site not ready",
+    immediate_release: "Immediate release",
+  }[type] || "Release";
+}
+
+function releaseStatusLabel(status) {
+  return {
+    logged: "Logged",
+    pending_effective_date: "Pending effective date",
+    immediate: "Immediate release logged",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  }[status] || "Logged";
+}
+
+function defaultNoticeDate(days = DEFAULT_NOTICE_DAYS) {
+  return addWorkingDays(todayDateStr(), days);
+}
+
+function latestWorkerNoticeForJob(jobId, workerId) {
+  return (state.workerNotices || []).find(
+    (n) =>
+      n.jobId === jobId &&
+      n.workerId === workerId &&
+      !["completed", "cancelled"].includes(n.noticeStatus),
+  );
+}
+
+function latestReleaseForJob(jobId, workerId = "") {
+  return (state.workerReleases || []).find(
+    (r) =>
+      r.jobId === jobId &&
+      (!workerId || r.workerId === workerId) &&
+      !["completed", "cancelled"].includes(r.releaseStatus),
+  );
+}
+
+function computeReleaseRule(job, releaseType) {
+  const startDays = workingDaysUntil(job?.startDate || job?.start);
+  const started = startDays === 0;
+  const noticeDays =
+    releaseType === "standard_release" && started
+      ? DEFAULT_NOTICE_DAYS
+      : releaseType === "immediate_release"
+        ? 0
+        : RELEASE_STAND_DOWN_DAYS;
+  const effectiveDate =
+    noticeDays > 0 ? defaultNoticeDate(noticeDays) : todayDateStr();
+  const noticeRule =
+    releaseType === "standard_release" && started
+      ? "5 working days once project has started"
+      : releaseType === "immediate_release"
+        ? "Immediate release requires a reason"
+        : "Pre-start / site-not-ready 3 working day rule";
+  return { started, noticeDays, effectiveDate, noticeRule };
+}
+
+function createReplacementTask(job, worker, reason, source) {
+  if (!Array.isArray(state.replacementTasks)) state.replacementTasks = [];
+  const task = {
+    id: createId(),
+    jobId: job?.id || "",
+    companyId: job?.companyId || "",
+    companyName: job?.companyName || "Company",
+    workerId: worker?.id || "",
+    workerName: worker?.name || "",
+    reason: reason || "Replacement requested",
+    source,
+    createdAt: new Date().toISOString(),
+    status: "open",
+  };
+  state.replacementTasks.unshift(task);
+  if (job) {
+    job.replacementRequired = true;
+    job.replacementTaskId = task.id;
+  }
+  return task;
+}
+
+function detachReleasedAssignment(job, status) {
+  if (!job) return;
+  const agr = agreementForJob(job);
+  if (agr && agr.status === "pending") agr.status = "cancelled";
+  job.assignedWorkerId = "";
+  job.workerId = "";
+  job.bookingActive = false;
+  job.agreementId = "";
+  job.bookingStatus = status;
+}
+
+function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
+  const job = findJob(jobId);
+  const sess = getSessionUser();
+  if (!job || !sess?.id || job.assignedWorkerId !== sess.id)
+    return { ok: false, reason: "Assignment not found" };
+  const worker = findWorker(sess.id) || sess;
+  const notice = {
+    id: createId(),
+    workerId: sess.id,
+    workerName: worker?.name || sess.name || "Worker",
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    noticeGivenAt: new Date().toISOString(),
+    proposedLastWorkingDay: proposedLastWorkingDay || defaultNoticeDate(),
+    reason: reason || "Not specified",
+    notes: notes.trim(),
+    noticeStatus: "logged",
+  };
+  if (!Array.isArray(state.workerNotices)) state.workerNotices = [];
+  state.workerNotices.unshift(notice);
+  job.noticeStatus = notice.noticeStatus;
+  job.proposedLastWorkingDay = notice.proposedLastWorkingDay;
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  state.notifications.unshift({
+    id: createId(),
+    type: "worker_notice",
+    workerId: notice.workerId,
+    workerName: notice.workerName,
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    message: `${notice.workerName} gave notice for ${job.trade} in ${job.location}. Proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)}.`,
+    createdAt: notice.noticeGivenAt,
+    readAt: "",
+  });
+  logActivity(
+    "notice",
+    `<strong>${escapeHtml(notice.workerName)}</strong> gave notice for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} — proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)}.`,
+  );
+  return { ok: true, notice };
+}
+
+function submitWorkerRelease(
+  jobId,
+  releaseType,
+  effectiveDate,
+  reason,
+  notes = "",
+  replacementRequired = false,
+) {
+  const job = findJob(jobId);
+  if (!job || !job.assignedWorkerId)
+    return { ok: false, reason: "Assigned job not found" };
+  const worker = findWorker(job.assignedWorkerId);
+  if (!reason) return { ok: false, reason: "Release reason is required" };
+  const rule = computeReleaseRule(job, releaseType);
+  const record = {
+    id: createId(),
+    workerId: job.assignedWorkerId,
+    workerName: worker?.name || "Worker",
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    releaseType,
+    releaseGivenAt: new Date().toISOString(),
+    effectiveDate: effectiveDate || rule.effectiveDate,
+    reason,
+    notes: notes.trim(),
+    replacementRequired: !!replacementRequired,
+    noticeWorkingDays: rule.noticeDays,
+    noticeRule: rule.noticeRule,
+    releaseStatus:
+      releaseType === "standard_release" ? "pending_effective_date" : "immediate",
+  };
+  if (!Array.isArray(state.workerReleases)) state.workerReleases = [];
+  state.workerReleases.unshift(record);
+  job.releaseStatus = record.releaseStatus;
+  job.releaseEffectiveDate = record.effectiveDate;
+  job.releaseReason = record.reason;
+  job.replacementRequired = !!replacementRequired;
+  if (worker) {
+    if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
+    worker.offerNotifications.unshift({
+      id: createId(),
+      type: "assignment_release",
+      jobId: job.id,
+      releaseId: record.id,
+      message: `${releaseTypeLabel(releaseType)} logged for ${job.trade} in ${job.location}. Effective ${formatDateOnly(record.effectiveDate)}.`,
+      createdAt: record.releaseGivenAt,
+      readAt: "",
+    });
+  }
+  if (replacementRequired)
+    createReplacementTask(job, worker, reason, `release:${releaseType}`);
+  if (
+    releaseType === "immediate_release" ||
+    releaseType === "pre_start_stand_down" ||
+    releaseType === "site_not_ready"
+  ) {
+    detachReleasedAssignment(job, releaseType);
+  }
+  logActivity(
+    "notice",
+    `${escapeHtml(releaseTypeLabel(releaseType))} logged for <strong>${escapeHtml(record.workerName)}</strong> on ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.${replacementRequired ? " Replacement task created." : ""}`,
+  );
+  return { ok: true, release: record };
+}
+
+function adjustJobQuantity(jobId, nextQuantity, reason = "") {
+  const job = findJob(jobId);
+  if (!job) return { ok: false, reason: "Job not found" };
+  const fromQuantity = Number(job.quantity || 1);
+  const toQuantity = Math.max(1, Number(nextQuantity) || fromQuantity);
+  if (toQuantity === fromQuantity)
+    return { ok: false, reason: "Quantity is unchanged" };
+  const adjustmentType = toQuantity > fromQuantity ? "increase" : "decrease";
+  const record = {
+    id: createId(),
+    jobId: job.id,
+    companyId: job.companyId || "",
+    companyName: job.companyName || "Company",
+    fromQuantity,
+    toQuantity,
+    adjustmentType,
+    reason: reason || "Not specified",
+    effectiveDate:
+      adjustmentType === "decrease"
+        ? defaultNoticeDate(DEFAULT_NOTICE_DAYS)
+        : todayDateStr(),
+    replacementRequired: adjustmentType === "increase",
+    createdAt: new Date().toISOString(),
+    status: "logged",
+  };
+  if (!Array.isArray(state.labourAdjustments)) state.labourAdjustments = [];
+  state.labourAdjustments.unshift(record);
+  job.quantity = toQuantity;
+  job.quantityChangePending = adjustmentType === "decrease";
+  if (adjustmentType === "increase")
+    createReplacementTask(job, null, record.reason, "labour_increase");
+  logActivity(
+    "job",
+    `${escapeHtml(job.trade)} labour requirement ${adjustmentType}d from ${fromQuantity} to ${toQuantity}.${adjustmentType === "increase" ? " Replacement task created." : ""}`,
+  );
+  return { ok: true, adjustment: record };
+}
+
 // ─── Cancel Booking Modal ─────────────────────────────────
 let pendingCancelJobId = null;
 
@@ -1721,6 +2038,152 @@ document
     if (e.target === document.getElementById("cancelBookingModal"))
       closeCancelBookingModal();
   });
+
+// ─── Notice / Release Modals ──────────────────────────────
+function openWorkerNoticeModal(jobId) {
+  const job = findJob(jobId);
+  const sess = getSessionUser();
+  if (!job || !sess?.id || job.assignedWorkerId !== sess.id) return;
+  const lastDay = defaultNoticeDate(DEFAULT_NOTICE_DAYS);
+  const summary = document.getElementById("workerNoticeSummary");
+  document.getElementById("workerNoticeJobId").value = job.id;
+  document.getElementById("workerNoticeLastDay").value = lastDay;
+  if (summary) {
+    summary.innerHTML = `
+      <div class="cbk-row"><span class="cbk-label">Assignment</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Standard notice</span><span class="cbk-val">${DEFAULT_NOTICE_DAYS} working days</span></div>
+      <div class="cancel-window-banner safe">Weekends are not counted for this MVP unless weekend working is added to the job later.</div>`;
+  }
+  document.getElementById("workerNoticeReason").value =
+    "Project no longer suitable";
+  document.getElementById("workerNoticeNotes").value = "";
+  document.getElementById("workerNoticeModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeWorkerNoticeModal() {
+  document.getElementById("workerNoticeModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function confirmWorkerNotice() {
+  const jobId = document.getElementById("workerNoticeJobId")?.value || "";
+  const lastDay = document.getElementById("workerNoticeLastDay")?.value || "";
+  const reason = document.getElementById("workerNoticeReason")?.value || "";
+  const notes = document.getElementById("workerNoticeNotes")?.value || "";
+  const res = submitWorkerNotice(jobId, lastDay, reason, notes);
+  if (!res.ok) {
+    showToast(res.reason);
+    return;
+  }
+  closeWorkerNoticeModal();
+  saveAndRender();
+  showToast("Notice logged");
+}
+
+function populateReleaseReasons(type) {
+  const select = document.getElementById("workerReleaseReason");
+  if (!select) return;
+  select.innerHTML = (
+    RELEASE_REASON_OPTIONS[type] || RELEASE_REASON_OPTIONS.standard_release
+  )
+    .map((reason) => `<option>${escapeHtml(reason)}</option>`)
+    .join("");
+}
+
+function openWorkerReleaseModal(jobId) {
+  const job = findJob(jobId);
+  if (!job || !job.assignedWorkerId) return;
+  const worker = findWorker(job.assignedWorkerId);
+  const type = "standard_release";
+  const rule = computeReleaseRule(job, type);
+  const summary = document.getElementById("workerReleaseSummary");
+  document.getElementById("workerReleaseJobId").value = job.id;
+  document.getElementById("workerReleaseType").value = type;
+  document.getElementById("workerReleaseDate").value = rule.effectiveDate;
+  document.getElementById("workerReleaseNotes").value = "";
+  document.getElementById("workerReleaseReplacement").checked = false;
+  populateReleaseReasons(type);
+  if (summary) {
+    summary.innerHTML = `
+      <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "Worker")}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Assignment</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Default rule</span><span class="cbk-val">${escapeHtml(rule.noticeRule)}</span></div>
+      <div class="cancel-window-banner safe">This records the release/stand-down only. It does not perform payment processing or legal automation.</div>`;
+  }
+  document.getElementById("workerReleaseModal")?.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+
+function closeWorkerReleaseModal() {
+  document.getElementById("workerReleaseModal")?.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function refreshReleaseDateForType() {
+  const jobId = document.getElementById("workerReleaseJobId")?.value || "";
+  const type = document.getElementById("workerReleaseType")?.value || "";
+  const job = findJob(jobId);
+  populateReleaseReasons(type);
+  if (!job) return;
+  const rule = computeReleaseRule(job, type);
+  const dateInput = document.getElementById("workerReleaseDate");
+  if (dateInput) dateInput.value = rule.effectiveDate;
+}
+
+function confirmWorkerRelease() {
+  const jobId = document.getElementById("workerReleaseJobId")?.value || "";
+  const type = document.getElementById("workerReleaseType")?.value || "";
+  const effectiveDate = document.getElementById("workerReleaseDate")?.value || "";
+  const reason = document.getElementById("workerReleaseReason")?.value || "";
+  const notes = document.getElementById("workerReleaseNotes")?.value || "";
+  const replacement = !!document.getElementById("workerReleaseReplacement")?.checked;
+  const res = submitWorkerRelease(
+    jobId,
+    type,
+    effectiveDate,
+    reason,
+    notes,
+    replacement,
+  );
+  if (!res.ok) {
+    showToast(res.reason);
+    return;
+  }
+  closeWorkerReleaseModal();
+  saveAndRender();
+  showToast(`${releaseTypeLabel(type)} logged`);
+}
+
+document
+  .getElementById("closeWorkerNoticeBtn")
+  ?.addEventListener("click", closeWorkerNoticeModal);
+document
+  .getElementById("cancelWorkerNoticeBtn")
+  ?.addEventListener("click", closeWorkerNoticeModal);
+document
+  .getElementById("confirmWorkerNoticeBtn")
+  ?.addEventListener("click", confirmWorkerNotice);
+document.getElementById("workerNoticeModal")?.addEventListener("click", (e) => {
+  if (e.target === document.getElementById("workerNoticeModal"))
+    closeWorkerNoticeModal();
+});
+document
+  .getElementById("closeWorkerReleaseBtn")
+  ?.addEventListener("click", closeWorkerReleaseModal);
+document
+  .getElementById("cancelWorkerReleaseBtn")
+  ?.addEventListener("click", closeWorkerReleaseModal);
+document
+  .getElementById("confirmWorkerReleaseBtn")
+  ?.addEventListener("click", confirmWorkerRelease);
+document
+  .getElementById("workerReleaseType")
+  ?.addEventListener("change", refreshReleaseDateForType);
+document.getElementById("workerReleaseModal")?.addEventListener("click", (e) => {
+  if (e.target === document.getElementById("workerReleaseModal"))
+    closeWorkerReleaseModal();
+});
 
 // Extension modal wiring
 document
@@ -2642,6 +3105,10 @@ const demoData = {
     },
   ],
   cancellations: [],
+  workerNotices: [],
+  workerReleases: [],
+  replacementTasks: [],
+  labourAdjustments: [],
   siteCodes: [],
   agreements: [],
   applications: [],
@@ -2666,6 +3133,10 @@ function loadState() {
 function migrateState(s) {
   if (!s || typeof s !== "object") return structuredClone(demoData);
   if (!Array.isArray(s.cancellations)) s.cancellations = [];
+  if (!Array.isArray(s.workerNotices)) s.workerNotices = [];
+  if (!Array.isArray(s.workerReleases)) s.workerReleases = [];
+  if (!Array.isArray(s.replacementTasks)) s.replacementTasks = [];
+  if (!Array.isArray(s.labourAdjustments)) s.labourAdjustments = [];
   if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
   if (!Array.isArray(s.invoices)) s.invoices = [];
   if (!Array.isArray(s.applications)) s.applications = [];
@@ -4173,6 +4644,12 @@ function renderWorkerHome(user) {
   const bookingAgr = booking ? agreementForJob(booking) : null;
   const agrState = bookingAgr ? agreementWorkerState(bookingAgr) : "none";
   const bookingLive = booking ? bookingAgreementActive(booking) : false;
+  const currentWorkerNotice = booking
+    ? latestWorkerNoticeForJob(booking.id, user.id)
+    : null;
+  const currentWorkerRelease = booking
+    ? latestReleaseForJob(booking.id, user.id)
+    : null;
   const agreementBanner =
     booking && bookingAgr && agrState !== "active"
       ? `
@@ -4203,8 +4680,8 @@ function renderWorkerHome(user) {
     .filter((a) => a.status !== "offered")
     .slice(-3)
     .reverse();
-  const missedNotice = (workerProfile?.offerNotifications || []).find(
-    (n) => n.type === "missed_2_offers" && !n.readAt,
+  const workerHomeNotices = (workerProfile?.offerNotifications || []).filter(
+    (n) => ["missed_2_offers", "assignment_release"].includes(n.type) && !n.readAt,
   );
   const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
   const plannedAbsencePanel = `
@@ -4269,8 +4746,10 @@ function renderWorkerHome(user) {
           : ""
       }
     </div>`;
-  const missedNoticeHtml = missedNotice
-    ? `<div class="wh-offer-notice">${escapeHtml(missedNotice.message)}</div>`
+  const missedNoticeHtml = workerHomeNotices.length
+    ? workerHomeNotices
+        .map((n) => `<div class="wh-offer-notice">${escapeHtml(n.message)}</div>`)
+        .join("")
     : "";
   const offerCardHtml = (app) => {
     const job = applicationJob(app);
@@ -4364,6 +4843,16 @@ function renderWorkerHome(user) {
       ${booking.sitePin ? `<button class="site-loc-view-btn" type="button" data-map-job="${booking.id}">Site Details</button>` : ""}
       ${booking.estimatedEndDate || booking.endDate ? `<div class="wh-booking-end">Estimated end: <strong>${formatDate(booking.estimatedEndDate || booking.endDate)}</strong></div>` : ""}
       ${
+        currentWorkerNotice
+          ? `<div class="notice-status-panel"><strong>Notice logged:</strong> proposed last working day ${formatDateOnly(currentWorkerNotice.proposedLastWorkingDay)} · ${escapeHtml(currentWorkerNotice.reason)}</div>`
+          : ""
+      }
+      ${
+        currentWorkerRelease
+          ? `<div class="notice-status-panel"><strong>${escapeHtml(releaseTypeLabel(currentWorkerRelease.releaseType))}:</strong> ${escapeHtml(releaseStatusLabel(currentWorkerRelease.releaseStatus))} · effective ${formatDateOnly(currentWorkerRelease.effectiveDate)}</div>`
+          : ""
+      }
+      ${
         booking.extensionRequestedAt
           ? `
         <div class="wh-ext-request">
@@ -4386,6 +4875,7 @@ function renderWorkerHome(user) {
         }</div>`
             : ""
       }
+      <button class="secondary-btn wide" type="button" data-worker-notice="${booking.id}">Give Notice</button>
       <div class="wh-booking-protect">If your company cancels within ${PROTECTION_WINDOW_DAYS} working days of the start date, you're owed 1 day's pay${bookingDayRate ? ` (${formatMoney(bookingDayRate)})` : ""}.</div>
     </div>`
     : "";
@@ -4568,6 +5058,9 @@ function renderWorkerHome(user) {
       event.stopPropagation();
       openSiteMap(btn.dataset.mapJob);
     });
+  });
+  el.querySelectorAll("[data-worker-notice]").forEach((btn) => {
+    btn.addEventListener("click", () => openWorkerNoticeModal(btn.dataset.workerNotice));
   });
 
   // Recommended job clicks → go to Jobs tab
@@ -4960,12 +5453,17 @@ function renderContractorHome(user) {
         .slice(0, 5)
         .map((w) => {
           const job = companyJobs.find((j) => j.assignedWorkerId === w.id);
+          const release = job ? latestReleaseForJob(job.id, w.id) : null;
+          const notice = job ? latestWorkerNoticeForJob(job.id, w.id) : null;
           return `<div class="ch-worker-row">
       <div class="worker-avatar ${avatarColor(w.name)}" style="width:34px;height:34px;font-size:0.78rem;flex-shrink:0">${initials(w.name)}</div>
       <div class="ch-wrow-info">
         <div class="ch-wrow-name">${escapeHtml(w.name)} <span class="protected-badge protected-badge--sm"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Protected</span></div>
         <div class="ch-wrow-meta">${escapeHtml(w.trade)}${job ? ` · ${escapeHtml(job.location)}` : ""}</div>
+        ${notice ? `<span class="notice-status-chip">Notice: ${formatDateOnly(notice.proposedLastWorkingDay)}</span>` : ""}
+        ${release ? `<span class="notice-status-chip">${escapeHtml(releaseTypeLabel(release.releaseType))}: ${formatDateOnly(release.effectiveDate)}</span>` : ""}
       </div>
+      ${job ? `<button class="secondary-btn" type="button" data-worker-release="${job.id}">Release / Stand-down</button>` : ""}
       ${job ? `<button class="ch-cancel-btn" type="button" data-cancel-booking="${job.id}">Cancel</button>` : ""}
     </div>`;
         })
@@ -5032,6 +5530,7 @@ function renderContractorHome(user) {
   document
     .getElementById("chRequestBtn")
     ?.addEventListener("click", () => switchTab("add"));
+  bindWorkerReleaseButtons(el);
   bindCancelBookingButtons(el);
   bindAgreementOpeners(el);
   bindExtensionButtons(el);
@@ -6071,6 +6570,8 @@ function renderJobs() {
   });
 
   bindCancelBookingButtons(jobsList);
+  bindWorkerReleaseButtons(jobsList);
+  bindLabourAdjustButtons(jobsList);
 }
 
 // ─── Cancelled Bookings (Admin) ───────────────────────────
@@ -6123,6 +6624,8 @@ function jobCard(job) {
     ? findWorker(job.assignedWorkerId)
     : null;
   const hasPin = job.sitePin && job.sitePin.lat !== null;
+  const release = assigned ? latestReleaseForJob(job.id, assigned.id) : null;
+  const notice = assigned ? latestWorkerNoticeForJob(job.id, assigned.id) : null;
 
   return `
   <article class="job-card">
@@ -6165,6 +6668,8 @@ function jobCard(job) {
       }
     </div>
     ${assigned ? bookingProtectionBanner(job) : ""}
+    ${notice ? `<div class="notice-status-panel"><strong>Worker notice:</strong> proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)} · ${escapeHtml(notice.reason)}</div>` : ""}
+    ${release ? `<div class="notice-status-panel"><strong>${escapeHtml(releaseTypeLabel(release.releaseType))}:</strong> ${escapeHtml(releaseStatusLabel(release.releaseStatus))} · effective ${formatDateOnly(release.effectiveDate)}</div>` : ""}
     <div class="job-card-footer">
       ${
         hasPin
@@ -6176,12 +6681,16 @@ function jobCard(job) {
       }
       ${
         assigned
-          ? `<button class="cancel-booking-btn" type="button" data-cancel-booking="${job.id}">
+          ? `<button class="site-loc-view-btn" type="button" data-worker-release="${job.id}">
+        Release / Stand-down
+      </button>
+      <button class="cancel-booking-btn" type="button" data-cancel-booking="${job.id}">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         Cancel Booking
       </button>`
           : ""
       }
+      <button class="secondary-btn" type="button" data-labour-adjust="${job.id}">Change Workers</button>
       ${
         !assigned
           ? `<div class="job-offer-note">Send offers from Matches so availability, travel, Planned Absence, and ratings are checked.</div>`
@@ -6864,6 +7373,8 @@ document.addEventListener("keydown", (e) => {
     closePhotoLightbox();
     closeDisputeModal();
     closeAgreementModal();
+    closeWorkerNoticeModal();
+    closeWorkerReleaseModal();
   }
 });
 document
