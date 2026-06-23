@@ -3150,6 +3150,37 @@ const _demoBilling = {
     manualRestriction: false,
   },
 };
+
+const PRE_START_DOCUMENT_TYPES = [
+  { value: "site_induction", label: "Site induction" },
+  { value: "rams", label: "RAMS" },
+  { value: "site_rules", label: "Site rules" },
+  { value: "emergency_procedures", label: "Emergency procedures" },
+  { value: "parking_information", label: "Parking information" },
+  { value: "welfare_information", label: "Welfare information" },
+  { value: "site_map", label: "Site map" },
+  { value: "other", label: "Other project documents" },
+];
+
+function normalizePreStartDocument(doc) {
+  const documentName = String(
+    doc?.documentName || doc?.name || doc?.title || "",
+  ).trim();
+  if (!documentName) return null;
+  const documentType = PRE_START_DOCUMENT_TYPES.some(
+    (type) => type.value === doc?.documentType,
+  )
+    ? doc.documentType
+    : "other";
+  return {
+    documentId: doc?.documentId || doc?.id || createId(),
+    documentType,
+    documentName,
+    uploadedAt: doc?.uploadedAt || new Date().toISOString(),
+    required: doc?.required == null ? true : !!doc.required,
+  };
+}
+
 const demoData = {
   workers: _demoWorkers,
   jobs: [
@@ -3262,6 +3293,7 @@ const demoData = {
   preferredWorkers: [],
   projectTransfers: [],
   shiftChangeOffers: [],
+  preStartAcknowledgements: [],
   companyDocuments: {},
   invoices: _demoInvoices,
   companyBilling: _demoBilling,
@@ -3293,6 +3325,8 @@ function migrateState(s) {
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
   if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
   if (!Array.isArray(s.shiftChangeOffers)) s.shiftChangeOffers = [];
+  if (!Array.isArray(s.preStartAcknowledgements))
+    s.preStartAcknowledgements = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
   (s.preferredWorkers || []).forEach((pref) => {
@@ -3309,6 +3343,14 @@ function migrateState(s) {
     if (!offer.status) offer.status = "offered";
     if (!offer.createdAt) offer.createdAt = new Date().toISOString();
   });
+  s.preStartAcknowledgements = (s.preStartAcknowledgements || [])
+    .map((ack) => ({
+      workerId: ack.workerId || "",
+      projectId: ack.projectId || ack.jobId || "",
+      documentId: ack.documentId || "",
+      acknowledgedAt: ack.acknowledgedAt || new Date().toISOString(),
+    }))
+    .filter((ack) => ack.workerId && ack.projectId && ack.documentId);
   (s.replacementTasks || []).forEach((task) => {
     if (!task.taskType) task.taskType = "replacement_needed";
     if (task.replacementNeeded == null) task.replacementNeeded = true;
@@ -3386,6 +3428,12 @@ function migrateState(s) {
   // Backfill a budget ceiling on legacy jobs that only carried a free-text pay
   // rate, so the pricing engine has something to work with.
   (s.jobs || []).forEach((j) => {
+    j.preStartDocuments = (Array.isArray(j.preStartDocuments)
+      ? j.preStartDocuments
+      : []
+    )
+      .map(normalizePreStartDocument)
+      .filter(Boolean);
     j.workingDays = normalizeWorkingDays(j.workingDays);
     j.requiresSaturday = j.workingDays.includes("saturday");
     j.requiresSunday = j.workingDays.includes("sunday");
@@ -3494,6 +3542,110 @@ const WORKER_DOCUMENT_STATUSES = ["unverified", "pending", "verified", "rejected
 
 function workerDocumentTypeLabel(type) {
   return WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.label || "Document";
+}
+
+function preStartDocumentTypeLabel(type) {
+  return (
+    PRE_START_DOCUMENT_TYPES.find((d) => d.value === type)?.label ||
+    "Project document"
+  );
+}
+
+function preStartDocumentsForJob(job) {
+  return (Array.isArray(job?.preStartDocuments) ? job.preStartDocuments : [])
+    .map(normalizePreStartDocument)
+    .filter(Boolean)
+    .sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
+}
+
+function addPreStartDocument(jobId, doc) {
+  const job = findJob(jobId);
+  const record = normalizePreStartDocument(doc);
+  if (!job || !record)
+    return { ok: false, reason: "Add a document name" };
+  job.preStartDocuments = preStartDocumentsForJob(job);
+  const idx = job.preStartDocuments.findIndex(
+    (d) => d.documentId === record.documentId,
+  );
+  if (idx === -1) job.preStartDocuments.unshift(record);
+  else job.preStartDocuments[idx] = record;
+  saveState();
+  return { ok: true, document: record };
+}
+
+function removePreStartDocument(jobId, documentId) {
+  const job = findJob(jobId);
+  if (!job || !documentId)
+    return { ok: false, reason: "Document not found" };
+  job.preStartDocuments = preStartDocumentsForJob(job).filter(
+    (doc) => doc.documentId !== documentId,
+  );
+  state.preStartAcknowledgements = (state.preStartAcknowledgements || []).filter(
+    (ack) => !(ack.projectId === jobId && ack.documentId === documentId),
+  );
+  saveState();
+  return { ok: true };
+}
+
+function preStartAcknowledgementsForJob(jobId) {
+  return (state.preStartAcknowledgements || []).filter(
+    (ack) => ack.projectId === jobId,
+  );
+}
+
+function preStartAcknowledgementsForWorker(workerId, jobId) {
+  return (state.preStartAcknowledgements || []).filter(
+    (ack) => ack.workerId === workerId && ack.projectId === jobId,
+  );
+}
+
+function acknowledgePreStartDocument(workerId, projectId, documentId) {
+  const job = findJob(projectId);
+  const document = preStartDocumentsForJob(job).find(
+    (doc) => doc.documentId === documentId,
+  );
+  if (!workerId || !job || !document)
+    return { ok: false, reason: "Document not found" };
+  if (!Array.isArray(state.preStartAcknowledgements))
+    state.preStartAcknowledgements = [];
+  const existing = state.preStartAcknowledgements.find(
+    (ack) =>
+      ack.workerId === workerId &&
+      ack.projectId === projectId &&
+      ack.documentId === documentId,
+  );
+  if (existing) return { ok: true, acknowledgement: existing, duplicate: true };
+  const acknowledgement = {
+    workerId,
+    projectId,
+    documentId,
+    acknowledgedAt: new Date().toISOString(),
+  };
+  state.preStartAcknowledgements.unshift(acknowledgement);
+  saveState();
+  return { ok: true, acknowledgement };
+}
+
+function preStartRequirementSummary(job, workerId) {
+  const documents = preStartDocumentsForJob(job);
+  const acknowledgements = preStartAcknowledgementsForWorker(workerId, job?.id);
+  const acknowledgedIds = new Set(acknowledgements.map((ack) => ack.documentId));
+  const required = documents.filter((doc) => doc.required);
+  const outstanding = required.filter((doc) => !acknowledgedIds.has(doc.documentId));
+  const completed = documents.filter((doc) => acknowledgedIds.has(doc.documentId));
+  return { documents, acknowledgements, required, outstanding, completed };
+}
+
+function hasOutstandingPreStartRequirements(workerId, jobId) {
+  const job = findJob(jobId);
+  return preStartRequirementSummary(job, workerId).outstanding.length > 0;
+}
+
+function preStartDocumentTypeOptions(selected = "site_induction") {
+  return PRE_START_DOCUMENT_TYPES.map(
+    (type) =>
+      `<option value="${type.value}" ${type.value === selected ? "selected" : ""}>${escapeHtml(type.label)}</option>`,
+  ).join("");
 }
 
 function normalizeWorkerDocument(doc) {
@@ -3666,6 +3818,208 @@ function companyWorkerVerificationHTML(worker) {
     <span>Documents: <strong>${docs}</strong></span>
     <span>Quals: <strong>${qualifications}</strong></span>
   </div>`;
+}
+
+function workerPreStartPanelHTML(job, workerId) {
+  if (!job) return "";
+  const summary = preStartRequirementSummary(job, workerId);
+  if (!summary.documents.length) return "";
+  const incomplete = summary.documents.filter(
+    (doc) => !summary.completed.some((done) => done.documentId === doc.documentId),
+  );
+  const docRow = (doc) => {
+    const ack = summary.acknowledgements.find(
+      (item) => item.documentId === doc.documentId,
+    );
+    return `
+      <div class="prestart-doc-row ${ack ? "complete" : doc.required ? "outstanding" : ""}">
+        <div class="prestart-doc-main">
+          <div class="prestart-doc-title">${escapeHtml(doc.documentName)}</div>
+          <div class="prestart-doc-meta">
+            ${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}
+            ${doc.required ? " · required" : " · optional"}
+            ${ack ? ` · acknowledged ${formatDate(ack.acknowledgedAt)}` : ""}
+          </div>
+        </div>
+        <div class="prestart-doc-actions">
+          <button class="secondary-btn" type="button" data-prestart-view="${doc.documentId}">View</button>
+          ${
+            ack
+              ? `<span class="prestart-status complete">Acknowledged</span>`
+              : `<button class="primary-btn" type="button" data-prestart-ack="${doc.documentId}" data-prestart-job="${job.id}">Acknowledge</button>`
+          }
+        </div>
+      </div>`;
+  };
+  return `
+    <div class="wh-section-label">Pre-start Requirements</div>
+    <div class="prestart-panel">
+      ${
+        summary.outstanding.length
+          ? `<div class="prestart-banner outstanding">${summary.outstanding.length} required document${summary.outstanding.length === 1 ? "" : "s"} outstanding before start.</div>`
+          : `<div class="prestart-banner complete">All required pre-start documents acknowledged.</div>`
+      }
+      <div class="prestart-subtitle">Outstanding</div>
+      ${incomplete.length ? incomplete.map(docRow).join("") : `<div class="att-empty">No outstanding pre-start documents.</div>`}
+      <div class="prestart-subtitle">Completed Acknowledgements</div>
+      ${summary.completed.length ? summary.completed.map(docRow).join("") : `<div class="att-empty">No completed acknowledgements yet.</div>`}
+    </div>`;
+}
+
+function companyPreStartJobPanelHTML(job) {
+  const docs = preStartDocumentsForJob(job);
+  const worker = job?.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const summary = worker ? preStartRequirementSummary(job, worker.id) : null;
+  const rows = docs.length
+    ? docs
+        .map((doc) => {
+          const ack = worker
+            ? summary.acknowledgements.find(
+                (item) => item.documentId === doc.documentId,
+              )
+            : null;
+          return `
+        <div class="prestart-doc-row">
+          <div class="prestart-doc-main">
+            <div class="prestart-doc-title">${escapeHtml(doc.documentName)}</div>
+            <div class="prestart-doc-meta">
+              ${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}
+              ${doc.required ? " · required" : " · optional"}
+              ${worker ? ` · ${ack ? `acknowledged by ${escapeHtml(worker.name)}` : `outstanding for ${escapeHtml(worker.name)}`}` : " · no worker assigned"}
+            </div>
+          </div>
+          <div class="prestart-doc-actions">
+            <span class="prestart-status ${ack ? "complete" : doc.required && worker ? "outstanding" : ""}">
+              ${ack ? "Acknowledged" : doc.required ? "Required" : "Optional"}
+            </span>
+            <button class="doc-del-btn" type="button" data-prestart-remove="${doc.documentId}" data-prestart-job="${job.id}">Remove</button>
+          </div>
+        </div>`;
+        })
+        .join("")
+    : `<div class="att-empty">No pre-start documents attached.</div>`;
+  return `
+    <div class="prestart-manage" data-prestart-manage="${job.id}">
+      <div class="prestart-panel-head">
+        <div>
+          <div class="prestart-title">Pre-start Documents</div>
+          <div class="prestart-hint">Metadata-only placeholders for induction, RAMS and project information.</div>
+        </div>
+        ${
+          summary
+            ? `<span class="prestart-status ${summary.outstanding.length ? "outstanding" : "complete"}">${summary.outstanding.length} outstanding</span>`
+            : ""
+        }
+      </div>
+      <div class="prestart-doc-list">${rows}</div>
+      <div class="prestart-add-form">
+        <select class="prestart-type" data-prestart-type="${job.id}" aria-label="Document type">${preStartDocumentTypeOptions()}</select>
+        <input class="prestart-name" data-prestart-name="${job.id}" type="text" placeholder="Document name or upload label" />
+        <label class="checkbox-row prestart-required">
+          <input type="checkbox" data-prestart-required="${job.id}" checked />
+          <span>Required</span>
+        </label>
+        <button class="primary-btn" type="button" data-prestart-add="${job.id}">Add</button>
+      </div>
+    </div>`;
+}
+
+function companyPreStartPanelHTML(user) {
+  const jobs = (state.jobs || []).filter(
+    (job) => companyOwnsJob(job, user.id) && !job.completed,
+  );
+  if (!jobs.length) return "";
+  return `
+    <div class="ch-offer-panel prestart-company-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Pre-start Documents</span>
+        <span class="ch-agr-panel-count">${jobs.length}</span>
+      </div>
+      ${jobs
+        .slice(0, 4)
+        .map(
+          (job) => `
+        <div class="prestart-project-card">
+          <div class="prestart-project-title">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</div>
+          ${companyPreStartJobPanelHTML(job)}
+        </div>`,
+        )
+        .join("")}
+    </div>`;
+}
+
+function bindPreStartDocumentButtons(container, workerId = "") {
+  const root = container || document;
+  root.querySelectorAll("[data-prestart-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const jobId = btn.dataset.prestartAdd;
+      const type = root.querySelector(`[data-prestart-type="${jobId}"]`)?.value || "other";
+      const nameInput = root.querySelector(`[data-prestart-name="${jobId}"]`);
+      const required = !!root.querySelector(`[data-prestart-required="${jobId}"]`)?.checked;
+      const res = addPreStartDocument(jobId, {
+        documentType: type,
+        documentName: nameInput?.value || "",
+        required,
+      });
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      if (nameInput) nameInput.value = "";
+      saveAndRender();
+      showToast("Pre-start document added");
+    });
+  });
+  root.querySelectorAll("[data-prestart-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = removePreStartDocument(
+        btn.dataset.prestartJob,
+        btn.dataset.prestartRemove,
+      );
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Pre-start document removed");
+    });
+  });
+  root.querySelectorAll("[data-prestart-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const job = state.jobs.find((item) =>
+        preStartDocumentsForJob(item).some(
+          (doc) => doc.documentId === btn.dataset.prestartView,
+        ),
+      );
+      const doc = preStartDocumentsForJob(job).find(
+        (item) => item.documentId === btn.dataset.prestartView,
+      );
+      if (!doc) return;
+      alert(
+        `${preStartDocumentTypeLabel(doc.documentType)}\n${doc.documentName}\n${doc.required ? "Required" : "Optional"}\nUploaded ${formatDate(doc.uploadedAt)}`,
+      );
+    });
+  });
+  root.querySelectorAll("[data-prestart-ack]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = workerId || getSessionUser()?.id || "";
+      const res = acknowledgePreStartDocument(
+        uid,
+        btn.dataset.prestartJob,
+        btn.dataset.prestartAck,
+      );
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast(
+        res.duplicate
+          ? "Document already acknowledged"
+          : "Pre-start document acknowledged",
+      );
+    });
+  });
 }
 
 function ensureWorkerProfileForUser(user) {
@@ -5197,6 +5551,7 @@ function renderWorkerHome(user) {
     (offer) => offer.workerId === user.id && offer.status === "offered",
   );
   const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
+  const preStartPanel = booking ? workerPreStartPanelHTML(booking, user.id) : "";
   const plannedAbsencePanel = `
     <div class="wh-section-label">Planned Absence</div>
     <div class="wh-planned-panel">
@@ -5493,6 +5848,7 @@ function renderWorkerHome(user) {
     <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
     ${plannedAbsencePanel}
+    ${preStartPanel}
     ${shiftChangePanel}
     ${offersPanel}
     ${signInPanel}
@@ -5642,6 +5998,7 @@ function renderWorkerHome(user) {
   el.querySelectorAll("[data-worker-notice]").forEach((btn) => {
     btn.addEventListener("click", () => openWorkerNoticeModal(btn.dataset.workerNotice));
   });
+  bindPreStartDocumentButtons(el, user.id);
 
   // Recommended job clicks → go to Jobs tab
   el.querySelectorAll("[data-apply-home]").forEach((row) => {
@@ -6098,6 +6455,7 @@ function renderContractorHome(user) {
     ${companyLateReportPanelHTML(user)}
     ${companyPlannedAbsencePanelHTML(user)}
     ${companyPreferredWorkersPanelHTML(user)}
+    ${companyPreStartPanelHTML(user)}
     ${companyOfferReviewPanelHTML(user)}
     ${companyReplacementPanelHTML(user)}
     ${extensionPanelHTML(user.id)}
@@ -6125,6 +6483,7 @@ function renderContractorHome(user) {
   bindCompanyOfferButtons(el);
   bindProjectTransferButtons(el);
   bindShiftChangeButtons(el);
+  bindPreStartDocumentButtons(el);
 }
 
 function companyPreferredWorkersPanelHTML(user) {
@@ -6866,6 +7225,7 @@ jobForm.addEventListener("submit", (e) => {
     },
     preferredWorkerIds,
     preferredFirst: preferredWorkerIds.length > 0,
+    preStartDocuments: [],
     noticePeriodDays:
       Number.isFinite(noticeRaw) && noticeRaw > 0
         ? noticeRaw
@@ -7318,6 +7678,7 @@ function renderJobs() {
   bindLabourAdjustButtons(jobsList);
   bindProjectTransferButtons(jobsList);
   bindShiftChangeButtons(jobsList);
+  bindPreStartDocumentButtons(jobsList);
 }
 
 // ─── Cancelled Bookings (Admin) ───────────────────────────
@@ -7416,6 +7777,7 @@ function jobCard(job) {
     ${assigned ? bookingProtectionBanner(job) : ""}
     ${notice ? `<div class="notice-status-panel"><strong>Worker notice:</strong> proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)} · ${escapeHtml(notice.reason)}</div>` : ""}
     ${release ? `<div class="notice-status-panel"><strong>${escapeHtml(releaseTypeLabel(release.releaseType))}:</strong> ${escapeHtml(releaseStatusLabel(release.releaseStatus))} · effective ${formatDateOnly(release.effectiveDate)}</div>` : ""}
+    ${companyPreStartJobPanelHTML(job)}
     <div class="job-card-footer">
       ${
         hasPin
