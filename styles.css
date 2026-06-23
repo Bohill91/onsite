@@ -4939,6 +4939,10 @@ margin-bottom: 12px;
   width: auto;
 }
 
+.replacement-panel {
+  border-color: rgba(185, 28, 28, 0.22);
+}
+
 .cancel-booking-actions {
   display: flex;
   gap: 10px;

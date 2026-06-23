@@ -1778,10 +1778,11 @@ function computeReleaseRule(job, releaseType) {
   return { started, noticeDays, effectiveDate, noticeRule };
 }
 
-function createReplacementTask(job, worker, reason, source) {
+function createReplacementTask(job, worker, reason, source, linkedReleaseId = "") {
   if (!Array.isArray(state.replacementTasks)) state.replacementTasks = [];
   const task = {
     id: createId(),
+    taskType: "replacement_needed",
     jobId: job?.id || "",
     companyId: job?.companyId || "",
     companyName: job?.companyName || "Company",
@@ -1789,12 +1790,15 @@ function createReplacementTask(job, worker, reason, source) {
     workerName: worker?.name || "",
     reason: reason || "Replacement requested",
     source,
+    linkedReleaseId,
+    replacementNeeded: true,
     createdAt: new Date().toISOString(),
     status: "open",
   };
   state.replacementTasks.unshift(task);
   if (job) {
     job.replacementRequired = true;
+    job.replacementNeeded = true;
     job.replacementTaskId = task.id;
   }
   return task;
@@ -1868,6 +1872,9 @@ function submitWorkerRelease(
   const worker = findWorker(job.assignedWorkerId);
   if (!reason) return { ok: false, reason: "Release reason is required" };
   const rule = computeReleaseRule(job, releaseType);
+  const sess = getSessionUser();
+  const now = new Date().toISOString();
+  const isImmediate = releaseType === "immediate_release";
   const record = {
     id: createId(),
     workerId: job.assignedWorkerId,
@@ -1876,11 +1883,15 @@ function submitWorkerRelease(
     companyId: job.companyId || "",
     companyName: job.companyName || "Company",
     releaseType,
-    releaseGivenAt: new Date().toISOString(),
+    releaseGivenAt: now,
+    releasedAt: isImmediate ? now : "",
+    releasedBy: sess?.companyName || sess?.name || "Company",
+    immediateRelease: isImmediate,
     effectiveDate: effectiveDate || rule.effectiveDate,
     reason,
     notes: notes.trim(),
     replacementRequired: !!replacementRequired,
+    replacementNeeded: !!replacementRequired,
     noticeWorkingDays: rule.noticeDays,
     noticeRule: rule.noticeRule,
     releaseStatus:
@@ -1892,6 +1903,7 @@ function submitWorkerRelease(
   job.releaseEffectiveDate = record.effectiveDate;
   job.releaseReason = record.reason;
   job.replacementRequired = !!replacementRequired;
+  job.replacementNeeded = !!replacementRequired;
   if (worker) {
     if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
     worker.offerNotifications.unshift({
@@ -1899,13 +1911,15 @@ function submitWorkerRelease(
       type: "assignment_release",
       jobId: job.id,
       releaseId: record.id,
-      message: `${releaseTypeLabel(releaseType)} logged for ${job.trade} in ${job.location}. Effective ${formatDateOnly(record.effectiveDate)}.`,
+      message: isImmediate
+        ? `You have been released from the assignment: ${job.trade} in ${job.location}.`
+        : `${releaseTypeLabel(releaseType)} logged for ${job.trade} in ${job.location}. Effective ${formatDateOnly(record.effectiveDate)}.`,
       createdAt: record.releaseGivenAt,
       readAt: "",
     });
   }
   if (replacementRequired)
-    createReplacementTask(job, worker, reason, `release:${releaseType}`);
+    createReplacementTask(job, worker, reason, `release:${releaseType}`, record.id);
   if (
     releaseType === "immediate_release" ||
     releaseType === "pre_start_stand_down" ||
@@ -2138,6 +2152,12 @@ function confirmWorkerRelease() {
   const reason = document.getElementById("workerReleaseReason")?.value || "";
   const notes = document.getElementById("workerReleaseNotes")?.value || "";
   const replacement = !!document.getElementById("workerReleaseReplacement")?.checked;
+  if (
+    type === "immediate_release" &&
+    !confirm("This will immediately release the worker from this assignment. Continue?")
+  ) {
+    return;
+  }
   const res = submitWorkerRelease(
     jobId,
     type,
@@ -3143,6 +3163,20 @@ function migrateState(s) {
   if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
+  (s.replacementTasks || []).forEach((task) => {
+    if (!task.taskType) task.taskType = "replacement_needed";
+    if (task.replacementNeeded == null) task.replacementNeeded = true;
+    if (task.linkedReleaseId == null) task.linkedReleaseId = "";
+  });
+  (s.workerReleases || []).forEach((release) => {
+    if (release.immediateRelease == null)
+      release.immediateRelease = release.releaseType === "immediate_release";
+    if (release.releasedAt == null)
+      release.releasedAt = release.immediateRelease ? release.releaseGivenAt || "" : "";
+    if (release.releasedBy == null) release.releasedBy = "";
+    if (release.replacementNeeded == null)
+      release.replacementNeeded = !!release.replacementRequired;
+  });
   (s.workers || []).forEach((w) => {
     if (w.consecutiveMissedOffers == null) w.consecutiveMissedOffers = 0;
     if (!Array.isArray(w.offerNotifications)) w.offerNotifications = [];
@@ -5512,6 +5546,7 @@ function renderContractorHome(user) {
     ${companyLateReportPanelHTML(user)}
     ${companyPlannedAbsencePanelHTML(user)}
     ${companyOfferReviewPanelHTML(user)}
+    ${companyReplacementPanelHTML(user)}
     ${extensionPanelHTML(user.id)}
     ${companyAgreementPanelHTML(user)}
     <div class="ch-section-label">Active Requests</div>
@@ -5592,6 +5627,34 @@ function companyPlannedAbsencePanelHTML(user) {
           return `<div class="ch-late-row">
             <div class="ch-late-msg">${escapeHtml(n.message || "Worker updated Planned Absence")}</div>
             <div class="ch-late-meta">${escapeHtml(when)}${mgr}${warning}</div>
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+}
+
+function companyReplacementPanelHTML(user) {
+  const tasks = (state.replacementTasks || [])
+    .filter(
+      (task) =>
+        task.status === "open" &&
+        (task.companyId === user.id || (!task.companyId && user.type === "company")),
+    )
+    .slice(0, 4);
+  if (!tasks.length) return "";
+  return `
+    <div class="ch-late-panel replacement-panel">
+      <div class="ch-agr-panel-head">
+        <span class="ch-agr-panel-title">Replacement Required</span>
+        <span class="ch-agr-panel-count">${tasks.length}</span>
+      </div>
+      ${tasks
+        .map((task) => {
+          const job = findJob(task.jobId);
+          const created = task.createdAt ? formatDate(task.createdAt) : "";
+          return `<div class="ch-late-row">
+            <div class="ch-late-msg">${escapeHtml(job?.trade || "Assignment")} · ${escapeHtml(job?.location || task.companyName || "")}</div>
+            <div class="ch-late-meta">${task.workerName ? `${escapeHtml(task.workerName)} released · ` : ""}${escapeHtml(task.reason || "Replacement requested")} · ${escapeHtml(created)}</div>
           </div>`;
         })
         .join("")}
