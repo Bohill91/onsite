@@ -2713,6 +2713,21 @@ const WORKER_PAYMENT_STATUS = {
   paid: { label: "Paid", tone: "green" },
   held: { label: "On Hold", tone: "red" },
 };
+const ATTENDANCE_APPROVAL_STATUS = {
+  draft: { label: "Draft", tone: "neutral" },
+  manager_reviewed: { label: "Attendance Manager Reviewed", tone: "amber" },
+  company_confirmed: { label: "Company Confirmed", tone: "green" },
+  invoice_ready: { label: "Invoice Ready", tone: "green" },
+};
+const COMMERCIAL_VERSION = 1;
+
+function readAuthUsers() {
+  try {
+    return JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
+  } catch (_) {
+    return [];
+  }
+}
 
 // ─── Company billing records ──────────────────────────────
 function getCompanyBilling(companyId) {
@@ -2722,12 +2737,29 @@ function getCompanyBilling(companyId) {
   if (!state.companyBilling[key]) {
     state.companyBilling[key] = {
       companyId: companyId || "",
+      companyNumber: "",
+      vatNumber: "",
+      vatRegistered: false,
+      paymentContact: "",
+      accountsEmail: "",
       paymentTerm: DEFAULT_PAYMENT_TERM,
       trusted: false,
       restricted: false,
       suspended: false,
       manualRestriction: false,
     };
+  }
+  const users = readAuthUsers();
+  const company = users.find((u) => u.id === companyId);
+  const billing = state.companyBilling[key];
+  if (company) {
+    billing.companyName = billing.companyName || company.companyName || company.name || "";
+    billing.companyNumber =
+      billing.companyNumber || company.companyNumber || company.regNumber || "";
+    billing.vatNumber = billing.vatNumber || company.vatNumber || "";
+    billing.vatRegistered = !!(billing.vatRegistered || company.vatRegistered);
+    billing.paymentContact = billing.paymentContact || company.paymentContact || "";
+    billing.accountsEmail = billing.accountsEmail || company.accountsEmail || company.email || "";
   }
   return state.companyBilling[key];
 }
@@ -2738,6 +2770,125 @@ function companyTermDays(companyId) {
 }
 
 // ─── Invoice builders & status derivation ─────────────────
+function invoiceNumberFor({ companyId, weekStart, existingId }) {
+  const cid = String(companyId || "ONSITE")
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(-6)
+    .toUpperCase();
+  return `OS-${String(weekStart || todayDateStr()).replaceAll("-", "")}-${cid || "CO"}-${String(existingId || createId()).slice(-4).toUpperCase()}`;
+}
+
+function companyInvoiceProjection(inv) {
+  if (!inv) return null;
+  return {
+    companyInvoiceId: inv.companyInvoiceId || inv.id || createId(),
+    invoiceId: inv.id || "",
+    invoiceNumber: inv.invoiceNumber || invoiceNumberFor(inv),
+    companyId: inv.companyId || "",
+    companyName: inv.companyName || "Company",
+    project: inv.projectName || "",
+    projectId: inv.projectId || "",
+    jobNumber: inv.jobNumber || "",
+    workerSummary: (inv.lines || [])
+      .map((line) => line.workerName)
+      .filter(Boolean)
+      .join(", "),
+    attendancePeriod: inv.attendancePeriod || {
+      start: inv.weekStart || "",
+      end: inv.weekEnd || "",
+    },
+    labourValue: inv.labourValue ?? inv.totalWorkerPay ?? 0,
+    onsiteFee: inv.onsiteFee ?? inv.totalMargin ?? 0,
+    vat: inv.vat || {
+      status: "placeholder",
+      rate: null,
+      amount: null,
+      vatRegistered: false,
+    },
+    invoiceStatus: inv.status || inv.invoiceStatus || "awaiting_payment",
+    createdAt: inv.createdAt || new Date().toISOString(),
+  };
+}
+
+function buildWorkerPaymentRecordsForInvoice(inv) {
+  if (!inv) return [];
+  return (inv.lines || []).map((line) => ({
+    paymentRecordId: line.workerPaymentRecordId || createId(),
+    invoiceId: inv.id || "",
+    invoiceNumber: inv.invoiceNumber || "",
+    workerId: line.workerId || "",
+    workerName: line.workerName || "Worker",
+    companyId: inv.companyId || "",
+    companyName: inv.companyName || "Company",
+    projectId: line.projectId || inv.projectId || "",
+    projectName: line.projectName || inv.projectName || "",
+    jobId: line.jobId || "",
+    jobNumber: line.jobNumber || inv.jobNumber || "",
+    attendancePeriod: line.attendancePeriod || inv.attendancePeriod || {
+      start: inv.weekStart || "",
+      end: inv.weekEnd || "",
+    },
+    labourValue: (line.workerPay || 0) * (line.days || 0),
+    cisDeductionPlaceholder: null,
+    netPaymentPlaceholder: null,
+    paymentStatus: "awaiting_funds",
+    createdAt: inv.createdAt || new Date().toISOString(),
+  }));
+}
+
+function syncCommercialInvoiceArchitecture(st = state) {
+  if (!Array.isArray(st.companyInvoices)) st.companyInvoices = [];
+  if (!Array.isArray(st.workerPaymentRecords)) st.workerPaymentRecords = [];
+  (st.invoices || []).forEach((inv) => {
+    normalizeInvoiceArchitecture(inv);
+    const projected = companyInvoiceProjection(inv);
+    if (projected) {
+      const existing = st.companyInvoices.find(
+        (i) => i.invoiceId === projected.invoiceId,
+      );
+      if (existing) Object.assign(existing, projected);
+      else st.companyInvoices.push(projected);
+    }
+    buildWorkerPaymentRecordsForInvoice(inv).forEach((record) => {
+      const exists = st.workerPaymentRecords.some(
+        (p) =>
+          p.invoiceId === record.invoiceId &&
+          p.workerId === record.workerId &&
+          p.jobId === record.jobId,
+      );
+      if (!exists) st.workerPaymentRecords.push(record);
+    });
+  });
+}
+
+function normalizeInvoiceArchitecture(inv) {
+  if (!inv) return inv;
+  inv.id = inv.id || createId();
+  inv.invoiceNumber =
+    inv.invoiceNumber ||
+    invoiceNumberFor({
+      companyId: inv.companyId,
+      weekStart: inv.weekStart,
+      existingId: inv.id,
+    });
+  inv.attendancePeriod = inv.attendancePeriod || {
+    start: inv.weekStart || "",
+    end: inv.weekEnd || "",
+  };
+  inv.labourValue = inv.labourValue ?? inv.totalWorkerPay ?? 0;
+  inv.onsiteFee = inv.onsiteFee ?? inv.totalMargin ?? 0;
+  inv.vat = inv.vat || {
+    status: "placeholder",
+    rate: null,
+    amount: null,
+    vatRegistered: false,
+  };
+  inv.invoiceStatus = inv.invoiceStatus || inv.status || "awaiting_payment";
+  inv.source = inv.source || "approved_attendance";
+  inv.commercialVersion = inv.commercialVersion || COMMERCIAL_VERSION;
+  return inv;
+}
+
 // Pure builder: assemble a weekly invoice from approved attendance lines. Each
 // line is { workerId, workerName, jobId, jobTrade, jobLocation, days, workerPay,
 // companyCharge, margin }.
@@ -2752,6 +2903,7 @@ function buildInvoiceRecord({
 }) {
   const created = createdAt || new Date().toISOString();
   const ls = (lines || []).map((l) => ({ ...l }));
+  const id = createId();
   const totalWorkerPay = ls.reduce(
     (s, l) => s + (l.workerPay || 0) * (l.days || 0),
     0,
@@ -2760,12 +2912,17 @@ function buildInvoiceRecord({
     (s, l) => s + (l.companyCharge || 0) * (l.days || 0),
     0,
   );
-  return {
-    id: createId(),
+  return normalizeInvoiceArchitecture({
+    id,
+    invoiceNumber: invoiceNumberFor({ companyId, weekStart, existingId: id }),
     companyId: companyId || "",
     companyName: companyName || "Company",
+    projectId: ls[0]?.projectId || "",
+    projectName: ls[0]?.projectName || "",
+    jobNumber: ls[0]?.jobNumber || "",
     weekStart,
     weekEnd,
+    attendancePeriod: { start: weekStart, end: weekEnd },
     createdAt: created,
     dueDate: addWorkingDays(
       created.slice(0, 10),
@@ -2773,13 +2930,24 @@ function buildInvoiceRecord({
     ),
     termDays: termDays || PAYMENT_TERMS[DEFAULT_PAYMENT_TERM].days,
     status: "awaiting_payment",
+    invoiceStatus: "awaiting_payment",
     totalCharge,
     totalWorkerPay,
     totalMargin: totalCharge - totalWorkerPay,
+    labourValue: totalWorkerPay,
+    onsiteFee: totalCharge - totalWorkerPay,
+    vat: {
+      status: "placeholder",
+      rate: null,
+      amount: null,
+      vatRegistered: false,
+    },
     lines: ls,
     paidAt: null,
     workerPaymentsReleased: false,
-  };
+    source: "approved_attendance",
+    commercialVersion: COMMERCIAL_VERSION,
+  });
 }
 
 // Effective status — recomputes "overdue" on the fly from the due date.
@@ -2841,6 +3009,131 @@ function canCompanyPost(companyId) {
 }
 
 // ─── Weekly invoice generation ────────────────────────────
+function attendanceDayType(record) {
+  if (record?.commercial?.dayType) return record.commercial.dayType;
+  if (record?.status === "excused") return "approved_absence";
+  if (record?.status === "sentHome") return "early_finish";
+  if (record?.status === "late") return "late_arrival";
+  return "full_day";
+}
+
+function attendanceCommercialSnapshot(record, job = null) {
+  const linkedJob = job || state.jobs.find((j) => j.id === record?.jobId);
+  const date = record?.date || todayDateStr();
+  const dailyJobNumbers = linkedJob?.dailyJobNumbers || {};
+  const dailyClientReferences = linkedJob?.dailyClientReferences || {};
+  return {
+    commercialVersion: COMMERCIAL_VERSION,
+    source: "attendance",
+    approvalStatus:
+      record?.commercial?.approvalStatus || record?.approvalStatus || "manager_reviewed",
+    dayType: attendanceDayType(record),
+    payableUnits:
+      record?.commercial?.payableUnits ??
+      (record?.status === "onTime" || record?.status === "late" ? 1 : 0),
+    jobNumber:
+      record?.commercial?.jobNumber || linkedJob?.jobNumber || record?.jobNumber || "",
+    dailyJobNumber:
+      dailyJobNumbers[date] || record?.commercial?.dailyJobNumber || "",
+    clientReference:
+      record?.commercial?.clientReference || linkedJob?.clientReference || "",
+    dailyClientReference:
+      dailyClientReferences[date] ||
+      record?.commercial?.dailyClientReference ||
+      "",
+    invoiceReference:
+      record?.commercial?.invoiceReference || linkedJob?.invoiceReference || "",
+    expectedStartTime:
+      record?.commercial?.expectedStartTime ||
+      linkedJob?.shiftStartTime ||
+      record?.expectedStartTime ||
+      "",
+    expectedFinishTime:
+      record?.commercial?.expectedFinishTime ||
+      linkedJob?.shiftFinishTime ||
+      record?.expectedFinishTime ||
+      "",
+    workerPayRate: record?.workerPay || linkedJob?.pricing?.workerPay || 0,
+    companyChargeRate:
+      record?.companyCharge ||
+      linkedJob?.companyCharge ||
+      (linkedJob ? companyChargeDisplay(linkedJob) : 0),
+    notes: record?.commercial?.notes || "",
+  };
+}
+
+function normalizeAttendanceApproval(record) {
+  if (!record) return record;
+  record.approvalStatus =
+    record.approvalStatus ||
+    record.commercial?.approvalStatus ||
+    (record.supervisorConfirmed ? "manager_reviewed" : "draft");
+  record.commercial = attendanceCommercialSnapshot(record);
+  return record;
+}
+
+function attendanceApprovalKey({ companyId, weekStart, workerId, jobId }) {
+  return `${companyId || "__unassigned__"}::${weekStart || ""}::${workerId || ""}::${jobId || ""}`;
+}
+
+function buildAttendanceApprovalRecord(group, status = "invoice_ready") {
+  const recs = group?.recs || [];
+  const first = recs[0] || {};
+  return {
+    approvalId: group?.approvalId || createId(),
+    approvalKey: attendanceApprovalKey({
+      companyId: group?.companyId,
+      weekStart: group?.weekStart,
+      workerId: first.workerId,
+      jobId: first.jobId,
+    }),
+    companyId: group?.companyId || "",
+    companyName: group?.companyName || "Company",
+    projectId: first.jobId || "",
+    projectName: first.projectName || "",
+    jobId: first.jobId || "",
+    jobNumber: first.jobNumber || first.commercial?.jobNumber || "",
+    workerId: first.workerId || "",
+    workerName: first.workerName || findWorker(first.workerId)?.name || "Worker",
+    attendancePeriod: {
+      start: group?.weekStart || "",
+      end: group?.weekEnd || "",
+    },
+    attendanceRecordIds: recs.map((r) => r.id).filter(Boolean),
+    status,
+    managerReviewedAt: status === "draft" ? "" : new Date().toISOString(),
+    companyConfirmedAt:
+      status === "company_confirmed" || status === "invoice_ready"
+        ? new Date().toISOString()
+        : "",
+    invoiceReadyAt: status === "invoice_ready" ? new Date().toISOString() : "",
+    createdAt: new Date().toISOString(),
+    commercialVersion: COMMERCIAL_VERSION,
+  };
+}
+
+function ensureAttendanceApprovalRecord(group) {
+  if (!Array.isArray(state.attendanceApprovals)) state.attendanceApprovals = [];
+  const first = group?.recs?.[0] || {};
+  const key = attendanceApprovalKey({
+    companyId: group?.companyId,
+    weekStart: group?.weekStart,
+    workerId: first.workerId,
+    jobId: first.jobId,
+  });
+  let approval = state.attendanceApprovals.find((item) => item.approvalKey === key);
+  if (!approval) {
+    approval = buildAttendanceApprovalRecord(group);
+    state.attendanceApprovals.push(approval);
+  } else {
+    approval.attendanceRecordIds = Array.from(
+      new Set([...(approval.attendanceRecordIds || []), ...group.recs.map((r) => r.id)]),
+    ).filter(Boolean);
+    approval.status = approval.status || "invoice_ready";
+  }
+  return approval;
+}
+
 // An attendance record is invoiceable only when it represents APPROVED, worked
 // days: supervisor-confirmed on-time/late attendance with no pending dispute.
 // No Show, disputed and under-review days are excluded entirely.
@@ -2857,6 +3150,8 @@ function isInvoiceableAttendance(r) {
 // of new invoices generated.
 function generateWeeklyInvoices() {
   if (!Array.isArray(state.invoices)) state.invoices = [];
+  if (!Array.isArray(state.companyInvoices)) state.companyInvoices = [];
+  if (!Array.isArray(state.workerPaymentRecords)) state.workerPaymentRecords = [];
   const today = todayDateStr();
   // Group invoiceable records by company + week, but only for weeks that have
   // already ended (we invoice completed weeks, never the in-progress one).
@@ -2889,15 +3184,25 @@ function generateWeeklyInvoices() {
     // Roll records up into one line per worker+job.
     const lineMap = {};
     g.recs.forEach((r) => {
+      normalizeAttendanceApproval(r);
       const lk = `${r.workerId}::${r.jobId}`;
       if (!lineMap[lk]) {
         const w = findWorker(r.workerId);
+        const job = state.jobs.find((j) => j.id === r.jobId);
         lineMap[lk] = {
           workerId: r.workerId,
           workerName: w?.name || r.workerName || "Worker",
           jobId: r.jobId,
+          projectId: r.jobId,
+          projectName: r.projectName || job?.projectName || "",
+          jobNumber: r.jobNumber || r.commercial?.jobNumber || job?.jobNumber || "",
           jobTrade: r.jobTrade || "",
           jobLocation: r.jobLocation || "",
+          attendancePeriod: { start: g.weekStart, end: g.weekEnd },
+          attendanceRecordIds: [],
+          dailyJobNumbers: [],
+          dailyClientReferences: [],
+          invoiceReferences: [],
           days: 0,
           workerPay: r.workerPay || 0,
           companyCharge: r.companyCharge || 0,
@@ -2905,9 +3210,23 @@ function generateWeeklyInvoices() {
         };
       }
       lineMap[lk].days += 1;
+      if (r.id) lineMap[lk].attendanceRecordIds.push(r.id);
+      if (r.commercial?.dailyJobNumber)
+        lineMap[lk].dailyJobNumbers.push({
+          date: r.date,
+          value: r.commercial.dailyJobNumber,
+        });
+      if (r.commercial?.dailyClientReference)
+        lineMap[lk].dailyClientReferences.push({
+          date: r.date,
+          value: r.commercial.dailyClientReference,
+        });
+      if (r.commercial?.invoiceReference)
+        lineMap[lk].invoiceReferences.push(r.commercial.invoiceReference);
     });
     const lines = Object.values(lineMap);
     if (!lines.length) return;
+    const approval = ensureAttendanceApprovalRecord(g);
     const inv = buildInvoiceRecord({
       companyId: g.companyId,
       companyName: g.companyName,
@@ -2916,7 +3235,12 @@ function generateWeeklyInvoices() {
       lines,
       termDays: companyTermDays(g.companyId),
     });
+    inv.attendanceApprovalId = approval.approvalId;
     state.invoices.push(inv);
+    state.companyInvoices.push(companyInvoiceProjection(inv));
+    buildWorkerPaymentRecordsForInvoice(inv).forEach((record) => {
+      state.workerPaymentRecords.push(record);
+    });
     created++;
   });
   if (created) {
@@ -3135,6 +3459,11 @@ const _demoInvoices = [
 const _demoBilling = {
   "demo-brightwork": {
     companyId: "demo-brightwork",
+    companyNumber: "",
+    vatNumber: "",
+    vatRegistered: false,
+    paymentContact: "",
+    accountsEmail: "",
     paymentTerm: "standard",
     trusted: false,
     restricted: true,
@@ -3143,6 +3472,11 @@ const _demoBilling = {
   },
   "demo-oldoak": {
     companyId: "demo-oldoak",
+    companyNumber: "",
+    vatNumber: "",
+    vatRegistered: false,
+    paymentContact: "",
+    accountsEmail: "",
     paymentTerm: "standard",
     trusted: false,
     restricted: true,
@@ -3296,6 +3630,9 @@ const demoData = {
   preStartAcknowledgements: [],
   companyDocuments: {},
   invoices: _demoInvoices,
+  attendanceApprovals: [],
+  companyInvoices: _demoInvoices.map(companyInvoiceProjection).filter(Boolean),
+  workerPaymentRecords: _demoInvoices.flatMap(buildWorkerPaymentRecordsForInvoice),
   companyBilling: _demoBilling,
 };
 
@@ -3320,6 +3657,9 @@ function migrateState(s) {
   if (!Array.isArray(s.labourAdjustments)) s.labourAdjustments = [];
   if (!Array.isArray(s.siteCodes)) s.siteCodes = [];
   if (!Array.isArray(s.invoices)) s.invoices = [];
+  if (!Array.isArray(s.attendanceApprovals)) s.attendanceApprovals = [];
+  if (!Array.isArray(s.companyInvoices)) s.companyInvoices = [];
+  if (!Array.isArray(s.workerPaymentRecords)) s.workerPaymentRecords = [];
   if (!Array.isArray(s.applications)) s.applications = [];
   if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
@@ -3369,6 +3709,10 @@ function migrateState(s) {
     if (w.consecutiveMissedOffers == null) w.consecutiveMissedOffers = 0;
     if (!Array.isArray(w.offerNotifications)) w.offerNotifications = [];
     if (!Array.isArray(w.lateReports)) w.lateReports = [];
+    if (w.paymentDetailsPlaceholder == null) w.paymentDetailsPlaceholder = "";
+    if (w.preferredPaymentMethod == null) w.preferredPaymentMethod = "";
+    if (w.paymentVerificationStatus == null)
+      w.paymentVerificationStatus = "unverified";
     w.weekendPreferences = workerWeekendPreferences(w);
   });
   (s.applications || []).forEach((a) => {
@@ -3434,6 +3778,13 @@ function migrateState(s) {
     )
       .map(normalizePreStartDocument)
       .filter(Boolean);
+    if (!j.jobType) j.jobType = "project";
+    if (!j.clientReference) j.clientReference = "";
+    if (!j.dailyJobNumbers || typeof j.dailyJobNumbers !== "object")
+      j.dailyJobNumbers = {};
+    if (!j.dailyClientReferences || typeof j.dailyClientReferences !== "object")
+      j.dailyClientReferences = {};
+    if (!Array.isArray(j.invoiceReferences)) j.invoiceReferences = [];
     j.workingDays = normalizeWorkingDays(j.workingDays);
     j.requiresSaturday = j.workingDays.includes("saturday");
     j.requiresSunday = j.workingDays.includes("sunday");
@@ -3473,11 +3824,21 @@ function migrateState(s) {
   // Backfill Job Agreements for confirmed bookings (legacy bookings are
   // auto-accepted on both sides so they stay workable).
   ensureAgreementsForState(s);
+  (s.invoices || []).forEach(normalizeInvoiceArchitecture);
+  Object.values(s.companyBilling || {}).forEach((billing) => {
+    if (billing.companyNumber == null) billing.companyNumber = "";
+    if (billing.vatNumber == null) billing.vatNumber = "";
+    if (billing.vatRegistered == null) billing.vatRegistered = false;
+    if (billing.paymentContact == null) billing.paymentContact = "";
+    if (billing.accountsEmail == null) billing.accountsEmail = "";
+  });
+  syncCommercialInvoiceArchitecture(s);
   return s;
 }
 
 function saveState() {
   try {
+    syncCommercialInvoiceArchitecture(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (_) {}
 }
@@ -4083,6 +4444,12 @@ function ensureWorkerProfileForUser(user) {
       worker?.qualificationVerificationStatus ||
       "pending",
     verificationStatus: user.verificationStatus || "pending",
+    paymentDetailsPlaceholder:
+      user.paymentDetailsPlaceholder || worker?.paymentDetailsPlaceholder || "",
+    preferredPaymentMethod:
+      user.preferredPaymentMethod || worker?.preferredPaymentMethod || "",
+    paymentVerificationStatus:
+      user.paymentVerificationStatus || worker?.paymentVerificationStatus || "unverified",
   };
 
   if (worker) {
@@ -6094,6 +6461,28 @@ function renderWorkerProfile(user) {
     },
     { label: "Documents", val: String(documentCount) },
     { label: "Qualifications", val: String(qualificationCount) },
+    {
+      label: "Payment Details",
+      val:
+        workerProfile?.paymentDetailsPlaceholder ||
+        user.paymentDetailsPlaceholder ||
+        "Placeholder only",
+    },
+    {
+      label: "Preferred Payment Method",
+      val:
+        workerProfile?.preferredPaymentMethod ||
+        user.preferredPaymentMethod ||
+        "Placeholder only",
+    },
+    {
+      label: "Payment Verification",
+      val: verificationStatusLabel(
+        workerProfile?.paymentVerificationStatus ||
+          user.paymentVerificationStatus ||
+          "unverified",
+      ),
+    },
   ]
     .map(
       (f) => `
@@ -6707,6 +7096,7 @@ function companyAgreementPanelHTML(user) {
 function renderContractorAccount(user) {
   const el = document.getElementById("accountContent");
   if (!el) return;
+  const billing = getCompanyBilling(user.id);
 
   const ini = (user.name || "C")
     .trim()
@@ -6730,6 +7120,13 @@ function renderContractorAccount(user) {
         <div class="prof-field"><div class="prof-field-label">Company</div><div class="prof-field-val">${escapeHtml(user.companyName || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Company</div></div>
+        <div class="prof-field"><div class="prof-field-label">Company Number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">VAT Registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
+        <div class="prof-field"><div class="prof-field-label">VAT Number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Payment Contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Accounts Email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Company Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.companyVerificationStatus || user.verificationStatus || "pending"))}</div></div>
+        <div class="prof-field"><div class="prof-field-label">VAT Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.vatVerificationStatus || "unverified"))}</div></div>
       </div>
     </div>
     <div class="prof-section">
@@ -6803,7 +7200,7 @@ function companyBillingSection(user) {
           const meta = INVOICE_STATUS[st] || INVOICE_STATUS.generated;
           return `<div class="bill-inv-row">
       <div class="bill-inv-main">
-        <div class="bill-inv-week">${formatDateOnly(i.weekStart)} – ${formatDateOnly(i.weekEnd)}</div>
+        <div class="bill-inv-week">${escapeHtml(i.invoiceNumber || "Invoice")} · ${formatDateOnly(i.weekStart)} – ${formatDateOnly(i.weekEnd)}</div>
         <div class="bill-inv-sub">Due ${formatDateOnly(i.dueDate)} · ${i.termDays} working days</div>
       </div>
       <div class="bill-inv-amt">${formatMoney(i.totalCharge)}</div>
@@ -7194,8 +7591,13 @@ jobForm.addEventListener("submit", (e) => {
 
   const job = {
     id: createId(),
+    jobType: "project",
     jobNumber,
     projectName,
+    clientReference: "",
+    dailyJobNumbers: {},
+    dailyClientReferences: {},
+    invoiceReferences: [],
     companyId: poster?.type === "company" ? poster.id : "",
     companyName:
       poster?.type === "company"
@@ -9182,6 +9584,10 @@ function submitDayAttendance() {
       rec.companyName = linkedJob.companyName || "Company";
       rec.jobTrade = linkedJob.trade || "";
       rec.jobLocation = linkedJob.location || "";
+      rec.projectName = linkedJob.projectName || "";
+      rec.jobNumber = linkedJob.jobNumber || "";
+      rec.expectedStartTime = linkedJob.shiftStartTime || "";
+      rec.expectedFinishTime = linkedJob.shiftFinishTime || "";
       rec.workerPay =
         linkedJob.pricing?.workerPay != null
           ? linkedJob.pricing.workerPay
@@ -9191,6 +9597,8 @@ function submitDayAttendance() {
           ? linkedJob.companyCharge
           : companyChargeDisplay(linkedJob);
     }
+    rec.approvalStatus = rec.supervisorConfirmed ? "manager_reviewed" : "draft";
+    rec.commercial = attendanceCommercialSnapshot(rec, linkedJob);
     if (prevRec) {
       if (prevRec.checkInTime) rec.checkInTime = prevRec.checkInTime;
       if (prevRec.suggestedStatus)

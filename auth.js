@@ -207,6 +207,9 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     verificationStatus: 'pending',
     workerVerificationStatus: 'pending',
     qualificationVerificationStatus: 'pending',
+    paymentDetailsPlaceholder: '',
+    preferredPaymentMethod: '',
+    paymentVerificationStatus: 'unverified',
     createdAt: Date.now(),
   };
 
@@ -382,6 +385,17 @@ document.getElementById('companyStep1Form').addEventListener('submit', function(
 document.getElementById('companyStep2Form').addEventListener('submit', function(e) {
   e.preventDefault();
 
+  const accountsEmail = document.getElementById('companyAccountsEmail')?.value.trim().toLowerCase() || '';
+  const err = document.getElementById('companyStep1Error');
+  if (accountsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountsEmail)) {
+    err.textContent = 'Enter a valid accounts email address.';
+    err.style.display = 'block';
+    return;
+  }
+  err.style.display = 'none';
+
+  const companyNumber = document.getElementById('companyRegNumber').value.trim();
+
   const user = {
     id: 'user-' + Date.now() + '-' + Math.random().toString(16).slice(2),
     type:        'company',
@@ -391,8 +405,14 @@ document.getElementById('companyStep2Form').addEventListener('submit', function(
     phone:       companyRegData.phone,
     password:    companyRegData.password,
     address:     document.getElementById('companyAddress').value.trim(),
-    regNumber:   document.getElementById('companyRegNumber').value.trim(),
+    regNumber:   companyNumber,
+    companyNumber,
     vatNumber:   document.getElementById('companyVAT').value.trim(),
+    vatRegistered: document.getElementById('companyVatRegistered')?.value === 'yes',
+    paymentContact: document.getElementById('companyPaymentContact')?.value.trim() || '',
+    accountsEmail,
+    companyVerificationStatus: 'pending',
+    vatVerificationStatus: document.getElementById('companyVAT').value.trim() ? 'pending' : 'unverified',
     verificationStatus: 'pending',
     createdAt: Date.now(),
   };
