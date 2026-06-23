@@ -816,6 +816,42 @@
   placeholder="e.g. Northgate Tower" required />
 </label>
                 <label class="field-label">
+  Assignment Type *
+  <select id="jobAssignmentType" required>
+    <option value="site_project">Site-based project</option>
+    <option value="mobile_reactive">Mobile / reactive works</option>
+    <option value="ongoing_placement">Ongoing placement</option>
+  </select>
+</label>
+                <label class="checkbox-row" id="jobNoFixedEndWrap">
+  <input id="jobNoFixedEndDate" type="checkbox" />
+  <span>No fixed end date</span>
+</label>
+                <div id="jobMobileDefaults" class="site-details-card hidden" style="grid-column: 1 / -1;">
+<h3>Mobile / Ongoing Defaults</h3>
+<p class="form-helper">Used for long-term or reactive assignments where the worker may visit different sites.</p>
+  <div class="form-grid-2">
+    <label class="field-label">
+      Default Role
+      <input id="jobDefaultRole" type="text" placeholder="e.g. Mobile Electrician" />
+    </label>
+    <label class="field-label">
+      Default Rate (£/day)
+      <input id="jobDefaultRate" type="number" min="0" placeholder="Defaults to budget max" />
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label class="field-label">
+      Default Shift Start
+      <input id="jobDefaultShiftStart" type="time" />
+    </label>
+    <label class="field-label">
+      Default Shift Finish
+      <input id="jobDefaultShiftFinish" type="time" />
+    </label>
+  </div>
+</div>
+                <label class="field-label">
   Location *
   <input
     id="jobLocation"

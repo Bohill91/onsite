@@ -2720,6 +2720,11 @@ const ATTENDANCE_APPROVAL_STATUS = {
   invoice_ready: { label: "Invoice Ready", tone: "green" },
 };
 const COMMERCIAL_VERSION = 1;
+const ASSIGNMENT_TYPES = {
+  site_project: "Site-based project",
+  mobile_reactive: "Mobile / reactive works",
+  ongoing_placement: "Ongoing placement",
+};
 
 function readAuthUsers() {
   try {
@@ -2727,6 +2732,19 @@ function readAuthUsers() {
   } catch (_) {
     return [];
   }
+}
+
+function normalizeAssignmentType(type) {
+  return ASSIGNMENT_TYPES[type] ? type : "site_project";
+}
+
+function assignmentTypeLabel(job) {
+  return ASSIGNMENT_TYPES[normalizeAssignmentType(job?.assignmentType || job?.jobType)];
+}
+
+function isMobileAssignment(job) {
+  const type = normalizeAssignmentType(job?.assignmentType || job?.jobType);
+  return type === "mobile_reactive" || type === "ongoing_placement" || !!job?.ongoing;
 }
 
 // ─── Company billing records ──────────────────────────────
@@ -3020,6 +3038,11 @@ function attendanceDayType(record) {
 function attendanceCommercialSnapshot(record, job = null) {
   const linkedJob = job || state.jobs.find((j) => j.id === record?.jobId);
   const date = record?.date || todayDateStr();
+  const dailyJob =
+    record?.dailyJob ||
+    (record?.dailyJobId
+      ? dailyJobsForAssignment(linkedJob).find((entry) => entry.id === record.dailyJobId)
+      : dailyJobForDate(linkedJob, date));
   const dailyJobNumbers = linkedJob?.dailyJobNumbers || {};
   const dailyClientReferences = linkedJob?.dailyClientReferences || {};
   return {
@@ -3032,17 +3055,35 @@ function attendanceCommercialSnapshot(record, job = null) {
       record?.commercial?.payableUnits ??
       (record?.status === "onTime" || record?.status === "late" ? 1 : 0),
     jobNumber:
-      record?.commercial?.jobNumber || linkedJob?.jobNumber || record?.jobNumber || "",
+      record?.commercial?.jobNumber ||
+      dailyJob?.companyJobNumber ||
+      linkedJob?.jobNumber ||
+      record?.jobNumber ||
+      "",
     dailyJobNumber:
-      dailyJobNumbers[date] || record?.commercial?.dailyJobNumber || "",
+      dailyJob?.companyJobNumber ||
+      dailyJobNumbers[date] ||
+      record?.commercial?.dailyJobNumber ||
+      "",
     clientReference:
-      record?.commercial?.clientReference || linkedJob?.clientReference || "",
+      record?.commercial?.clientReference ||
+      dailyJob?.clientReference ||
+      linkedJob?.clientReference ||
+      "",
     dailyClientReference:
+      dailyJob?.clientReference ||
       dailyClientReferences[date] ||
       record?.commercial?.dailyClientReference ||
       "",
     invoiceReference:
-      record?.commercial?.invoiceReference || linkedJob?.invoiceReference || "",
+      record?.commercial?.invoiceReference ||
+      dailyJob?.invoiceReference ||
+      linkedJob?.invoiceReference ||
+      "",
+    dailyJobId: dailyJob?.id || record?.dailyJobId || "",
+    clientSiteName: dailyJob?.clientSiteName || record?.clientSiteName || "",
+    dailySiteAddress: dailyJob?.siteAddress || record?.dailySiteAddress || "",
+    workNotes: dailyJob?.workNotes || record?.workNotes || "",
     expectedStartTime:
       record?.commercial?.expectedStartTime ||
       linkedJob?.shiftStartTime ||
@@ -3200,6 +3241,7 @@ function generateWeeklyInvoices() {
           jobLocation: r.jobLocation || "",
           attendancePeriod: { start: g.weekStart, end: g.weekEnd },
           attendanceRecordIds: [],
+          dailyJobIds: [],
           dailyJobNumbers: [],
           dailyClientReferences: [],
           invoiceReferences: [],
@@ -3211,6 +3253,8 @@ function generateWeeklyInvoices() {
       }
       lineMap[lk].days += 1;
       if (r.id) lineMap[lk].attendanceRecordIds.push(r.id);
+      if (r.commercial?.dailyJobId || r.dailyJobId)
+        lineMap[lk].dailyJobIds.push(r.commercial?.dailyJobId || r.dailyJobId);
       if (r.commercial?.dailyJobNumber)
         lineMap[lk].dailyJobNumbers.push({
           date: r.date,
@@ -3778,13 +3822,31 @@ function migrateState(s) {
     )
       .map(normalizePreStartDocument)
       .filter(Boolean);
-    if (!j.jobType) j.jobType = "project";
+    j.assignmentType = normalizeAssignmentType(j.assignmentType || j.jobType);
+    j.jobType = j.assignmentType;
+    if (j.ongoing == null) j.ongoing = j.assignmentType === "ongoing_placement";
+    if (j.noFixedEndDate == null)
+      j.noFixedEndDate =
+        j.assignmentType !== "site_project" &&
+        (!!j.ongoing || (!j.estimatedEndDate && !j.endDate));
+    if (j.defaultRole == null) j.defaultRole = j.role || j.specialism || "";
+    if (j.defaultRate == null) j.defaultRate = j.agreedDayRate || j.budgetMax || null;
+    if (!Array.isArray(j.defaultWorkingDays))
+      j.defaultWorkingDays = normalizeWorkingDays(j.workingDays);
+    if (!j.defaultShiftTimes || typeof j.defaultShiftTimes !== "object") {
+      j.defaultShiftTimes = {
+        start: j.shiftStartTime || "",
+        finish: j.shiftFinishTime || "",
+      };
+    }
     if (!j.clientReference) j.clientReference = "";
     if (!j.dailyJobNumbers || typeof j.dailyJobNumbers !== "object")
       j.dailyJobNumbers = {};
     if (!j.dailyClientReferences || typeof j.dailyClientReferences !== "object")
       j.dailyClientReferences = {};
     if (!Array.isArray(j.invoiceReferences)) j.invoiceReferences = [];
+    j.dailyJobs = dailyJobsForAssignment(j);
+    syncDailyJobReferences(j);
     j.workingDays = normalizeWorkingDays(j.workingDays);
     j.requiresSaturday = j.workingDays.includes("saturday");
     j.requiresSunday = j.workingDays.includes("sunday");
@@ -3887,6 +3949,144 @@ function plannedAbsenceNoticeMessage(absence) {
   return absence?.noticeWarning
     ? "This planned absence is inside the 5 working day notice period. Please inform your site supervisor directly as soon as possible."
     : "";
+}
+
+function normalizeDailyJobEntry(entry = {}) {
+  const date = formatDateInput(entry.date);
+  if (!date) return null;
+  return {
+    id: entry.id || createId(),
+    date,
+    clientSiteName: String(entry.clientSiteName || entry.siteName || "").trim(),
+    siteAddress: String(entry.siteAddress || entry.location || "").trim(),
+    location: String(entry.location || entry.siteAddress || "").trim(),
+    companyJobNumber: String(entry.companyJobNumber || entry.jobNumber || "").trim(),
+    clientReference: String(entry.clientReference || "").trim(),
+    workNotes: String(entry.workNotes || entry.notes || "").trim(),
+    attendanceStatus: entry.attendanceStatus || "",
+    invoiceReference: String(entry.invoiceReference || "").trim(),
+    createdAt: entry.createdAt || new Date().toISOString(),
+    updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
+  };
+}
+
+function dailyJobsForAssignment(job) {
+  const explicit = Array.isArray(job?.dailyJobs) ? job.dailyJobs : [];
+  const mappedDates = Array.from(
+    new Set([
+      ...Object.keys(job?.dailyJobNumbers || {}),
+      ...Object.keys(job?.dailyClientReferences || {}),
+    ]),
+  ).map((date) => ({
+    date,
+    companyJobNumber: job?.dailyJobNumbers?.[date] || "",
+    clientReference: job?.dailyClientReferences?.[date] || "",
+  }));
+  return (explicit.length ? explicit : mappedDates)
+    .map(normalizeDailyJobEntry)
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function dailyJobForDate(job, date = todayDateStr()) {
+  return dailyJobsForAssignment(job).find((entry) => entry.date === date) || null;
+}
+
+function syncDailyJobReferences(job) {
+  if (!job) return;
+  job.dailyJobs = dailyJobsForAssignment(job);
+  job.dailyJobNumbers = {};
+  job.dailyClientReferences = {};
+  job.invoiceReferences = [];
+  job.dailyJobs.forEach((entry) => {
+    if (entry.companyJobNumber) job.dailyJobNumbers[entry.date] = entry.companyJobNumber;
+    if (entry.clientReference)
+      job.dailyClientReferences[entry.date] = entry.clientReference;
+    if (
+      entry.invoiceReference &&
+      !job.invoiceReferences.includes(entry.invoiceReference)
+    ) {
+      job.invoiceReferences.push(entry.invoiceReference);
+    }
+  });
+}
+
+function upsertDailyJobEntry(jobId, entry) {
+  const job = findJob(jobId);
+  const record = normalizeDailyJobEntry(entry);
+  if (!job || !record) return { ok: false, reason: "Add a date for the daily job" };
+  job.dailyJobs = dailyJobsForAssignment(job);
+  const idx = job.dailyJobs.findIndex((item) => item.id === record.id);
+  if (idx >= 0) {
+    record.createdAt = job.dailyJobs[idx].createdAt || record.createdAt;
+    record.updatedAt = new Date().toISOString();
+    job.dailyJobs[idx] = record;
+  } else {
+    job.dailyJobs.push(record);
+  }
+  syncDailyJobReferences(job);
+  saveState();
+  return { ok: true, dailyJob: record };
+}
+
+function removeDailyJobEntry(jobId, dailyJobId) {
+  const job = findJob(jobId);
+  if (!job || !dailyJobId) return { ok: false, reason: "Daily job not found" };
+  job.dailyJobs = dailyJobsForAssignment(job).filter((entry) => entry.id !== dailyJobId);
+  syncDailyJobReferences(job);
+  saveState();
+  return { ok: true };
+}
+
+function dailyMobileJobsPanelHTML(job, { manage = false, workerView = false } = {}) {
+  if (!isMobileAssignment(job)) return "";
+  const entries = dailyJobsForAssignment(job);
+  const today = todayDateStr();
+  const visibleEntries = workerView
+    ? entries.filter((entry) => entry.date >= today).slice(0, 4)
+    : entries.slice(-5).reverse();
+  const rows = visibleEntries.length
+    ? visibleEntries
+        .map(
+          (entry) => `
+      <div class="mobile-day-row">
+        <div>
+          <strong>${formatDateOnly(entry.date)}${entry.clientSiteName ? ` · ${escapeHtml(entry.clientSiteName)}` : ""}</strong>
+          <span>${escapeHtml(entry.siteAddress || entry.location || "Location TBC")}</span>
+          <small>${entry.companyJobNumber ? `Job ${escapeHtml(entry.companyJobNumber)}` : "Job number TBC"}${entry.clientReference ? ` · Ref ${escapeHtml(entry.clientReference)}` : ""}${entry.invoiceReference ? ` · Invoice ref ${escapeHtml(entry.invoiceReference)}` : ""}</small>
+          ${entry.workNotes ? `<em>${escapeHtml(entry.workNotes)}</em>` : ""}
+        </div>
+        ${
+          manage
+            ? `<button class="secondary-btn" type="button" data-mobile-day-remove="${job.id}:${entry.id}">Remove</button>`
+            : ""
+        }
+      </div>`,
+        )
+        .join("")
+    : `<div class="att-empty">No daily mobile jobs added yet.</div>`;
+  const form = manage
+    ? `
+    <div class="mobile-day-form">
+      <input type="date" data-mobile-day-date="${job.id}" />
+      <input type="text" data-mobile-day-site="${job.id}" placeholder="Client/site name" />
+      <input type="text" data-mobile-day-address="${job.id}" placeholder="Site address/location" />
+      <input type="text" data-mobile-day-job-number="${job.id}" placeholder="Company job number" />
+      <input type="text" data-mobile-day-client-ref="${job.id}" placeholder="Client reference" />
+      <input type="text" data-mobile-day-invoice-ref="${job.id}" placeholder="Invoice ref placeholder" />
+      <textarea data-mobile-day-notes="${job.id}" rows="2" placeholder="Work notes"></textarea>
+      <button class="primary-btn" type="button" data-mobile-day-add="${job.id}">Add Daily Job</button>
+    </div>`
+    : "";
+  return `
+    <div class="mobile-day-panel">
+      <div class="mobile-day-head">
+        <strong>Daily Mobile Jobs</strong>
+        <span>${escapeHtml(assignmentTypeLabel(job))}</span>
+      </div>
+      ${rows}
+      ${form}
+    </div>`;
 }
 
 const WORKER_DOCUMENT_TYPES = [
@@ -5684,6 +5884,31 @@ let activeFilter = "all";
 
 workerSearch.addEventListener("input", () => renderWorkers());
 
+function updateAssignmentTypeForm() {
+  const type = normalizeAssignmentType(
+    document.getElementById("jobAssignmentType")?.value,
+  );
+  const mobile = type !== "site_project";
+  const endInput = document.getElementById("jobEndDate");
+  const siteAddress = document.getElementById("jobSiteAddress");
+  const mobileDefaults = document.getElementById("jobMobileDefaults");
+  const noFixedEnd = document.getElementById("jobNoFixedEndDate");
+  if (mobileDefaults) mobileDefaults.classList.toggle("hidden", !mobile);
+  if (endInput) {
+    endInput.required = !mobile || !noFixedEnd?.checked;
+    if (mobile && noFixedEnd?.checked) endInput.value = "";
+  }
+  if (siteAddress) siteAddress.required = !mobile;
+}
+
+document
+  .getElementById("jobAssignmentType")
+  ?.addEventListener("change", updateAssignmentTypeForm);
+document
+  .getElementById("jobNoFixedEndDate")
+  ?.addEventListener("change", updateAssignmentTypeForm);
+updateAssignmentTypeForm();
+
 document.querySelectorAll(".filter-chip").forEach((chip) => {
   chip.addEventListener("click", () => {
     document
@@ -6094,6 +6319,9 @@ function renderWorkerHome(user) {
       </button>
     </div>`
       : "";
+  const mobileDailyPanel = booking
+    ? dailyMobileJobsPanelHTML(booking, { workerView: true })
+    : "";
   const activeBookingHtml = booking
     ? `
     <div class="wh-booking-card">
@@ -6219,6 +6447,7 @@ function renderWorkerHome(user) {
     ${shiftChangePanel}
     ${offersPanel}
     ${signInPanel}
+    ${mobileDailyPanel}
     ${activeBookingHtml}
     ${recJobsHtml}`;
 
@@ -6797,6 +7026,7 @@ function renderContractorHome(user) {
       ${job ? `<button class="secondary-btn" type="button" data-project-transfer="${job.id}">Offer Transfer</button>` : ""}
       ${job ? `<button class="secondary-btn" type="button" data-shift-change="${job.id}">Offer Shift Change</button>` : ""}
       ${job ? `<button class="ch-cancel-btn" type="button" data-cancel-booking="${job.id}">Cancel</button>` : ""}
+      ${job ? dailyMobileJobsPanelHTML(job, { manage: true }) : ""}
     </div>`;
         })
         .join("")
@@ -6819,6 +7049,7 @@ function renderContractorHome(user) {
         ${escapeHtml(job.location)}
         ${job.start ? ` · ${new Date(job.start).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
         ${job.quantity && job.quantity > 1 ? ` · ${job.quantity} workers` : ""}
+        ${isMobileAssignment(job) ? ` · ${escapeHtml(assignmentTypeLabel(job))}` : ""}
         ${charge ? ` · ${formatMoney(charge)}/day` : ""}
         ${appCount ? ` · ${appCount} interested` : ""}
       </div>
@@ -6873,6 +7104,7 @@ function renderContractorHome(user) {
   bindProjectTransferButtons(el);
   bindShiftChangeButtons(el);
   bindPreStartDocumentButtons(el);
+  bindMobileDailyJobButtons(el);
 }
 
 function companyPreferredWorkersPanelHTML(user) {
@@ -7059,6 +7291,50 @@ function bindShiftChangeButtons(scope) {
     btn.addEventListener("click", () =>
       openShiftChangeModal(btn.dataset.shiftChange),
     );
+  });
+}
+
+function bindMobileDailyJobButtons(scope) {
+  scope.querySelectorAll("[data-mobile-day-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const jobId = btn.dataset.mobileDayAdd;
+      const res = upsertDailyJobEntry(jobId, {
+        date: scope.querySelector(`[data-mobile-day-date="${jobId}"]`)?.value || "",
+        clientSiteName:
+          scope.querySelector(`[data-mobile-day-site="${jobId}"]`)?.value || "",
+        siteAddress:
+          scope.querySelector(`[data-mobile-day-address="${jobId}"]`)?.value || "",
+        companyJobNumber:
+          scope.querySelector(`[data-mobile-day-job-number="${jobId}"]`)?.value ||
+          "",
+        clientReference:
+          scope.querySelector(`[data-mobile-day-client-ref="${jobId}"]`)?.value ||
+          "",
+        invoiceReference:
+          scope.querySelector(`[data-mobile-day-invoice-ref="${jobId}"]`)?.value ||
+          "",
+        workNotes:
+          scope.querySelector(`[data-mobile-day-notes="${jobId}"]`)?.value || "",
+      });
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Daily mobile job added");
+    });
+  });
+  scope.querySelectorAll("[data-mobile-day-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const [jobId, dailyJobId] = btn.dataset.mobileDayRemove.split(":");
+      const res = removeDailyJobEntry(jobId, dailyJobId);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Daily mobile job removed");
+    });
   });
 }
 
@@ -7540,6 +7816,13 @@ jobForm.addEventListener("submit", (e) => {
 
   const projectName =
     document.querySelector("#projectName")?.value.trim() || "";
+  const assignmentType = normalizeAssignmentType(
+    document.querySelector("#jobAssignmentType")?.value || "site_project",
+  );
+  const mobileAssignment = assignmentType !== "site_project";
+  const noFixedEndDate =
+    mobileAssignment && !!document.querySelector("#jobNoFixedEndDate")?.checked;
+  const defaultRateRaw = Number(document.querySelector("#jobDefaultRate")?.value);
 
   const attendanceManagerName =
     document.querySelector("#attendanceManagerName")?.value.trim() || "";
@@ -7567,7 +7850,9 @@ jobForm.addEventListener("submit", (e) => {
       ? Math.round(budgetMinRaw)
       : null;
 
-  const endDate = document.querySelector("#jobEndDate")?.value || "";
+  const endDate = noFixedEndDate
+    ? ""
+    : document.querySelector("#jobEndDate")?.value || "";
   const noticeRaw = Number(document.querySelector("#jobNoticeDays")?.value);
   const jobStartValue = document.querySelector("#jobStart").value;
   const shiftStartTime = document.querySelector("#jobShiftStart")?.value || "";
@@ -7591,13 +7876,30 @@ jobForm.addEventListener("submit", (e) => {
 
   const job = {
     id: createId(),
-    jobType: "project",
+    jobType: assignmentType,
+    assignmentType,
+    ongoing: assignmentType === "ongoing_placement",
+    noFixedEndDate,
     jobNumber,
     projectName,
     clientReference: "",
+    defaultRole: document.querySelector("#jobDefaultRole")?.value.trim() || "",
+    defaultRate:
+      Number.isFinite(defaultRateRaw) && defaultRateRaw > 0
+        ? Math.round(defaultRateRaw)
+        : budgetMax,
+    defaultWorkingDays: workingDays,
+    defaultShiftTimes: {
+      start: document.querySelector("#jobDefaultShiftStart")?.value || shiftStartTime || "",
+      finish:
+        document.querySelector("#jobDefaultShiftFinish")?.value ||
+        shiftFinishTime ||
+        "",
+    },
     dailyJobNumbers: {},
     dailyClientReferences: {},
     invoiceReferences: [],
+    dailyJobs: [],
     companyId: poster?.type === "company" ? poster.id : "",
     companyName:
       poster?.type === "company"
@@ -7717,6 +8019,7 @@ jobForm.addEventListener("submit", (e) => {
 
   // Reset photo cards
   resetJobPhotos();
+  updateAssignmentTypeForm();
 
   saveAndRender();
   showToast("Job request posted");
@@ -8081,6 +8384,7 @@ function renderJobs() {
   bindProjectTransferButtons(jobsList);
   bindShiftChangeButtons(jobsList);
   bindPreStartDocumentButtons(jobsList);
+  bindMobileDailyJobButtons(jobsList);
 }
 
 // ─── Cancelled Bookings (Admin) ───────────────────────────
@@ -8143,7 +8447,7 @@ function jobCard(job) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </div>
       <div class="job-meta">
-        <div class="job-title">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</div>
+        <div class="job-title">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}${isMobileAssignment(job) ? ` · ${escapeHtml(assignmentTypeLabel(job))}` : ""}</div>
         <div class="job-details">
           <span class="job-detail-item">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -8154,6 +8458,14 @@ function jobCard(job) {
               ? `<span class="job-detail-item">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             ${escapeHtml(job.duration)}
+          </span>`
+              : ""
+          }
+          ${
+            job.noFixedEndDate
+              ? `<span class="job-detail-item">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+            No fixed end date
           </span>`
               : ""
           }
@@ -8180,6 +8492,7 @@ function jobCard(job) {
     ${notice ? `<div class="notice-status-panel"><strong>Worker notice:</strong> proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)} · ${escapeHtml(notice.reason)}</div>` : ""}
     ${release ? `<div class="notice-status-panel"><strong>${escapeHtml(releaseTypeLabel(release.releaseType))}:</strong> ${escapeHtml(releaseStatusLabel(release.releaseStatus))} · effective ${formatDateOnly(release.effectiveDate)}</div>` : ""}
     ${companyPreStartJobPanelHTML(job)}
+    ${assigned ? dailyMobileJobsPanelHTML(job, { manage: true }) : ""}
     <div class="job-card-footer">
       ${
         hasPin
@@ -9579,13 +9892,23 @@ function submitDayAttendance() {
     // Snapshot the booking + pricing so weekly invoices can be built from
     // approved attendance even if the job is later edited or completed.
     if (linkedJob) {
+      const dailyJob = dailyJobForDate(linkedJob, today);
       rec.jobId = linkedJob.id;
       rec.companyId = linkedJob.companyId || "";
       rec.companyName = linkedJob.companyName || "Company";
       rec.jobTrade = linkedJob.trade || "";
-      rec.jobLocation = linkedJob.location || "";
+      rec.jobLocation = dailyJob?.siteAddress || dailyJob?.location || linkedJob.location || "";
       rec.projectName = linkedJob.projectName || "";
-      rec.jobNumber = linkedJob.jobNumber || "";
+      rec.jobNumber = dailyJob?.companyJobNumber || linkedJob.jobNumber || "";
+      if (dailyJob) {
+        rec.dailyJobId = dailyJob.id;
+        rec.clientSiteName = dailyJob.clientSiteName || "";
+        rec.dailySiteAddress = dailyJob.siteAddress || "";
+        rec.dailyClientReference = dailyJob.clientReference || "";
+        rec.invoiceReference = dailyJob.invoiceReference || "";
+        rec.workNotes = dailyJob.workNotes || "";
+        rec.dailyJob = dailyJob;
+      }
       rec.expectedStartTime = linkedJob.shiftStartTime || "";
       rec.expectedFinishTime = linkedJob.shiftFinishTime || "";
       rec.workerPay =
@@ -10157,6 +10480,7 @@ async function workerScanCheckIn(uid, workerObj) {
     showToast("You're not assigned to a site today");
     return;
   }
+  const dailyJob = dailyJobForDate(job, today);
 
   if (!bookingAgreementActive(job)) {
     showToast("Accept your Job Agreement before checking in");
@@ -10206,9 +10530,16 @@ async function workerScanCheckIn(uid, workerObj) {
     companyId: job.companyId || "",
     companyName: job.companyName || "",
     jobTrade: job.trade || "",
-    jobLocation: job.location || "",
+    jobLocation: dailyJob?.siteAddress || dailyJob?.location || job.location || "",
     projectName: job.projectName || job.siteName || "",
-    siteName: job.siteName || "",
+    siteName: dailyJob?.clientSiteName || job.siteName || "",
+    jobNumber: dailyJob?.companyJobNumber || job.jobNumber || "",
+    dailyJobId: dailyJob?.id || "",
+    clientSiteName: dailyJob?.clientSiteName || "",
+    dailySiteAddress: dailyJob?.siteAddress || "",
+    dailyClientReference: dailyJob?.clientReference || "",
+    invoiceReference: dailyJob?.invoiceReference || "",
+    workNotes: dailyJob?.workNotes || "",
     date: today,
     scanDate: today,
     status: "checkedIn",
@@ -10227,6 +10558,7 @@ async function workerScanCheckIn(uid, workerObj) {
     qrDate: code.date,
     scanToken: code.token,
   };
+  rec.commercial = attendanceCommercialSnapshot(rec, job);
   if (gps) {
     rec.gpsLat = gps.lat;
     rec.gpsLng = gps.lng;
@@ -10301,8 +10633,14 @@ function renderWorkerTimesheet(uid, user, histEl) {
         ? `<span class="ts-stars">${"★".repeat(rec.rating)}${"☆".repeat(5 - rec.rating)}</span>`
         : "";
       const job = state.jobs.find((j) => j.assignedWorkerId === uid);
-      const site = job
-        ? `<span class="ts-site">${escapeHtml(job.location)}</span>`
+      const siteLabel =
+        rec.clientSiteName ||
+        rec.dailySiteAddress ||
+        rec.jobLocation ||
+        job?.location ||
+        "";
+      const site = siteLabel
+        ? `<span class="ts-site">${escapeHtml(siteLabel)}</span>`
         : "";
       const gps = rec.gpsLat
         ? `<span class="ts-gps" title="GPS recorded">📍</span>`
