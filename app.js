@@ -4290,6 +4290,7 @@ function renderWorkerHome(user) {
         </div>
         ${job.siteName || job.siteAddress ? `<div class="wh-offer-site">${escapeHtml(job.siteName || job.siteAddress)}</div>` : ""}
         <div class="wh-offer-actions">
+          ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Site Details</button>` : ""}
           <button class="secondary-btn wh-offer-decline" type="button" data-worker-offer-decline="${app.id}">Decline</button>
           <button class="primary-btn wh-offer-accept" type="button" data-worker-offer-accept="${app.id}">Accept</button>
         </div>
@@ -4360,6 +4361,7 @@ function renderWorkerHome(user) {
         ${booking.duration ? ` · ${escapeHtml(booking.duration)}` : ""}
         ${bookingDayRate ? ` · <strong>${formatMoney(bookingDayRate)}/day</strong>` : booking.payRate ? ` · <strong>${escapeHtml(booking.payRate)}</strong>` : ""}
       </div>
+      ${booking.sitePin ? `<button class="site-loc-view-btn" type="button" data-map-job="${booking.id}">Site Details</button>` : ""}
       ${booking.estimatedEndDate || booking.endDate ? `<div class="wh-booking-end">Estimated end: <strong>${formatDate(booking.estimatedEndDate || booking.endDate)}</strong></div>` : ""}
       ${
         booking.extensionRequestedAt
@@ -4560,6 +4562,12 @@ function renderWorkerHome(user) {
     btn.addEventListener("click", () =>
       openWorkerQrScanner(btn.dataset.workerHomeSignin, workerProfile || user),
     );
+  });
+  el.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openSiteMap(btn.dataset.mapJob);
+    });
   });
 
   // Recommended job clicks → go to Jobs tab
@@ -5697,6 +5705,21 @@ jobForm.addEventListener("submit", (e) => {
   const gate = document.querySelector("#jobGateAccess")?.value.trim();
   if (gate) job.gateAccess = gate;
 
+  const photos = {};
+  const photoMeta = {};
+  PHOTO_KEYS.forEach(({ key, label }) => {
+    if (!currentJobPhotos[key]) return;
+    photos[key] = currentJobPhotos[key];
+    photoMeta[key] = {
+      photoType: key,
+      label,
+      fileName: currentJobPhotoMeta[key]?.fileName || "",
+      uploadedAt: currentJobPhotoMeta[key]?.uploadedAt || new Date().toISOString(),
+    };
+  });
+  if (Object.keys(photos).length) job.sitePhotos = photos;
+  if (Object.keys(photoMeta).length) job.sitePhotoMeta = photoMeta;
+
   state.jobs.push(job);
   const autoOffer = autoOfferBestMatch(job.id);
   logActivity(
@@ -5704,13 +5727,6 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
-
-  // Capture photos
-  const photos = {};
-  ["gate", "entrance", "welfare"].forEach((k) => {
-    if (currentJobPhotos[k]) photos[k] = currentJobPhotos[k];
-  });
-  if (Object.keys(photos).length) job.sitePhotos = photos;
 
   // Reset location section
   currentJobPin = { lat: null, lng: null };
@@ -6510,17 +6526,26 @@ function findJob(id) {
 
 // ─── Site Photo Upload ────────────────────────────────────
 let currentJobPhotos = { gate: null, entrance: null, welfare: null };
+let currentJobPhotoMeta = { gate: null, entrance: null, welfare: null };
 
 const PHOTO_KEYS = [
-  { key: "gate", inputId: "photoGate", prevId: "prvGate", phId: "phGate" },
+  {
+    key: "gate",
+    label: "Access route / gate",
+    inputId: "photoGate",
+    prevId: "prvGate",
+    phId: "phGate",
+  },
   {
     key: "entrance",
+    label: "Site entrance",
     inputId: "photoEntrance",
     prevId: "prvEntrance",
     phId: "phEntrance",
   },
   {
     key: "welfare",
+    label: "Parking / sign-in point",
     inputId: "photoWelfare",
     prevId: "prvWelfare",
     phId: "phWelfare",
@@ -6569,6 +6594,10 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
     try {
       const compressed = await compressImage(file);
       currentJobPhotos[key] = compressed;
+      currentJobPhotoMeta[key] = {
+        fileName: file.name || "",
+        uploadedAt: new Date().toISOString(),
+      };
       const card = e.target.closest(".photo-card");
       const prev = document.getElementById(prevId);
       const ph = document.getElementById(phId);
@@ -6605,6 +6634,7 @@ function resetJobPhotos() {
     if (card) card.classList.remove("has-photo");
   });
   currentJobPhotos = { gate: null, entrance: null, welfare: null };
+  currentJobPhotoMeta = { gate: null, entrance: null, welfare: null };
 }
 
 // ─── Site Location & Map System ───────────────────────────
@@ -6759,23 +6789,27 @@ function openSiteMap(jobId) {
   // Photo strip
   const photoStrip = document.getElementById("sitePhotoStrip");
   const photoLabels = {
-    gate: "Gate",
-    entrance: "Site Entrance",
-    welfare: "Welfare Cabin",
+    gate: "Access route / gate",
+    entrance: "Site entrance",
+    welfare: "Parking / sign-in point",
   };
   const jobPhotos = job.sitePhotos || {};
+  const jobPhotoMeta = job.sitePhotoMeta || {};
   const photoEntries = Object.entries(photoLabels).filter(
     ([k]) => jobPhotos[k],
   );
   if (photoEntries.length) {
     photoStrip.innerHTML = photoEntries
       .map(
-        ([k, label]) => `
+        ([k, fallbackLabel]) => {
+          const label = jobPhotoMeta[k]?.label || fallbackLabel;
+          return `
       <div class="strip-item" data-lightbox-src="${jobPhotos[k]}" data-lightbox-label="${escapeHtml(label)}">
         <img src="${jobPhotos[k]}" class="strip-img" alt="${escapeHtml(label)}" />
         <span class="strip-label">${escapeHtml(label)}</span>
         <span class="strip-hint">Tap to expand</span>
-      </div>`,
+      </div>`;
+        },
       )
       .join("");
     photoStrip.classList.remove("hidden");
@@ -8475,6 +8509,9 @@ function renderSiteQrPanel() {
         `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`,
     )
     .join("");
+  const siteDetailsButton = job?.sitePin
+    ? `<button class="site-loc-view-btn" type="button" id="qrSiteDetailsBtn">Site Details</button>`
+    : "";
 
   let codeBlock;
   if (code) {
@@ -8509,6 +8546,7 @@ function renderSiteQrPanel() {
       </div>
       <label class="qr-job-label" for="qrJobSelect">Site</label>
       <select class="qr-job-select" id="qrJobSelect">${options}</select>
+      ${siteDetailsButton}
       ${codeBlock}
     </div>`;
 
@@ -8525,6 +8563,9 @@ function renderSiteQrPanel() {
       showToast("Site QR generated for today");
       renderSiteQrPanel();
     });
+  document
+    .getElementById("qrSiteDetailsBtn")
+    ?.addEventListener("click", () => openSiteMap(qrSelectedJobId));
 }
 
 // ─── Admin Attendance Review (full audit) ─────────────────

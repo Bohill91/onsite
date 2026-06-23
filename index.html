@@ -945,6 +945,28 @@ Trade *
     Gate / Access Instructions
     <input id="jobGateAccess" type="text" placeholder="e.g. Call site manager on arrival for gate code" />
   </label>
+
+  <div class="field-label">
+    Site Photos
+    <p class="field-hint">Add local prototype images to help workers find the correct entrance and sign-in point.</p>
+    <div class="site-photo-grid">
+      <label class="photo-card" for="photoGate">
+        <input id="photoGate" class="photo-file-input" type="file" accept="image/*" />
+        <img id="prvGate" class="photo-preview" alt="Access route or gate preview" />
+        <span id="phGate" class="photo-placeholder">Access route / gate photo</span>
+      </label>
+      <label class="photo-card" for="photoEntrance">
+        <input id="photoEntrance" class="photo-file-input" type="file" accept="image/*" />
+        <img id="prvEntrance" class="photo-preview" alt="Site entrance preview" />
+        <span id="phEntrance" class="photo-placeholder">Site entrance photo</span>
+      </label>
+      <label class="photo-card" for="photoWelfare">
+        <input id="photoWelfare" class="photo-file-input" type="file" accept="image/*" />
+        <img id="prvWelfare" class="photo-preview" alt="Parking or sign-in point preview" />
+        <span id="phWelfare" class="photo-placeholder">Parking / sign-in point photo</span>
+      </label>
+    </div>
+  </div>
 </div>
      <button type="submit" class="primary-btn full-width">
   Find Labour
