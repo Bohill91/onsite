@@ -250,6 +250,35 @@ button, input, select, textarea {
   }
 }
 
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.settings-card span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settings-card strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.settings-card small {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 /* ─── Stats Row ────────────────────────────────────────── */
 .stats-row {
   display: grid;
@@ -6402,6 +6431,101 @@ margin-bottom: 12px;
   margin-bottom: 14px;
 }
 
+.company-home {
+  display: grid;
+  gap: 16px;
+}
+
+.company-home-head,
+.company-home-section-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.company-home-kicker {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.company-home-head h2,
+.company-home-section-head h3 {
+  color: var(--ink);
+  font-size: 1.35rem;
+  margin: 2px 0 0;
+}
+
+.company-home-head p {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.company-home-request {
+  margin: 0;
+  width: auto;
+}
+
+.company-command-grid,
+.company-issue-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.company-command-card,
+.company-issue-card,
+.company-worker-card {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.company-command-card span,
+.company-issue-card span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.company-command-card strong,
+.company-issue-card strong {
+  color: var(--ink);
+  display: block;
+  font-size: 1.45rem;
+  margin-top: 6px;
+}
+
+.company-issue-card {
+  cursor: pointer;
+  text-align: left;
+}
+
+.company-issue-card.has-issues {
+  border-color: rgba(249, 115, 22, 0.35);
+}
+
+.company-issue-card small {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.76rem;
+  margin-top: 4px;
+}
+
+.company-home-section {
+  display: grid;
+  gap: 10px;
+}
+
 .company-project-card,
 .company-project-detail,
 .company-project-section {
@@ -6489,6 +6613,31 @@ margin-bottom: 12px;
   padding: 14px;
 }
 
+.company-project-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.company-project-tab {
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--ink-2);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.company-project-tab.active {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.35);
+  color: var(--orange-dark);
+}
+
 .company-project-kicker {
   color: var(--ink-3);
   font-size: 0.7rem;
@@ -6521,6 +6670,61 @@ margin-bottom: 12px;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
+}
+
+.company-worker-directory {
+  display: grid;
+  gap: 12px;
+}
+
+.company-worker-card {
+  display: grid;
+  gap: 10px;
+}
+
+.company-worker-main {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.company-worker-name {
+  color: var(--ink);
+  font-size: 0.96rem;
+  font-weight: 800;
+}
+
+.company-worker-meta,
+.company-worker-facts {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+}
+
+.company-worker-tags,
+.company-worker-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.company-worker-tags span,
+.company-worker-facts span {
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 4px 7px;
+}
+
+.company-worker-profile-sheet {
+  display: grid;
+  gap: 12px;
+}
+
+.company-worker-profile-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .company-project-section h4 {

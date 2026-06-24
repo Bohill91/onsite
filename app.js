@@ -5979,9 +5979,10 @@ const WORKER_TABS = [
 
 const CONTRACTOR_TABS = [
   { id: "dashboard", icon: "home", label: "Home" },
-  { id: "add", icon: "requests", label: "Requests" },
-  { id: "workers", icon: "workforce", label: "Workforce" },
-  { id: "account", icon: "account", label: "Account" },
+  { id: "jobs", icon: "jobs", label: "Projects" },
+  { id: "attendance", icon: "bookings", label: "Attendance" },
+  { id: "workers", icon: "workforce", label: "Workers" },
+  { id: "account", icon: "account", label: "Profile" },
 ];
 
 function rebuildNav(tabDefs, activeId) {
@@ -6988,15 +6989,39 @@ function agreementHistorySection(agreements) {
 
 // ─── Company Home ──────────────────────────────────────
 let activeCompanyProjectId = "";
+let activeCompanyProjectSection = "overview";
+
+const COMPANY_PROJECT_SECTIONS = [
+  { id: "overview", label: "Overview" },
+  { id: "workers", label: "Workers" },
+  { id: "requirements", label: "Requirements" },
+  { id: "attendance", label: "Attendance" },
+  { id: "documents", label: "Documents" },
+  { id: "site", label: "Site Info" },
+  { id: "invoices", label: "Invoices" },
+];
+
+function companyAssignedWorkers(job) {
+  const workers = [];
+  if (job?.assignedWorkerId) {
+    const worker = findWorker(job.assignedWorkerId);
+    if (worker) workers.push(worker);
+  }
+  return workers;
+}
 
 function companyProjectSummary(job, user) {
   const today = todayDateStr();
-  const assignedWorker = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const assignedWorkers = companyAssignedWorkers(job);
+  const assignedWorker = assignedWorkers[0] || null;
   const required = Math.max(1, Number(job.quantity) || 1);
-  const filled = assignedWorker ? 1 : 0;
+  const filled = assignedWorkers.length;
   const apps = (state.applications || []).filter((a) => a.jobId === job.id);
   const pendingOffers = apps.filter((a) => a.status === "offered");
   const reviewWorkers = apps.filter((a) => a.status === "under_company_review");
+  const todayRecords = attendanceRecords.filter(
+    (r) => r.jobId === job.id && r.companyId === user.id && r.date === today,
+  );
   const attendanceIssues = attendanceRecords.filter(
     (r) =>
       r.jobId === job.id &&
@@ -7017,6 +7042,11 @@ function companyProjectSummary(job, user) {
       (task.companyId === user.id || !task.companyId),
   );
   const preStart = preStartRequirementSummary(job, assignedWorker?.id || "");
+  const outstandingPreStart = assignedWorkers.reduce(
+    (sum, worker) =>
+      sum + preStartRequirementSummary(job, worker.id).outstanding.length,
+    0,
+  );
   const status = job.completed
     ? "Completed"
     : job.bookingStatus === "confirmed" || assignedWorker
@@ -7026,17 +7056,52 @@ function companyProjectSummary(job, user) {
         : "Open";
   return {
     assignedWorker,
+    assignedWorkers,
     required,
     filled,
     openRoles: Math.max(0, required - filled),
     apps,
     pendingOffers,
     reviewWorkers,
+    todayRecords,
+    expectedToday: assignedWorkers.length,
+    signedInToday: todayRecords.filter((r) =>
+      ["checkedIn", "onTime", "late"].includes(r.status),
+    ).length,
+    confirmedToday: todayRecords.filter((r) =>
+      ["onTime", "late", "noShow"].includes(r.status),
+    ).length,
+    lateReports: todayRecords.filter((r) => r.lateReport).length,
+    noShows: todayRecords.filter((r) => r.status === "noShow").length,
     attendanceIssues,
     plannedAbsences,
     replacements,
     preStart,
+    outstandingPreStart,
     status,
+  };
+}
+
+function companyDashboardSummary(user) {
+  const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
+  const activeJobs = companyJobs.filter((j) => !j.completed);
+  const summaries = activeJobs.map((job) => companyProjectSummary(job, user));
+  return {
+    companyJobs,
+    activeJobs,
+    summaries,
+    activeProjects: activeJobs.length,
+    workersExpected: summaries.reduce((sum, s) => sum + s.expectedToday, 0),
+    attendanceConfirmed: summaries.reduce((sum, s) => sum + s.confirmedToday, 0),
+    openRequirements: summaries.reduce((sum, s) => sum + s.openRoles, 0),
+    pendingActions: summaries.reduce(
+      (sum, s) => sum + s.pendingOffers.length + s.reviewWorkers.length,
+      0,
+    ),
+    lateReports: summaries.reduce((sum, s) => sum + s.lateReports, 0),
+    plannedAbsences: summaries.reduce((sum, s) => sum + s.plannedAbsences.length, 0),
+    replacements: summaries.reduce((sum, s) => sum + s.replacements.length, 0),
+    outstandingPreStart: summaries.reduce((sum, s) => sum + s.outstandingPreStart, 0),
   };
 }
 
@@ -7099,96 +7164,7 @@ function projectInvoicePlaceholderHTML(job) {
 function companyProjectDetailHTML(job, user) {
   if (!job) return "";
   const summary = companyProjectSummary(job, user);
-  const assignedWorkers = summary.assignedWorker ? [summary.assignedWorker] : [];
-  const acceptedRows = summary.reviewWorkers.length
-    ? summary.reviewWorkers
-        .map((app) => {
-          const worker = applicationWorker(app);
-          const rating = worker ? buildWorkerRating(worker.id) : null;
-          return `<div class="company-project-worker-row">
-            <div class="company-project-worker-main">
-              <strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong>
-              <span>${escapeHtml(worker?.trade || job.trade || "")}${rating ? ` · Reliability ${escapeHtml(rating.reliabilityRating)}` : ""}${rating ? ` · Punctuality ${escapeHtml(rating.punctualityRating)}` : ""}</span>
-              ${worker ? companyWorkerVerificationHTML(worker) : ""}
-              ${worker ? companyWorkerDocumentsHTML(worker, job) : ""}
-            </div>
-            <div class="company-project-worker-actions">
-              <button class="secondary-btn" type="button" data-company-offer-decline="${app.id}">Decline</button>
-              <button class="primary-btn" type="button" data-company-offer-accept="${app.id}">Accept</button>
-            </div>
-          </div>`;
-        })
-        .join("")
-    : `<div class="att-empty">No accepted workers awaiting company approval.</div>`;
-  const pendingRows = summary.pendingOffers.length
-    ? summary.pendingOffers
-        .map((app) => {
-          const worker = applicationWorker(app);
-          return `<div class="company-project-mini-row">
-            <span>${escapeHtml(app.workerName || worker?.name || "Worker")}</span>
-            <strong>${escapeHtml(offerExpiryLabel(app))}</strong>
-          </div>`;
-        })
-        .join("")
-    : `<div class="att-empty">No pending offers for this project.</div>`;
-  const assignedRows = assignedWorkers.length
-    ? assignedWorkers
-        .map((worker) => {
-          const notice = latestWorkerNoticeForJob(job.id, worker.id);
-          const release = latestReleaseForJob(job.id, worker.id);
-          return `<div class="company-project-worker-row">
-            <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
-            <div class="company-project-worker-main">
-              <strong>${escapeHtml(worker.name)}</strong>
-              <span>${escapeHtml(worker.trade || job.trade || "")}${worker.qualifications ? ` · ${escapeHtml(worker.qualifications)}` : ""}</span>
-              ${notice ? `<span class="notice-status-chip">Notice: ${formatDateOnly(notice.proposedLastWorkingDay)}</span>` : ""}
-              ${release ? `<span class="notice-status-chip">${escapeHtml(releaseTypeLabel(release.releaseType))}: ${formatDateOnly(release.effectiveDate)}</span>` : ""}
-              ${companyWorkerVerificationHTML(worker)}
-              ${companyWorkerDocumentsHTML(worker, job)}
-            </div>
-            <div class="company-project-worker-actions">
-              <button class="secondary-btn" type="button" data-worker-calendar="${worker.id}">Calendar</button>
-              <button class="secondary-btn" type="button" data-worker-release="${job.id}">Release / Replace</button>
-              <button class="secondary-btn" type="button" data-project-transfer="${job.id}">Offer Transfer</button>
-              <button class="secondary-btn" type="button" data-shift-change="${job.id}">Shift Change</button>
-            </div>
-          </div>`;
-        })
-        .join("")
-    : `<div class="att-empty">No worker confirmed on this project yet.</div>`;
-  const issueRows = summary.attendanceIssues.length
-    ? summary.attendanceIssues
-        .map((rec) => {
-          const worker = findWorker(rec.workerId);
-          const cfg = ATT_CFG[rec.status] || ATT_CFG.unconfirmed;
-          return `<div class="company-project-mini-row">
-            <span>${escapeHtml(worker?.name || "Worker")} · ${formatDateOnly(rec.date)}</span>
-            <strong>${escapeHtml(cfg.label || rec.status)}</strong>
-          </div>`;
-        })
-        .join("")
-    : `<div class="att-empty">No attendance issues recorded today.</div>`;
-  const absenceRows = summary.plannedAbsences.length
-    ? summary.plannedAbsences
-        .slice(0, 4)
-        .map(
-          (n) => `<div class="company-project-mini-row">
-            <span>${escapeHtml(n.workerName || "Worker")} · ${formatDateOnly(n.startDate)}${n.endDate && n.endDate !== n.startDate ? ` to ${formatDateOnly(n.endDate)}` : ""}</span>
-            <strong>${n.noticeWarning ? "Inside notice period" : "Planned Absence"}</strong>
-          </div>`,
-        )
-        .join("")
-    : `<div class="att-empty">No Planned Absence notices for this project.</div>`;
-  const replacementRows = summary.replacements.length
-    ? summary.replacements
-        .map(
-          (task) => `<div class="company-project-mini-row">
-            <span>${escapeHtml(task.workerName || job.trade || "Worker")} · ${escapeHtml(task.reason || "Replacement requested")}</span>
-            <strong>Open</strong>
-          </div>`,
-        )
-        .join("")
-    : `<div class="att-empty">No replacement flags for this project.</div>`;
+  const detailBody = companyProjectSectionHTML(job, user, summary);
   return `
     <section class="company-project-detail">
       <div class="company-project-detail-head">
@@ -7199,73 +7175,222 @@ function companyProjectDetailHTML(job, user) {
         </div>
         <button class="secondary-btn" type="button" data-company-project-close>Close</button>
       </div>
+      <div class="company-project-tabs" role="tablist" aria-label="Project detail sections">
+        ${COMPANY_PROJECT_SECTIONS.map(
+          (section) => `<button class="company-project-tab${activeCompanyProjectSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
+        ).join("")}
+      </div>
       <div class="company-project-actions">
         <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Workers</button>
         <button class="secondary-btn" type="button" data-project-attendance>View Attendance</button>
         ${job.sitePin || job.sitePhotos ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Site / Access Info</button>` : ""}
         <button class="secondary-btn" type="button" data-labour-adjust="${job.id}">Change Workers</button>
       </div>
-      <div class="company-project-detail-grid">
-        <div class="company-project-section">
-          <h4>Assigned Workers</h4>
-          ${assignedRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Required Roles Still Unfilled</h4>
-          <div class="company-project-mini-row"><span>${escapeHtml(job.trade || "Labour")} ${job.specialism ? `· ${escapeHtml(job.specialism)}` : ""}</span><strong>${summary.openRoles}</strong></div>
-        </div>
-        <div class="company-project-section">
-          <h4>Pending Offers</h4>
-          ${pendingRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Workers Awaiting Approval</h4>
-          ${acceptedRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Attendance / QR</h4>
-          ${issueRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Planned Absence</h4>
-          ${absenceRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Replacement Needed</h4>
-          ${replacementRows}
-        </div>
-        <div class="company-project-section">
-          <h4>Pre-start Documents</h4>
-          ${companyPreStartJobPanelHTML(job)}
-        </div>
-        <div class="company-project-section">
-          <h4>Mobile / Daily Jobs</h4>
-          ${dailyMobileJobsPanelHTML(job, { manage: true }) || `<div class="att-empty">Not a mobile or ongoing assignment.</div>`}
-        </div>
-        <div class="company-project-section">
-          <h4>Invoice / Payment Placeholders</h4>
-          ${projectInvoicePlaceholderHTML(job)}
+      ${detailBody}
+    </section>`;
+}
+
+function companyProjectSectionHTML(job, user, summary) {
+  return {
+    overview: companyProjectOverviewHTML(job, summary),
+    workers: companyProjectWorkersHTML(job, summary),
+    requirements: companyProjectRequirementsHTML(job, summary),
+    attendance: companyProjectAttendanceHTML(job, summary),
+    documents: companyProjectDocumentsHTML(job, summary),
+    site: companyProjectSiteInfoHTML(job),
+    invoices: `<div class="company-project-section"><h4>Invoices / Placeholders</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
+  }[activeCompanyProjectSection] || companyProjectOverviewHTML(job, summary);
+}
+
+function companyProjectOverviewHTML(job, summary) {
+  const endDate = job.estimatedEndDate || job.endDate || "";
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Overview</h4>
+        <div class="company-project-mini-row"><span>Status</span><strong>${escapeHtml(summary.status)}</strong></div>
+        <div class="company-project-mini-row"><span>Assignment type</span><strong>${escapeHtml(assignmentTypeLabel(job))}</strong></div>
+        <div class="company-project-mini-row"><span>Start</span><strong>${job.start ? formatDateOnly(job.start) : "TBC"}</strong></div>
+        <div class="company-project-mini-row"><span>End</span><strong>${job.noFixedEndDate ? "No fixed end date" : endDate ? formatDateOnly(endDate) : "TBC"}</strong></div>
+      </div>
+      <div class="company-project-section">
+        <h4>Current Position</h4>
+        <div class="company-project-mini-row"><span>Filled vs required</span><strong>${summary.filled}/${summary.required}</strong></div>
+        <div class="company-project-mini-row"><span>Pending offers</span><strong>${summary.pendingOffers.length}</strong></div>
+        <div class="company-project-mini-row"><span>Awaiting approval</span><strong>${summary.reviewWorkers.length}</strong></div>
+        <div class="company-project-mini-row"><span>Replacement flags</span><strong>${summary.replacements.length}</strong></div>
+      </div>
+    </div>`;
+}
+
+function companyProjectWorkersHTML(job, summary) {
+  const rows = summary.assignedWorkers.length
+    ? summary.assignedWorkers.map((worker) => companyProjectWorkerRowHTML(worker, job, summary)).join("")
+    : `<div class="att-empty">No worker confirmed on this project yet.</div>`;
+  const approvals = summary.reviewWorkers.length
+    ? `<div class="company-project-section"><h4>Workers Awaiting Approval</h4>${summary.reviewWorkers
+        .map((app) => {
+          const worker = applicationWorker(app);
+          const rating = worker ? buildWorkerRating(worker.id) : null;
+          return `<div class="company-project-worker-row">
+            <div class="company-project-worker-main">
+              <strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong>
+              <span>${escapeHtml(worker?.trade || job.trade || "")}${rating ? ` · Reliability ${escapeHtml(rating.reliabilityRating)} · Punctuality ${escapeHtml(rating.punctualityRating)}` : ""}</span>
+              ${worker ? companyWorkerVerificationHTML(worker) : ""}
+              ${worker ? companyWorkerDocumentsHTML(worker, job) : ""}
+            </div>
+            <div class="company-project-worker-actions">
+              <button class="secondary-btn" type="button" data-company-offer-decline="${app.id}">Decline</button>
+              <button class="primary-btn" type="button" data-company-offer-accept="${app.id}">Accept</button>
+            </div>
+          </div>`;
+        })
+        .join("")}</div>`
+    : "";
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Assigned Workers</h4>
+        ${rows}
+      </div>
+      ${approvals}
+    </div>`;
+}
+
+function companyProjectWorkerRowHTML(worker, job) {
+  const rating = buildWorkerRating(worker.id);
+  const docs = workerDocumentsFor(worker);
+  const planned = plannedAbsencesForWorker(worker).find(
+    (absence) => dateOnlyMs(absence.endDate) >= dateOnlyMs(todayDateStr()),
+  );
+  const todayRec = attendanceRecords.find(
+    (r) => r.jobId === job.id && r.workerId === worker.id && r.date === todayDateStr(),
+  );
+  const signInLabel = todayRec
+    ? ATT_CFG[todayRec.status]?.label || todayRec.status
+    : "Not signed in";
+  return `<div class="company-project-worker-row">
+    <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
+    <div class="company-project-worker-main">
+      <strong>${escapeHtml(worker.name)}</strong>
+      <span>${escapeHtml(worker.trade || job.trade || "")}${worker.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</span>
+      <span>Reliability ${escapeHtml(rating.reliabilityRating)} · Punctuality ${escapeHtml(rating.punctualityRating)} · ${docs.length} document${docs.length === 1 ? "" : "s"}</span>
+      <span>${planned ? `Planned Absence ${formatDateOnly(planned.startDate)}` : "No upcoming Planned Absence"} · ${escapeHtml(signInLabel)}</span>
+    </div>
+    <div class="company-project-worker-actions">
+      <button class="secondary-btn" type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">View Profile</button>
+      <button class="secondary-btn" type="button" data-worker-calendar="${worker.id}">Calendar</button>
+      <button class="secondary-btn" type="button" data-worker-release="${job.id}">Release / Replace</button>
+      <button class="secondary-btn" type="button" data-project-transfer="${job.id}">Offer Transfer</button>
+      <button class="secondary-btn" type="button" data-shift-change="${job.id}">Shift Change</button>
+    </div>
+  </div>`;
+}
+
+function companyProjectRequirementsHTML(job, summary) {
+  const pendingRows = summary.pendingOffers.length
+    ? summary.pendingOffers
+        .map((app) => {
+          const worker = applicationWorker(app);
+          return `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || worker?.name || "Worker")}</span><strong>${escapeHtml(offerExpiryLabel(app))}</strong></div>`;
+        })
+        .join("")
+    : `<div class="att-empty">No pending offers for this project.</div>`;
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Labour Requirement</h4>
+        <div class="company-project-mini-row"><span>Role / trade</span><strong>${escapeHtml(job.trade || "Labour")}</strong></div>
+        <div class="company-project-mini-row"><span>Specialism</span><strong>${escapeHtml(job.specialism || job.grade || "Not specified")}</strong></div>
+        <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
+        <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
+        <div class="company-project-mini-row"><span>Open</span><strong>${summary.openRoles}</strong></div>
+        <div class="company-project-worker-actions">
+          <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Workers</button>
+          <button class="secondary-btn" type="button" data-labour-adjust="${job.id}">Increase / Decrease</button>
         </div>
       </div>
-    </section>`;
+      <div class="company-project-section">
+        <h4>Pending Offers</h4>
+        ${pendingRows}
+      </div>
+    </div>`;
+}
+
+function companyProjectAttendanceHTML(job, summary) {
+  const lateRows = summary.todayRecords.filter((rec) => rec.lateReport);
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Today</h4>
+        <div class="company-project-mini-row"><span>Expected today</span><strong>${summary.expectedToday}</strong></div>
+        <div class="company-project-mini-row"><span>Signed in</span><strong>${summary.signedInToday}</strong></div>
+        <div class="company-project-mini-row"><span>Attendance confirmed</span><strong>${summary.confirmedToday}</strong></div>
+        <div class="company-project-mini-row"><span>Late reports</span><strong>${summary.lateReports}</strong></div>
+        <div class="company-project-mini-row"><span>No-shows</span><strong>${summary.noShows}</strong></div>
+        <div class="company-project-worker-actions">
+          <button class="secondary-btn" type="button" data-project-attendance>Open Attendance</button>
+        </div>
+      </div>
+      <div class="company-project-section">
+        <h4>QR / Manual Backup</h4>
+        <div class="company-project-mini-row"><span>QR sign-in</span><strong>${summary.signedInToday}/${summary.expectedToday}</strong></div>
+        <div class="company-project-mini-row"><span>Manual override</span><strong>Available in Attendance</strong></div>
+        ${
+          lateRows.length
+            ? lateRows.map((rec) => `<div class="company-project-mini-row"><span>${escapeHtml(findWorker(rec.workerId)?.name || "Worker")}</span><strong>${escapeHtml(rec.lateReport.reason || "Late report")}</strong></div>`).join("")
+            : `<div class="att-empty">No late reports today.</div>`
+        }
+      </div>
+    </div>`;
+}
+
+function companyProjectDocumentsHTML(job, summary) {
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Pre-start Documents</h4>
+        ${companyPreStartJobPanelHTML(job)}
+      </div>
+      <div class="company-project-section">
+        <h4>Worker Acknowledgements</h4>
+        <div class="company-project-mini-row"><span>Outstanding acknowledgements</span><strong>${summary.outstandingPreStart}</strong></div>
+        ${summary.assignedWorkers.length ? summary.assignedWorkers.map((worker) => {
+          const req = preStartRequirementSummary(job, worker.id);
+          return `<div class="company-project-mini-row"><span>${escapeHtml(worker.name)}</span><strong>${req.outstanding.length ? `${req.outstanding.length} outstanding` : "Complete"}</strong></div>`;
+        }).join("") : `<div class="att-empty">No assigned workers yet.</div>`}
+      </div>
+    </div>`;
+}
+
+function companyProjectSiteInfoHTML(job) {
+  const photoMeta = job.sitePhotoMeta || {};
+  const photoRows = Object.values(photoMeta).length
+    ? Object.values(photoMeta)
+        .map((photo) => `<div class="company-project-mini-row"><span>${escapeHtml(photo.label || photo.photoType || "Site photo")}</span><strong>${escapeHtml(photo.fileName || "Photo added")}</strong></div>`)
+        .join("")
+    : `<div class="att-empty">No site photo metadata added.</div>`;
+  return `
+    <div class="company-project-detail-grid">
+      <div class="company-project-section">
+        <h4>Site Address &amp; Access</h4>
+        ${buildSiteInfoHtml(job) || `<div class="att-empty">No site information added.</div>`}
+        ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Open Site Map</button>` : ""}
+      </div>
+      <div class="company-project-section">
+        <h4>Photos &amp; Responsibility</h4>
+        ${photoRows}
+        <div class="company-project-mini-row"><span>Attendance responsibility</span><strong>${job.attendanceManager?.name ? `Manager: ${escapeHtml(job.attendanceManager.name)}` : "Company / manual setup"}</strong></div>
+      </div>
+    </div>`;
 }
 
 function renderContractorHome(user) {
   const el = document.getElementById("tab-dashboard");
   if (!el) return;
 
-  const today = todayDateStr();
-  const todayRecs = attendanceRecords.filter(
-    (r) => r.date === today && r.companyId === user.id,
-  );
-  const att = {
-    on: todayRecs.filter((r) => r.status === "onTime").length,
-    late: todayRecs.filter((r) => r.status === "late").length,
-    ns: todayRecs.filter((r) => r.status === "noShow").length,
-  };
-
-  const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
-  const activeJobs = companyJobs.filter((j) => !j.completed);
+  const summary = companyDashboardSummary(user);
+  const { companyJobs, activeJobs } = summary;
   if (
     activeCompanyProjectId &&
     !companyJobs.some((job) => job.id === activeCompanyProjectId)
@@ -7277,40 +7402,61 @@ function renderContractorHome(user) {
     ? activeJobs
         .map((job) => companyProjectCardHTML(job, user))
         .join("")
-    : `<div class="att-empty">No active projects yet — use the Requests tab to post one.</div>`;
+    : `<div class="att-empty">No active projects yet — use Request Labour to post one.</div>`;
 
   const companyName = user.companyName || user.name || "Company";
+  const issueCards = [
+    ["Late reports", summary.lateReports, "Open Attendance", "attendance"],
+    ["Planned absences", summary.plannedAbsences, "Review Projects", "jobs"],
+    ["Replacements needed", summary.replacements, "Review Projects", "jobs"],
+    ["Pre-start outstanding", summary.outstandingPreStart, "Review Documents", "jobs"],
+  ];
 
   el.innerHTML = `
-    <div class="ch-greeting">Welcome back, <strong>${escapeHtml(companyName.split(" ")[0])}</strong></div>
-    <button class="ch-request-btn" type="button" id="chRequestBtn">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Request Labour
-    </button>
-    <div class="ch-att-bar">
-      <div class="ch-att-item on-time"><span class="ch-att-num">${att.on}</span><span class="ch-att-lbl">On Time</span></div>
-      <div class="ch-att-item late"><span class="ch-att-num">${att.late}</span><span class="ch-att-lbl">Late</span></div>
-      <div class="ch-att-item no-show"><span class="ch-att-num">${att.ns}</span><span class="ch-att-lbl">No Show</span></div>
-    </div>
-    ${companyLateReportPanelHTML(user)}
-    <div class="ch-section-label">Projects</div>
-    ${
-      activeJobs.some((job) => job.assignedWorkerId)
-        ? `<div class="protection-banner company-project-protection">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <span><strong>OnSite Protected Booking:</strong> If a booking is cancelled within ${PROTECTION_WINDOW_DAYS} working days of the start date, the worker will receive 1 day's pay at the agreed rate.</span>
-    </div>`
-        : ""
-    }
-    <div class="company-project-grid">${projectCards}</div>
-    ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}
-    ${companyPlannedAbsencePanelHTML(user)}
-    ${companyPreferredWorkersPanelHTML(user)}
-    ${companyPreStartPanelHTML(user)}
-    ${companyOfferReviewPanelHTML(user)}
-    ${companyReplacementPanelHTML(user)}
-    ${extensionPanelHTML(user.id)}
-    ${companyAgreementPanelHTML(user)}`;
+    <section class="company-home">
+      <div class="company-home-head">
+        <div>
+          <div class="company-home-kicker">Company Home</div>
+          <h2>${escapeHtml(companyName)}</h2>
+          <p>Active labour, attendance, approvals, and site readiness in one place.</p>
+        </div>
+        <button class="ch-request-btn company-home-request" type="button" id="chRequestBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Request Labour
+        </button>
+      </div>
+      <div class="company-command-grid">
+        <div class="company-command-card"><span>Active projects</span><strong>${summary.activeProjects}</strong></div>
+        <div class="company-command-card"><span>Workers expected today</span><strong>${summary.workersExpected}</strong></div>
+        <div class="company-command-card"><span>Attendance confirmed</span><strong>${summary.attendanceConfirmed}</strong></div>
+        <div class="company-command-card"><span>Open labour requirements</span><strong>${summary.openRequirements}</strong></div>
+        <div class="company-command-card"><span>Pending offers / approvals</span><strong>${summary.pendingActions}</strong></div>
+      </div>
+      <div class="company-home-section">
+        <div class="company-home-section-head">
+          <h3>Issues requiring attention</h3>
+        </div>
+        <div class="company-issue-grid">
+          ${issueCards
+            .map(
+              ([label, count, action, tab]) => `<button class="company-issue-card${count ? " has-issues" : ""}" type="button" data-tab="${tab}">
+                <span>${escapeHtml(label)}</span>
+                <strong>${count}</strong>
+                <small>${escapeHtml(count ? action : "Clear")}</small>
+              </button>`,
+            )
+            .join("")}
+        </div>
+      </div>
+      <div class="company-home-section">
+        <div class="company-home-section-head">
+          <h3>Active projects</h3>
+          <button class="secondary-btn" type="button" data-tab="jobs">View all</button>
+        </div>
+        <div class="company-project-grid">${projectCards}</div>
+      </div>
+      ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}
+    </section>`;
 
   document
     .getElementById("chRequestBtn")
@@ -7326,6 +7472,232 @@ function renderContractorHome(user) {
   bindMobileDailyJobButtons(el);
   bindLabourAdjustButtons(el);
   bindCompanyProjectDashboardButtons(el);
+  el.querySelectorAll("[data-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+}
+
+function renderCompanyProjectsPage(user) {
+  const el = document.getElementById("jobsList");
+  if (!el) return;
+  const title = document.querySelector("#tab-jobs .panel-title");
+  const subtitle = document.querySelector("#tab-jobs .panel-subtitle");
+  if (title) title.textContent = "Projects";
+  if (subtitle) subtitle.textContent = "Project-first view of your labour requests";
+  const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
+  const activeJobs = companyJobs.filter((j) => !j.completed);
+  const selectedProject = companyJobs.find(
+    (job) => job.id === activeCompanyProjectId,
+  );
+  el.classList.remove("card-list");
+  el.innerHTML = `
+    <div class="company-project-grid">
+      ${
+        activeJobs.length
+          ? activeJobs.map((job) => companyProjectCardHTML(job, user)).join("")
+          : `<div class="att-empty">No active projects yet — use Request Labour from the dashboard to post one.</div>`
+      }
+    </div>
+    ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}`;
+  bindCompanyProjectDashboardButtons(el);
+  bindCompanyOfferButtons(el);
+  bindWorkerReleaseButtons(el);
+  bindAgreementOpeners(el);
+  bindProjectTransferButtons(el);
+  bindShiftChangeButtons(el);
+  bindPreStartDocumentButtons(el);
+  bindMobileDailyJobButtons(el);
+  bindLabourAdjustButtons(el);
+  el.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
+}
+
+function renderCompanyWorkerDirectory(user) {
+  const title = document.querySelector("#tab-workers .panel-title");
+  const subtitle = document.querySelector("#tab-workers .panel-subtitle");
+  const dupe = document.getElementById("adminDupeReview");
+  if (title) title.textContent = "Workers";
+  if (subtitle)
+    subtitle.textContent =
+      "Assigned, preferred, and previous workers linked to your projects";
+  if (dupe) dupe.innerHTML = "";
+  const list = document.getElementById("workersList");
+  const empty = document.getElementById("workersEmpty");
+  if (!list) return;
+
+  const query = (workerSearch?.value || "").trim().toLowerCase();
+  const companyJobs = state.jobs.filter((job) => companyOwnsJob(job, user.id));
+  const assignedIds = new Set(
+    companyJobs.map((job) => job.assignedWorkerId).filter(Boolean),
+  );
+  const preferredIds = new Set(
+    preferredWorkersForCompany(user.id).map((pref) => pref.workerId),
+  );
+  const previousIds = new Set(
+    (state.applications || [])
+      .filter((app) => app.companyId === user.id && app.workerId)
+      .map((app) => app.workerId),
+  );
+  const rows = state.workers
+    .map((worker) => {
+      const tags = [];
+      if (assignedIds.has(worker.id)) tags.push("Assigned");
+      if (preferredIds.has(worker.id)) tags.push("Preferred");
+      if (!assignedIds.has(worker.id) && previousIds.has(worker.id))
+        tags.push("Previous");
+      return tags.length ? { worker, tags } : null;
+    })
+    .filter(Boolean)
+    .filter(({ worker }) => {
+      const text = [
+        worker.name,
+        worker.trade,
+        worker.grade,
+        worker.qualifications,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = !query || text.includes(query);
+      const matchesFilter =
+        activeFilter === "all"
+          ? true
+          : activeFilter === "available"
+            ? worker.availability === "available"
+            : activeFilter === "elite"
+              ? buildWorkerRating(worker.id).reliabilityRating === "Excellent"
+              : true;
+      return matchesSearch && matchesFilter;
+    });
+
+  if (empty) {
+    empty.style.display = rows.length ? "none" : "block";
+    empty.textContent = query
+      ? "No linked workers match your search."
+      : "No assigned, preferred, or previous workers yet.";
+  }
+  list.classList.remove("card-list");
+  list.innerHTML = rows.length
+    ? `<div class="company-worker-directory">${rows
+        .map(({ worker, tags }) => companyDirectoryWorkerCardHTML(worker, tags))
+        .join("")}</div>`
+    : "";
+
+  list.querySelectorAll("[data-company-worker-profile]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openCompanyWorkerProfileModal(btn.dataset.companyWorkerProfile),
+    );
+  });
+  list.querySelectorAll("[data-worker-calendar]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openWorkerPlannedAbsenceCalendar(btn.dataset.workerCalendar),
+    );
+  });
+  list.querySelectorAll("[data-preferred-worker]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = togglePreferredWorker(user.id, btn.dataset.preferredWorker);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast(
+        res.preferred
+          ? `${res.worker.name} added to Preferred Workers`
+          : `${res.worker.name} removed from Preferred Workers`,
+      );
+    });
+  });
+}
+
+function companyDirectoryWorkerCardHTML(worker, tags) {
+  const rating = buildWorkerRating(worker.id);
+  const docCount = workerDocumentsFor(worker).length;
+  const planned = plannedAbsencesForWorker(worker).find(
+    (absence) => dateOnlyMs(absence.endDate) >= dateOnlyMs(todayDateStr()),
+  );
+  const session = getSessionUser();
+  const preferred =
+    session?.type === "company" && isPreferredWorker(session.id, worker.id);
+  return `
+    <article class="company-worker-card">
+      <div class="company-worker-main">
+        <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
+        <div>
+          <div class="company-worker-name">${escapeHtml(worker.name)}</div>
+          <div class="company-worker-meta">${escapeHtml(worker.trade || "Trade not set")}${worker.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</div>
+          <div class="company-worker-tags">
+            ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+            <span>${escapeHtml(worker.availability || "available")}</span>
+            ${planned ? `<span>Planned Absence ${formatDateOnly(planned.startDate)}</span>` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="company-worker-facts">
+        <span>Reliability <strong>${escapeHtml(rating.reliabilityRating)}</strong></span>
+        <span>Punctuality <strong>${escapeHtml(rating.punctualityRating)}</strong></span>
+        <span>Documents <strong>${docCount}</strong></span>
+      </div>
+      <div class="company-project-worker-actions">
+        <button class="secondary-btn" type="button" data-company-worker-profile="${worker.id}">View Profile</button>
+        <button class="secondary-btn" type="button" data-worker-calendar="${worker.id}">Calendar</button>
+        <button class="secondary-btn preferred-worker-btn ${preferred ? "active" : ""}" type="button" data-preferred-worker="${worker.id}">${preferred ? "Preferred" : "Mark Preferred"}</button>
+      </div>
+    </article>`;
+}
+
+function openCompanyWorkerProfileModal(workerId, jobId = "") {
+  const worker = findWorker(workerId);
+  if (!worker) return;
+  const job = jobId ? findJob(jobId) : null;
+  const rating = buildWorkerRating(worker.id);
+  const docs = workerDocumentsFor(worker);
+  const planned = plannedAbsencesForWorker(worker);
+  document.getElementById("companyWorkerProfileModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "companyWorkerProfileModal";
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="planned-calendar-sheet company-worker-profile-sheet" role="dialog" aria-modal="true" aria-label="Worker profile">
+      <div class="planned-calendar-head">
+        <div>
+          <div class="planned-calendar-title">${escapeHtml(worker.name || "Worker")}</div>
+          <div class="planned-calendar-sub">${escapeHtml(worker.trade || "Trade not set")}${worker.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</div>
+        </div>
+        <button class="modal-close-btn" type="button" data-company-worker-profile-close aria-label="Close">×</button>
+      </div>
+      <div class="company-worker-profile-grid">
+        <div class="settings-card"><span>Reliability</span><strong>${escapeHtml(rating.reliabilityRating)}</strong><small>${rating.evidence.attendanceDays} attendance days</small></div>
+        <div class="settings-card"><span>Punctuality</span><strong>${escapeHtml(rating.punctualityRating)}</strong><small>${rating.evidence.reportedLateEvents} reported late events</small></div>
+        <div class="settings-card"><span>Documents</span><strong>${docs.length}</strong><small>${escapeHtml(verificationStatusLabel(worker.workerVerificationStatus))}</small></div>
+        <div class="settings-card"><span>Availability</span><strong>${escapeHtml(worker.availability || "available")}</strong><small>${worker.nextAvailableDate ? `Next ${formatDateOnly(worker.nextAvailableDate)}` : "No next date set"}</small></div>
+      </div>
+      <div class="company-project-section">
+        <h4>Documents &amp; Certifications</h4>
+        ${companyWorkerDocumentsHTML(worker, job)}
+      </div>
+      <div class="company-project-section">
+        <h4>Planned Absence</h4>
+        ${
+          planned.length
+            ? planned
+                .map(
+                  (absence) => `<div class="company-project-mini-row"><span>${formatDateOnly(absence.startDate)}</span><strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Single day"}</strong></div>`,
+                )
+                .join("")
+            : `<div class="att-empty">No Planned Absence added.</div>`
+        }
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("[data-company-worker-profile-close]")?.addEventListener(
+    "click",
+    () => modal.remove(),
+  );
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) modal.remove();
+  });
 }
 
 function companyPreferredWorkersPanelHTML(user) {
@@ -7563,6 +7935,7 @@ function bindCompanyProjectDashboardButtons(scope) {
   scope.querySelectorAll("[data-company-project-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
+      activeCompanyProjectSection = "overview";
       render();
     });
   });
@@ -7583,6 +7956,23 @@ function bindCompanyProjectDashboardButtons(scope) {
   scope.querySelectorAll("[data-worker-calendar]").forEach((btn) => {
     btn.addEventListener("click", () =>
       openWorkerPlannedAbsenceCalendar(btn.dataset.workerCalendar),
+    );
+  });
+  scope.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
+  scope.querySelectorAll("[data-company-project-section]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCompanyProjectSection = btn.dataset.companyProjectSection || "overview";
+      render();
+    });
+  });
+  scope.querySelectorAll("[data-company-worker-profile]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openCompanyWorkerProfileModal(
+        btn.dataset.companyWorkerProfile,
+        btn.dataset.companyWorkerJob,
+      ),
     );
   });
 }
@@ -7622,6 +8012,7 @@ function renderContractorAccount(user) {
   const el = document.getElementById("accountContent");
   if (!el) return;
   const billing = getCompanyBilling(user.id);
+  const companyJobs = state.jobs.filter((job) => companyOwnsJob(job, user.id));
 
   const ini = (user.name || "C")
     .trim()
@@ -7642,14 +8033,18 @@ function renderContractorAccount(user) {
       <div class="prof-section-title">Account Details</div>
       <div class="prof-fields">
         <div class="prof-field"><div class="prof-field-label">Contact Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Company</div><div class="prof-field-val">${escapeHtml(user.companyName || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Registered Company Name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Trading Name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Registered Address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Company</div></div>
         <div class="prof-field"><div class="prof-field-label">Company Number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">VAT Registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
         <div class="prof-field"><div class="prof-field-label">VAT Number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Payment Contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Accounts Email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Accounts Phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Company Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.companyVerificationStatus || user.verificationStatus || "pending"))}</div></div>
         <div class="prof-field"><div class="prof-field-label">VAT Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.vatVerificationStatus || "unverified"))}</div></div>
       </div>
@@ -7657,8 +8052,17 @@ function renderContractorAccount(user) {
     <div class="prof-section">
       <div class="prof-section-title">Activity</div>
       <div class="prof-stats-grid">
-        <div class="prof-stat"><div class="prof-stat-val">${state.jobs.length}</div><div class="prof-stat-lbl">Requests Posted</div></div>
-        <div class="prof-stat"><div class="prof-stat-val">${state.jobs.filter((j) => j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${companyJobs.length}</div><div class="prof-stat-lbl">Requests Posted</div></div>
+        <div class="prof-stat"><div class="prof-stat-val">${companyJobs.filter((j) => j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
+      </div>
+    </div>
+    <div class="prof-section">
+      <div class="prof-section-title">Settings &amp; Support</div>
+      <div class="prof-fields">
+        <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Privacy &amp; Security</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Placeholder</div></div>
       </div>
     </div>
     ${companyBillingSection(user)}
@@ -8307,7 +8711,8 @@ function render() {
     renderWorkerProfile(user);
   } else if (role === "company") {
     renderContractorHome(user);
-    renderWorkers();
+    renderCompanyProjectsPage(user);
+    renderCompanyWorkerDirectory(user);
     renderAttendance();
     renderContractorAccount(user);
     renderJobPreferredWorkerChoices(user);
