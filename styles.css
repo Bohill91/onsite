@@ -2319,6 +2319,182 @@ margin-bottom: 12px;
 }
 .wh-signin-btn:hover { background: var(--orange-dark); }
 
+.wh-signin-actions {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.worker-home-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.worker-home-topbar {
+  position: relative;
+}
+
+.worker-bell-btn {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.worker-bell-btn strong {
+  align-items: center;
+  background: var(--orange);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.75rem;
+  justify-content: center;
+  min-width: 22px;
+  padding: 2px 6px;
+}
+
+.worker-notification-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  margin: 10px 0 14px;
+  padding: 10px;
+}
+
+.worker-notification-row {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  padding: 10px 4px;
+}
+
+.worker-notification-row:last-child { border-bottom: none; }
+
+.worker-notification-row strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.worker-notification-row span {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  margin: 12px 0;
+  padding: 14px;
+}
+
+.worker-daily-card {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.worker-daily-card--warn {
+  border-color: rgba(220, 38, 38, 0.28);
+}
+
+.worker-daily-kicker {
+  color: var(--ink-2);
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.worker-daily-card strong {
+  color: var(--ink);
+  display: block;
+  font-size: 1.05rem;
+  margin-top: 3px;
+}
+
+.worker-daily-card small,
+.worker-flow-meta,
+.worker-flow-note {
+  color: var(--ink-2);
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 3px;
+}
+
+.worker-daily-empty {
+  text-align: left;
+}
+
+.worker-page {
+  display: grid;
+  gap: 16px;
+}
+
+.worker-page-section {
+  display: grid;
+  gap: 10px;
+}
+
+.worker-section-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.worker-section-head h3 {
+  margin: 0;
+}
+
+.worker-flow-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.worker-flow-card-head h4 {
+  margin: 0;
+}
+
+.worker-flow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.worker-calendar-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.worker-timesheet-panel h3,
+.worker-timesheet-panel h4 {
+  margin-top: 0;
+}
+
 /* ─── Timesheet ─────────────────────────────────────────── */
 .ts-summary {
   background: var(--surface-2);

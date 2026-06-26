@@ -5961,6 +5961,7 @@ const NAV_SM = {
   requests: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
   workforce: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   account: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
+  offers: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
 };
 
 const NAV_LG = Object.fromEntries(
@@ -5972,7 +5973,8 @@ const NAV_LG = Object.fromEntries(
 
 const WORKER_TABS = [
   { id: "dashboard", icon: "home", label: "Home" },
-  { id: "jobs", icon: "jobs", label: "Jobs" },
+  { id: "offers", icon: "offers", label: "Offers" },
+  { id: "calendar", icon: "bookings", label: "Calendar" },
   { id: "attendance", icon: "bookings", label: "Timesheet" },
   { id: "profile", icon: "profile", label: "Profile" },
 ];
@@ -6312,13 +6314,66 @@ function renderWorkerHome(user) {
       <div class="wh-signin-copy">
         <div class="wh-section-label">Site Sign In</div>
         <div class="wh-signin-title">${escapeHtml(booking.trade)} · ${escapeHtml(booking.location)}</div>
-        <div class="wh-signin-sub">Camera scanner-ready sign in for today's site QR code.</div>
+        <div class="wh-signin-sub">Today ${escapeHtml(jobExpectedStartTime(booking))}${booking.shiftFinishTime ? ` to ${escapeHtml(booking.shiftFinishTime)}` : ""} · camera scanner-ready site QR.</div>
       </div>
-      <button class="wh-signin-btn" type="button" data-worker-home-signin="${user.id}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Sign In
-      </button>
+      <div class="wh-signin-actions">
+        <button class="wh-signin-btn" type="button" data-worker-home-signin="${user.id}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Sign In
+        </button>
+        <button class="secondary-btn" type="button" data-worker-home-late="${user.id}">Report Running Late</button>
+      </div>
     </div>`
+      : "";
+  const noAssignmentPanel =
+    !booking
+      ? `<div class="wh-booking-card worker-daily-empty">
+          <div class="wh-booking-label">No current assignment</div>
+          <div class="wh-booking-trade">You are ${isUnavailable ? "unavailable" : "available"} for job offers.</div>
+          <div class="wh-booking-meta">${isUnavailable && nextAvailable ? `Next available ${formatDateOnly(nextAvailable)}` : "Keep your profile ready for new offers."}</div>
+          <button class="secondary-btn wide" type="button" data-tab="calendar">${isUnavailable ? "Update Availability" : "View Calendar"}</button>
+        </div>`
+      : "";
+  const outstandingPreStart = booking
+    ? preStartRequirementSummary(booking, user.id).outstanding.length
+    : 0;
+  const homeNotifications = workerNotificationItems(user, workerProfile, booking);
+  const notificationPanel = `
+    <div class="worker-home-topbar">
+      <button class="worker-bell-btn" type="button" data-worker-notifications>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>Notifications</span>
+        <strong>${homeNotifications.length}</strong>
+      </button>
+    </div>
+    <div class="worker-notification-panel hidden" id="workerNotificationPanel">
+      ${
+        homeNotifications.length
+          ? homeNotifications.map((item) => `<div class="worker-notification-row"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.body)}</span></div>`).join("")
+          : `<div class="att-empty">No important notifications right now.</div>`
+      }
+    </div>`;
+  const homeOffersPanel =
+    activeOffers.length || pendingShiftChangeOffers.length
+      ? `<div class="worker-daily-card">
+          <div>
+            <span class="worker-daily-kicker">Pending offers</span>
+            <strong>${activeOffers.length + pendingShiftChangeOffers.length}</strong>
+            <small>${activeOffers.length ? `${activeOffers.length} job offer${activeOffers.length === 1 ? "" : "s"}` : ""}${pendingShiftChangeOffers.length ? `${activeOffers.length ? " · " : ""}${pendingShiftChangeOffers.length} shift change` : ""}</small>
+          </div>
+          <button class="secondary-btn" type="button" data-tab="offers">Review</button>
+        </div>`
+      : "";
+  const preStartSummaryPanel =
+    outstandingPreStart > 0
+      ? `<div class="worker-daily-card worker-daily-card--warn">
+          <div>
+            <span class="worker-daily-kicker">Pre-start documents</span>
+            <strong>${outstandingPreStart} outstanding</strong>
+            <small>Acknowledge required documents before you start.</small>
+          </div>
+          <button class="secondary-btn" type="button" data-tab="profile">View</button>
+        </div>`
       : "";
   const mobileDailyPanel = booking
     ? dailyMobileJobsPanelHTML(booking, { workerView: true })
@@ -6421,36 +6476,18 @@ function renderWorkerHome(user) {
     <div class="att-empty">No open ${escapeHtml(user.trade || "jobs")} positions right now — check back soon.</div>`;
 
   el.innerHTML = `
-    <div class="wh-greeting">${greet}, <strong>${escapeHtml((user.name || "").split(" ")[0])}</strong> 👋</div>
-    <div class="wh-hero">
-      <div class="wh-hero-left">
-        ${ratingBadgeHTML(rating.reliabilityRating)}
-      </div>
-      <div class="wh-hero-stats">
-        <div class="wh-stat-card">
-          <div class="wh-stat-val">${stats.totalShifts}</div>
-          <div class="wh-stat-lbl">Attendance Days</div>
-        </div>
-        <div class="wh-stat-card">
-          <div class="wh-stat-val wh-stat-rating">${escapeHtml(rating.punctualityRating)}</div>
-          <div class="wh-stat-lbl">Punctuality</div>
-        </div>
-        <div class="wh-stat-card">
-          <div class="wh-stat-val">${daysThisMonth}</div>
-          <div class="wh-stat-lbl">Days This Month</div>
-        </div>
-      </div>
+    <div class="worker-home-head">
+      <div class="wh-greeting">${greet}, <strong>${escapeHtml((user.name || "").split(" ")[0])}</strong></div>
+      ${notificationPanel}
     </div>
-    <div class="wh-rating-evidence">${ratingEvidenceHTML(rating, true)}</div>
     ${availabilityPanel}
-    ${plannedAbsencePanel}
-    ${preStartPanel}
-    ${shiftChangePanel}
-    ${offersPanel}
+    ${homeOffersPanel}
+    ${preStartSummaryPanel}
     ${signInPanel}
+    ${noAssignmentPanel}
     ${mobileDailyPanel}
     ${activeBookingHtml}
-    ${recJobsHtml}`;
+    ${preStartPanel}`;
 
   // Availability toggle
   document.getElementById("whAvailBtn")?.addEventListener("click", () => {
@@ -6586,6 +6623,12 @@ function renderWorkerHome(user) {
       openWorkerQrScanner(btn.dataset.workerHomeSignin, workerProfile || user),
     );
   });
+  el.querySelectorAll("[data-worker-home-late]").forEach((btn) => {
+    btn.addEventListener("click", () => openReportModal(btn.dataset.workerHomeLate));
+  });
+  el.querySelector("[data-worker-notifications]")?.addEventListener("click", () => {
+    document.getElementById("workerNotificationPanel")?.classList.toggle("hidden");
+  });
   el.querySelectorAll("[data-map-job]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -6606,6 +6649,423 @@ function renderWorkerHome(user) {
   });
   bindAgreementOpeners(el);
   bindExtensionButtons(el);
+}
+
+function workerNotificationItems(user, workerProfile, booking) {
+  const items = [];
+  const activeOffers = (state.applications || []).filter(
+    (app) => app.workerId === user.id && app.status === "offered",
+  );
+  activeOffers.forEach((app) => {
+    const job = applicationJob(app);
+    items.push({
+      title: "New offer",
+      body: `${job?.trade || "Job"} · ${job?.location || "Location TBC"} · ${offerExpiryLabel(app)}`,
+    });
+  });
+  (state.applications || [])
+    .filter(
+      (app) =>
+        app.workerId === user.id &&
+        ["under_company_review", "confirmed", "declined_by_worker"].includes(app.status),
+    )
+    .slice(-3)
+    .forEach((app) => {
+      items.push({
+        title: offerStatusLabel(app.status),
+        body: `${app.trade || applicationJob(app)?.trade || "Offer"} · ${app.location || applicationJob(app)?.location || ""}`,
+      });
+    });
+  (workerProfile?.offerNotifications || [])
+    .filter((n) => !n.readAt)
+    .forEach((n) => items.push({ title: "Notification", body: n.message || n.type }));
+  if (booking) {
+    const agr = agreementForJob(booking);
+    if (agr && agreementWorkerState(agr) === "pending_worker") {
+      items.push({
+        title: "Agreement reminder",
+        body: "Review and sign your Job Agreement before QR sign-in becomes active.",
+      });
+    }
+    const preStart = preStartRequirementSummary(booking, user.id);
+    if (preStart.outstanding.length) {
+      items.push({
+        title: "Document reminder",
+        body: `${preStart.outstanding.length} pre-start document${preStart.outstanding.length === 1 ? "" : "s"} outstanding.`,
+      });
+    }
+    const todayLate = attendanceRecords.find(
+      (rec) => rec.workerId === user.id && rec.jobId === booking.id && rec.date === todayDateStr() && rec.lateReport,
+    );
+    if (todayLate?.lateReport?.supervisorDecision) {
+      items.push({
+        title: "Late report response",
+        body: todayLate.lateReport.supervisorDecision.replaceAll("_", " "),
+      });
+    }
+  }
+  const expiringDocs = workerDocumentsFor(workerProfile || user).filter(
+    (doc) => ["expired", "expiring"].includes(workerDocumentExpiryStatus(doc.expiryDate).cls),
+  );
+  if (expiringDocs.length) {
+    items.push({
+      title: "Document reminder",
+      body: `${expiringDocs.length} document${expiringDocs.length === 1 ? "" : "s"} expired or expiring soon.`,
+    });
+  }
+  return items;
+}
+
+function workerOfferDecisionCardHTML(app, user) {
+  const job = applicationJob(app);
+  const pay = job ? workerPayDisplay(job, user) : null;
+  if (!job) return "";
+  const active = app.status === "offered";
+  return `
+    <article class="worker-flow-card">
+      <div class="worker-flow-card-head">
+        <div>
+          <span class="worker-daily-kicker">${active ? "Active offer" : "Offer history"}</span>
+          <h3>${escapeHtml(job.trade || "Job")} · ${escapeHtml(job.location || "Location TBC")}</h3>
+        </div>
+        <strong>${escapeHtml(active ? offerExpiryLabel(app) : offerStatusLabel(app.status))}</strong>
+      </div>
+      <div class="worker-flow-meta">
+        ${job.start ? formatDate(job.start) : "Start date TBC"}
+        ${job.duration ? ` · ${escapeHtml(job.duration)}` : ""}
+        ${pay != null ? ` · ${formatMoney(pay)}/day offered` : ""}
+      </div>
+      <div class="worker-flow-meta">Working days: ${escapeHtml(workingDaysLabel(job))}${weekendRatesLabel(job) ? ` · ${escapeHtml(weekendRatesLabel(job))}` : ""}</div>
+      ${
+        app.workerDeclineReason
+          ? `<div class="worker-flow-note">Decline reason: ${escapeHtml(app.workerDeclineReason)}${app.workerDeclineComment ? ` · ${escapeHtml(app.workerDeclineComment)}` : ""}</div>`
+          : ""
+      }
+      ${
+        active
+          ? `<div class="worker-flow-actions">
+              ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Site Details</button>` : ""}
+              <button class="secondary-btn" type="button" data-worker-offer-decline="${app.id}">Decline</button>
+              <button class="primary-btn" type="button" data-worker-offer-accept="${app.id}">Accept</button>
+            </div>`
+          : ""
+      }
+    </article>`;
+}
+
+function renderWorkerOffersPage(user) {
+  const el = document.getElementById("offersContent");
+  if (!el) return;
+  const apps = (state.applications || [])
+    .filter((app) => app.workerId === user.id)
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt || 0) -
+        new Date(a.updatedAt || a.createdAt || 0),
+    );
+  const active = apps.filter((app) => app.status === "offered");
+  const history = apps.filter((app) => app.status !== "offered").slice(0, 10);
+  const shiftChanges = (state.shiftChangeOffers || []).filter(
+    (offer) => offer.workerId === user.id && offer.status === "offered",
+  );
+  const openJobs = workerOpenJobs(user).slice(0, 8);
+  el.innerHTML = `
+    <div class="worker-page">
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Active offers</h2>
+          <span>${active.length}</span>
+        </div>
+        ${active.length ? active.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : `<div class="att-empty">No active job offers right now.</div>`}
+      </section>
+      ${
+        shiftChanges.length
+          ? `<section class="worker-page-section">
+              <div class="worker-section-head">
+                <h2>Shift change offers</h2>
+                <span>${shiftChanges.length}</span>
+              </div>
+              ${shiftChanges
+                .map((offer) => {
+                  const job = findJob(offer.jobId);
+                  return `<article class="worker-flow-card">
+                    <div class="worker-flow-card-head">
+                      <div>
+                        <span class="worker-daily-kicker">Shift change</span>
+                        <h3>${escapeHtml(job?.trade || "Assignment")} · ${escapeHtml(job?.location || "")}</h3>
+                      </div>
+                      <strong>Decision needed</strong>
+                    </div>
+                    <div class="worker-flow-meta">${escapeHtml(offer.proposedShiftPattern || "Shift")} · ${escapeHtml(offer.proposedShiftStartTime)} to ${escapeHtml(offer.proposedShiftFinishTime)}${offer.effectiveDate ? ` · from ${formatDateOnly(offer.effectiveDate)}` : ""}</div>
+                    <div class="worker-flow-actions">
+                      <button class="secondary-btn" type="button" data-shift-change-decline="${offer.id}">Decline</button>
+                      <button class="primary-btn" type="button" data-shift-change-accept="${offer.id}">Accept</button>
+                    </div>
+                  </article>`;
+                })
+                .join("")}
+            </section>`
+          : ""
+      }
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Open opportunities</h2>
+          <span>${openJobs.length}</span>
+        </div>
+        ${openJobs.length ? openJobs.map((job) => workerJobCard(job, user)).join("") : `<div class="att-empty">No open jobs matching your trade right now.</div>`}
+      </section>
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Previous offers</h2>
+          <span>${history.length}</span>
+        </div>
+        ${history.length ? history.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : `<div class="att-empty">No previous offers yet.</div>`}
+      </section>
+    </div>`;
+  bindWorkerOfferButtons(el);
+  bindWorkerJobBoardButtons(el, user);
+}
+
+function workerOpenJobs(user) {
+  const trade = canonicalTrade(user?.trade);
+  return [...state.jobs]
+    .filter(
+      (job) =>
+        !job.assignedWorkerId &&
+        !job.completed &&
+        (!trade || canonicalTrade(job.trade) === trade),
+    )
+    .sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0));
+}
+
+function bindWorkerOfferButtons(scope) {
+  scope.querySelectorAll("[data-worker-offer-accept]").forEach((btn) => {
+    btn.addEventListener("click", () => workerAcceptOffer(btn.dataset.workerOfferAccept));
+  });
+  scope.querySelectorAll("[data-worker-offer-decline]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      openOfferDecisionModal("worker", btn.dataset.workerOfferDecline),
+    );
+  });
+  scope.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
+  scope.querySelectorAll("[data-shift-change-accept]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Shift change accepted");
+    });
+  });
+  scope.querySelectorAll("[data-shift-change-decline]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveAndRender();
+      showToast("Shift change declined");
+    });
+  });
+}
+
+function bindWorkerJobBoardButtons(scope, user) {
+  scope.querySelectorAll("[data-apply-job]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const result = registerInterest(btn.dataset.applyJob, user);
+      if (!result.ok) {
+        showToast(result.reason);
+        return;
+      }
+      showToast(
+        result.duplicate
+          ? "You've already registered interest in this job."
+          : "Your interest has been registered — you'll be contacted shortly.",
+      );
+    });
+  });
+  scope.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+  });
+}
+
+function renderWorkerCalendarPage(user) {
+  const el = document.getElementById("calendarContent");
+  if (!el) return;
+  const workerProfile = findWorker(user.id) || ensureWorkerProfileForUser(user);
+  const plannedAbsences = plannedAbsencesForWorker(workerProfile || user);
+  const unavailableDates = plannedAbsenceDateSet(plannedAbsences);
+  const todayMs = dateOnlyMs(todayDateStr());
+  const days = Array.from({ length: 35 }, (_, i) => {
+    const iso = new Date(todayMs + i * 86400000).toISOString().slice(0, 10);
+    return { iso, unavailable: unavailableDates.has(iso) };
+  });
+  const commitments = state.jobs.filter((job) => job.assignedWorkerId === user.id && !job.completed);
+  el.innerHTML = `
+    <div class="worker-page">
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Availability</h2>
+          <span>${escapeHtml(user.availability || "available")}</span>
+        </div>
+        ${workerAvailabilityControlsHTML(user)}
+      </section>
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Planned Absence</h2>
+          <span>${plannedAbsences.length}</span>
+        </div>
+        ${workerPlannedAbsenceFormHTML(plannedAbsences)}
+      </section>
+      <section class="worker-page-section">
+        <div class="planned-calendar-grid worker-calendar-grid">
+          ${days
+            .map(
+              (day) => `<div class="planned-calendar-day ${day.unavailable ? "unavailable" : ""}">
+                <span>${new Date(day.iso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" })}</span>
+                <strong>${new Date(day.iso + "T00:00:00").getDate()}</strong>
+              </div>`,
+            )
+            .join("")}
+        </div>
+      </section>
+      <section class="worker-page-section">
+        <div class="worker-section-head">
+          <h2>Future project commitments</h2>
+          <span>${commitments.length}</span>
+        </div>
+        ${
+          commitments.length
+            ? commitments.map((job) => `<div class="worker-flow-card"><h3>${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</h3><div class="worker-flow-meta">${job.start ? formatDate(job.start) : "Start TBC"}${job.estimatedEndDate || job.endDate ? ` · ends ${formatDateOnly(job.estimatedEndDate || job.endDate)}` : ""}</div></div>`).join("")
+            : `<div class="att-empty">No future commitments recorded.</div>`
+        }
+      </section>
+    </div>`;
+  bindWorkerAvailabilityControls(el, user);
+  bindWorkerPlannedAbsenceControls(el, user, plannedAbsences);
+}
+
+function workerAvailabilityControlsHTML(user) {
+  const isUnavailable = user.availability === "not available";
+  return `<div class="wh-availability-panel">
+    <div class="wh-availability-main">
+      <button class="wh-avail-btn ${isUnavailable ? "unavailable" : "available"}" id="calendarAvailBtn" type="button">
+        <span class="wh-avail-dot"></span>
+        ${isUnavailable ? "Unavailable" : "Available"}
+      </button>
+      <label class="wh-next-date">
+        <span>Next Available Date</span>
+        <input id="calendarNextAvailableDate" type="date" value="${escapeHtml(formatDateInput(user.nextAvailableDate))}" />
+      </label>
+      <button class="wh-next-save" id="calendarNextAvailableSave" type="button">Save</button>
+    </div>
+    ${isUnavailable ? `<div class="wh-unavailable-note">You’re currently unavailable. Toggle to available when you’re ready to start receiving job offers.</div>` : ""}
+  </div>`;
+}
+
+function workerPlannedAbsenceFormHTML(plannedAbsences) {
+  return `<div class="wh-planned-panel">
+    <div class="wh-planned-form">
+      <input id="calAbsenceEditId" type="hidden" value="" />
+      <label class="wh-next-date"><span>Start Date</span><input id="calAbsenceStart" type="date" /></label>
+      <label class="wh-next-date"><span>End Date</span><input id="calAbsenceEnd" type="date" /></label>
+      <button class="wh-next-save" id="calAbsenceSave" type="button">Add</button>
+      <button class="wh-planned-cancel hidden" id="calAbsenceCancel" type="button">Cancel</button>
+    </div>
+    <div class="wh-planned-warning hidden" id="calAbsenceWarning">
+      This planned absence is inside the 5 working day notice period. Please inform your site supervisor directly as soon as possible.
+    </div>
+    ${
+      plannedAbsences.length
+        ? `<div class="wh-planned-list">${plannedAbsences
+            .map(
+              (absence) => `<div class="wh-planned-row">
+                <div><span>${formatDateOnly(absence.startDate)}</span><strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Unavailable"}</strong></div>
+                <div class="wh-planned-actions">
+                  <button type="button" data-cal-absence-edit="${absence.id}">Edit</button>
+                  <button type="button" data-cal-absence-remove="${absence.id}">Remove</button>
+                </div>
+              </div>`,
+            )
+            .join("")}</div>`
+        : `<div class="att-empty">No Planned Absence added.</div>`
+    }
+  </div>`;
+}
+
+function bindWorkerAvailabilityControls(scope, user) {
+  scope.querySelector("#calendarAvailBtn")?.addEventListener("click", () => {
+    const nextAvailability =
+      user.availability === "not available" ? "available" : "not available";
+    if (nextAvailability === "available") {
+      alert(
+        "By marking yourself as available, you may receive job offers from contractors. If you are currently in work/unavailable, set yourself to unavailable until you are ready for a new assignment.",
+      );
+    }
+    const nextDate = scope.querySelector("#calendarNextAvailableDate")?.value || "";
+    updateWorkerAvailability(user.id, nextAvailability, nextDate);
+    render();
+    showToast(`Status set to ${nextAvailability}`);
+  });
+  scope.querySelector("#calendarNextAvailableSave")?.addEventListener("click", () => {
+    const nextDate = scope.querySelector("#calendarNextAvailableDate")?.value || "";
+    updateWorkerAvailability(user.id, user.availability || "available", nextDate);
+    render();
+    showToast("Next available date saved");
+  });
+}
+
+function bindWorkerPlannedAbsenceControls(scope, user, plannedAbsences) {
+  const updateWarning = () => {
+    const startDate = scope.querySelector("#calAbsenceStart")?.value || "";
+    scope
+      .querySelector("#calAbsenceWarning")
+      ?.classList.toggle("hidden", !plannedAbsenceInsideNotice(startDate));
+  };
+  scope.querySelector("#calAbsenceStart")?.addEventListener("change", updateWarning);
+  scope.querySelector("#calAbsenceSave")?.addEventListener("click", () => {
+    const editId = scope.querySelector("#calAbsenceEditId")?.value || "";
+    const startDate = scope.querySelector("#calAbsenceStart")?.value || "";
+    const endDate = scope.querySelector("#calAbsenceEnd")?.value || "";
+    const res = upsertWorkerPlannedAbsence(user.id, editId, startDate, endDate);
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    const warning = plannedAbsenceNoticeMessage(res.absence);
+    render();
+    if (warning) alert(warning);
+    showToast(editId ? "Planned Absence updated" : "Planned Absence added");
+  });
+  scope.querySelector("#calAbsenceCancel")?.addEventListener("click", () => render());
+  scope.querySelectorAll("[data-cal-absence-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const absence = plannedAbsences.find((a) => a.id === btn.dataset.calAbsenceEdit);
+      if (!absence) return;
+      scope.querySelector("#calAbsenceEditId").value = absence.id;
+      scope.querySelector("#calAbsenceStart").value = absence.startDate;
+      scope.querySelector("#calAbsenceEnd").value = absence.endDate;
+      scope.querySelector("#calAbsenceSave").textContent = "Update";
+      scope.querySelector("#calAbsenceCancel")?.classList.remove("hidden");
+      updateWarning();
+    });
+  });
+  scope.querySelectorAll("[data-cal-absence-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const res = removeWorkerPlannedAbsence(user.id, btn.dataset.calAbsenceRemove);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      render();
+      showToast("Planned Absence removed");
+    });
+  });
 }
 
 // Wire any "[data-agr-open]" buttons within a container to open the agreement.
@@ -6852,9 +7312,23 @@ function renderWorkerProfile(user) {
       ${ratingEvidenceHTML(rating)}
     </div>
 
-    ${workerPaymentsSection(user)}
-
     ${agreementHistorySection(state.agreements.filter((a) => a.workerId === user.id))}
+
+    <div class="prof-section">
+      <div class="prof-section-title">Company Reviews</div>
+      <div class="prof-fields">
+        <div class="prof-field"><div class="prof-field-label">Reviews</div><div class="prof-field-val">Placeholder</div></div>
+      </div>
+    </div>
+
+    <div class="prof-section">
+      <div class="prof-section-title">Settings, Privacy &amp; Support</div>
+      <div class="prof-fields">
+        <div class="prof-field"><div class="prof-field-label">Settings</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Privacy</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Placeholder</div></div>
+      </div>
+    </div>
 
     <div class="prof-section">
       <div class="prof-section-title">Account</div>
@@ -8706,7 +9180,8 @@ function render() {
 
   if (role === "worker") {
     renderWorkerHome(user);
-    renderWorkerJobBoard(user);
+    renderWorkerOffersPage(user);
+    renderWorkerCalendarPage(user);
     renderWorkerAttendance(user);
     renderWorkerProfile(user);
   } else if (role === "company") {
@@ -11248,11 +11723,38 @@ function renderWorkerTimesheet(uid, user, histEl) {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const stats = getWorkerStats(uid);
+  const currentAssignment = state.jobs.find((job) => job.assignedWorkerId === uid && !job.completed);
+  const lateReports = myRecs.filter((rec) => rec.lateReport);
+  const confirmedDays = myRecs.filter((rec) => rec.supervisorConfirmed || ["onTime", "late", "noShow"].includes(rec.status));
 
   const tsHeader = document.querySelector("#tab-attendance .ts-header");
+  const assignmentPanel = `
+    <div class="worker-timesheet-panel">
+      <div class="worker-section-head">
+        <h2>Current assignment</h2>
+        <span>${currentAssignment ? "Active" : "None"}</span>
+      </div>
+      ${
+        currentAssignment
+          ? `<div class="worker-flow-card">
+              <h3>${escapeHtml(currentAssignment.trade)} · ${escapeHtml(currentAssignment.location)}</h3>
+              <div class="worker-flow-meta">${currentAssignment.start ? formatDate(currentAssignment.start) : "Start TBC"} · ${escapeHtml(jobExpectedStartTime(currentAssignment))}${currentAssignment.shiftFinishTime ? ` to ${escapeHtml(currentAssignment.shiftFinishTime)}` : ""}</div>
+              <div class="worker-flow-actions">
+                <button class="secondary-btn" type="button" data-map-job="${currentAssignment.id}">Site Details</button>
+              </div>
+            </div>`
+          : `<div class="att-empty">No active assignment. New confirmed work will appear here.</div>`
+      }
+    </div>`;
 
   if (!myRecs.length) {
-    histEl.innerHTML = `<div class="att-empty">No attendance history yet — mark your first day above.</div>`;
+    histEl.innerHTML =
+      assignmentPanel +
+      `<div class="att-empty">No attendance history yet — mark your first day above.</div>` +
+      workerPaymentsSection(user);
+    histEl.querySelectorAll("[data-map-job]").forEach((btn) => {
+      btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+    });
     return;
   }
 
@@ -11277,6 +11779,14 @@ function renderWorkerTimesheet(uid, user, histEl) {
       <div class="ts-summary-item">
         <div class="ts-summary-val">${stats.noShow}</div>
         <div class="ts-summary-lbl">No Shows</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${lateReports.length}</div>
+        <div class="ts-summary-lbl">Late Reports</div>
+      </div>
+      <div class="ts-summary-item">
+        <div class="ts-summary-val">${confirmedDays.length}</div>
+        <div class="ts-summary-lbl">Confirmed</div>
       </div>
     </div>`;
 
@@ -11329,13 +11839,31 @@ function renderWorkerTimesheet(uid, user, histEl) {
     })
     .join("");
 
-  histEl.innerHTML = summaryBar + `<div class="ts-rows">${rows}</div>`;
+  const lateReportRows = lateReports.length
+    ? `<div class="worker-timesheet-panel">
+        <div class="worker-section-head"><h2>Late reports submitted</h2><span>${lateReports.length}</span></div>
+        ${lateReports
+          .slice(0, 5)
+          .map((rec) => `<div class="worker-flow-card"><h3>${formatAttDate(rec.date)}</h3><div class="worker-flow-meta">${escapeHtml(rec.lateReport.reason || "Other")} · ETA ${escapeHtml(rec.lateReport.estimatedArrivalTime || "—")}${rec.lateReport.supervisorDecision ? ` · ${escapeHtml(LATE_CLASSIFICATION[rec.lateReport.supervisorDecision] || rec.lateReport.supervisorDecision)}` : ""}</div></div>`)
+          .join("")}
+      </div>`
+    : "";
+
+  histEl.innerHTML =
+    assignmentPanel +
+    summaryBar +
+    `<div class="ts-rows">${rows}</div>` +
+    lateReportRows +
+    workerPaymentsSection(user);
 
   // Wire dispute buttons for workers
   histEl.querySelectorAll("[data-dispute-record]").forEach((btn) => {
     btn.addEventListener("click", () =>
       openDisputeModal(btn.dataset.disputeRecord),
     );
+  });
+  histEl.querySelectorAll("[data-map-job]").forEach((btn) => {
+    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
   });
 }
 
