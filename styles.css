@@ -6679,9 +6679,21 @@ margin-bottom: 12px;
 }
 
 .labour-request-modal {
+  align-items: center;
+  display: flex;
   inset: 0;
+  justify-content: center;
+  padding: 24px;
   position: fixed;
   z-index: 1000;
+}
+
+.labour-request-modal.hidden {
+  display: none;
+}
+
+body.modal-open {
+  overflow: hidden;
 }
 
 .labour-request-backdrop {
@@ -6692,17 +6704,14 @@ margin-bottom: 12px;
 
 .labour-request-sheet {
   background: var(--surface);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  bottom: 0;
-  box-shadow: 0 -18px 48px rgba(15, 23, 42, 0.26);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.26);
   display: flex;
   flex-direction: column;
-  left: 50%;
   max-height: 92vh;
   max-width: 980px;
   overflow: hidden;
-  position: absolute;
-  transform: translateX(-50%);
+  position: relative;
   width: min(100%, 980px);
 }
 
@@ -7055,6 +7064,17 @@ margin-bottom: 12px;
 
   .company-project-page-head {
     justify-content: stretch;
+  }
+
+  .labour-request-modal {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .labour-request-sheet {
+    border-radius: 0;
+    max-height: 100vh;
+    width: 100%;
   }
 
   .prestart-add-form {

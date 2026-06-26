@@ -5906,7 +5906,7 @@ function closeLabourRequestWorkflow() {
   const formWrap = document.getElementById("formJob");
   const returnPoint = document.getElementById("jobFormReturnPoint");
   const modal = document.getElementById("labourRequestModal");
-  if (modal?.classList.contains("hidden") && !(formWrap && modal.contains(formWrap))) return;
+  if (!modal || (modal.classList.contains("hidden") && !(formWrap && modal.contains(formWrap)))) return;
   if (formWrap && returnPoint?.parentElement) {
     formWrap.classList.add("hidden");
     returnPoint.parentElement.insertBefore(formWrap, returnPoint.nextSibling);
@@ -5926,8 +5926,16 @@ document.querySelectorAll("[data-labour-request-close]").forEach((btn) => {
   btn.addEventListener("click", closeLabourRequestWorkflow);
 });
 
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-labour-request-close]")) return;
+  closeLabourRequestWorkflow();
+});
+
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeLabourRequestWorkflow();
+  const modal = document.getElementById("labourRequestModal");
+  if (event.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+    closeLabourRequestWorkflow();
+  }
 });
 
 function updateAssignmentTypeForm() {
