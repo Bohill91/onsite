@@ -5884,6 +5884,52 @@ let activeFilter = "all";
 
 workerSearch.addEventListener("input", () => renderWorkers());
 
+function openLabourRequestWorkflow() {
+  const formWrap = document.getElementById("formJob");
+  const modal = document.getElementById("labourRequestModal");
+  const body = document.getElementById("labourRequestModalBody");
+  if (!formWrap || !modal || !body) {
+    switchTab("add");
+    return;
+  }
+  body.appendChild(formWrap);
+  formWrap.classList.remove("hidden");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  renderJobPreferredWorkerChoices(getSessionUser());
+  updateAssignmentTypeForm();
+  setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
+}
+
+function closeLabourRequestWorkflow() {
+  const formWrap = document.getElementById("formJob");
+  const returnPoint = document.getElementById("jobFormReturnPoint");
+  const modal = document.getElementById("labourRequestModal");
+  if (modal?.classList.contains("hidden") && !(formWrap && modal.contains(formWrap))) return;
+  if (formWrap && returnPoint?.parentElement) {
+    formWrap.classList.add("hidden");
+    returnPoint.parentElement.insertBefore(formWrap, returnPoint.nextSibling);
+  }
+  modal?.classList.add("hidden");
+  modal?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function bindLabourRequestWorkflow(scope = document) {
+  scope.querySelectorAll("[data-company-request-labour]").forEach((btn) => {
+    btn.addEventListener("click", openLabourRequestWorkflow);
+  });
+}
+
+document.querySelectorAll("[data-labour-request-close]").forEach((btn) => {
+  btn.addEventListener("click", closeLabourRequestWorkflow);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeLabourRequestWorkflow();
+});
+
 function updateAssignmentTypeForm() {
   const type = normalizeAssignmentType(
     document.getElementById("jobAssignmentType")?.value,
@@ -6035,7 +6081,7 @@ function applyRoleView(user) {
     // Companies: show job form only, hide worker form and toggle bar
     document.querySelector(".add-toggle")?.classList.add("hidden");
     document.querySelector("#formWorker")?.classList.add("hidden");
-    document.querySelector("#formJob")?.classList.remove("hidden");
+    document.querySelector("#formJob")?.classList.add("hidden");
     // Update the add tab header for companies
     const addTitle = document.querySelector("#tab-add .form-card-header h3");
     const addSub = document.querySelector("#tab-add .form-card-header p");
@@ -7876,7 +7922,13 @@ function renderContractorHome(user) {
     ? activeJobs
         .map((job) => companyProjectCardHTML(job, user))
         .join("")
-    : `<div class="att-empty">No active projects yet — use Request Labour to post one.</div>`;
+    : `<div class="company-empty-card">
+        <div>
+          <strong>No active projects yet</strong>
+          <span>Create your first labour request to start matching workers.</span>
+        </div>
+        <button class="ch-request-btn" type="button" data-company-request-labour>Request Labour</button>
+      </div>`;
 
   const companyName = user.companyName || user.name || "Company";
   const issueCards = [
@@ -7894,7 +7946,7 @@ function renderContractorHome(user) {
           <h2>${escapeHtml(companyName)}</h2>
           <p>Active labour, attendance, approvals, and site readiness in one place.</p>
         </div>
-        <button class="ch-request-btn company-home-request" type="button" id="chRequestBtn">
+        <button class="ch-request-btn company-home-request" type="button" data-company-request-labour>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Request Labour
         </button>
@@ -7932,9 +7984,7 @@ function renderContractorHome(user) {
       ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}
     </section>`;
 
-  document
-    .getElementById("chRequestBtn")
-    ?.addEventListener("click", () => switchTab("add"));
+  bindLabourRequestWorkflow(el);
   bindWorkerReleaseButtons(el);
   bindCancelBookingButtons(el);
   bindAgreementOpeners(el);
@@ -7965,14 +8015,27 @@ function renderCompanyProjectsPage(user) {
   );
   el.classList.remove("card-list");
   el.innerHTML = `
+    <div class="company-project-page-head">
+      <button class="ch-request-btn" type="button" data-company-request-labour>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Request Labour
+      </button>
+    </div>
     <div class="company-project-grid">
       ${
         activeJobs.length
           ? activeJobs.map((job) => companyProjectCardHTML(job, user)).join("")
-          : `<div class="att-empty">No active projects yet — use Request Labour from the dashboard to post one.</div>`
+          : `<div class="company-empty-card">
+              <div>
+                <strong>No active projects yet</strong>
+                <span>Create a labour request to start building your project workforce.</span>
+              </div>
+              <button class="ch-request-btn" type="button" data-company-request-labour>Request Labour</button>
+            </div>`
       }
     </div>
     ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}`;
+  bindLabourRequestWorkflow(el);
   bindCompanyProjectDashboardButtons(el);
   bindCompanyOfferButtons(el);
   bindWorkerReleaseButtons(el);
@@ -8419,7 +8482,7 @@ function bindCompanyProjectDashboardButtons(scope) {
   });
   scope.querySelectorAll("[data-project-request-more]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      switchTab("add");
+      openLabourRequestWorkflow();
       const job = findJob(btn.dataset.projectRequestMore);
       if (job) showToast(`Use this request as the reference for ${job.projectName || job.trade}`);
     });
@@ -9151,6 +9214,7 @@ jobForm.addEventListener("submit", (e) => {
   saveAndRender();
   showToast("Job request posted");
   switchTab("dashboard");
+  closeLabourRequestWorkflow();
 });
 
 resetDemoBtn.addEventListener("click", () => {
@@ -9191,9 +9255,11 @@ function render() {
     renderAttendance();
     renderContractorAccount(user);
     renderJobPreferredWorkerChoices(user);
-    // Company's add tab: show job form only
+    // Company's labour request form is opened from Request Labour buttons only.
     document.querySelector("#formWorker")?.classList.add("hidden");
-    document.querySelector("#formJob")?.classList.remove("hidden");
+    if (!document.getElementById("labourRequestModalBody")?.contains(document.querySelector("#formJob"))) {
+      document.querySelector("#formJob")?.classList.add("hidden");
+    }
   } else {
     renderStats();
     renderActivity();
