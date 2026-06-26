@@ -7937,6 +7937,13 @@ function renderContractorHome(user) {
       </div>`;
 
   const companyName = user.companyName || user.name || "Company";
+  const summaryCards = [
+    ["Active projects", summary.activeProjects],
+    ["Expected today", summary.workersExpected],
+    ["Confirmed today", summary.attendanceConfirmed],
+    ["Open roles", summary.openRequirements],
+    ["Pending approvals", summary.pendingActions],
+  ];
   const issueCards = [
     ["Late reports", summary.lateReports, "Open Attendance", "attendance"],
     ["Planned absences", summary.plannedAbsences, "Review Projects", "jobs"],
@@ -7946,27 +7953,32 @@ function renderContractorHome(user) {
 
   el.innerHTML = `
     <section class="company-home">
-      <div class="company-home-head">
-        <div>
-          <div class="company-home-kicker">Company Home</div>
-          <h2>${escapeHtml(companyName)}</h2>
-          <p>Active labour, attendance, approvals, and site readiness in one place.</p>
+      <div class="company-command-centre">
+        <div class="company-home-head">
+          <div>
+            <div class="company-home-kicker">Company Home</div>
+            <h2>${escapeHtml(companyName)}</h2>
+            <p>Project labour, attendance, approvals, and site readiness at a glance.</p>
+          </div>
+          <button class="ch-request-btn company-home-request" type="button" data-company-request-labour>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Request Labour
+          </button>
         </div>
-        <button class="ch-request-btn company-home-request" type="button" data-company-request-labour>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Request Labour
-        </button>
+        <div class="company-command-grid">
+          ${summaryCards
+            .map(
+              ([label, count]) => `<div class="company-command-card"><span>${escapeHtml(label)}</span><strong>${count}</strong></div>`,
+            )
+            .join("")}
+        </div>
       </div>
-      <div class="company-command-grid">
-        <div class="company-command-card"><span>Active projects</span><strong>${summary.activeProjects}</strong></div>
-        <div class="company-command-card"><span>Workers expected today</span><strong>${summary.workersExpected}</strong></div>
-        <div class="company-command-card"><span>Attendance confirmed</span><strong>${summary.attendanceConfirmed}</strong></div>
-        <div class="company-command-card"><span>Open labour requirements</span><strong>${summary.openRequirements}</strong></div>
-        <div class="company-command-card"><span>Pending offers / approvals</span><strong>${summary.pendingActions}</strong></div>
-      </div>
-      <div class="company-home-section">
+      <div class="company-home-band">
         <div class="company-home-section-head">
-          <h3>Issues requiring attention</h3>
+          <div>
+            <h3>Issues requiring attention</h3>
+            <p>Only showing current items that may need action.</p>
+          </div>
         </div>
         <div class="company-issue-grid">
           ${issueCards
@@ -7980,9 +7992,12 @@ function renderContractorHome(user) {
             .join("")}
         </div>
       </div>
-      <div class="company-home-section">
+      <div class="company-home-band">
         <div class="company-home-section-head">
-          <h3>Active projects</h3>
+          <div>
+            <h3>Active Projects</h3>
+            <p>${activeJobs.length ? `${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}` : "No active projects yet"}</p>
+          </div>
           <button class="secondary-btn" type="button" data-tab="jobs">View all</button>
         </div>
         <div class="company-project-grid">${projectCards}</div>
@@ -8553,8 +8568,10 @@ function companyAgreementPanelHTML(user) {
 function renderContractorAccount(user) {
   const el = document.getElementById("accountContent");
   if (!el) return;
-  const billing = getCompanyBilling(user.id);
-  const companyJobs = state.jobs.filter((job) => companyOwnsJob(job, user.id));
+  const billing = getCompanyBilling(user.id) || {};
+  const companyJobs = (state.jobs || []).filter((job) =>
+    companyOwnsJob(job, user.id),
+  );
   const companyDisplayName =
     user.companyName ||
     user.registeredCompanyName ||
@@ -8581,7 +8598,9 @@ function renderContractorAccount(user) {
     optionalAccountSection(() => companyDocsSection(user)),
     optionalAccountSection(() =>
       agreementHistorySection(
-        state.agreements.filter((a) => a.companyId === user.id || !a.companyId),
+        (state.agreements || []).filter(
+          (a) => a.companyId === user.id || !a.companyId,
+        ),
       ),
     ),
   ].join("");
@@ -8663,7 +8682,7 @@ function companyPreferredAccountSection(user) {
           </div>`,
         )
         .join("")
-    : `<div class="att-empty">No Preferred Workers yet. Add them from the worker roster.</div>`;
+    : `<div class="att-empty">No Preferred Workers yet. Preferred workers added from project worker profiles will appear here.</div>`;
   return `
     <div class="prof-section">
       <div class="prof-section-title">Preferred Workers</div>

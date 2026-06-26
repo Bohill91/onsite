@@ -6609,15 +6609,26 @@ margin-bottom: 12px;
 
 .company-home {
   display: grid;
-  gap: 16px;
+  gap: 18px;
+  margin-inline: auto;
+  max-width: 1180px;
+  width: 100%;
 }
 
 .company-home-head,
 .company-home-section-head {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.company-command-centre,
+.company-home-band {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 16px;
 }
 
 .company-home-kicker {
@@ -6642,6 +6653,13 @@ margin-bottom: 12px;
   margin: 4px 0 0;
 }
 
+.company-home-section-head p {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
 .company-home-request {
   margin: 0;
   width: auto;
@@ -6654,7 +6672,7 @@ margin-bottom: 12px;
 }
 
 .company-empty-card {
-  align-items: center;
+  align-items: flex-start;
   background: var(--surface);
   border: 1px dashed rgba(249, 115, 22, 0.38);
   border-radius: var(--radius-sm);
@@ -6662,7 +6680,8 @@ margin-bottom: 12px;
   gap: 12px;
   grid-column: 1 / -1;
   justify-content: space-between;
-  padding: 16px;
+  min-height: 120px;
+  padding: 20px;
 }
 
 .company-empty-card strong {
@@ -6749,7 +6768,16 @@ body.modal-open {
 .company-issue-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.company-command-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.company-issue-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 12px;
 }
 
 .company-command-card,
@@ -6775,12 +6803,13 @@ body.modal-open {
 .company-issue-card strong {
   color: var(--ink);
   display: block;
-  font-size: 1.45rem;
+  font-size: 1.35rem;
   margin-top: 6px;
 }
 
 .company-issue-card {
   cursor: pointer;
+  min-height: 96px;
   text-align: left;
 }
 
@@ -7064,6 +7093,11 @@ body.modal-open {
 
   .company-project-page-head {
     justify-content: stretch;
+  }
+
+  .company-command-grid,
+  .company-issue-grid {
+    grid-template-columns: 1fr;
   }
 
   .labour-request-modal {
