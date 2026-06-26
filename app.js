@@ -6037,7 +6037,6 @@ const CONTRACTOR_TABS = [
   { id: "dashboard", icon: "home", label: "Home" },
   { id: "jobs", icon: "jobs", label: "Projects" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
-  { id: "workers", icon: "workforce", label: "Workers" },
   { id: "account", icon: "account", label: "Profile" },
 ];
 
@@ -7933,9 +7932,8 @@ function renderContractorHome(user) {
     : `<div class="company-empty-card">
         <div>
           <strong>No active projects yet</strong>
-          <span>Create your first labour request to start matching workers.</span>
+          <span>Use the Request Labour button above to start matching workers.</span>
         </div>
-        <button class="ch-request-btn" type="button" data-company-request-labour>Request Labour</button>
       </div>`;
 
   const companyName = user.companyName || user.name || "Company";
@@ -8036,9 +8034,8 @@ function renderCompanyProjectsPage(user) {
           : `<div class="company-empty-card">
               <div>
                 <strong>No active projects yet</strong>
-                <span>Create a labour request to start building your project workforce.</span>
+                <span>Use the Request Labour button above to start building your project workforce.</span>
               </div>
-              <button class="ch-request-btn" type="button" data-company-request-labour>Request Labour</button>
             </div>`
       }
     </div>
@@ -8558,8 +8555,38 @@ function renderContractorAccount(user) {
   if (!el) return;
   const billing = getCompanyBilling(user.id);
   const companyJobs = state.jobs.filter((job) => companyOwnsJob(job, user.id));
+  const companyDisplayName =
+    user.companyName ||
+    user.registeredCompanyName ||
+    user.tradingName ||
+    user.name ||
+    "Company";
+  const companyVerification = verificationStatusLabel(
+    user.companyVerificationStatus || user.verificationStatus || "pending",
+  );
+  const vatVerification = verificationStatusLabel(
+    user.vatVerificationStatus || "unverified",
+  );
+  const optionalAccountSection = (build) => {
+    try {
+      return build() || "";
+    } catch (err) {
+      console.warn("Company profile optional section failed", err);
+      return "";
+    }
+  };
+  const optionalSections = [
+    optionalAccountSection(() => companyBillingSection(user)),
+    optionalAccountSection(() => companyPreferredAccountSection(user)),
+    optionalAccountSection(() => companyDocsSection(user)),
+    optionalAccountSection(() =>
+      agreementHistorySection(
+        state.agreements.filter((a) => a.companyId === user.id || !a.companyId),
+      ),
+    ),
+  ].join("");
 
-  const ini = (user.name || "C")
+  const ini = (companyDisplayName || "C")
     .trim()
     .split(/\s+/)
     .slice(0, 2)
@@ -8567,11 +8594,11 @@ function renderContractorAccount(user) {
     .join("");
   el.innerHTML = `
     <div class="prof-header">
-      <div class="prof-avatar ${avatarColor(user.name || "C")}">${ini}</div>
+      <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
       <div class="prof-id">
-        <div class="prof-name">${escapeHtml(user.companyName || user.name || "")}</div>
+        <div class="prof-name">${escapeHtml(companyDisplayName)}</div>
         <div class="prof-trade">Company Account</div>
-        <span class="wsc-verify-badge verified">✓ Verified</span>
+        <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
       </div>
     </div>
     <div class="prof-section">
@@ -8590,8 +8617,8 @@ function renderContractorAccount(user) {
         <div class="prof-field"><div class="prof-field-label">Payment Contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Accounts Email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
         <div class="prof-field"><div class="prof-field-label">Accounts Phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Company Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.companyVerificationStatus || user.verificationStatus || "pending"))}</div></div>
-        <div class="prof-field"><div class="prof-field-label">VAT Verification</div><div class="prof-field-val">${escapeHtml(verificationStatusLabel(user.vatVerificationStatus || "unverified"))}</div></div>
+        <div class="prof-field"><div class="prof-field-label">Company Verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
+        <div class="prof-field"><div class="prof-field-label">VAT Verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
       </div>
     </div>
     <div class="prof-section">
@@ -8610,10 +8637,7 @@ function renderContractorAccount(user) {
         <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Placeholder</div></div>
       </div>
     </div>
-    ${companyBillingSection(user)}
-    ${companyPreferredAccountSection(user)}
-    ${companyDocsSection(user)}
-    ${agreementHistorySection(state.agreements.filter((a) => a.companyId === user.id || !a.companyId))}
+    ${optionalSections}
     <button class="ch-logout-btn" type="button" id="accLogoutBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign Out
