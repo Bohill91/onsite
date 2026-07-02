@@ -4954,14 +4954,23 @@ function renderJobPreferredWorkerChoices(user) {
           },
         )
         .join("")
-    : `<div class="preferred-worker-empty">No preferred workers yet. Mark workers as Preferred from a project worker profile to request them first.</div>`;
+    : `<div class="preferred-worker-empty">No previous or preferred workers available yet.</div>`;
 }
 
 document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
   const term = event.target.value.trim().toLowerCase();
-  document.querySelectorAll("[data-preferred-worker-card]").forEach((card) => {
+  const cards = Array.from(document.querySelectorAll("[data-preferred-worker-card]"));
+  cards.forEach((card) => {
     card.classList.toggle("hidden", !!term && !card.dataset.search.includes(term));
   });
+  document.getElementById("jobPreferredWorkerNoResults")?.remove();
+  if (term && cards.length && cards.every((card) => card.classList.contains("hidden"))) {
+    const list = document.getElementById("jobPreferredWorkersList");
+    list?.insertAdjacentHTML(
+      "beforeend",
+      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty">No previous or preferred workers available yet.</div>`,
+    );
+  }
 });
 
 function tryPreferredWorkerOffers(job) {
