@@ -5899,6 +5899,7 @@ function openLabourRequestWorkflow() {
   document.body.classList.add("modal-open");
   renderJobPreferredWorkerChoices(getSessionUser());
   updateAssignmentTypeForm();
+  requestAnimationFrame(() => initPickerMap());
   setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
 }
 
@@ -5962,6 +5963,130 @@ document
   .getElementById("jobNoFixedEndDate")
   ?.addEventListener("change", updateAssignmentTypeForm);
 updateAssignmentTypeForm();
+
+// ─── Multi-trade labour requirement builder (UI only) ─────
+// The backend currently supports ONE labour requirement per request.
+// Added trades are captured as UI summary cards; the first saved card is
+// restored into the builder inputs at submit time so submission behaves
+// exactly as before.
+// TODO: extend the jobForm submit handler to post every requirement in
+// pendingTradeRequirements (e.g. a requirements[] array on the job, or one
+// job per requirement) once the backend supports multiple requirements.
+let pendingTradeRequirements = [];
+
+function readTradeReqInputs() {
+  return {
+    trade: document.getElementById("jobTrade")?.value || "",
+    specialism: document.getElementById("jobSpecialism")?.value || "",
+    grade: document.getElementById("jobGrade")?.value || "",
+    workActivity: document.getElementById("workActivity")?.value.trim() || "",
+    quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
+    requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
+  };
+}
+
+function applyTradeReqToInputs(req) {
+  const tradeSelect = document.getElementById("jobTrade");
+  if (tradeSelect) {
+    tradeSelect.value = req.trade;
+    tradeSelect.dispatchEvent(new Event("change"));
+  }
+  const spec = document.getElementById("jobSpecialism");
+  if (spec) spec.value = req.specialism;
+  const grade = document.getElementById("jobGrade");
+  if (grade) grade.value = req.grade;
+  const act = document.getElementById("workActivity");
+  if (act) act.value = req.workActivity;
+  const qty = document.getElementById("jobQuantity");
+  if (qty) qty.value = String(req.quantity);
+  const quals = document.getElementById("jobReqQuals");
+  if (quals) quals.value = req.requiredQualifications;
+}
+
+function clearTradeReqInputs() {
+  applyTradeReqToInputs({
+    trade: "",
+    specialism: "",
+    grade: "",
+    workActivity: "",
+    quantity: 1,
+    requiredQualifications: "",
+  });
+}
+
+function renderTradeReqCards() {
+  const list = document.getElementById("jobTradeReqList");
+  if (!list) return;
+  list.innerHTML = pendingTradeRequirements
+    .map(
+      (r, i) => `
+    <div class="jw-req-card">
+      <div class="jw-req-main">
+        <div class="jw-req-trade">${escapeHtml(r.trade)}${r.specialism ? ` — ${escapeHtml(r.specialism)}` : ""}</div>
+        ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
+        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}</div>
+      </div>
+      <button type="button" class="jw-req-remove" data-req-remove="${i}" aria-label="Remove requirement">×</button>
+    </div>`,
+    )
+    .join("");
+}
+
+function syncTradeReqBuilderState() {
+  // While saved requirement cards exist the builder inputs may sit empty,
+  // so relax native validation on them; it is restored when the list empties.
+  const hasCards = pendingTradeRequirements.length > 0;
+  ["jobTrade", "jobSpecialism", "workActivity", "jobQuantity", "jobReqQuals"].forEach(
+    (id) => {
+      const el = document.getElementById(id);
+      if (el) el.required = !hasCards;
+    },
+  );
+  renderTradeReqCards();
+}
+
+function resetJobTradeRequirements() {
+  pendingTradeRequirements = [];
+  syncTradeReqBuilderState();
+}
+
+document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
+  const req = readTradeReqInputs();
+  if (!req.trade) return showToast("Select a trade first");
+  if (!req.specialism) return showToast("Select a role / specialism");
+  if (!req.workActivity) return showToast("Enter the work activity");
+  if (!req.requiredQualifications)
+    return showToast("Enter the required qualifications & tickets");
+  pendingTradeRequirements.push(req);
+  clearTradeReqInputs();
+  syncTradeReqBuilderState();
+});
+
+document.getElementById("jobTradeReqList")?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-req-remove]");
+  if (!btn) return;
+  pendingTradeRequirements.splice(Number(btn.dataset.reqRemove), 1);
+  syncTradeReqBuilderState();
+});
+
+// Restore the first saved requirement into the builder inputs when the form
+// submits with incomplete builder fields (their `required` is relaxed while
+// cards exist, so native validation passes). This listener is registered
+// before the main submit handler, so the restored values are what it reads.
+// It runs on the submit event itself, covering button clicks, Enter-key and
+// programmatic submits alike.
+// TODO: submit the remaining requirements once the backend supports multiple.
+function restoreFirstTradeRequirement() {
+  if (!pendingTradeRequirements.length) return;
+  const current = readTradeReqInputs();
+  const incomplete =
+    !current.trade ||
+    !current.specialism ||
+    !current.workActivity ||
+    !current.requiredQualifications;
+  if (incomplete) applyTradeReqToInputs(pendingTradeRequirements[0]);
+}
+jobForm?.addEventListener("submit", restoreFirstTradeRequirement);
 
 document.querySelectorAll(".filter-chip").forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -6176,7 +6301,7 @@ function renderWorkerHome(user) {
       </div>
       <button class="wh-agr-review-btn" type="button" data-agr-open="${bookingAgr.id}">${agrState === "pending_worker" ? "Review & Sign" : "View"}</button>
     </div>`
-	      : "";
+              : "";
   const isUnavailable = user.availability === "not available";
   const nextAvailable = formatDateInput(user.nextAvailableDate);
   const workerProfile = findWorker(user.id) || ensureWorkerProfileForUser(user);
@@ -9075,7 +9200,7 @@ jobForm.addEventListener("submit", (e) => {
     document.querySelector("#attendanceManagerPhone")?.value.trim() || "";
   const trade = document.querySelector("#jobTrade").value.trim();
   const location = document.querySelector("#jobLocation").value.trim();
-  const duration = document.querySelector("#jobDuration").value.trim();
+  const duration = document.querySelector("#jobDuration")?.value.trim() || "";
   const specialism = document.querySelector("#jobSpecialism")?.value || "";
 
   const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
@@ -9247,12 +9372,14 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
+  resetJobTradeRequirements();
 
   // Reset location section
   currentJobPin = { lat: null, lng: null };
   document.querySelector("#pinCoordsDisplay")?.classList.add("hidden");
   document.querySelector("#siteLocFields")?.classList.add("hidden");
-  document.querySelector("#siteLocChevron").style.transform = "";
+  const siteLocChevron = document.querySelector("#siteLocChevron");
+  if (siteLocChevron) siteLocChevron.style.transform = "";
   if (pickerMarker) {
     pickerMarker.remove();
     pickerMarker = null;

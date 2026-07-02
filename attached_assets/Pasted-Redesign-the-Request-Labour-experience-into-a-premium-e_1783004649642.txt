@@ -1,0 +1,152 @@
+Redesign the Request Labour experience into a premium enterprise workflow. This is a UI/UX task only.
+
+CRITICAL:
+- Do NOT change any business logic.
+- Do NOT rename any existing field IDs.
+- Do NOT change how the form submits.
+- Do NOT remove any existing functionality.
+- Do NOT fake functionality that doesn't exist.
+- Preserve compatibility with the existing backend.
+
+The current Request Labour modal feels like a long HTML form. I want it to feel like modern enterprise software such as Procore, Monday.com, Linear or Stripe Dashboard. This is the core workflow of the application and should look like software that a major construction company would genuinely enjoy using.
+
+Keep all existing fields, including:
+- Job Number
+- Project Name
+- Assignment Type
+- No Fixed End Date
+- Location
+- Description of Works
+- Start Date
+- Estimated End Date
+- Shift Start
+- Shift Finish
+- Budget Min
+- Budget Max
+- Site Address
+- Entrance Pin
+- Site Contact Name
+- Site Contact Number
+- Arrival Instructions
+- Parking Information
+- PPE Requirements
+- Gate / Access Instructions
+- Site Photos
+- Preferred Workers
+- Required Qualifications
+- Accommodation
+- Map integration
+
+REMOVE completely:
+- Saturday Offered Rate
+- Sunday Offered Rate
+
+Weekend working is NOT requested here. Weekend requests happen later from the Project page after workers have already been assigned.
+
+Replace the current Working Days checkboxes with seven modern selectable chips:
+
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+Saturday
+Sunday
+
+Each chip should have a professional rounded appearance, grey when inactive and orange when selected.
+
+The biggest redesign is Labour Requirements.
+
+Instead of only allowing one trade, build a multi-trade labour request builder.
+
+Fields should remain:
+
+Trade
+Role / Specialism
+Experience
+Qualifications
+Work Activity
+Workers Required
+
+Underneath these fields add:
+
++ Add Another Trade
+
+When clicked, save that labour requirement as a clean summary card such as:
+
+Electrical
+Electrician
+Commercial Fit Out
+5 Workers
+
+with a remove button.
+
+Immediately clear the inputs so another trade can be added.
+
+Example:
+
+Electrical — 5 Workers
+
+Plumbing — 3 Workers
+
+Drylining — 4 Workers
+
+Electrical Supervisor — 1 Worker
+
+The user continues building one project containing multiple labour requirements.
+
+If the backend currently only supports one labour requirement, build the UI only and leave clear TODO comments where the submission logic will later be extended. Do not invent fake functionality.
+
+Improve the layout dramatically.
+
+Group the form into clean cards:
+
+PROJECT
+- Job Number
+- Project Name
+- Assignment Type
+- Location
+- Description of Works
+
+LABOUR REQUIREMENTS
+- Trade builder
+- Added requirement cards
+
+SCHEDULE
+- Start Date
+- Estimated End Date
+- Working Days
+- Shift Start
+- Shift Finish
+
+BUDGET
+- Minimum Budget
+- Maximum Budget
+- Small explanation underneath
+
+SITE INFORMATION
+- Site Address
+- Map
+- Entrance Pin
+- Site Contact
+- Arrival Instructions
+- Parking
+- PPE
+- Gate Instructions
+- Photos
+
+Improve spacing throughout.
+
+Increase whitespace.
+
+Use stronger typography.
+
+Use subtle card borders.
+
+Avoid long uninterrupted walls of inputs.
+
+Reduce visual clutter.
+
+The entire experience should feel like building a project, not completing paperwork.
+
+The finished result should look premium, polished and commercial while preserving every piece of existing functionality.

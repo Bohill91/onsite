@@ -7125,3 +7125,235 @@ body.modal-open {
     justify-content: flex-start;
   }
 }
+
+/* ─── Request Labour redesign (jw-*) ─────────────────────── */
+.jw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.jw-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.jw-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.jw-kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin: 0;
+}
+.jw-card-title {
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+.jw-card-sub {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+.jw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.jw-span-2 {
+  grid-column: 1 / -1;
+}
+.jw-form textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  font-size: 0.9rem;
+  padding: 10px 12px;
+  width: 100%;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+.jw-form textarea::placeholder {
+  color: var(--ink-3);
+}
+.jw-form textarea:focus {
+  border-color: var(--orange);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+.jw-check {
+  margin: 0;
+}
+.jw-subcard {
+  margin: 0;
+}
+.jw-note {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  line-height: 1.5;
+  margin: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+/* Working day chips */
+.jw-days-wrap {
+  gap: 10px;
+}
+.jw-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jw-day-chip {
+  position: relative;
+}
+.jw-day-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.jw-day-chip span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.jw-day-chip:hover span {
+  border-color: var(--ink-3);
+}
+.jw-day-chip input:checked + span {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+.jw-day-chip input:focus-visible + span {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
+}
+
+/* Multi-trade requirement builder */
+.jw-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.jw-req-list:empty {
+  display: none;
+}
+.jw-req-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+.jw-req-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.jw-req-trade {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.jw-req-meta {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+.jw-req-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--orange);
+}
+.jw-req-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+.jw-req-remove:hover {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+.jw-add-trade-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--border);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.jw-add-trade-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+  background: rgba(249, 115, 22, 0.04);
+}
+.jw-add-trade-plus {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.jw-submit {
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .jw-grid {
+    grid-template-columns: 1fr;
+  }
+  .jw-card {
+    padding: 18px 15px;
+  }
+}
