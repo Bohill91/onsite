@@ -946,8 +946,11 @@
                   </label>
                   <p class="form-helper">Accommodation allowance is passed to the worker and added to the company invoice without OnSite service fee.</p>
                 </div>
-                <div id="jobPreferredWorkersWrap" class="field-label preferred-workers-picker hidden">
-                  Preferred Workers
+                <div id="jobPreferredWorkersWrap" class="preferred-workers-picker hidden">
+                  <label class="field-label" for="jobPreferredWorkerSearch">
+                    Preferred Workers
+                    <input id="jobPreferredWorkerSearch" type="search" placeholder="Search previous or preferred workers" autocomplete="off" />
+                  </label>
                   <p class="form-helper">Selected preferred workers will be offered first if availability and matching rules allow.</p>
                   <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
                 </div>
@@ -1080,6 +1083,11 @@
                       <input id="photoWelfare" class="photo-file-input" type="file" accept="image/*" />
                       <img id="prvWelfare" class="photo-preview" alt="Parking or sign-in point preview" />
                       <span id="phWelfare" class="photo-placeholder">Parking / sign-in point photo</span>
+                    </label>
+                    <label class="photo-card" for="photoOther">
+                      <input id="photoOther" class="photo-file-input" type="file" accept="image/*" />
+                      <img id="prvOther" class="photo-preview" alt="Other site photo preview" />
+                      <span id="phOther" class="photo-placeholder">Other site photo</span>
                     </label>
                   </div>
                 </div>

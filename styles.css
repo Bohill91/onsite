@@ -1449,27 +1449,30 @@ margin-bottom: 12px;
 /* ─── Site Photo Upload — Job Form ─────────────────────── */
 .site-photo-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .photo-card {
   position: relative;
-  aspect-ratio: 4/3;
-  background: var(--surface-3);
-  border: 1.5px dashed var(--border-light);
-  border-radius: var(--radius-sm);
+  min-height: 118px;
+  aspect-ratio: 1 / 0.86;
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
   cursor: pointer;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .photo-card:hover {
   border-color: var(--orange);
   background: rgba(249, 115, 22, 0.04);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .photo-card.has-photo {
@@ -1483,13 +1486,28 @@ margin-bottom: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   color: var(--ink-3);
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 12px;
   pointer-events: none;
   text-align: center;
+}
+
+.photo-placeholder::before {
+  content: "+";
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(249, 115, 22, 0.1);
+  color: var(--orange);
+  font-size: 1.25rem;
+  font-weight: 800;
 }
 
 .photo-card.has-photo .photo-placeholder { display: none; }
@@ -1524,6 +1542,12 @@ margin-bottom: 12px;
 }
 
 .photo-card.has-photo:hover::after { opacity: 1; }
+
+@media (max-width: 720px) {
+  .site-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
 /* ─── Modal Photo Strip ─────────────────────────────────── */
 .site-photo-strip {
@@ -3200,8 +3224,8 @@ margin-bottom: 12px;
 
 .geocode-row {
   display: flex;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .geocode-row input {
@@ -3210,47 +3234,66 @@ margin-bottom: 12px;
 }
 
 .geocode-btn {
-  background: var(--surface-3);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-xs);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 12px;
   color: var(--ink);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.82rem;
-  font-weight: 600;
-  padding: 0 14px;
+  font-weight: 800;
+  padding: 0 16px;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
   flex-shrink: 0;
+  color: #fff;
 }
 
-.geocode-btn:hover { background: var(--orange); color: #fff; border-color: var(--orange); }
+.geocode-btn:hover {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+  transform: translateY(-1px);
+}
 .geocode-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .field-hint {
   color: var(--ink-3);
-  font-size: 0.77rem;
+  font-size: 0.78rem;
   font-weight: 400;
-  margin: 4px 0 8px;
+  margin: 6px 0 10px;
+  line-height: 1.45;
 }
 
 .picker-map {
-  height: 240px;
-  border-radius: var(--radius-xs);
+  height: 280px;
+  border-radius: 18px;
   border: 1px solid var(--border);
   overflow: hidden;
   cursor: crosshair;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 16px 38px rgba(15, 23, 42, 0.08);
+}
+
+.picker-map .leaflet-control-zoom {
+  border: 0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.picker-map .leaflet-control-zoom a {
+  border: 0;
+  color: var(--ink);
 }
 
 .pin-coords-display {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-  padding: 6px 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
   background: rgba(22, 163, 74, 0.08);
   border: 1px solid rgba(22, 163, 74, 0.25);
-  border-radius: var(--radius-xs);
+  border-radius: 12px;
   color: var(--green-text);
   font-size: 0.78rem;
   font-weight: 600;
@@ -6314,10 +6357,10 @@ margin-bottom: 12px;
 
 .picker-map {
   width: 100%;
-  height: 240px;
-  min-height: 240px;
+  height: 280px;
+  min-height: 280px;
   display: block;
-  border-radius: 12px;
+  border-radius: 18px;
   overflow: hidden;
 }
 
@@ -6328,8 +6371,22 @@ margin-bottom: 12px;
 .preferred-workers-picker {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 14px;
   padding: 14px;
+}
+
+.preferred-workers-picker .field-label {
+  margin: 0;
+}
+
+.preferred-workers-picker input[type="search"] {
+  background: var(--surface);
+  border-radius: 12px;
+  padding-left: 38px;
+  background-image: radial-gradient(circle at 14px 50%, transparent 0 5px, var(--ink-3) 5px 6px, transparent 6px), linear-gradient(45deg, transparent 0 52%, var(--ink-3) 52% 58%, transparent 58%);
+  background-repeat: no-repeat;
+  background-size: 26px 26px, 10px 10px;
+  background-position: 8px center, 24px 19px;
 }
 
 .preferred-workers-list {
@@ -6339,17 +6396,30 @@ margin-bottom: 12px;
 }
 
 .preferred-worker-choice {
-  align-items: center;
+  align-items: flex-start;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  display: flex;
-  gap: 10px;
-  padding: 9px 10px;
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto);
+  gap: 12px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.preferred-worker-choice:hover {
+  border-color: var(--orange);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.preferred-worker-choice.hidden {
+  display: none;
 }
 
 .preferred-worker-choice input {
   accent-color: var(--orange);
+  margin-top: 3px;
 }
 
 .preferred-worker-choice strong,
@@ -6358,13 +6428,39 @@ margin-bottom: 12px;
 }
 
 .preferred-worker-choice strong {
-  font-size: 0.83rem;
+  color: var(--ink);
+  font-size: 0.86rem;
 }
 
 .preferred-worker-choice small {
   color: var(--ink-3);
   font-size: 0.72rem;
   margin-top: 2px;
+}
+
+.preferred-worker-choice-meta {
+  text-align: right;
+}
+
+.preferred-worker-empty {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 12px;
+}
+
+@media (max-width: 640px) {
+  .preferred-worker-choice {
+    grid-template-columns: auto 1fr;
+  }
+
+  .preferred-worker-choice-meta {
+    grid-column: 2;
+    text-align: left;
+  }
 }
 
 .preferred-worker-btn.active {
@@ -7263,15 +7359,17 @@ body.modal-open {
 
 /* Working day chips */
 .jw-days-wrap {
-  gap: 10px;
+  gap: 12px;
 }
 .jw-days {
-  display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  display: grid;
   gap: 8px;
+  grid-template-columns: repeat(7, minmax(76px, 1fr));
 }
 .jw-day-chip {
   position: relative;
+  min-width: 0;
 }
 .jw-day-chip input {
   position: absolute;
@@ -7282,27 +7380,37 @@ body.modal-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 15px;
-  border-radius: 999px;
-  background: var(--surface-2);
+  min-height: 40px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: #f4f4f5;
   border: 1px solid var(--border);
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 800;
   color: var(--ink-2);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .jw-day-chip:hover span {
-  border-color: var(--ink-3);
+  border-color: var(--orange-muted);
+  transform: translateY(-1px);
 }
 .jw-day-chip input:checked + span {
   background: var(--orange);
   border-color: var(--orange);
   color: #fff;
+  box-shadow: 0 10px 18px rgba(249, 115, 22, 0.2);
 }
 .jw-day-chip input:focus-visible + span {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
+}
+
+@media (max-width: 760px) {
+  .jw-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Multi-trade requirement builder */

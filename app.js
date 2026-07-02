@@ -4909,29 +4909,60 @@ function preferredWorkerIdsFromJobForm() {
 function renderJobPreferredWorkerChoices(user) {
   const wrap = document.getElementById("jobPreferredWorkersWrap");
   const list = document.getElementById("jobPreferredWorkersList");
+  const search = document.getElementById("jobPreferredWorkerSearch");
   if (!wrap || !list) return;
   if (user?.type !== "company") {
     wrap.classList.add("hidden");
     list.innerHTML = "";
+    if (search) search.value = "";
     return;
   }
   const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
   wrap.classList.remove("hidden");
+  if (search) search.value = "";
   list.innerHTML = prefs.length
     ? prefs
         .map(
-          (pref) => `
-        <label class="preferred-worker-choice">
+          (pref) => {
+            const worker = pref.worker || {};
+            const rating = buildWorkerRating(worker.id || pref.workerId || "");
+            const cardNumber = worker.cscsCard || worker.ecsCard || "";
+            const searchText = [
+              worker.name,
+              pref.workerName,
+              worker.trade,
+              pref.workerTrade,
+              cardNumber,
+              rating.reliabilityRating,
+              rating.punctualityRating,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            return `
+        <label class="preferred-worker-choice" data-preferred-worker-card data-search="${escapeHtml(searchText)}">
           <input type="checkbox" name="jobPreferredWorkerIds" value="${pref.workerId}" />
-          <span>
-            <strong>${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</strong>
-            <small>${escapeHtml(pref.worker?.trade || pref.workerTrade || "")}</small>
+          <span class="preferred-worker-choice-main">
+            <strong>${escapeHtml(worker.name || pref.workerName || "Worker")}</strong>
+            <small>${escapeHtml(worker.trade || pref.workerTrade || "Trade not set")}</small>
           </span>
-        </label>`,
+          <span class="preferred-worker-choice-meta">
+            <small>${cardNumber ? `CSCS/ECS ${escapeHtml(cardNumber)}` : "Card number not added"}</small>
+            <small>${escapeHtml(rating.reliabilityRating || "New / Unproven")} / ${escapeHtml(rating.punctualityRating || "New / Unproven")}</small>
+          </span>
+        </label>`;
+          },
         )
         .join("")
-    : `<div class="att-empty">Mark workers as Preferred from the roster to request them first.</div>`;
+    : `<div class="preferred-worker-empty">No preferred workers yet. Mark workers as Preferred from a project worker profile to request them first.</div>`;
 }
+
+document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
+  const term = event.target.value.trim().toLowerCase();
+  document.querySelectorAll("[data-preferred-worker-card]").forEach((card) => {
+    card.classList.toggle("hidden", !!term && !card.dataset.search.includes(term));
+  });
+});
 
 function tryPreferredWorkerOffers(job) {
   const ids = Array.isArray(job?.preferredWorkerIds) ? job.preferredWorkerIds : [];
@@ -10427,8 +10458,8 @@ function findJob(id) {
 }
 
 // ─── Site Photo Upload ────────────────────────────────────
-let currentJobPhotos = { gate: null, entrance: null, welfare: null };
-let currentJobPhotoMeta = { gate: null, entrance: null, welfare: null };
+let currentJobPhotos = { gate: null, entrance: null, welfare: null, other: null };
+let currentJobPhotoMeta = { gate: null, entrance: null, welfare: null, other: null };
 
 const PHOTO_KEYS = [
   {
@@ -10451,6 +10482,13 @@ const PHOTO_KEYS = [
     inputId: "photoWelfare",
     prevId: "prvWelfare",
     phId: "phWelfare",
+  },
+  {
+    key: "other",
+    label: "Other site photo",
+    inputId: "photoOther",
+    prevId: "prvOther",
+    phId: "phOther",
   },
 ];
 
@@ -10535,8 +10573,8 @@ function resetJobPhotos() {
     }
     if (card) card.classList.remove("has-photo");
   });
-  currentJobPhotos = { gate: null, entrance: null, welfare: null };
-  currentJobPhotoMeta = { gate: null, entrance: null, welfare: null };
+  currentJobPhotos = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
+  currentJobPhotoMeta = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
 }
 
 // ─── Site Location & Map System ───────────────────────────
@@ -10694,6 +10732,7 @@ function openSiteMap(jobId) {
     gate: "Access route / gate",
     entrance: "Site entrance",
     welfare: "Parking / sign-in point",
+    other: "Other site photo",
   };
   const jobPhotos = job.sitePhotos || {};
   const jobPhotoMeta = job.sitePhotoMeta || {};
