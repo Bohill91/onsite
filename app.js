@@ -5898,6 +5898,7 @@ function openLabourRequestWorkflow() {
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
   renderJobPreferredWorkerChoices(getSessionUser());
+  syncTradeReqBuilderState();
   updateAssignmentTypeForm();
   requestAnimationFrame(() => initPickerMap());
   setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
@@ -5964,18 +5965,20 @@ document
   ?.addEventListener("change", updateAssignmentTypeForm);
 updateAssignmentTypeForm();
 
-// ─── Multi-trade labour requirement builder (UI only) ─────
-// The backend currently supports ONE labour requirement per request.
-// Added trades are captured as UI summary cards; the first saved card is
-// restored into the builder inputs at submit time so submission behaves
-// exactly as before.
-// TODO: extend the jobForm submit handler to post every requirement in
-// pendingTradeRequirements (e.g. a requirements[] array on the job, or one
-// job per requirement) once the backend supports multiple requirements.
+function selectedJobWorkingDays() {
+  return normalizeWorkingDays(
+    Array.from(document.querySelectorAll('input[name="jobWorkingDays"]:checked')).map(
+      (input) => input.value,
+    ),
+  );
+}
+
+// ─── Multi-trade labour requirement builder ───────────────
 let pendingTradeRequirements = [];
 
 function readTradeReqInputs() {
   return {
+    id: createId(),
     trade: document.getElementById("jobTrade")?.value || "",
     specialism: document.getElementById("jobSpecialism")?.value || "",
     grade: document.getElementById("jobGrade")?.value || "",
@@ -5983,6 +5986,56 @@ function readTradeReqInputs() {
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
   };
+}
+
+function tradeReqHasCoreFields(req) {
+  return !!(
+    req?.trade &&
+    req?.specialism &&
+    req?.workActivity &&
+    req?.requiredQualifications
+  );
+}
+
+function sameTradeRequirement(a, b) {
+  return (
+    a?.trade === b?.trade &&
+    a?.specialism === b?.specialism &&
+    a?.grade === b?.grade &&
+    a?.workActivity === b?.workActivity &&
+    a?.requiredQualifications === b?.requiredQualifications &&
+    Number(a?.quantity || 1) === Number(b?.quantity || 1)
+  );
+}
+
+function buildLabourRequirementsFromForm(shared = {}) {
+  const current = readTradeReqInputs();
+  const requirements = [...pendingTradeRequirements];
+  if (
+    tradeReqHasCoreFields(current) &&
+    !requirements.some((req) => sameTradeRequirement(req, current))
+  ) {
+    requirements.push(current);
+  }
+  const base = requirements.length ? requirements : [current];
+  return base
+    .filter((req) => req.trade || req.specialism || req.workActivity)
+    .map((req, index) => ({
+      id: req.id || `${createId()}-${index}`,
+      trade: req.trade || "",
+      specialism: req.specialism || "",
+      grade: req.grade || "",
+      requiredQualifications: req.requiredQualifications || "",
+      workActivity: req.workActivity || "",
+      quantity: Math.max(1, Number(req.quantity) || 1),
+      budgetMin: shared.budgetMin ?? null,
+      budgetMax: shared.budgetMax ?? null,
+      saturdayRate: shared.saturdayRate ?? shared.budgetMax ?? null,
+      sundayRate: shared.sundayRate ?? shared.budgetMax ?? null,
+      workingDays: normalizeWorkingDays(shared.workingDays),
+      shiftStartTime: shared.shiftStartTime || "",
+      shiftFinishTime: shared.shiftFinishTime || "",
+    }));
 }
 
 function applyTradeReqToInputs(req) {
@@ -6075,7 +6128,6 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
 // before the main submit handler, so the restored values are what it reads.
 // It runs on the submit event itself, covering button clicks, Enter-key and
 // programmatic submits alike.
-// TODO: submit the remaining requirements once the backend supports multiple.
 function restoreFirstTradeRequirement() {
   if (!pendingTradeRequirements.length) return;
   const current = readTradeReqInputs();
@@ -7662,11 +7714,59 @@ function companyAssignedWorkers(job) {
   return workers;
 }
 
+function labourRequirementsForJob(job) {
+  if (Array.isArray(job?.labourRequirements) && job.labourRequirements.length) {
+    return job.labourRequirements.map((req, index) => ({
+      id: req.id || `${job.id || "job"}-req-${index}`,
+      trade: req.trade || job.trade || "",
+      specialism: req.specialism || job.specialism || "",
+      grade: req.grade || job.grade || "",
+      requiredQualifications:
+        req.requiredQualifications || job.requiredQualifications || "",
+      workActivity: req.workActivity || job.workActivity || "",
+      quantity: Math.max(1, Number(req.quantity) || 1),
+      budgetMin: req.budgetMin ?? job.budgetMin ?? null,
+      budgetMax: req.budgetMax ?? job.budgetMax ?? null,
+      saturdayRate: req.saturdayRate ?? job.weekendRates?.saturday ?? null,
+      sundayRate: req.sundayRate ?? job.weekendRates?.sunday ?? null,
+      workingDays: normalizeWorkingDays(req.workingDays || job.workingDays),
+      shiftStartTime: req.shiftStartTime || job.shiftStartTime || "",
+      shiftFinishTime: req.shiftFinishTime || job.shiftFinishTime || "",
+    }));
+  }
+  return [
+    {
+      id: `${job?.id || "job"}-req-0`,
+      trade: job?.trade || "",
+      specialism: job?.specialism || "",
+      grade: job?.grade || "",
+      requiredQualifications: job?.requiredQualifications || "",
+      workActivity: job?.workActivity || "",
+      quantity: Math.max(1, Number(job?.quantity) || 1),
+      budgetMin: job?.budgetMin ?? null,
+      budgetMax: job?.budgetMax ?? null,
+      saturdayRate: job?.weekendRates?.saturday ?? null,
+      sundayRate: job?.weekendRates?.sunday ?? null,
+      workingDays: normalizeWorkingDays(job?.workingDays),
+      shiftStartTime: job?.shiftStartTime || "",
+      shiftFinishTime: job?.shiftFinishTime || "",
+    },
+  ];
+}
+
+function labourRequirementLabel(req) {
+  return `${req.specialism || req.trade || "Labour"} x ${req.quantity || 1}`;
+}
+
 function companyProjectSummary(job, user) {
   const today = todayDateStr();
+  const labourRequirements = labourRequirementsForJob(job);
   const assignedWorkers = companyAssignedWorkers(job);
   const assignedWorker = assignedWorkers[0] || null;
-  const required = Math.max(1, Number(job.quantity) || 1);
+  const required = labourRequirements.reduce(
+    (sum, req) => sum + Math.max(1, Number(req.quantity) || 1),
+    0,
+  );
   const filled = assignedWorkers.length;
   const apps = (state.applications || []).filter((a) => a.jobId === job.id);
   const pendingOffers = apps.filter((a) => a.status === "offered");
@@ -7709,6 +7809,7 @@ function companyProjectSummary(job, user) {
   return {
     assignedWorker,
     assignedWorkers,
+    labourRequirements,
     required,
     filled,
     openRoles: Math.max(0, required - filled),
@@ -7760,6 +7861,9 @@ function companyDashboardSummary(user) {
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
   const title = job.projectName || job.siteName || job.trade || "Project";
+  const reqSummary = summary.labourRequirements
+    .map(labourRequirementLabel)
+    .join(" · ");
   const meta = [
     job.location,
     assignmentTypeLabel(job),
@@ -7776,7 +7880,7 @@ function companyProjectCardHTML(job, user) {
         </div>
         <span class="company-project-status">${escapeHtml(summary.status)}</span>
       </div>
-      <div class="company-project-role">${escapeHtml(job.trade || "Labour")} ${job.specialism ? `· ${escapeHtml(job.specialism)}` : ""}</div>
+      <div class="company-project-role">${escapeHtml(reqSummary || job.trade || "Labour")}</div>
       <div class="company-project-fill">
         <span>${summary.filled}/${summary.required} filled</span>
         <strong>${summary.openRoles ? `${summary.openRoles} still required` : "Requirement filled"}</strong>
@@ -7948,12 +8052,23 @@ function companyProjectRequirementsHTML(job, summary) {
         })
         .join("")
     : `<div class="att-empty">No pending offers for this project.</div>`;
+  const requirementRows = summary.labourRequirements
+    .map(
+      (req) => `<div class="company-project-mini-row labour-project-req-row">
+        <span>${escapeHtml(req.trade || "Labour")}${req.specialism ? ` · ${escapeHtml(req.specialism)}` : ""}${req.grade ? ` · ${escapeHtml(req.grade)}` : ""}</span>
+        <strong>${req.quantity || 1} worker${Number(req.quantity) === 1 ? "" : "s"}</strong>
+      </div>
+      <div class="company-project-mini-row labour-project-req-meta">
+        <span>${escapeHtml(req.workActivity || "Work activity TBC")}</span>
+        <strong>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day max` : "Rate TBC"}</strong>
+      </div>`,
+    )
+    .join("");
   return `
     <div class="company-project-detail-grid">
       <div class="company-project-section">
-        <h4>Labour Requirement</h4>
-        <div class="company-project-mini-row"><span>Role / trade</span><strong>${escapeHtml(job.trade || "Labour")}</strong></div>
-        <div class="company-project-mini-row"><span>Specialism</span><strong>${escapeHtml(job.specialism || job.grade || "Not specified")}</strong></div>
+        <h4>Labour Requirements</h4>
+        ${requirementRows}
         <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
         <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
         <div class="company-project-mini-row"><span>Open</span><strong>${summary.openRoles}</strong></div>
@@ -9239,6 +9354,15 @@ jobForm.addEventListener("submit", (e) => {
       ? Math.round(sundayRateRaw)
       : budgetMax;
   const preferredWorkerIds = preferredWorkerIdsFromJobForm();
+  const labourRequirements = buildLabourRequirementsFromForm({
+    budgetMin,
+    budgetMax,
+    saturdayRate,
+    sundayRate,
+    workingDays,
+    shiftStartTime,
+    shiftFinishTime,
+  });
 
   const job = {
     id: createId(),
@@ -9273,6 +9397,7 @@ jobForm.addEventListener("submit", (e) => {
         : "",
     trade,
     specialism,
+    labourRequirements,
     location,
     start: jobStartValue,
     shiftStartTime:
