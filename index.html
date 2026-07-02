@@ -838,7 +838,6 @@
                     Assignment Type *
                     <select id="jobAssignmentType" required>
                       <option value="site_project">Site-based project</option>
-                      <option value="mobile_reactive">Mobile / reactive works</option>
                       <option value="ongoing_placement">Ongoing placement</option>
                     </select>
                   </label>
@@ -848,32 +847,12 @@
                     <datalist id="locationOptions"></datalist>
                   </label>
                 </div>
-                <label class="checkbox-row jw-check" id="jobNoFixedEndWrap">
-                  <input id="jobNoFixedEndDate" type="checkbox" />
-                  <span>No fixed end date</span>
-                </label>
-                <div id="jobMobileDefaults" class="site-details-card jw-subcard hidden">
-                  <h3>Mobile / Ongoing Defaults</h3>
-                  <p class="form-helper">Used for long-term or reactive assignments where the worker may visit different sites.</p>
-                  <div class="form-grid-2">
-                    <label class="field-label">
-                      Default Role
-                      <input id="jobDefaultRole" type="text" placeholder="e.g. Mobile Electrician" />
-                    </label>
-                    <label class="field-label">
-                      Default Rate (£/day)
-                      <input id="jobDefaultRate" type="number" min="0" placeholder="Defaults to budget max" />
-                    </label>
-                  </div>
-                  <div class="form-grid-2">
-                    <label class="field-label">
-                      Default Shift Start
-                      <input id="jobDefaultShiftStart" type="time" />
-                    </label>
-                    <label class="field-label">
-                      Default Shift Finish
-                      <input id="jobDefaultShiftFinish" type="time" />
-                    </label>
+                <div id="jobVehicleWrap" class="jw-conditional hidden">
+                  <h4>Vehicle arrangements</h4>
+                  <div class="jw-option-row" role="group" aria-label="Vehicle arrangements">
+                    <label class="radio-row"><input type="radio" name="jobVehicleArrangement" value="company_vehicle" /><span>Company vehicle provided</span></label>
+                    <label class="radio-row"><input type="radio" name="jobVehicleArrangement" value="worker_vehicle" /><span>Worker to use own vehicle</span></label>
+                    <label class="radio-row"><input type="radio" name="jobVehicleArrangement" value="not_required" checked /><span>Not required / not applicable</span></label>
                   </div>
                 </div>
               </section>
@@ -960,6 +939,13 @@
                   <input id="jobAccommodationPaid" type="checkbox" />
                   <span>Accommodation paid for work-away roles</span>
                 </label>
+                <div id="jobAccommodationAllowanceWrap" class="jw-conditional hidden">
+                  <label class="field-label">
+                    Accommodation allowance per night
+                    <input id="jobAccommodationAllowance" type="number" min="0" placeholder="£40" />
+                  </label>
+                  <p class="form-helper">Accommodation allowance is passed to the worker and added to the company invoice without OnSite service fee.</p>
+                </div>
                 <div id="jobPreferredWorkersWrap" class="field-label preferred-workers-picker hidden">
                   Preferred Workers
                   <p class="form-helper">Selected preferred workers will be offered first if availability and matching rules allow.</p>
@@ -978,10 +964,14 @@
                     Start Date &amp; Time *
                     <input id="jobStart" type="datetime-local" required />
                   </label>
-                  <label class="field-label">
-                    Estimated End Date *
+                  <div class="field-label">
+                    <span>Estimated End Date *</span>
                     <input id="jobEndDate" type="date" required />
-                  </label>
+                    <label class="checkbox-row jw-check jw-inline-check" id="jobNoFixedEndWrap">
+                      <input id="jobNoFixedEndDate" type="checkbox" />
+                      <span>No fixed end date</span>
+                    </label>
+                  </div>
                   <label class="field-label">
                     Shift Start Time *
                     <input id="jobShiftStart" type="time" required />
@@ -1021,7 +1011,7 @@
                     <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
                   </label>
                 </div>
-                <p class="jw-note">This is your total daily labour budget per worker, including the OnSite service fee.</p>
+                <p class="jw-note">Total daily labour budget per worker, excluding VAT and including the OnSite service fee.</p>
               </section>
 
               <!-- ── SITE INFORMATION ────────────────────────── -->

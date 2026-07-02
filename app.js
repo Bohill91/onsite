@@ -5944,17 +5944,31 @@ function updateAssignmentTypeForm() {
   const type = normalizeAssignmentType(
     document.getElementById("jobAssignmentType")?.value,
   );
-  const mobile = type !== "site_project";
+  const ongoing = type === "ongoing_placement";
   const endInput = document.getElementById("jobEndDate");
   const siteAddress = document.getElementById("jobSiteAddress");
-  const mobileDefaults = document.getElementById("jobMobileDefaults");
   const noFixedEnd = document.getElementById("jobNoFixedEndDate");
-  if (mobileDefaults) mobileDefaults.classList.toggle("hidden", !mobile);
+  const noFixedWrap = document.getElementById("jobNoFixedEndWrap");
+  const vehicleWrap = document.getElementById("jobVehicleWrap");
+  if (!ongoing && noFixedEnd) noFixedEnd.checked = false;
+  if (noFixedWrap) noFixedWrap.classList.toggle("hidden", !ongoing);
+  if (vehicleWrap) vehicleWrap.classList.toggle("hidden", !ongoing);
   if (endInput) {
-    endInput.required = !mobile || !noFixedEnd?.checked;
-    if (mobile && noFixedEnd?.checked) endInput.value = "";
+    const noFixed = ongoing && !!noFixedEnd?.checked;
+    endInput.required = !noFixed;
+    endInput.disabled = noFixed;
+    endInput.classList.toggle("hidden", noFixed);
+    if (noFixed) endInput.value = "";
   }
-  if (siteAddress) siteAddress.required = !mobile;
+  if (siteAddress) siteAddress.required = true;
+}
+
+function updateAccommodationForm() {
+  const paid = !!document.getElementById("jobAccommodationPaid")?.checked;
+  const wrap = document.getElementById("jobAccommodationAllowanceWrap");
+  const allowance = document.getElementById("jobAccommodationAllowance");
+  if (wrap) wrap.classList.toggle("hidden", !paid);
+  if (!paid && allowance) allowance.value = "";
 }
 
 document
@@ -5963,7 +5977,11 @@ document
 document
   .getElementById("jobNoFixedEndDate")
   ?.addEventListener("change", updateAssignmentTypeForm);
+document
+  .getElementById("jobAccommodationPaid")
+  ?.addEventListener("change", updateAccommodationForm);
 updateAssignmentTypeForm();
+updateAccommodationForm();
 
 function selectedJobWorkingDays() {
   return normalizeWorkingDays(
@@ -9300,10 +9318,16 @@ jobForm.addEventListener("submit", (e) => {
   const assignmentType = normalizeAssignmentType(
     document.querySelector("#jobAssignmentType")?.value || "site_project",
   );
-  const mobileAssignment = assignmentType !== "site_project";
+  const ongoingAssignment = assignmentType === "ongoing_placement";
   const noFixedEndDate =
-    mobileAssignment && !!document.querySelector("#jobNoFixedEndDate")?.checked;
+    ongoingAssignment && !!document.querySelector("#jobNoFixedEndDate")?.checked;
   const defaultRateRaw = Number(document.querySelector("#jobDefaultRate")?.value);
+  const accommodationPaid = !!document.querySelector("#jobAccommodationPaid")?.checked;
+  const accommodationAllowanceRaw = Number(
+    document.querySelector("#jobAccommodationAllowance")?.value,
+  );
+  const vehicleArrangement =
+    document.querySelector('input[name="jobVehicleArrangement"]:checked')?.value || "";
 
   const attendanceManagerName =
     document.querySelector("#attendanceManagerName")?.value.trim() || "";
@@ -9426,8 +9450,19 @@ jobForm.addEventListener("submit", (e) => {
         ? noticeRaw
         : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
-    accommodationPaid: !!document.querySelector("#jobAccommodationPaid")?.checked,
+    accommodationPaid,
   };
+
+  if (ongoingAssignment && vehicleArrangement) {
+    job.vehicleArrangement = vehicleArrangement;
+  }
+  if (
+    accommodationPaid &&
+    Number.isFinite(accommodationAllowanceRaw) &&
+    accommodationAllowanceRaw > 0
+  ) {
+    job.accommodationAllowancePerNight = Math.round(accommodationAllowanceRaw);
+  }
 
   // Labour requirement details
   const grade = document.querySelector("#jobGrade")?.value;
@@ -9513,6 +9548,7 @@ jobForm.addEventListener("submit", (e) => {
   // Reset photo cards
   resetJobPhotos();
   updateAssignmentTypeForm();
+  updateAccommodationForm();
 
   saveAndRender();
   showToast("Job request posted");

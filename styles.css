@@ -7219,6 +7219,37 @@ body.modal-open {
 .jw-subcard {
   margin: 0;
 }
+.jw-conditional {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.jw-conditional.hidden,
+.jw-form input.hidden,
+.jw-inline-check.hidden {
+  display: none;
+}
+.jw-conditional h4 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.jw-option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.jw-option-row .radio-row {
+  margin: 0;
+}
+.jw-inline-check {
+  margin-top: 8px;
+}
 .jw-note {
   font-size: 0.8rem;
   color: var(--ink-3);
