@@ -6002,6 +6002,20 @@ function updateAccommodationForm() {
   if (!paid && allowance) allowance.value = "";
 }
 
+function updateOvertimeForm() {
+  const available = !!document.getElementById("jobOvertimeAvailable")?.checked;
+  const wrap = document.getElementById("jobOvertimeRatesWrap");
+  if (wrap) wrap.classList.toggle("hidden", !available);
+  if (!available) {
+    ["jobAfterHoursRateType", "jobSaturdayRateType", "jobSundayRateType"].forEach(
+      (id) => {
+        const select = document.getElementById(id);
+        if (select) select.value = "standard";
+      },
+    );
+  }
+}
+
 document
   .getElementById("jobAssignmentType")
   ?.addEventListener("change", updateAssignmentTypeForm);
@@ -6011,8 +6025,12 @@ document
 document
   .getElementById("jobAccommodationPaid")
   ?.addEventListener("change", updateAccommodationForm);
+document
+  .getElementById("jobOvertimeAvailable")
+  ?.addEventListener("change", updateOvertimeForm);
 updateAssignmentTypeForm();
 updateAccommodationForm();
+updateOvertimeForm();
 
 function selectedJobWorkingDays() {
   return normalizeWorkingDays(
@@ -9400,6 +9418,7 @@ jobForm.addEventListener("submit", (e) => {
   );
   const saturdayRateRaw = Number(document.querySelector("#jobSaturdayRate")?.value);
   const sundayRateRaw = Number(document.querySelector("#jobSundayRate")?.value);
+  const overtimeAvailable = !!document.querySelector("#jobOvertimeAvailable")?.checked;
   const saturdayRate =
     Number.isFinite(saturdayRateRaw) && saturdayRateRaw > 0
       ? Math.round(saturdayRateRaw)
@@ -9473,6 +9492,19 @@ jobForm.addEventListener("submit", (e) => {
       saturday: saturdayRate,
       sunday: sundayRate,
     },
+    overtimeAvailable,
+    overtimeRates: overtimeAvailable
+      ? {
+          afterStandardHours:
+            document.querySelector("#jobAfterHoursRateType")?.value || "standard",
+          saturday: document.querySelector("#jobSaturdayRateType")?.value || "standard",
+          sunday: document.querySelector("#jobSundayRateType")?.value || "standard",
+        }
+      : {
+          afterStandardHours: "standard",
+          saturday: "standard",
+          sunday: "standard",
+        },
     preferredWorkerIds,
     preferredFirst: preferredWorkerIds.length > 0,
     preStartDocuments: [],
@@ -9580,6 +9612,7 @@ jobForm.addEventListener("submit", (e) => {
   resetJobPhotos();
   updateAssignmentTypeForm();
   updateAccommodationForm();
+  updateOvertimeForm();
 
   saveAndRender();
   showToast("Job request posted");
