@@ -7399,6 +7399,13 @@ body.modal-open {
   border-radius: 10px;
   padding: 10px 12px;
 }
+.jw-rate-option {
+  justify-content: flex-start;
+}
+.jw-rate-option .form-helper {
+  margin: 0;
+  line-height: 1.45;
+}
 
 .jw-pricing-panel {
   background: var(--surface-2);

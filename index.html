@@ -936,6 +936,14 @@
                     Daily Labour Rate (£/day) *
                     <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
                   </label>
+                  <div class="field-label jw-rate-option">
+                    <span>Rate handling</span>
+                    <label class="checkbox-row jw-check">
+                      <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
+                      <span>Worker receives the full advertised rate (Recommended)</span>
+                    </label>
+                    <p class="form-helper">When selected, OnSite’s service fee is added separately instead of being deducted from the worker’s rate.</p>
+                  </div>
                 </div>
                 <label class="checkbox-row jw-check">
                   <input id="jobOvertimeAvailable" type="checkbox" />
@@ -976,9 +984,6 @@
                   </div>
                   <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
                 </div>
-                <button type="button" id="jobAddTradeBtn" class="jw-add-trade-btn">
-                  <span class="jw-add-trade-plus">+</span> Add Another Trade
-                </button>
                 <label class="checkbox-row jw-check">
                   <input id="jobAccommodationPaid" type="checkbox" />
                   <span>Accommodation paid for work-away roles</span>
@@ -990,6 +995,10 @@
                   </label>
                   <p class="form-helper">This allowance is paid directly to the worker and added to the company invoice without an OnSite service fee.</p>
                 </div>
+                <button type="button" id="jobAddTradeBtn" class="jw-add-trade-btn">
+                  <span class="jw-add-trade-plus">+</span> Add Another Trade
+                </button>
+                <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
                 <div id="jobPreferredWorkersWrap" class="preferred-workers-picker hidden">
                   <label class="field-label" for="jobPreferredWorkerSearch">
                     Preferred Workers
@@ -1041,21 +1050,6 @@
                     <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="sunday" /><span>Sunday</span></label>
                   </div>
                 </div>
-              </section>
-
-              <!-- ── BUDGET ──────────────────────────────────── -->
-              <section class="jw-card">
-                <header class="jw-card-head">
-                  <p class="jw-kicker">Budget</p>
-                  <h3 class="jw-card-title">Pricing Estimate</h3>
-                </header>
-                <label class="checkbox-row jw-check">
-                  <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
-                  <span>Worker receives the full advertised rate (Recommended)</span>
-                </label>
-                <p class="form-helper">When selected, OnSite’s service fee is added separately instead of being deducted from the worker’s rate.</p>
-                <p class="jw-note">Daily totals shown are what you’ll be charged, unless deductions, overtime or allowances apply. Final invoices are based on approved attendance.</p>
-                <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
               </section>
 
               <!-- ── SITE INFORMATION ────────────────────────── -->
