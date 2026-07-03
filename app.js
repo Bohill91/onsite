@@ -5996,7 +5996,7 @@ function updateAssignmentTypeForm() {
     const noFixed = !!noFixedEnd?.checked;
     endInput.required = !noFixed;
     endInput.disabled = noFixed;
-    endInput.classList.toggle("hidden", noFixed);
+    endInput.classList.remove("hidden");
     if (noFixed) endInput.value = "";
   }
   if (siteAddress) siteAddress.required = true;

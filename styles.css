@@ -7386,6 +7386,9 @@ body.modal-open {
 .jw-inline-check {
   margin-top: 8px;
 }
+.jw-schedule-spacer {
+  min-height: 1px;
+}
 .jw-note {
   font-size: 0.8rem;
   color: var(--ink-3);
@@ -7553,6 +7556,9 @@ body.modal-open {
 @media (max-width: 640px) {
   .jw-grid {
     grid-template-columns: 1fr;
+  }
+  .jw-schedule-spacer {
+    display: none;
   }
   .jw-card {
     padding: 18px 15px;
