@@ -6054,6 +6054,13 @@ function selectedJobWorkingDays() {
 
 // ─── Multi-trade labour requirement builder ───────────────
 function readTradeReqInputs() {
+  syncDailyLabourRateFields();
+  const budgetMaxRaw = Number(document.getElementById("jobBudgetMax")?.value);
+  const budgetMax =
+    Number.isFinite(budgetMaxRaw) && budgetMaxRaw > 0
+      ? Math.round(budgetMaxRaw)
+      : null;
+  const overtimeAvailable = !!document.getElementById("jobOvertimeAvailable")?.checked;
   return {
     id: createId(),
     trade: document.getElementById("jobTrade")?.value || "",
@@ -6062,6 +6069,21 @@ function readTradeReqInputs() {
     workActivity: document.getElementById("workActivity")?.value.trim() || "",
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
+    budgetMin: budgetMax,
+    budgetMax,
+    overtimeAvailable,
+    overtimeRates: overtimeAvailable
+      ? {
+          afterStandardHours:
+            document.getElementById("jobAfterHoursRateType")?.value || "standard",
+          saturday: document.getElementById("jobSaturdayRateType")?.value || "standard",
+          sunday: document.getElementById("jobSundayRateType")?.value || "standard",
+        }
+      : {
+          afterStandardHours: "standard",
+          saturday: "standard",
+          sunday: "standard",
+        },
   };
 }
 
@@ -6070,7 +6092,8 @@ function tradeReqHasCoreFields(req) {
     req?.trade &&
     req?.specialism &&
     req?.workActivity &&
-    req?.requiredQualifications
+    req?.requiredQualifications &&
+    req?.budgetMax
   );
 }
 
@@ -6081,7 +6104,9 @@ function sameTradeRequirement(a, b) {
     a?.grade === b?.grade &&
     a?.workActivity === b?.workActivity &&
     a?.requiredQualifications === b?.requiredQualifications &&
-    Number(a?.quantity || 1) === Number(b?.quantity || 1)
+    Number(a?.quantity || 1) === Number(b?.quantity || 1) &&
+    Number(a?.budgetMax || 0) === Number(b?.budgetMax || 0) &&
+    !!a?.overtimeAvailable === !!b?.overtimeAvailable
   );
 }
 
@@ -6089,7 +6114,11 @@ function requestLabourEstimateRequirements() {
   const current = readTradeReqInputs();
   const requirements = [...pendingTradeRequirements];
   if (
-    (current.trade || current.specialism || current.workActivity || current.quantity > 1) &&
+    (current.trade ||
+      current.specialism ||
+      current.workActivity ||
+      current.quantity > 1 ||
+      current.budgetMax) &&
     !requirements.some((req) => sameTradeRequirement(req, current))
   ) {
     requirements.push(current);
@@ -6107,7 +6136,6 @@ function renderJobPricingBreakdown() {
   const panel = document.getElementById("jobPricingBreakdown");
   if (!panel) return;
   syncDailyLabourRateFields();
-  const rate = Math.max(0, Number(document.getElementById("jobBudgetMax")?.value) || 0);
   const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
   const accommodationAllowance = accommodationPaid
     ? Math.max(0, Number(document.getElementById("jobAccommodationAllowance")?.value) || 0)
@@ -6118,6 +6146,8 @@ function renderJobPricingBreakdown() {
       [req.trade, req.specialism].filter(Boolean).join(" / ") ||
       `Labour requirement ${index + 1}`,
     quantity: Math.max(1, Number(req.quantity) || 1),
+    rate: Math.max(0, Number(req.budgetMax) || 0),
+    overtimeAvailable: !!req.overtimeAvailable,
   }));
 
   // TODO: Replace these provisional display-only percentages with configured
@@ -6125,21 +6155,23 @@ function renderJobPricingBreakdown() {
   const serviceFeePct = 0.15;
   const vatPct = 0.2;
   let totalWorkers = 0;
-  let estimatedTotal = 0;
+  let totalDailyCost = 0;
 
   const rows = visibleReqs
     .map((req) => {
+      const rate = req.rate;
       const serviceFee = Math.round(rate * serviceFeePct);
       const vat = Math.round((rate + serviceFee) * vatPct);
       const totalPerWorker = rate + accommodationAllowance + serviceFee + vat;
       const requirementTotal = totalPerWorker * req.quantity;
       totalWorkers += req.quantity;
-      estimatedTotal += requirementTotal;
+      totalDailyCost += requirementTotal;
       return `
         <div class="jw-price-row">
           <div>
             <strong>${escapeHtml(req.label)}</strong>
             <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"}</span>
+            ${req.overtimeAvailable ? `<span>Overtime available</span>` : ""}
           </div>
           <div class="jw-price-lines">
             <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
@@ -6156,8 +6188,8 @@ function renderJobPricingBreakdown() {
   panel.innerHTML = `
     <div class="jw-price-head">
       <div>
-        <strong>Live pricing estimate</strong>
-        <span>Provisional daily estimate only. Final pricing is calculated at checkout.</span>
+        <strong>Live pricing breakdown</strong>
+        <span>Daily totals shown are what you’ll be charged, unless deductions, overtime or allowances apply. Final invoices are based on approved attendance.</span>
       </div>
     </div>
     <div class="jw-price-list">${rows}</div>
@@ -6169,7 +6201,7 @@ function renderJobPricingBreakdown() {
     <div class="jw-price-total">
       <span>Total workers: <strong>${totalWorkers}</strong></span>
       <span>Total trades / labour requirements: <strong>${visibleReqs.length}</strong></span>
-      <span>Estimated total daily cost: <strong>${formatMoney(estimatedTotal)}</strong></span>
+      <span>Total daily cost for all workers: <strong>${formatMoney(totalDailyCost)}</strong></span>
     </div>`;
 }
 
@@ -6193,10 +6225,16 @@ function buildLabourRequirementsFromForm(shared = {}) {
       requiredQualifications: req.requiredQualifications || "",
       workActivity: req.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
-      budgetMin: shared.budgetMin ?? null,
-      budgetMax: shared.budgetMax ?? null,
-      saturdayRate: shared.saturdayRate ?? shared.budgetMax ?? null,
-      sundayRate: shared.sundayRate ?? shared.budgetMax ?? null,
+      budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
+      budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
+      saturdayRate: req.saturdayRate ?? shared.saturdayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
+      sundayRate: req.sundayRate ?? shared.sundayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
+      overtimeAvailable: !!req.overtimeAvailable,
+      overtimeRates: req.overtimeRates || {
+        afterStandardHours: "standard",
+        saturday: "standard",
+        sunday: "standard",
+      },
       workingDays: normalizeWorkingDays(shared.workingDays),
       shiftStartTime: shared.shiftStartTime || "",
       shiftFinishTime: shared.shiftFinishTime || "",
@@ -6219,6 +6257,18 @@ function applyTradeReqToInputs(req) {
   if (qty) qty.value = String(req.quantity);
   const quals = document.getElementById("jobReqQuals");
   if (quals) quals.value = req.requiredQualifications;
+  const rate = document.getElementById("jobBudgetMax");
+  if (rate) rate.value = req.budgetMax || "";
+  const overtime = document.getElementById("jobOvertimeAvailable");
+  if (overtime) overtime.checked = !!req.overtimeAvailable;
+  const overtimeRates = req.overtimeRates || {};
+  const after = document.getElementById("jobAfterHoursRateType");
+  if (after) after.value = overtimeRates.afterStandardHours || "standard";
+  const saturday = document.getElementById("jobSaturdayRateType");
+  if (saturday) saturday.value = overtimeRates.saturday || "standard";
+  const sunday = document.getElementById("jobSundayRateType");
+  if (sunday) sunday.value = overtimeRates.sunday || "standard";
+  updateOvertimeForm();
 }
 
 function clearTradeReqInputs() {
@@ -6229,6 +6279,13 @@ function clearTradeReqInputs() {
     workActivity: "",
     quantity: 1,
     requiredQualifications: "",
+    budgetMax: "",
+    overtimeAvailable: false,
+    overtimeRates: {
+      afterStandardHours: "standard",
+      saturday: "standard",
+      sunday: "standard",
+    },
   });
 }
 
@@ -6242,7 +6299,7 @@ function renderTradeReqCards() {
       <div class="jw-req-main">
         <div class="jw-req-trade">${escapeHtml(r.trade)}${r.specialism ? ` — ${escapeHtml(r.specialism)}` : ""}</div>
         ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}</div>
+        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}${r.budgetMax ? ` · ${formatMoney(r.budgetMax)}/day` : ""}${r.overtimeAvailable ? " · Overtime" : ""}</div>
       </div>
       <button type="button" class="jw-req-remove" data-req-remove="${i}" aria-label="Remove requirement">×</button>
     </div>`,
@@ -6254,7 +6311,7 @@ function syncTradeReqBuilderState() {
   // While saved requirement cards exist the builder inputs may sit empty,
   // so relax native validation on them; it is restored when the list empties.
   const hasCards = pendingTradeRequirements.length > 0;
-  ["jobTrade", "jobSpecialism", "workActivity", "jobQuantity", "jobReqQuals"].forEach(
+  ["jobTrade", "jobSpecialism", "workActivity", "jobQuantity", "jobReqQuals", "jobBudgetMax"].forEach(
     (id) => {
       const el = document.getElementById(id);
       if (el) el.required = !hasCards;
@@ -6276,6 +6333,7 @@ document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
   if (!req.workActivity) return showToast("Enter the work activity");
   if (!req.requiredQualifications)
     return showToast("Enter the required qualifications & tickets");
+  if (!req.budgetMax) return showToast("Enter the daily labour rate");
   pendingTradeRequirements.push(req);
   clearTradeReqInputs();
   syncTradeReqBuilderState();
@@ -6317,7 +6375,8 @@ function restoreFirstTradeRequirement() {
     !current.trade ||
     !current.specialism ||
     !current.workActivity ||
-    !current.requiredQualifications;
+    !current.requiredQualifications ||
+    !current.budgetMax;
   if (incomplete) applyTradeReqToInputs(pendingTradeRequirements[0]);
 }
 jobForm?.addEventListener("submit", restoreFirstTradeRequirement);
