@@ -5990,11 +5990,10 @@ function updateAssignmentTypeForm() {
   const noFixedEnd = document.getElementById("jobNoFixedEndDate");
   const noFixedWrap = document.getElementById("jobNoFixedEndWrap");
   const vehicleWrap = document.getElementById("jobVehicleWrap");
-  if (!ongoing && noFixedEnd) noFixedEnd.checked = false;
-  if (noFixedWrap) noFixedWrap.classList.toggle("hidden", !ongoing);
+  if (noFixedWrap) noFixedWrap.classList.remove("hidden");
   if (vehicleWrap) vehicleWrap.classList.toggle("hidden", !ongoing);
   if (endInput) {
-    const noFixed = ongoing && !!noFixedEnd?.checked;
+    const noFixed = !!noFixedEnd?.checked;
     endInput.required = !noFixed;
     endInput.disabled = noFixed;
     endInput.classList.toggle("hidden", noFixed);
@@ -9377,8 +9376,7 @@ jobForm.addEventListener("submit", (e) => {
     document.querySelector("#jobAssignmentType")?.value || "site_project",
   );
   const ongoingAssignment = assignmentType === "ongoing_placement";
-  const noFixedEndDate =
-    ongoingAssignment && !!document.querySelector("#jobNoFixedEndDate")?.checked;
+  const noFixedEndDate = !!document.querySelector("#jobNoFixedEndDate")?.checked;
   const defaultRateRaw = Number(document.querySelector("#jobDefaultRate")?.value);
   const accommodationPaid = !!document.querySelector("#jobAccommodationPaid")?.checked;
   const accommodationAllowanceRaw = Number(
