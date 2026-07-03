@@ -1101,33 +1101,34 @@
                     <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis, safety boots" />
                   </label>
                   <label class="field-label jw-span-2">
-                    Gate / Access Instructions
-                    <input id="jobGateAccess" type="text" placeholder="e.g. Call site manager on arrival for gate code" />
+                    Additional Notes for Workers
+                    <textarea id="jobGateAccess" rows="2" placeholder="e.g. Fuel cards, parking expenses, required tools or site-specific instructions."></textarea>
+                    <p class="form-helper">Add anything workers should know before starting, such as fuel, parking expenses, tools, welfare, access details or site-specific instructions.</p>
                   </label>
                 </div>
                 <div class="field-label">
                   Site Photos
-                  <p class="field-hint">Add local prototype images to help workers find the correct entrance and sign-in point.</p>
+                  <p class="field-hint">Add local prototype images to help workers find the correct entrance, welfare area and parking.</p>
                   <div class="site-photo-grid">
-                    <label class="photo-card" for="photoGate">
-                      <input id="photoGate" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvGate" class="photo-preview" alt="Access route or gate preview" />
-                      <span id="phGate" class="photo-placeholder">Access route / gate photo</span>
-                    </label>
                     <label class="photo-card" for="photoEntrance">
                       <input id="photoEntrance" class="photo-file-input" type="file" accept="image/*" />
                       <img id="prvEntrance" class="photo-preview" alt="Site entrance preview" />
-                      <span id="phEntrance" class="photo-placeholder">Site entrance photo</span>
+                      <span id="phEntrance" class="photo-placeholder">Site entrance</span>
                     </label>
                     <label class="photo-card" for="photoWelfare">
                       <input id="photoWelfare" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvWelfare" class="photo-preview" alt="Parking or sign-in point preview" />
-                      <span id="phWelfare" class="photo-placeholder">Parking / sign-in point photo</span>
+                      <img id="prvWelfare" class="photo-preview" alt="Welfare area preview" />
+                      <span id="phWelfare" class="photo-placeholder">Welfare</span>
+                    </label>
+                    <label class="photo-card" for="photoGate">
+                      <input id="photoGate" class="photo-file-input" type="file" accept="image/*" />
+                      <img id="prvGate" class="photo-preview" alt="Parking preview" />
+                      <span id="phGate" class="photo-placeholder">Parking</span>
                     </label>
                     <label class="photo-card" for="photoOther">
                       <input id="photoOther" class="photo-file-input" type="file" accept="image/*" />
                       <img id="prvOther" class="photo-preview" alt="Other site photo preview" />
-                      <span id="phOther" class="photo-placeholder">Other site photo</span>
+                      <span id="phOther" class="photo-placeholder">Other</span>
                     </label>
                   </div>
                 </div>

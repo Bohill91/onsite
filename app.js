@@ -10504,7 +10504,7 @@ let currentJobPhotoMeta = { gate: null, entrance: null, welfare: null, other: nu
 const PHOTO_KEYS = [
   {
     key: "gate",
-    label: "Access route / gate",
+    label: "Parking",
     inputId: "photoGate",
     prevId: "prvGate",
     phId: "phGate",
@@ -10518,7 +10518,7 @@ const PHOTO_KEYS = [
   },
   {
     key: "welfare",
-    label: "Parking / sign-in point",
+    label: "Welfare",
     inputId: "photoWelfare",
     prevId: "prvWelfare",
     phId: "phWelfare",
@@ -10769,9 +10769,9 @@ function openSiteMap(jobId) {
   // Photo strip
   const photoStrip = document.getElementById("sitePhotoStrip");
   const photoLabels = {
-    gate: "Access route / gate",
+    gate: "Parking",
     entrance: "Site entrance",
-    welfare: "Parking / sign-in point",
+    welfare: "Welfare",
     other: "Other site photo",
   };
   const jobPhotos = job.sitePhotos || {};

@@ -1450,16 +1450,16 @@ margin-bottom: 12px;
 .site-photo-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .photo-card {
   position: relative;
-  min-height: 118px;
-  aspect-ratio: 1 / 0.86;
+  min-height: 96px;
+  aspect-ratio: 1 / 0.78;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1.5px dashed var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   cursor: pointer;
   overflow: hidden;
   display: flex;
@@ -1488,25 +1488,25 @@ margin-bottom: 12px;
   align-items: center;
   gap: 8px;
   color: var(--ink-3);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.25;
-  padding: 12px;
+  padding: 10px;
   pointer-events: none;
   text-align: center;
 }
 
 .photo-placeholder::before {
   content: "+";
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: rgba(249, 115, 22, 0.1);
   color: var(--orange);
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 800;
 }
 
