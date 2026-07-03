@@ -5980,6 +5980,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+let pendingTradeRequirements = [];
+
 function updateAssignmentTypeForm() {
   const type = normalizeAssignmentType(
     document.getElementById("jobAssignmentType")?.value,
@@ -6008,6 +6010,7 @@ function updateAccommodationForm() {
   const allowance = document.getElementById("jobAccommodationAllowance");
   if (wrap) wrap.classList.toggle("hidden", !paid);
   if (!paid && allowance) allowance.value = "";
+  renderJobPricingBreakdown();
 }
 
 function updateOvertimeForm() {
@@ -6022,6 +6025,7 @@ function updateOvertimeForm() {
       },
     );
   }
+  renderJobPricingBreakdown();
 }
 
 document
@@ -6049,8 +6053,6 @@ function selectedJobWorkingDays() {
 }
 
 // ─── Multi-trade labour requirement builder ───────────────
-let pendingTradeRequirements = [];
-
 function readTradeReqInputs() {
   return {
     id: createId(),
@@ -6081,6 +6083,94 @@ function sameTradeRequirement(a, b) {
     a?.requiredQualifications === b?.requiredQualifications &&
     Number(a?.quantity || 1) === Number(b?.quantity || 1)
   );
+}
+
+function requestLabourEstimateRequirements() {
+  const current = readTradeReqInputs();
+  const requirements = [...pendingTradeRequirements];
+  if (
+    (current.trade || current.specialism || current.workActivity || current.quantity > 1) &&
+    !requirements.some((req) => sameTradeRequirement(req, current))
+  ) {
+    requirements.push(current);
+  }
+  return requirements.length ? requirements : [current];
+}
+
+function syncDailyLabourRateFields() {
+  const rateInput = document.getElementById("jobBudgetMax");
+  const minInput = document.getElementById("jobBudgetMin");
+  if (rateInput && minInput) minInput.value = rateInput.value;
+}
+
+function renderJobPricingBreakdown() {
+  const panel = document.getElementById("jobPricingBreakdown");
+  if (!panel) return;
+  syncDailyLabourRateFields();
+  const rate = Math.max(0, Number(document.getElementById("jobBudgetMax")?.value) || 0);
+  const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
+  const accommodationAllowance = accommodationPaid
+    ? Math.max(0, Number(document.getElementById("jobAccommodationAllowance")?.value) || 0)
+    : 0;
+  const requirements = requestLabourEstimateRequirements();
+  const visibleReqs = requirements.map((req, index) => ({
+    label:
+      [req.trade, req.specialism].filter(Boolean).join(" / ") ||
+      `Labour requirement ${index + 1}`,
+    quantity: Math.max(1, Number(req.quantity) || 1),
+  }));
+
+  // TODO: Replace these provisional display-only percentages with configured
+  // commercial rates when the real checkout/invoicing layer exists.
+  const serviceFeePct = 0.15;
+  const vatPct = 0.2;
+  let totalWorkers = 0;
+  let estimatedTotal = 0;
+
+  const rows = visibleReqs
+    .map((req) => {
+      const serviceFee = Math.round(rate * serviceFeePct);
+      const vat = Math.round((rate + serviceFee) * vatPct);
+      const totalPerWorker = rate + accommodationAllowance + serviceFee + vat;
+      const requirementTotal = totalPerWorker * req.quantity;
+      totalWorkers += req.quantity;
+      estimatedTotal += requirementTotal;
+      return `
+        <div class="jw-price-row">
+          <div>
+            <strong>${escapeHtml(req.label)}</strong>
+            <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"}</span>
+          </div>
+          <div class="jw-price-lines">
+            <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
+            <span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>
+            <span>OnSite service fee <strong>${formatMoney(serviceFee)}</strong></span>
+            <span>VAT <strong>${formatMoney(vat)}</strong></span>
+            <span>Total per worker <strong>${formatMoney(totalPerWorker)}</strong></span>
+            <span>Total daily cost <strong>${formatMoney(requirementTotal)}</strong></span>
+          </div>
+        </div>`;
+    })
+    .join("");
+
+  panel.innerHTML = `
+    <div class="jw-price-head">
+      <div>
+        <strong>Live pricing estimate</strong>
+        <span>Provisional daily estimate only. Final pricing is calculated at checkout.</span>
+      </div>
+    </div>
+    <div class="jw-price-list">${rows}</div>
+    ${
+      accommodationAllowance
+        ? `<p class="jw-price-note">Accommodation is added to the company invoice without an OnSite service fee.</p>`
+        : ""
+    }
+    <div class="jw-price-total">
+      <span>Total workers: <strong>${totalWorkers}</strong></span>
+      <span>Total trades / labour requirements: <strong>${visibleReqs.length}</strong></span>
+      <span>Estimated total daily cost: <strong>${formatMoney(estimatedTotal)}</strong></span>
+    </div>`;
 }
 
 function buildLabourRequirementsFromForm(shared = {}) {
@@ -6171,6 +6261,7 @@ function syncTradeReqBuilderState() {
     },
   );
   renderTradeReqCards();
+  renderJobPricingBreakdown();
 }
 
 function resetJobTradeRequirements() {
@@ -6196,6 +6287,22 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
   pendingTradeRequirements.splice(Number(btn.dataset.reqRemove), 1);
   syncTradeReqBuilderState();
 });
+
+[
+  "jobBudgetMax",
+  "jobAccommodationAllowance",
+  "jobTrade",
+  "jobSpecialism",
+  "jobGrade",
+  "workActivity",
+  "jobQuantity",
+  "jobReqQuals",
+  "jobWorkerReceivesFullRate",
+].forEach((id) => {
+  document.getElementById(id)?.addEventListener("input", renderJobPricingBreakdown);
+  document.getElementById(id)?.addEventListener("change", renderJobPricingBreakdown);
+});
+renderJobPricingBreakdown();
 
 // Restore the first saved requirement into the builder inputs when the form
 // submits with incomplete builder fields (their `required` is relaxed while
@@ -9400,6 +9507,9 @@ jobForm.addEventListener("submit", (e) => {
 
   const quantity = Number(document.querySelector("#jobQuantity")?.value) || 1;
 
+  syncDailyLabourRateFields();
+  const workerReceivesFullAdvertisedRate =
+    !!document.querySelector("#jobWorkerReceivesFullRate")?.checked;
   const budgetMinRaw = Number(document.querySelector("#jobBudgetMin")?.value);
   const budgetMaxRaw = Number(document.querySelector("#jobBudgetMax")?.value);
   const budgetMax =
@@ -9492,6 +9602,7 @@ jobForm.addEventListener("submit", (e) => {
     quantity,
     budgetMin,
     budgetMax,
+    workerReceivesFullAdvertisedRate,
     workingDays,
     requiresSaturday: workingDays.includes("saturday"),
     requiresSunday: workingDays.includes("sunday"),

@@ -7400,6 +7400,78 @@ body.modal-open {
   padding: 10px 12px;
 }
 
+.jw-pricing-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+.jw-price-head strong {
+  color: var(--ink);
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+.jw-price-head span,
+.jw-price-note {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin: 3px 0 0;
+}
+.jw-price-list {
+  display: grid;
+  gap: 10px;
+}
+.jw-price-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr);
+  padding: 12px;
+}
+.jw-price-row strong {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+.jw-price-row span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.74rem;
+  margin-top: 2px;
+}
+.jw-price-lines {
+  display: grid;
+  gap: 5px;
+}
+.jw-price-lines span,
+.jw-price-total span {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+.jw-price-lines strong,
+.jw-price-total strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.jw-price-total {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+}
+
 @media (max-width: 720px) {
   .jw-option-row {
     grid-template-columns: 1fr;
@@ -7459,6 +7531,9 @@ body.modal-open {
 @media (max-width: 760px) {
   .jw-days {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .jw-price-row {
+    grid-template-columns: 1fr;
   }
 }
 

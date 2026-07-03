@@ -1003,19 +1003,21 @@
               <section class="jw-card">
                 <header class="jw-card-head">
                   <p class="jw-kicker">Budget</p>
-                  <h3 class="jw-card-title">Daily Labour Budget</h3>
+                  <h3 class="jw-card-title">Daily Labour Rate</h3>
                 </header>
                 <div class="jw-grid">
-                  <label class="field-label">
-                    Budget — Min (£/day) *
-                    <input id="jobBudgetMin" type="number" min="0" placeholder="e.g. 240" required />
-                  </label>
-                  <label class="field-label">
-                    Budget — Max (£/day) *
+                  <input id="jobBudgetMin" type="hidden" />
+                  <label class="field-label jw-span-2">
+                    Daily Labour Rate (£/day) *
                     <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
                   </label>
                 </div>
                 <p class="jw-note">Daily worker rate, excluding VAT. OnSite fee and VAT are calculated at checkout.</p>
+                <label class="checkbox-row jw-check">
+                  <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
+                  <span>Worker receives the full advertised rate (Recommended)</span>
+                </label>
+                <p class="form-helper">When selected, OnSite’s service fee is added separately instead of being deducted from the worker’s rate.</p>
                 <label class="checkbox-row jw-check">
                   <input id="jobOvertimeAvailable" type="checkbox" />
                   <span>Overtime available</span>
@@ -1055,6 +1057,7 @@
                   </div>
                   <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
                 </div>
+                <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
               </section>
 
               <!-- ── SITE INFORMATION ────────────────────────── -->
