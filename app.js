@@ -6061,6 +6061,8 @@ function readTradeReqInputs() {
       ? Math.round(budgetMaxRaw)
       : null;
   const overtimeAvailable = !!document.getElementById("jobOvertimeAvailable")?.checked;
+  const workerReceivesFullAdvertisedRate =
+    !!document.getElementById("jobWorkerReceivesFullRate")?.checked;
   return {
     id: createId(),
     trade: document.getElementById("jobTrade")?.value || "",
@@ -6071,6 +6073,7 @@ function readTradeReqInputs() {
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
     budgetMin: budgetMax,
     budgetMax,
+    workerReceivesFullAdvertisedRate,
     overtimeAvailable,
     overtimeRates: overtimeAvailable
       ? {
@@ -6106,6 +6109,8 @@ function sameTradeRequirement(a, b) {
     a?.requiredQualifications === b?.requiredQualifications &&
     Number(a?.quantity || 1) === Number(b?.quantity || 1) &&
     Number(a?.budgetMax || 0) === Number(b?.budgetMax || 0) &&
+    (a?.workerReceivesFullAdvertisedRate !== false) ===
+      (b?.workerReceivesFullAdvertisedRate !== false) &&
     !!a?.overtimeAvailable === !!b?.overtimeAvailable
   );
 }
@@ -6147,6 +6152,7 @@ function renderJobPricingBreakdown() {
       `Labour requirement ${index + 1}`,
     quantity: Math.max(1, Number(req.quantity) || 1),
     rate: Math.max(0, Number(req.budgetMax) || 0),
+    workerReceivesFullAdvertisedRate: req.workerReceivesFullAdvertisedRate !== false,
     overtimeAvailable: !!req.overtimeAvailable,
   }));
 
@@ -6160,9 +6166,16 @@ function renderJobPricingBreakdown() {
   const rows = visibleReqs
     .map((req) => {
       const rate = req.rate;
-      const serviceFee = Math.round(rate * serviceFeePct);
-      const vat = Math.round((rate + serviceFee) * vatPct);
-      const totalPerWorker = rate + accommodationAllowance + serviceFee + vat;
+      const workerReceivesFullRate = req.workerReceivesFullAdvertisedRate !== false;
+      const workerReceives = workerReceivesFullRate
+        ? rate
+        : Math.max(0, Math.floor(rate / (1 + serviceFeePct)));
+      const serviceFee = workerReceivesFullRate
+        ? Math.round(rate * serviceFeePct)
+        : Math.max(0, rate - workerReceives);
+      const companyDayRate = workerReceivesFullRate ? rate + serviceFee : rate;
+      const vat = Math.round(companyDayRate * vatPct);
+      const totalPerWorker = companyDayRate + accommodationAllowance + vat;
       const requirementTotal = totalPerWorker * req.quantity;
       totalWorkers += req.quantity;
       totalDailyCost += requirementTotal;
@@ -6175,8 +6188,9 @@ function renderJobPricingBreakdown() {
           </div>
           <div class="jw-price-lines">
             <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
+            <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
             <span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>
-            <span>OnSite service fee <strong>${formatMoney(serviceFee)}</strong></span>
+            <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
             <span>VAT <strong>${formatMoney(vat)}</strong></span>
             <span>Total per worker <strong>${formatMoney(totalPerWorker)}</strong></span>
             <span>Total daily cost <strong>${formatMoney(requirementTotal)}</strong></span>
@@ -6229,6 +6243,10 @@ function buildLabourRequirementsFromForm(shared = {}) {
       budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
       saturdayRate: req.saturdayRate ?? shared.saturdayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
       sundayRate: req.sundayRate ?? shared.sundayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
+      workerReceivesFullAdvertisedRate:
+        req.workerReceivesFullAdvertisedRate ??
+        shared.workerReceivesFullAdvertisedRate ??
+        true,
       overtimeAvailable: !!req.overtimeAvailable,
       overtimeRates: req.overtimeRates || {
         afterStandardHours: "standard",
@@ -6259,6 +6277,8 @@ function applyTradeReqToInputs(req) {
   if (quals) quals.value = req.requiredQualifications;
   const rate = document.getElementById("jobBudgetMax");
   if (rate) rate.value = req.budgetMax || "";
+  const fullRate = document.getElementById("jobWorkerReceivesFullRate");
+  if (fullRate) fullRate.checked = req.workerReceivesFullAdvertisedRate !== false;
   const overtime = document.getElementById("jobOvertimeAvailable");
   if (overtime) overtime.checked = !!req.overtimeAvailable;
   const overtimeRates = req.overtimeRates || {};
@@ -6280,6 +6300,7 @@ function clearTradeReqInputs() {
     quantity: 1,
     requiredQualifications: "",
     budgetMax: "",
+    workerReceivesFullAdvertisedRate: true,
     overtimeAvailable: false,
     overtimeRates: {
       afterStandardHours: "standard",
@@ -9607,6 +9628,7 @@ jobForm.addEventListener("submit", (e) => {
   const labourRequirements = buildLabourRequirementsFromForm({
     budgetMin,
     budgetMax,
+    workerReceivesFullAdvertisedRate,
     saturdayRate,
     sundayRate,
     workingDays,

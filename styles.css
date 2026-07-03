@@ -7400,6 +7400,10 @@ body.modal-open {
   padding: 10px 12px;
 }
 .jw-rate-option {
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   justify-content: flex-start;
 }
 .jw-rate-option .form-helper {
