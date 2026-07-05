@@ -7956,15 +7956,17 @@ function agreementHistorySection(agreements) {
 // ─── Company Home ──────────────────────────────────────
 let activeCompanyProjectId = "";
 let activeCompanyProjectSection = "overview";
+let activeCompanyProjectSearch = "";
 
 const COMPANY_PROJECT_SECTIONS = [
   { id: "overview", label: "Overview" },
+  { id: "requirements", label: "Labour Requirements" },
   { id: "workers", label: "Workers" },
-  { id: "requirements", label: "Requirements" },
   { id: "attendance", label: "Attendance" },
   { id: "documents", label: "Documents" },
   { id: "site", label: "Site Info" },
   { id: "invoices", label: "Invoices" },
+  { id: "activity", label: "Activity" },
 ];
 
 function companyAssignedWorkers(job) {
@@ -8018,6 +8020,57 @@ function labourRequirementsForJob(job) {
 
 function labourRequirementLabel(req) {
   return `${req.specialism || req.trade || "Labour"} x ${req.quantity || 1}`;
+}
+
+function companyProjectTitle(job) {
+  return job?.projectName || job?.siteName || job?.trade || "Project";
+}
+
+function companyProjectSearchText(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
+  return [
+    companyProjectTitle(job),
+    job.jobNumber,
+    job.location,
+    job.trade,
+    job.specialism,
+    assignmentTypeLabel(job),
+    ...(summary.labourRequirements || []).flatMap((req) => [
+      req.trade,
+      req.specialism,
+      req.grade,
+      req.workActivity,
+      req.requiredQualifications,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterCompanyProjects(jobs, user) {
+  const query = activeCompanyProjectSearch.trim().toLowerCase();
+  if (!query) return jobs;
+  return jobs.filter((job) =>
+    companyProjectSearchText(job, companyProjectSummary(job, user)).includes(query),
+  );
+}
+
+function companyProjectSearchHTML(id) {
+  return `<label class="company-project-search" for="${id}">
+    <span>Search projects</span>
+    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" />
+  </label>`;
+}
+
+function companyProjectEmptyStateHTML(message = "Create your first labour request and it will appear here as a Live Project.") {
+  return `<div class="company-empty-card">
+    <div>
+      <span class="company-project-kicker">No Projects</span>
+      <strong>No live projects yet</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+    <button class="ch-request-btn" type="button" data-company-request-labour>New Labour Request</button>
+  </div>`;
 }
 
 function companyProjectSummary(job, user) {
@@ -8122,27 +8175,37 @@ function companyDashboardSummary(user) {
 
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
-  const title = job.projectName || job.siteName || job.trade || "Project";
-  const reqSummary = summary.labourRequirements
-    .map(labourRequirementLabel)
-    .join(" · ");
-  const meta = [
-    job.location,
-    assignmentTypeLabel(job),
-    job.start ? formatDateOnly(job.start) : "",
-    job.noFixedEndDate ? "No fixed end date" : "",
+  const title = companyProjectTitle(job);
+  const requirementRows = summary.labourRequirements
+    .map(
+      (req) => `<span>${escapeHtml(req.specialism || req.trade || "Labour")} <strong>x ${Math.max(1, Number(req.quantity) || 1)}</strong></span>`,
+    )
+    .join("");
+  const urgentFlags = [
+    summary.lateReports ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}` : "",
+    summary.plannedAbsences.length ? `${summary.plannedAbsences.length} Planned Absence` : "",
+    summary.replacements.length ? `${summary.replacements.length} replacement flag${summary.replacements.length === 1 ? "" : "s"}` : "",
+    summary.outstandingPreStart ? `${summary.outstandingPreStart} pre-start outstanding` : "",
   ].filter(Boolean);
   const selected = activeCompanyProjectId === job.id;
   return `
-    <article class="company-project-card${selected ? " selected" : ""}">
+    <article class="company-project-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
       <div class="company-project-top">
         <div>
+          <div class="company-project-kicker">Project</div>
           <div class="company-project-title">${escapeHtml(title)}</div>
-          <div class="company-project-meta">${escapeHtml(meta.join(" · "))}</div>
+          <div class="company-project-meta">Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
         </div>
         <span class="company-project-status">${escapeHtml(summary.status)}</span>
       </div>
-      <div class="company-project-role">${escapeHtml(reqSummary || job.trade || "Labour")}</div>
+      <div class="company-project-facts">
+        <span>Assignment type <strong>${escapeHtml(assignmentTypeLabel(job))}</strong></span>
+        <span>Start date <strong>${job.start ? formatDateOnly(job.start) : "TBC"}</strong></span>
+      </div>
+      <div class="company-project-requirements">
+        <span class="company-project-requirements-label">Labour requirements</span>
+        <div>${requirementRows || `<span>${escapeHtml(job.trade || "Labour")} <strong>x ${summary.required || 1}</strong></span>`}</div>
+      </div>
       <div class="company-project-fill">
         <span>${summary.filled}/${summary.required} filled</span>
         <strong>${summary.openRoles ? `${summary.openRoles} still required` : "Requirement filled"}</strong>
@@ -8150,11 +8213,9 @@ function companyProjectCardHTML(job, user) {
       <div class="company-project-metrics">
         <span>Pending offers <strong>${summary.pendingOffers.length}</strong></span>
         <span>Need approval <strong>${summary.reviewWorkers.length}</strong></span>
-        <span>Attendance issues <strong>${summary.attendanceIssues.length}</strong></span>
-        <span>Planned Absence <strong>${summary.plannedAbsences.length}</strong></span>
-        <span>Replacements <strong>${summary.replacements.length}</strong></span>
+        ${urgentFlags.length ? urgentFlags.map((flag) => `<span class="urgent">${escapeHtml(flag)}</span>`).join("") : `<span>Urgent flags <strong>0</strong></span>`}
       </div>
-      <button class="primary-btn company-project-open" type="button" data-company-project-open="${job.id}">Open Project</button>
+      <div class="primary-btn company-project-open">Open Project</div>
     </article>`;
 }
 
@@ -8217,6 +8278,7 @@ function companyProjectSectionHTML(job, user, summary) {
     documents: companyProjectDocumentsHTML(job, summary),
     site: companyProjectSiteInfoHTML(job),
     invoices: `<div class="company-project-section"><h4>Invoices / Placeholders</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
+    activity: companyProjectActivityHTML(job, summary),
   }[activeCompanyProjectSection] || companyProjectOverviewHTML(job, summary);
 }
 
@@ -8414,12 +8476,32 @@ function companyProjectSiteInfoHTML(job) {
     </div>`;
 }
 
+function companyProjectActivityHTML(job, summary) {
+  const offerRows = summary.apps
+    .slice(0, 8)
+    .map((app) => `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || "Worker")} · ${escapeHtml(app.status || "offer")}</span><strong>${app.createdAt ? formatDateOnly(app.createdAt) : "Offer"}</strong></div>`);
+  const attendanceRows = summary.todayRecords
+    .slice(0, 8)
+    .map((rec) => `<div class="company-project-mini-row"><span>${escapeHtml(findWorker(rec.workerId)?.name || "Worker")} · ${escapeHtml(ATT_CFG[rec.status]?.label || rec.status || "Attendance")}</span><strong>${formatDateOnly(rec.date)}</strong></div>`);
+  const notificationRows = (state.notifications || [])
+    .filter((n) => n.jobId === job.id)
+    .slice(0, 8)
+    .map((n) => `<div class="company-project-mini-row"><span>${escapeHtml(n.title || n.type || "Notification")}</span><strong>${n.createdAt ? formatDateOnly(n.createdAt) : "Update"}</strong></div>`);
+  const rows = [...notificationRows, ...offerRows, ...attendanceRows];
+  return `
+    <div class="company-project-section">
+      <h4>Activity</h4>
+      ${rows.length ? rows.join("") : `<div class="att-empty">No project activity yet.</div>`}
+    </div>`;
+}
+
 function renderContractorHome(user) {
   const el = document.getElementById("tab-dashboard");
   if (!el) return;
 
   const summary = companyDashboardSummary(user);
   const { companyJobs, activeJobs } = summary;
+  const visibleProjects = filterCompanyProjects(activeJobs, user);
   if (
     activeCompanyProjectId &&
     !companyJobs.some((job) => job.id === activeCompanyProjectId)
@@ -8427,83 +8509,40 @@ function renderContractorHome(user) {
     activeCompanyProjectId = "";
   }
   const selectedProject = companyJobs.find((job) => job.id === activeCompanyProjectId);
-  const projectCards = activeJobs.length
-    ? activeJobs
+  const projectCards = visibleProjects.length
+    ? visibleProjects
         .map((job) => companyProjectCardHTML(job, user))
         .join("")
-    : `<div class="company-empty-card">
-        <div>
-          <strong>No active projects yet</strong>
-          <span>Use the Request Labour button above to start matching workers.</span>
-        </div>
-      </div>`;
-
-  const companyName = user.companyName || user.name || "Company";
-  const summaryCards = [
-    ["Active projects", summary.activeProjects],
-    ["Expected today", summary.workersExpected],
-    ["Confirmed today", summary.attendanceConfirmed],
-    ["Open roles", summary.openRequirements],
-    ["Pending approvals", summary.pendingActions],
-  ];
-  const issueCards = [
-    ["Late reports", summary.lateReports, "Open Attendance", "attendance"],
-    ["Planned absences", summary.plannedAbsences, "Review Projects", "jobs"],
-    ["Replacements needed", summary.replacements, "Review Projects", "jobs"],
-    ["Pre-start outstanding", summary.outstandingPreStart, "Review Documents", "jobs"],
-  ];
+    : activeJobs.length
+      ? `<div class="company-empty-card">
+          <div>
+            <span class="company-project-kicker">No Matches</span>
+            <strong>No projects match that search</strong>
+            <span>Try searching by project name, job number, location or trade.</span>
+          </div>
+        </div>`
+      : companyProjectEmptyStateHTML();
 
   el.innerHTML = `
     <section class="company-home">
-      <div class="company-command-centre">
+      <div class="company-live-projects-head">
         <div class="company-home-head">
           <div>
-            <div class="company-home-kicker">Company Home</div>
-            <h2>${escapeHtml(companyName)}</h2>
-            <p>Project labour, attendance, approvals, and site readiness at a glance.</p>
+            <div class="company-home-kicker">Dashboard</div>
+            <h2>Live Projects</h2>
+            <p>Find and monitor current projects, labour requirements, offers and urgent flags.</p>
           </div>
           <button class="ch-request-btn company-home-request" type="button" data-company-request-labour>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Request Labour
+            New Labour Request
           </button>
         </div>
-        <div class="company-command-grid">
-          ${summaryCards
-            .map(
-              ([label, count]) => `<div class="company-command-card"><span>${escapeHtml(label)}</span><strong>${count}</strong></div>`,
-            )
-            .join("")}
+        <div class="company-project-toolbar">
+          ${companyProjectSearchHTML("companyDashboardProjectSearch")}
+          <div class="company-project-count">${visibleProjects.length}/${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}</div>
         </div>
       </div>
-      <div class="company-home-band">
-        <div class="company-home-section-head">
-          <div>
-            <h3>Issues requiring attention</h3>
-            <p>Only showing current items that may need action.</p>
-          </div>
-        </div>
-        <div class="company-issue-grid">
-          ${issueCards
-            .map(
-              ([label, count, action, tab]) => `<button class="company-issue-card${count ? " has-issues" : ""}" type="button" data-tab="${tab}">
-                <span>${escapeHtml(label)}</span>
-                <strong>${count}</strong>
-                <small>${escapeHtml(count ? action : "Clear")}</small>
-              </button>`,
-            )
-            .join("")}
-        </div>
-      </div>
-      <div class="company-home-band">
-        <div class="company-home-section-head">
-          <div>
-            <h3>Active Projects</h3>
-            <p>${activeJobs.length ? `${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}` : "No active projects yet"}</p>
-          </div>
-          <button class="secondary-btn" type="button" data-tab="jobs">View all</button>
-        </div>
-        <div class="company-project-grid">${projectCards}</div>
-      </div>
+      <div class="company-project-grid">${projectCards}</div>
       ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}
     </section>`;
 
@@ -8519,9 +8558,7 @@ function renderContractorHome(user) {
   bindMobileDailyJobButtons(el);
   bindLabourAdjustButtons(el);
   bindCompanyProjectDashboardButtons(el);
-  el.querySelectorAll("[data-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
+  bindCompanyProjectSearch(el);
 }
 
 function renderCompanyProjectsPage(user) {
@@ -8533,27 +8570,40 @@ function renderCompanyProjectsPage(user) {
   if (subtitle) subtitle.textContent = "Project-first view of your labour requests";
   const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
   const activeJobs = companyJobs.filter((j) => !j.completed);
+  const visibleProjects = filterCompanyProjects(activeJobs, user);
   const selectedProject = companyJobs.find(
     (job) => job.id === activeCompanyProjectId,
   );
   el.classList.remove("card-list");
   el.innerHTML = `
     <div class="company-project-page-head">
+      <div>
+        <div class="company-home-kicker">Projects</div>
+        <h2>Live Projects</h2>
+        <p>Open a Project to manage labour, attendance, documents, site info and invoices.</p>
+      </div>
       <button class="ch-request-btn" type="button" data-company-request-labour>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Request Labour
+        New Labour Request
       </button>
+    </div>
+    <div class="company-project-toolbar">
+      ${companyProjectSearchHTML("companyProjectsSearch")}
+      <div class="company-project-count">${visibleProjects.length}/${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}</div>
     </div>
     <div class="company-project-grid">
       ${
-        activeJobs.length
-          ? activeJobs.map((job) => companyProjectCardHTML(job, user)).join("")
-          : `<div class="company-empty-card">
-              <div>
-                <strong>No active projects yet</strong>
-                <span>Use the Request Labour button above to start building your project workforce.</span>
-              </div>
-            </div>`
+        visibleProjects.length
+          ? visibleProjects.map((job) => companyProjectCardHTML(job, user)).join("")
+          : activeJobs.length
+            ? `<div class="company-empty-card">
+                <div>
+                  <span class="company-project-kicker">No Matches</span>
+                  <strong>No projects match that search</strong>
+                  <span>Try searching by project name, job number, location or trade.</span>
+                </div>
+              </div>`
+            : companyProjectEmptyStateHTML("Use the New Labour Request button to start building your project workforce.")
       }
     </div>
     ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}`;
@@ -8567,6 +8617,7 @@ function renderCompanyProjectsPage(user) {
   bindPreStartDocumentButtons(el);
   bindMobileDailyJobButtons(el);
   bindLabourAdjustButtons(el);
+  bindCompanyProjectSearch(el);
   el.querySelectorAll("[data-map-job]").forEach((btn) => {
     btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
   });
@@ -8997,6 +9048,13 @@ function bindCompanyProjectDashboardButtons(scope) {
       activeCompanyProjectSection = "overview";
       render();
     });
+    btn.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
+      activeCompanyProjectSection = "overview";
+      render();
+    });
   });
   scope.querySelector("[data-company-project-close]")?.addEventListener("click", () => {
     activeCompanyProjectId = "";
@@ -9034,6 +9092,25 @@ function bindCompanyProjectDashboardButtons(scope) {
       ),
     );
   });
+}
+
+function bindCompanyProjectSearch(scope) {
+  scope
+    .querySelectorAll("#companyDashboardProjectSearch, #companyProjectsSearch")
+    .forEach((input) => {
+      input.addEventListener("input", () => {
+        const inputId = input.id;
+        const cursor = input.selectionStart || input.value.length;
+        activeCompanyProjectSearch = input.value || "";
+        render();
+        requestAnimationFrame(() => {
+          const nextInput = document.getElementById(inputId);
+          if (!nextInput) return;
+          nextInput.focus();
+          nextInput.setSelectionRange(cursor, cursor);
+        });
+      });
+    });
 }
 
 // Company panel: agreements awaiting the company's confirmation.
