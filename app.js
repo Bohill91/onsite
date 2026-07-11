@@ -8022,6 +8022,37 @@ function labourRequirementLabel(req) {
   return `${req.specialism || req.trade || "Labour"} x ${req.quantity || 1}`;
 }
 
+function uniqueLabourRequirements(requirements) {
+  const seen = new Map();
+  (requirements || []).forEach((req) => {
+    const key = [
+      req.trade || "",
+      req.specialism || "",
+      req.grade || "",
+      req.workActivity || "",
+      req.requiredQualifications || "",
+      Number(req.quantity) || 1,
+    ].join("|");
+    if (!seen.has(key)) seen.set(key, req);
+  });
+  return Array.from(seen.values());
+}
+
+function companyRequirementFilledCount(req, summary) {
+  if (!summary?.assignedWorkers?.length) return 0;
+  if ((summary.labourRequirements || []).length <= 1) return summary.filled;
+  const reqTrade = String(req.trade || "").toLowerCase();
+  const reqRole = String(req.specialism || "").toLowerCase();
+  return summary.assignedWorkers.filter((worker) => {
+    const workerTrade = String(worker.trade || "").toLowerCase();
+    const workerRole = String(worker.specialism || worker.grade || "").toLowerCase();
+    return (
+      (reqTrade && workerTrade.includes(reqTrade)) ||
+      (reqRole && workerRole.includes(reqRole))
+    );
+  }).length;
+}
+
 function companyProjectTitle(job) {
   return job?.projectName || job?.siteName || job?.trade || "Project";
 }
@@ -8176,10 +8207,23 @@ function companyDashboardSummary(user) {
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
   const title = companyProjectTitle(job);
-  const requirementRows = summary.labourRequirements
-    .map(
-      (req) => `<span>${escapeHtml(req.specialism || req.trade || "Labour")} <strong>x ${Math.max(1, Number(req.quantity) || 1)}</strong></span>`,
-    )
+  const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
+    .map((req) => {
+      const required = Math.max(1, Number(req.quantity) || 1);
+      const filled = Math.min(required, companyRequirementFilledCount(req, summary));
+      const remaining = Math.max(0, required - filled);
+      return `<div class="company-project-req-line">
+        <div>
+          <strong>${escapeHtml(req.specialism || req.trade || "Labour")}</strong>
+          <span>${escapeHtml(req.trade && req.specialism ? req.trade : req.workActivity || "Labour requirement")}</span>
+        </div>
+        <dl>
+          <div><dt>Required</dt><dd>${required}</dd></div>
+          <div><dt>Filled</dt><dd>${filled}</dd></div>
+          <div><dt>Remaining</dt><dd>${remaining}</dd></div>
+        </dl>
+      </div>`;
+    })
     .join("");
   const urgentFlags = [
     summary.lateReports ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}` : "",
@@ -8199,23 +8243,23 @@ function companyProjectCardHTML(job, user) {
         <span class="company-project-status">${escapeHtml(summary.status)}</span>
       </div>
       <div class="company-project-facts">
-        <span>Assignment type <strong>${escapeHtml(assignmentTypeLabel(job))}</strong></span>
-        <span>Start date <strong>${job.start ? formatDateOnly(job.start) : "TBC"}</strong></span>
+        <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
+        <span><strong>Start date</strong> ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
       </div>
       <div class="company-project-requirements">
-        <span class="company-project-requirements-label">Labour requirements</span>
-        <div>${requirementRows || `<span>${escapeHtml(job.trade || "Labour")} <strong>x ${summary.required || 1}</strong></span>`}</div>
-      </div>
-      <div class="company-project-fill">
-        <span>${summary.filled}/${summary.required} filled</span>
-        <strong>${summary.openRoles ? `${summary.openRoles} still required` : "Requirement filled"}</strong>
+        <span class="company-project-requirements-label">Labour Requirements</span>
+        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>Labour requirement</span></div><dl><div><dt>Required</dt><dd>${summary.required || 1}</dd></div><div><dt>Filled</dt><dd>${summary.filled}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
       </div>
       <div class="company-project-metrics">
-        <span>Pending offers <strong>${summary.pendingOffers.length}</strong></span>
-        <span>Need approval <strong>${summary.reviewWorkers.length}</strong></span>
-        ${urgentFlags.length ? urgentFlags.map((flag) => `<span class="urgent">${escapeHtml(flag)}</span>`).join("") : `<span>Urgent flags <strong>0</strong></span>`}
+        <span><strong>${summary.filled}/${summary.required}</strong> Filled</span>
+        <span><strong>${summary.pendingOffers.length}</strong> Pending offers</span>
+        <span><strong>${summary.reviewWorkers.length}</strong> Awaiting approval</span>
+        <span class="${urgentFlags.length ? "urgent" : ""}"><strong>${urgentFlags.length}</strong> Urgent issues</span>
       </div>
-      <div class="primary-btn company-project-open">Open Project</div>
+      ${urgentFlags.length ? `<div class="company-project-urgent-list">${urgentFlags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
+      <div class="company-project-action-row">
+        <div class="primary-btn company-project-open">View Project</div>
+      </div>
     </article>`;
 }
 
@@ -8528,7 +8572,7 @@ function renderContractorHome(user) {
       <div class="company-live-projects-head">
         <div class="company-home-head">
           <div>
-            <div class="company-home-kicker">Dashboard</div>
+            <div class="company-home-kicker">DASHBOARD</div>
             <h2>Live Projects</h2>
             <p>Find and monitor current projects, labour requirements, offers and urgent flags.</p>
           </div>
@@ -8539,7 +8583,7 @@ function renderContractorHome(user) {
         </div>
         <div class="company-project-toolbar">
           ${companyProjectSearchHTML("companyDashboardProjectSearch")}
-          <div class="company-project-count">${visibleProjects.length}/${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}</div>
+          <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
         </div>
       </div>
       <div class="company-project-grid">${projectCards}</div>
@@ -8589,7 +8633,7 @@ function renderCompanyProjectsPage(user) {
     </div>
     <div class="company-project-toolbar">
       ${companyProjectSearchHTML("companyProjectsSearch")}
-      <div class="company-project-count">${visibleProjects.length}/${activeJobs.length} live project${activeJobs.length === 1 ? "" : "s"}</div>
+      <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
     </div>
     <div class="company-project-grid">
       ${
