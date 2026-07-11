@@ -8214,12 +8214,11 @@ function companyProjectCardHTML(job, user) {
       const remaining = Math.max(0, required - filled);
       return `<div class="company-project-req-line">
         <div>
-          <strong>${escapeHtml(req.specialism || req.trade || "Labour")}</strong>
-          <span>${escapeHtml(req.trade && req.specialism ? req.trade : req.workActivity || "Labour requirement")}</span>
+          <strong>${escapeHtml(req.trade || "Labour")}</strong>
+          <span>${escapeHtml(req.specialism || req.workActivity || "Role / specialism TBC")}</span>
         </div>
         <dl>
-          <div><dt>Required</dt><dd>${required}</dd></div>
-          <div><dt>Filled</dt><dd>${filled}</dd></div>
+          <div><dt>Filled / required</dt><dd>${filled}/${required}</dd></div>
           <div><dt>Remaining</dt><dd>${remaining}</dd></div>
         </dl>
       </div>`;
@@ -8248,7 +8247,7 @@ function companyProjectCardHTML(job, user) {
       </div>
       <div class="company-project-requirements">
         <span class="company-project-requirements-label">Labour Requirements</span>
-        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>Labour requirement</span></div><dl><div><dt>Required</dt><dd>${summary.required || 1}</dd></div><div><dt>Filled</dt><dd>${summary.filled}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
+        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>${escapeHtml(job.specialism || "Role / specialism TBC")}</span></div><dl><div><dt>Filled / required</dt><dd>${summary.filled}/${summary.required || 1}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
       </div>
       <div class="company-project-metrics">
         <span><strong>${summary.filled}/${summary.required}</strong> Filled</span>
@@ -8288,26 +8287,28 @@ function companyProjectDetailHTML(job, user) {
   if (!job) return "";
   const summary = companyProjectSummary(job, user);
   const detailBody = companyProjectSectionHTML(job, user, summary);
+  const endDate = job.estimatedEndDate || job.endDate || "";
   return `
-    <section class="company-project-detail">
+    <section class="company-project-detail-page">
+      <button class="company-project-back" type="button" data-company-project-close>&larr; Back to Live Projects</button>
       <div class="company-project-detail-head">
         <div>
-          <div class="company-project-kicker">Project Detail</div>
-          <h3>${escapeHtml(job.projectName || job.siteName || job.trade || "Project")}</h3>
-          <p>${escapeHtml(job.location || "Location TBC")} · ${escapeHtml(summary.status)} · ${summary.filled}/${summary.required} filled</p>
+          <div class="company-project-kicker">PROJECT</div>
+          <h3>${escapeHtml(companyProjectTitle(job))}</h3>
+          <p>Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</p>
+          <div class="company-project-detail-meta">
+            <span>${escapeHtml(assignmentTypeLabel(job))}</span>
+            <span>Start ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
+            <span>${job.noFixedEndDate ? "No fixed end date" : `End ${endDate ? formatDateOnly(endDate) : "TBC"}`}</span>
+            <span>${summary.filled}/${summary.required} filled</span>
+          </div>
         </div>
-        <button class="secondary-btn" type="button" data-company-project-close>Close</button>
+        <span class="company-project-status">${escapeHtml(summary.status)}</span>
       </div>
       <div class="company-project-tabs" role="tablist" aria-label="Project detail sections">
         ${COMPANY_PROJECT_SECTIONS.map(
           (section) => `<button class="company-project-tab${activeCompanyProjectSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
         ).join("")}
-      </div>
-      <div class="company-project-actions">
-        <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Workers</button>
-        <button class="secondary-btn" type="button" data-project-attendance>View Attendance</button>
-        ${job.sitePin || job.sitePhotos ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Site / Access Info</button>` : ""}
-        <button class="secondary-btn" type="button" data-labour-adjust="${job.id}">Change Workers</button>
       </div>
       ${detailBody}
     </section>`;
@@ -8328,21 +8329,40 @@ function companyProjectSectionHTML(job, user, summary) {
 
 function companyProjectOverviewHTML(job, summary) {
   const endDate = job.estimatedEndDate || job.endDate || "";
+  const issues = [
+    summary.lateReports ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}` : "",
+    summary.plannedAbsences.length ? `${summary.plannedAbsences.length} Planned Absence` : "",
+    summary.replacements.length ? `${summary.replacements.length} replacement flag${summary.replacements.length === 1 ? "" : "s"}` : "",
+    summary.outstandingPreStart ? `${summary.outstandingPreStart} pre-start acknowledgement${summary.outstandingPreStart === 1 ? "" : "s"} outstanding` : "",
+  ].filter(Boolean);
   return `
     <div class="company-project-detail-grid">
       <div class="company-project-section">
-        <h4>Overview</h4>
-        <div class="company-project-mini-row"><span>Status</span><strong>${escapeHtml(summary.status)}</strong></div>
+        <h4>Project Details</h4>
+        <div class="company-project-mini-row"><span>Job number</span><strong>${escapeHtml(job.jobNumber || "Not set")}</strong></div>
+        <div class="company-project-mini-row"><span>Location</span><strong>${escapeHtml(job.location || "Location TBC")}</strong></div>
         <div class="company-project-mini-row"><span>Assignment type</span><strong>${escapeHtml(assignmentTypeLabel(job))}</strong></div>
         <div class="company-project-mini-row"><span>Start</span><strong>${job.start ? formatDateOnly(job.start) : "TBC"}</strong></div>
         <div class="company-project-mini-row"><span>End</span><strong>${job.noFixedEndDate ? "No fixed end date" : endDate ? formatDateOnly(endDate) : "TBC"}</strong></div>
       </div>
       <div class="company-project-section">
-        <h4>Current Position</h4>
-        <div class="company-project-mini-row"><span>Filled vs required</span><strong>${summary.filled}/${summary.required}</strong></div>
+        <h4>Staffing Summary</h4>
+        <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
+        <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
+        <div class="company-project-mini-row"><span>Remaining</span><strong>${summary.openRoles}</strong></div>
         <div class="company-project-mini-row"><span>Pending offers</span><strong>${summary.pendingOffers.length}</strong></div>
         <div class="company-project-mini-row"><span>Awaiting approval</span><strong>${summary.reviewWorkers.length}</strong></div>
-        <div class="company-project-mini-row"><span>Replacement flags</span><strong>${summary.replacements.length}</strong></div>
+        <div class="company-project-worker-actions">
+          <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Labour</button>
+        </div>
+      </div>
+      <div class="company-project-section">
+        <h4>Current Issues</h4>
+        ${
+          issues.length
+            ? issues.map((issue) => `<div class="company-project-mini-row"><span>${escapeHtml(issue)}</span><strong>Review</strong></div>`).join("")
+            : `<div class="att-empty">No current issues requiring attention.</div>`
+        }
       </div>
     </div>`;
 }
@@ -8420,7 +8440,7 @@ function companyProjectRequirementsHTML(job, summary) {
         })
         .join("")
     : `<div class="att-empty">No pending offers for this project.</div>`;
-  const requirementRows = summary.labourRequirements
+  const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map(
       (req) => `<div class="company-project-mini-row labour-project-req-row">
         <span>${escapeHtml(req.trade || "Labour")}${req.specialism ? ` · ${escapeHtml(req.specialism)}` : ""}${req.grade ? ` · ${escapeHtml(req.grade)}` : ""}</span>
@@ -8440,10 +8460,6 @@ function companyProjectRequirementsHTML(job, summary) {
         <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
         <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
         <div class="company-project-mini-row"><span>Open</span><strong>${summary.openRoles}</strong></div>
-        <div class="company-project-worker-actions">
-          <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Workers</button>
-          <button class="secondary-btn" type="button" data-labour-adjust="${job.id}">Increase / Decrease</button>
-        </div>
       </div>
       <div class="company-project-section">
         <h4>Pending Offers</h4>
@@ -8463,9 +8479,6 @@ function companyProjectAttendanceHTML(job, summary) {
         <div class="company-project-mini-row"><span>Attendance confirmed</span><strong>${summary.confirmedToday}</strong></div>
         <div class="company-project-mini-row"><span>Late reports</span><strong>${summary.lateReports}</strong></div>
         <div class="company-project-mini-row"><span>No-shows</span><strong>${summary.noShows}</strong></div>
-        <div class="company-project-worker-actions">
-          <button class="secondary-btn" type="button" data-project-attendance>Open Attendance</button>
-        </div>
       </div>
       <div class="company-project-section">
         <h4>QR / Manual Backup</h4>
@@ -8553,6 +8566,21 @@ function renderContractorHome(user) {
     activeCompanyProjectId = "";
   }
   const selectedProject = companyJobs.find((job) => job.id === activeCompanyProjectId);
+  if (selectedProject) {
+    el.innerHTML = `<section class="company-home">${companyProjectDetailHTML(selectedProject, user)}</section>`;
+    bindWorkerReleaseButtons(el);
+    bindCancelBookingButtons(el);
+    bindAgreementOpeners(el);
+    bindExtensionButtons(el);
+    bindCompanyOfferButtons(el);
+    bindProjectTransferButtons(el);
+    bindShiftChangeButtons(el);
+    bindPreStartDocumentButtons(el);
+    bindMobileDailyJobButtons(el);
+    bindLabourAdjustButtons(el);
+    bindCompanyProjectDashboardButtons(el);
+    return;
+  }
   const projectCards = visibleProjects.length
     ? visibleProjects
         .map((job) => companyProjectCardHTML(job, user))
@@ -8587,7 +8615,6 @@ function renderContractorHome(user) {
         </div>
       </div>
       <div class="company-project-grid">${projectCards}</div>
-      ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}
     </section>`;
 
   bindLabourRequestWorkflow(el);
@@ -8619,6 +8646,22 @@ function renderCompanyProjectsPage(user) {
     (job) => job.id === activeCompanyProjectId,
   );
   el.classList.remove("card-list");
+  if (selectedProject) {
+    el.innerHTML = companyProjectDetailHTML(selectedProject, user);
+    bindCompanyProjectDashboardButtons(el);
+    bindCompanyOfferButtons(el);
+    bindWorkerReleaseButtons(el);
+    bindAgreementOpeners(el);
+    bindProjectTransferButtons(el);
+    bindShiftChangeButtons(el);
+    bindPreStartDocumentButtons(el);
+    bindMobileDailyJobButtons(el);
+    bindLabourAdjustButtons(el);
+    el.querySelectorAll("[data-map-job]").forEach((btn) => {
+      btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
+    });
+    return;
+  }
   el.innerHTML = `
     <div class="company-project-page-head">
       <div>
@@ -8649,8 +8692,7 @@ function renderCompanyProjectsPage(user) {
               </div>`
             : companyProjectEmptyStateHTML("Use the New Labour Request button to start building your project workforce.")
       }
-    </div>
-    ${selectedProject ? companyProjectDetailHTML(selectedProject, user) : ""}`;
+    </div>`;
   bindLabourRequestWorkflow(el);
   bindCompanyProjectDashboardButtons(el);
   bindCompanyOfferButtons(el);

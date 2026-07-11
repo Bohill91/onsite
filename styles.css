@@ -6721,7 +6721,7 @@ margin-bottom: 12px;
   display: grid;
   gap: 18px;
   margin-inline: auto;
-  max-width: 1040px;
+  max-width: 1120px;
   width: 100%;
 }
 
@@ -7034,8 +7034,8 @@ body.modal-open {
 }
 
 .company-project-card.selected {
-  border-color: var(--orange);
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.12);
+  border-color: var(--border-light);
+  box-shadow: none;
 }
 
 .company-project-top,
@@ -7064,7 +7064,6 @@ body.modal-open {
   line-height: 1.35;
 }
 
-.company-project-status,
 .company-project-status {
   background: var(--surface-2);
   border: 1px solid var(--border-light);
@@ -7225,33 +7224,71 @@ body.modal-open {
   padding: 14px;
 }
 
-.company-project-tabs {
+.company-project-detail-page {
+  display: grid;
+  gap: 16px;
+}
+
+.company-project-back {
+  align-self: start;
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 800;
+  padding: 0;
+}
+
+.company-project-back:hover {
+  color: var(--orange-dark);
+}
+
+.company-project-detail-page .company-project-detail-head {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.company-project-detail-meta {
+  color: var(--ink-3);
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.company-project-tabs {
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  gap: 18px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom: 0;
 }
 
 .company-project-tab {
-  background: var(--surface-2);
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--ink-2);
   cursor: pointer;
   flex: 0 0 auto;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 800;
-  padding: 7px 10px;
+  padding: 0 0 10px;
 }
 
 .company-project-tab.active {
-  background: rgba(249, 115, 22, 0.12);
-  border-color: rgba(249, 115, 22, 0.35);
+  background: transparent;
+  border-color: var(--orange);
   color: var(--orange-dark);
 }
 
 .company-project-kicker {
-  color: var(--ink-3);
+  color: var(--orange);
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0;
@@ -7260,7 +7297,7 @@ body.modal-open {
 
 .company-project-detail-head h3 {
   color: var(--ink);
-  font-size: 1.08rem;
+  font-size: 1.35rem;
   margin: 2px 0;
 }
 
@@ -7281,7 +7318,7 @@ body.modal-open {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 16px;
 }
 
 .company-worker-directory {
