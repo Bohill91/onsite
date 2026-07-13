@@ -7214,18 +7214,19 @@ body.modal-open {
 }
 
 .company-project-health-panel {
-  align-items: flex-end;
+  align-items: start;
   display: grid;
-  gap: 5px;
-  max-width: 280px;
-  text-align: right;
+  gap: 4px;
+  justify-items: start;
+  max-width: 190px;
+  text-align: left;
 }
 
 .company-project-health-line {
   align-items: center;
   display: inline-flex;
   gap: 7px;
-  justify-self: end;
+  justify-self: start;
 }
 
 .company-project-health-led {
@@ -7233,8 +7234,19 @@ body.modal-open {
   border-radius: 999px;
   box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05);
   display: inline-block;
-  height: 9px;
-  width: 9px;
+  height: 10px;
+  position: relative;
+  width: 10px;
+}
+
+.company-project-health-led::after {
+  animation: health-led-pulse 2.4s ease-out infinite;
+  background: currentColor;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  opacity: 0.28;
+  position: absolute;
 }
 
 .company-project-health-label {
@@ -7252,19 +7264,23 @@ body.modal-open {
 }
 
 .company-project-health-panel.healthy .company-project-health-led {
-  background: #16a34a;
+  background: #16c75f;
+  color: #16c75f;
 }
 
 .company-project-health-panel.needsAttention .company-project-health-led {
-  background: #eab308;
+  background: #facc15;
+  color: #facc15;
 }
 
 .company-project-health-panel.atRisk .company-project-health-led {
-  background: #f97316;
+  background: #ff7a1a;
+  color: #ff7a1a;
 }
 
 .company-project-health-panel.critical .company-project-health-led {
-  background: #dc2626;
+  background: #ef4444;
+  color: #ef4444;
 }
 
 .company-project-health-suggestions {
@@ -7273,9 +7289,30 @@ body.modal-open {
 }
 
 .company-project-health-suggestions span {
-  color: var(--ink-2);
-  font-size: 0.72rem;
+  color: var(--ink-3);
+  font-size: 0.7rem;
   line-height: 1.35;
+}
+
+@keyframes health-led-pulse {
+  0% {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(2.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .company-project-health-led::after {
+    animation: none;
+  }
 }
 
 .company-project-facts {

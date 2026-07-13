@@ -8665,15 +8665,13 @@ function projectCardAttendanceHTML(job, summary) {
 function projectHealthGuidanceHTML(health) {
   const messages = {
     healthy: "Labour requests are progressing as expected.",
-    needsAttention: "Labour demand is currently high for one or more labour requirements.",
+    needsAttention: "Labour demand is high for this requirement.",
     atRisk: health.primaryReason || "Project health needs review.",
     critical: health.primaryReason || "Project health needs urgent review.",
   };
   const suggestions =
     health.level === "needsAttention"
-      ? [
-          "To improve the likelihood of filling this requirement sooner, consider increasing the advertised day rate.",
-        ]
+      ? ["Consider increasing the advertised day rate."]
       : [];
   return `<div class="company-project-health-panel ${escapeHtml(health.level)}">
     <div class="company-project-health-line">
