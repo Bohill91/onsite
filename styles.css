@@ -7151,7 +7151,7 @@ body.modal-open {
 }
 
 .company-project-card .company-project-top {
-  gap: 24px;
+  gap: 18px;
 }
 
 .company-project-title {
@@ -7222,9 +7222,9 @@ body.modal-open {
   display: grid;
   gap: 4px;
   justify-items: start;
-  margin-right: 14px;
-  max-width: 260px;
-  min-width: min(260px, 100%);
+  margin-right: 26px;
+  max-width: 300px;
+  min-width: min(300px, 100%);
   text-align: left;
 }
 
@@ -7374,6 +7374,10 @@ body.modal-open {
 .company-project-req-line:first-child {
   border-top: 0;
   padding-top: 0;
+}
+
+.company-project-requirements + .company-project-attendance {
+  margin-top: -16px;
 }
 
 .company-project-req-line > div:first-child {

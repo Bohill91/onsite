@@ -458,12 +458,11 @@ const RELEASE_REASON_OPTIONS = {
 // if the date is in the past. Returns null for an unparseable/empty date.
 function calendarDaysUntil(dateStr) {
   if (!dateStr) return null;
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr);
-  target.setHours(0, 0, 0, 0);
-  if (isNaN(target)) return null;
-  return Math.round((target - now) / 86400000);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const targetMs = dateOnlyMs(dateStr);
+  if (targetMs === null) return null;
+  return Math.round((targetMs - today.getTime()) / 86400000);
 }
 
 // Human-readable label for a booking's extension/availability status.
