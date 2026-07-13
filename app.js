@@ -8706,7 +8706,6 @@ function companyProjectCardHTML(job, user) {
         <span class="company-project-requirements-label">Today's Attendance</span>
         ${projectCardAttendanceHTML(job, summary)}
       </div>
-      <div class="company-project-health-reason${health.requiresAction ? " attention" : ""}">${escapeHtml(health.primaryReason)}</div>
       <div class="company-project-action-row">
         <div class="primary-btn company-project-open">View Project</div>
       </div>
