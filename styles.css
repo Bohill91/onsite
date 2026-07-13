@@ -7411,8 +7411,15 @@ body.modal-open {
 
 .company-project-attendance-note {
   color: var(--ink-3);
+  display: grid;
   font-size: 0.78rem;
+  gap: 3px;
   line-height: 1.35;
+}
+
+.company-project-attendance-note strong {
+  color: var(--ink);
+  font-size: 0.82rem;
 }
 
 .company-project-health-reason {

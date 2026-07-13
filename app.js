@@ -8647,16 +8647,19 @@ function projectRequirementExperienceLabel(req, job) {
 
 function projectCardAttendanceHTML(job, summary) {
   const startDays = projectStartDays(job);
-  const attendanceStarted =
-    startDays !== null && startDays <= 0 && summary.expectedToday > 0;
+  const attendanceStarted = startDays !== null && startDays <= 0;
   if (!attendanceStarted) {
-    return `<div class="company-project-attendance-note">Attendance has not started.</div>`;
+    return `<div class="company-project-attendance-note">
+      <strong>Project has not started yet.</strong>
+      <span>Starts ${job.start ? formatDateOnly(job.start) : "TBC"}.</span>
+    </div>`;
   }
+  const notSignedIn = Math.max(0, summary.expectedToday - summary.signedInToday);
   return `<div class="company-project-metrics company-project-attendance-metrics" aria-label="Today's Attendance">
     <span><strong>${summary.expectedToday}</strong> Expected</span>
     <span><strong>${summary.signedInToday}</strong> Signed in</span>
-    <span class="${summary.lateReports ? "urgent" : ""}"><strong>${summary.lateReports}</strong> Late reports</span>
-    <span class="${summary.noShows ? "urgent" : ""}"><strong>${summary.noShows}</strong> No shows</span>
+    <span class="${summary.lateReports ? "urgent" : ""}"><strong>${summary.lateReports}</strong> Informed of lateness</span>
+    <span class="${notSignedIn ? "urgent" : ""}"><strong>${notSignedIn}</strong> Not signed in</span>
   </div>`;
 }
 
