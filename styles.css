@@ -223,6 +223,7 @@ button, input, select, textarea {
 
 @media (min-width: 860px) {
   .sidebar-account-slot {
+    display: block;
     margin-top: auto;
     position: relative;
   }
