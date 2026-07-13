@@ -8635,6 +8635,31 @@ function calculateProjectHealth(job, summary = companyProjectSummary(job, getSes
   };
 }
 
+function projectRequirementExperienceLabel(req, job) {
+  const trade = req?.trade || job?.trade || "";
+  const grade = req?.grade || job?.grade || "";
+  if (!grade) return "Experience level TBC";
+  if (trade && !String(grade).toLowerCase().includes(String(trade).toLowerCase())) {
+    return `${trade} ${grade}`;
+  }
+  return grade;
+}
+
+function projectCardAttendanceHTML(job, summary) {
+  const startDays = projectStartDays(job);
+  const attendanceStarted =
+    startDays !== null && startDays <= 0 && summary.expectedToday > 0;
+  if (!attendanceStarted) {
+    return `<div class="company-project-attendance-note">Attendance has not started.</div>`;
+  }
+  return `<div class="company-project-metrics company-project-attendance-metrics" aria-label="Today's Attendance">
+    <span><strong>${summary.expectedToday}</strong> Expected</span>
+    <span><strong>${summary.signedInToday}</strong> Signed in</span>
+    <span class="${summary.lateReports ? "urgent" : ""}"><strong>${summary.lateReports}</strong> Late reports</span>
+    <span class="${summary.noShows ? "urgent" : ""}"><strong>${summary.noShows}</strong> No shows</span>
+  </div>`;
+}
+
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
   const health = calculateProjectHealth(job, summary);
@@ -8645,7 +8670,7 @@ function companyProjectCardHTML(job, user) {
       return `<div class="company-project-req-line">
         <div>
           <strong>${escapeHtml(req.trade || "Labour")}</strong>
-          <span>${escapeHtml(req.specialism || req.workActivity || "Role / specialism TBC")}</span>
+          <span>${escapeHtml(projectRequirementExperienceLabel(req, job))}</span>
         </div>
         <dl>
           <div><dt>Filled / required</dt><dd>${stats.filled}/${stats.required}</dd></div>
@@ -8654,12 +8679,6 @@ function companyProjectCardHTML(job, user) {
       </div>`;
     })
     .join("");
-  const urgentFlags = [
-    summary.lateReports ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}` : "",
-    summary.plannedAbsences.length ? `${summary.plannedAbsences.length} Planned Absence` : "",
-    summary.replacements.length ? `${summary.replacements.length} replacement flag${summary.replacements.length === 1 ? "" : "s"}` : "",
-    summary.outstandingPreStart ? `${summary.outstandingPreStart} pre-start outstanding` : "",
-  ].filter(Boolean);
   const selected = activeCompanyProjectId === job.id;
   return `
     <article class="company-project-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
@@ -8678,16 +8697,13 @@ function companyProjectCardHTML(job, user) {
       </div>
       <div class="company-project-requirements">
         <span class="company-project-requirements-label">Labour Requirements</span>
-        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>${escapeHtml(job.specialism || "Role / specialism TBC")}</span></div><dl><div><dt>Filled / required</dt><dd>${summary.filled}/${summary.required || 1}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
+        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>${escapeHtml(projectRequirementExperienceLabel({ trade: job.trade, grade: job.grade }, job))}</span></div><dl><div><dt>Filled / required</dt><dd>${summary.filled}/${summary.required || 1}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
       </div>
-      <div class="company-project-metrics">
-        <span><strong>${summary.filled}/${summary.required}</strong> Filled</span>
-        <span><strong>${summary.pendingOffers.length}</strong> Pending offers</span>
-        <span><strong>${summary.reviewWorkers.length}</strong> Awaiting approval</span>
-        <span class="${urgentFlags.length ? "urgent" : ""}"><strong>${urgentFlags.length}</strong> Urgent issues</span>
+      <div class="company-project-attendance">
+        <span class="company-project-requirements-label">Today's Attendance</span>
+        ${projectCardAttendanceHTML(job, summary)}
       </div>
       <div class="company-project-health-reason${health.requiresAction ? " attention" : ""}">${escapeHtml(health.primaryReason)}</div>
-      ${urgentFlags.length ? `<div class="company-project-urgent-list">${urgentFlags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
       <div class="company-project-action-row">
         <div class="primary-btn company-project-open">View Project</div>
       </div>

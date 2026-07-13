@@ -7397,6 +7397,24 @@ body.modal-open {
   color: #b42318;
 }
 
+.company-project-attendance {
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.company-project-attendance-metrics {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.company-project-attendance-note {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .company-project-health-reason {
   color: var(--ink-3);
   font-size: 0.78rem;
