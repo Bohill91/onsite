@@ -7162,6 +7162,71 @@ body.modal-open {
   margin: 2px 0 0;
 }
 
+.company-project-req-detail {
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: 12px;
+}
+
+.company-project-req-detail:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.company-project-req-detail > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.company-project-req-detail strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.company-project-req-detail span,
+.company-project-req-detail small {
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+
+.company-project-req-detail span {
+  font-size: 0.78rem;
+}
+
+.company-project-req-detail small {
+  font-size: 0.73rem;
+}
+
+.company-project-req-detail dl {
+  display: grid;
+  gap: 12px;
+  grid-auto-flow: column;
+  margin: 0;
+}
+
+.company-project-req-detail dl div {
+  text-align: right;
+}
+
+.company-project-req-detail dt {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 800;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.company-project-req-detail dd {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin: 2px 0 0;
+}
+
 .company-project-metrics {
   border-top: 1px solid var(--border-light);
   display: grid;
@@ -7449,16 +7514,19 @@ body.modal-open {
   }
 
   .company-project-req-line,
+  .company-project-req-detail,
   .company-project-metrics {
     grid-template-columns: 1fr;
   }
 
-  .company-project-req-line dl {
+  .company-project-req-line dl,
+  .company-project-req-detail dl {
     grid-auto-flow: row;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .company-project-req-line dl div {
+  .company-project-req-line dl div,
+  .company-project-req-detail dl div {
     text-align: left;
   }
 

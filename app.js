@@ -6063,6 +6063,16 @@ function readTradeReqInputs() {
   const overtimeAvailable = !!document.getElementById("jobOvertimeAvailable")?.checked;
   const workerReceivesFullAdvertisedRate =
     !!document.getElementById("jobWorkerReceivesFullRate")?.checked;
+  const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
+  const accommodationAllowanceRaw = Number(
+    document.getElementById("jobAccommodationAllowance")?.value,
+  );
+  const accommodationAllowancePerNight =
+    accommodationPaid &&
+    Number.isFinite(accommodationAllowanceRaw) &&
+    accommodationAllowanceRaw > 0
+      ? Math.round(accommodationAllowanceRaw)
+      : null;
   return {
     id: createId(),
     trade: document.getElementById("jobTrade")?.value || "",
@@ -6074,6 +6084,8 @@ function readTradeReqInputs() {
     budgetMin: budgetMax,
     budgetMax,
     workerReceivesFullAdvertisedRate,
+    accommodationPaid,
+    accommodationAllowancePerNight,
     overtimeAvailable,
     overtimeRates: overtimeAvailable
       ? {
@@ -6100,19 +6112,37 @@ function tradeReqHasCoreFields(req) {
   );
 }
 
+function labourRequirementKey(req) {
+  const overtimeRates = req?.overtimeRates || {};
+  return [
+    req?.trade || "",
+    req?.specialism || "",
+    req?.grade || "",
+    req?.workActivity || "",
+    req?.requiredQualifications || "",
+    Number(req?.quantity || 1),
+    Number(req?.budgetMax || 0),
+    req?.workerReceivesFullAdvertisedRate !== false,
+    !!req?.overtimeAvailable,
+    overtimeRates.afterStandardHours || "standard",
+    overtimeRates.saturday || "standard",
+    overtimeRates.sunday || "standard",
+    !!req?.accommodationPaid,
+    Number(req?.accommodationAllowancePerNight || 0),
+  ].join("|");
+}
+
 function sameTradeRequirement(a, b) {
-  return (
-    a?.trade === b?.trade &&
-    a?.specialism === b?.specialism &&
-    a?.grade === b?.grade &&
-    a?.workActivity === b?.workActivity &&
-    a?.requiredQualifications === b?.requiredQualifications &&
-    Number(a?.quantity || 1) === Number(b?.quantity || 1) &&
-    Number(a?.budgetMax || 0) === Number(b?.budgetMax || 0) &&
-    (a?.workerReceivesFullAdvertisedRate !== false) ===
-      (b?.workerReceivesFullAdvertisedRate !== false) &&
-    !!a?.overtimeAvailable === !!b?.overtimeAvailable
-  );
+  return labourRequirementKey(a) === labourRequirementKey(b);
+}
+
+function dedupeLabourRequirements(requirements) {
+  const seen = new Map();
+  (requirements || []).forEach((req) => {
+    const key = labourRequirementKey(req);
+    if (!seen.has(key)) seen.set(key, req);
+  });
+  return Array.from(seen.values());
 }
 
 function requestLabourEstimateRequirements() {
@@ -6229,7 +6259,7 @@ function buildLabourRequirementsFromForm(shared = {}) {
     requirements.push(current);
   }
   const base = requirements.length ? requirements : [current];
-  return base
+  return dedupeLabourRequirements(base)
     .filter((req) => req.trade || req.specialism || req.workActivity)
     .map((req, index) => ({
       id: req.id || `${createId()}-${index}`,
@@ -6247,6 +6277,11 @@ function buildLabourRequirementsFromForm(shared = {}) {
         req.workerReceivesFullAdvertisedRate ??
         shared.workerReceivesFullAdvertisedRate ??
         true,
+      accommodationPaid: !!(req.accommodationPaid ?? shared.accommodationPaid),
+      accommodationAllowancePerNight:
+        req.accommodationAllowancePerNight ??
+        shared.accommodationAllowancePerNight ??
+        null,
       overtimeAvailable: !!req.overtimeAvailable,
       overtimeRates: req.overtimeRates || {
         afterStandardHours: "standard",
@@ -6355,6 +6390,10 @@ document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
   if (!req.requiredQualifications)
     return showToast("Enter the required qualifications & tickets");
   if (!req.budgetMax) return showToast("Enter the daily labour rate");
+  if (pendingTradeRequirements.some((existing) => sameTradeRequirement(existing, req))) {
+    showToast("This labour requirement has already been added");
+    return;
+  }
   pendingTradeRequirements.push(req);
   clearTradeReqInputs();
   syncTradeReqBuilderState();
@@ -7980,7 +8019,7 @@ function companyAssignedWorkers(job) {
 
 function labourRequirementsForJob(job) {
   if (Array.isArray(job?.labourRequirements) && job.labourRequirements.length) {
-    return job.labourRequirements.map((req, index) => ({
+    return dedupeLabourRequirements(job.labourRequirements).map((req, index) => ({
       id: req.id || `${job.id || "job"}-req-${index}`,
       trade: req.trade || job.trade || "",
       specialism: req.specialism || job.specialism || "",
@@ -7993,6 +8032,21 @@ function labourRequirementsForJob(job) {
       budgetMax: req.budgetMax ?? job.budgetMax ?? null,
       saturdayRate: req.saturdayRate ?? job.weekendRates?.saturday ?? null,
       sundayRate: req.sundayRate ?? job.weekendRates?.sunday ?? null,
+      workerReceivesFullAdvertisedRate:
+        req.workerReceivesFullAdvertisedRate ??
+        job.workerReceivesFullAdvertisedRate ??
+        true,
+      overtimeAvailable: !!(req.overtimeAvailable ?? job.overtimeAvailable),
+      overtimeRates: req.overtimeRates || job.overtimeRates || {
+        afterStandardHours: "standard",
+        saturday: "standard",
+        sunday: "standard",
+      },
+      accommodationPaid: !!(req.accommodationPaid ?? job.accommodationPaid),
+      accommodationAllowancePerNight:
+        req.accommodationAllowancePerNight ??
+        job.accommodationAllowancePerNight ??
+        null,
       workingDays: normalizeWorkingDays(req.workingDays || job.workingDays),
       shiftStartTime: req.shiftStartTime || job.shiftStartTime || "",
       shiftFinishTime: req.shiftFinishTime || job.shiftFinishTime || "",
@@ -8011,6 +8065,16 @@ function labourRequirementsForJob(job) {
       budgetMax: job?.budgetMax ?? null,
       saturdayRate: job?.weekendRates?.saturday ?? null,
       sundayRate: job?.weekendRates?.sunday ?? null,
+      workerReceivesFullAdvertisedRate:
+        job?.workerReceivesFullAdvertisedRate ?? true,
+      overtimeAvailable: !!job?.overtimeAvailable,
+      overtimeRates: job?.overtimeRates || {
+        afterStandardHours: "standard",
+        saturday: "standard",
+        sunday: "standard",
+      },
+      accommodationPaid: !!job?.accommodationPaid,
+      accommodationAllowancePerNight: job?.accommodationAllowancePerNight ?? null,
       workingDays: normalizeWorkingDays(job?.workingDays),
       shiftStartTime: job?.shiftStartTime || "",
       shiftFinishTime: job?.shiftFinishTime || "",
@@ -8023,19 +8087,7 @@ function labourRequirementLabel(req) {
 }
 
 function uniqueLabourRequirements(requirements) {
-  const seen = new Map();
-  (requirements || []).forEach((req) => {
-    const key = [
-      req.trade || "",
-      req.specialism || "",
-      req.grade || "",
-      req.workActivity || "",
-      req.requiredQualifications || "",
-      Number(req.quantity) || 1,
-    ].join("|");
-    if (!seen.has(key)) seen.set(key, req);
-  });
-  return Array.from(seen.values());
+  return dedupeLabourRequirements(requirements);
 }
 
 function companyRequirementFilledCount(req, summary) {
@@ -8051,6 +8103,51 @@ function companyRequirementFilledCount(req, summary) {
       (reqRole && workerRole.includes(reqRole))
     );
   }).length;
+}
+
+function companyRequirementApplicationCount(req, summary, statuses) {
+  const apps = summary?.apps || [];
+  if (!apps.length) return 0;
+  const statusSet = new Set(statuses);
+  const scopedApps = apps.filter((app) => statusSet.has(app.status));
+  if ((summary.labourRequirements || []).length <= 1) return scopedApps.length;
+  const reqTrade = String(req.trade || "").toLowerCase();
+  const reqRole = String(req.specialism || "").toLowerCase();
+  return scopedApps.filter((app) => {
+    const worker = applicationWorker(app);
+    const text = [
+      app.trade,
+      app.specialism,
+      worker?.trade,
+      worker?.specialism,
+      worker?.grade,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return (reqTrade && text.includes(reqTrade)) || (reqRole && text.includes(reqRole));
+  }).length;
+}
+
+function companyRequirementStats(req, summary) {
+  const required = Math.max(1, Number(req.quantity) || 1);
+  const filled = Math.min(required, companyRequirementFilledCount(req, summary));
+  const offered = companyRequirementApplicationCount(req, summary, ["offered"]);
+  const accepted = Math.min(
+    required,
+    filled +
+      companyRequirementApplicationCount(req, summary, [
+        "under_company_review",
+        "confirmed",
+      ]),
+  );
+  return {
+    required,
+    filled,
+    offered,
+    accepted,
+    remaining: Math.max(0, required - filled),
+  };
 }
 
 function companyProjectTitle(job) {
@@ -8117,6 +8214,9 @@ function companyProjectSummary(job, user) {
   const apps = (state.applications || []).filter((a) => a.jobId === job.id);
   const pendingOffers = apps.filter((a) => a.status === "offered");
   const reviewWorkers = apps.filter((a) => a.status === "under_company_review");
+  const projectAttendanceRecords = attendanceRecords.filter(
+    (r) => r.jobId === job.id && (!user?.id || r.companyId === user.id || !r.companyId),
+  );
   const todayRecords = attendanceRecords.filter(
     (r) => r.jobId === job.id && r.companyId === user.id && r.date === today,
   );
@@ -8162,6 +8262,7 @@ function companyProjectSummary(job, user) {
     apps,
     pendingOffers,
     reviewWorkers,
+    projectAttendanceRecords,
     todayRecords,
     expectedToday: assignedWorkers.length,
     signedInToday: todayRecords.filter((r) =>
@@ -8209,17 +8310,15 @@ function companyProjectCardHTML(job, user) {
   const title = companyProjectTitle(job);
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
-      const required = Math.max(1, Number(req.quantity) || 1);
-      const filled = Math.min(required, companyRequirementFilledCount(req, summary));
-      const remaining = Math.max(0, required - filled);
+      const stats = companyRequirementStats(req, summary);
       return `<div class="company-project-req-line">
         <div>
           <strong>${escapeHtml(req.trade || "Labour")}</strong>
           <span>${escapeHtml(req.specialism || req.workActivity || "Role / specialism TBC")}</span>
         </div>
         <dl>
-          <div><dt>Filled / required</dt><dd>${filled}/${required}</dd></div>
-          <div><dt>Remaining</dt><dd>${remaining}</dd></div>
+          <div><dt>Filled / required</dt><dd>${stats.filled}/${stats.required}</dd></div>
+          <div><dt>Remaining</dt><dd>${stats.remaining}</dd></div>
         </dl>
       </div>`;
     })
@@ -8441,25 +8540,41 @@ function companyProjectRequirementsHTML(job, summary) {
         .join("")
     : `<div class="att-empty">No pending offers for this project.</div>`;
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
-    .map(
-      (req) => `<div class="company-project-mini-row labour-project-req-row">
-        <span>${escapeHtml(req.trade || "Labour")}${req.specialism ? ` · ${escapeHtml(req.specialism)}` : ""}${req.grade ? ` · ${escapeHtml(req.grade)}` : ""}</span>
-        <strong>${req.quantity || 1} worker${Number(req.quantity) === 1 ? "" : "s"}</strong>
-      </div>
-      <div class="company-project-mini-row labour-project-req-meta">
-        <span>${escapeHtml(req.workActivity || "Work activity TBC")}</span>
-        <strong>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day max` : "Rate TBC"}</strong>
-      </div>`,
-    )
+    .map((req) => {
+      const stats = companyRequirementStats(req, summary);
+      const meta = [
+        req.grade,
+        req.workActivity,
+        req.requiredQualifications,
+        req.budgetMax ? `${formatMoney(req.budgetMax)}/day` : "",
+        req.workerReceivesFullAdvertisedRate === false
+          ? "Service fee deducted from advertised rate"
+          : "Full advertised rate to worker",
+        req.overtimeAvailable ? "Overtime available" : "",
+        req.accommodationPaid
+          ? `Accommodation${req.accommodationAllowancePerNight ? ` ${formatMoney(req.accommodationAllowancePerNight)}/night` : ""}`
+          : "",
+      ].filter(Boolean);
+      return `<div class="company-project-req-detail">
+        <div>
+          <strong>${escapeHtml(req.trade || "Labour")}</strong>
+          <span>${escapeHtml(req.specialism || "Role / specialism TBC")}</span>
+          ${meta.length ? `<small>${meta.map(escapeHtml).join(" · ")}</small>` : ""}
+        </div>
+        <dl>
+          <div><dt>Required</dt><dd>${stats.required}</dd></div>
+          <div><dt>Offered</dt><dd>${stats.offered}</dd></div>
+          <div><dt>Accepted / assigned</dt><dd>${stats.accepted}</dd></div>
+          <div><dt>Remaining</dt><dd>${stats.remaining}</dd></div>
+        </dl>
+      </div>`;
+    })
     .join("");
   return `
     <div class="company-project-detail-grid">
       <div class="company-project-section">
         <h4>Labour Requirements</h4>
-        ${requirementRows}
-        <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
-        <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
-        <div class="company-project-mini-row"><span>Open</span><strong>${summary.openRoles}</strong></div>
+        ${requirementRows || `<div class="att-empty">No labour requirements saved for this project.</div>`}
       </div>
       <div class="company-project-section">
         <h4>Pending Offers</h4>
@@ -8470,6 +8585,14 @@ function companyProjectRequirementsHTML(job, summary) {
 
 function companyProjectAttendanceHTML(job, summary) {
   const lateRows = summary.todayRecords.filter((rec) => rec.lateReport);
+  const historyRows = [...summary.projectAttendanceRecords]
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 12)
+    .map((rec) => `<div class="company-project-mini-row">
+      <span>${formatDateOnly(rec.date)} · ${escapeHtml(findWorker(rec.workerId)?.name || "Worker")}</span>
+      <strong>${escapeHtml(ATT_CFG[rec.status]?.label || rec.status || "Attendance")}</strong>
+    </div>`)
+    .join("");
   return `
     <div class="company-project-detail-grid">
       <div class="company-project-section">
@@ -8481,9 +8604,13 @@ function companyProjectAttendanceHTML(job, summary) {
         <div class="company-project-mini-row"><span>No-shows</span><strong>${summary.noShows}</strong></div>
       </div>
       <div class="company-project-section">
-        <h4>QR / Manual Backup</h4>
+        <h4>Project Attendance Records</h4>
         <div class="company-project-mini-row"><span>QR sign-in</span><strong>${summary.signedInToday}/${summary.expectedToday}</strong></div>
         <div class="company-project-mini-row"><span>Manual override</span><strong>Available in Attendance</strong></div>
+        ${historyRows || `<div class="att-empty">No attendance records saved for this project yet.</div>`}
+      </div>
+      <div class="company-project-section">
+        <h4>Late Reports</h4>
         ${
           lateRows.length
             ? lateRows.map((rec) => `<div class="company-project-mini-row"><span>${escapeHtml(findWorker(rec.workerId)?.name || "Worker")}</span><strong>${escapeHtml(rec.lateReport.reason || "Late report")}</strong></div>`).join("")
@@ -8513,8 +8640,14 @@ function companyProjectDocumentsHTML(job, summary) {
 
 function companyProjectSiteInfoHTML(job) {
   const photoMeta = job.sitePhotoMeta || {};
-  const photoRows = Object.values(photoMeta).length
+  const photoValues = Object.values(photoMeta).length
     ? Object.values(photoMeta)
+    : Object.keys(job.sitePhotos || {}).map((key) => ({
+        label: key,
+        fileName: "Photo added",
+      }));
+  const photoRows = photoValues.length
+    ? photoValues
         .map((photo) => `<div class="company-project-mini-row"><span>${escapeHtml(photo.label || photo.photoType || "Site photo")}</span><strong>${escapeHtml(photo.fileName || "Photo added")}</strong></div>`)
         .join("")
     : `<div class="att-empty">No site photo metadata added.</div>`;
@@ -8522,12 +8655,22 @@ function companyProjectSiteInfoHTML(job) {
     <div class="company-project-detail-grid">
       <div class="company-project-section">
         <h4>Site Address &amp; Access</h4>
-        ${buildSiteInfoHtml(job) || `<div class="att-empty">No site information added.</div>`}
+        <div class="company-project-mini-row"><span>Location</span><strong>${escapeHtml(job.location || "Location TBC")}</strong></div>
+        <div class="company-project-mini-row"><span>Site address</span><strong>${escapeHtml(job.siteAddress || job.location || "Not added")}</strong></div>
+        <div class="company-project-mini-row"><span>Entrance pin</span><strong>${job.sitePin ? "Pinned" : "Not pinned"}</strong></div>
+        <div class="company-project-mini-row"><span>Site contact</span><strong>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</strong></div>
+        <div class="company-project-mini-row"><span>Arrival instructions</span><strong>${escapeHtml(job.arrivalInstructions || "Not added")}</strong></div>
+        <div class="company-project-mini-row"><span>Parking information</span><strong>${escapeHtml(job.parking || "Not added")}</strong></div>
+        <div class="company-project-mini-row"><span>PPE requirements</span><strong>${escapeHtml(job.ppe || "Not added")}</strong></div>
+        <div class="company-project-mini-row"><span>Additional notes for workers</span><strong>${escapeHtml(job.gateAccess || "Not added")}</strong></div>
         ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Open Site Map</button>` : ""}
       </div>
       <div class="company-project-section">
-        <h4>Photos &amp; Responsibility</h4>
+        <h4>Site Photos</h4>
         ${photoRows}
+      </div>
+      <div class="company-project-section">
+        <h4>Attendance Responsibility</h4>
         <div class="company-project-mini-row"><span>Attendance responsibility</span><strong>${job.attendanceManager?.name ? `Manager: ${escapeHtml(job.attendanceManager.name)}` : "Company / manual setup"}</strong></div>
       </div>
     </div>`;
@@ -9792,6 +9935,13 @@ jobForm.addEventListener("submit", (e) => {
     budgetMin,
     budgetMax,
     workerReceivesFullAdvertisedRate,
+    accommodationPaid,
+    accommodationAllowancePerNight:
+      accommodationPaid &&
+      Number.isFinite(accommodationAllowanceRaw) &&
+      accommodationAllowanceRaw > 0
+        ? Math.round(accommodationAllowanceRaw)
+        : null,
     saturdayRate,
     sundayRate,
     workingDays,
