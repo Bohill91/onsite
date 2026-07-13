@@ -9818,15 +9818,15 @@ function renderContractorHome(user) {
 
   el.innerHTML = `
     <section class="company-dashboard-page request-labour-page">
+      <header class="request-labour-page-head company-dashboard-head">
+        <div>
+          <p class="company-home-kicker">DASHBOARD</p>
+          <h2>Dashboard</h2>
+          <p>Monitor your live projects, staffing, attendance and project health.</p>
+        </div>
+      </header>
       <div class="request-labour-page-body">
         <div class="jw-form">
-          <header class="request-labour-page-head company-dashboard-head">
-            <div>
-              <p class="company-home-kicker">DASHBOARD</p>
-              <h2>Dashboard</h2>
-              <p>Monitor your live projects, staffing, attendance and project health.</p>
-            </div>
-          </header>
           <section class="company-dashboard-filter-card jw-card">
             <div class="company-project-toolbar">
               ${companyProjectSearchHTML("companyDashboardProjectSearch")}
