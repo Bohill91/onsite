@@ -228,7 +228,7 @@ button, input, select, textarea {
   }
 
   .sidebar-account-card {
-    align-items: center;
+    align-items: flex-start;
     background: var(--surface-2);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
@@ -262,23 +262,35 @@ button, input, select, textarea {
 
   .sidebar-company-text {
     display: grid;
-    gap: 2px;
+    gap: 1px;
     min-width: 0;
   }
 
   .sidebar-company-name {
     color: var(--ink);
-    font-size: 0.84rem;
+    font-size: 0.82rem;
     font-weight: 800;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .sidebar-company-type {
-    color: var(--ink-3);
-    font-size: 0.74rem;
+  .sidebar-user-name {
+    color: var(--ink-2);
+    font-size: 0.76rem;
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-user-role {
+    color: var(--ink-3);
+    font-size: 0.72rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sidebar-account-menu {

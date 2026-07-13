@@ -6607,6 +6607,23 @@ function companySidebarInitials(name) {
     .join("") || "C";
 }
 
+function companySidebarUserRole(user) {
+  const rawRole =
+    user?.permissionRole ||
+    user?.companyRole ||
+    user?.userRole ||
+    user?.role ||
+    "administrator";
+  const normalized = String(rawRole).trim().toLowerCase();
+  const labels = {
+    administrator: "Administrator",
+    admin: "Administrator",
+    manager: "Manager",
+    supervisor: "Supervisor",
+  };
+  return labels[normalized] || rawRole;
+}
+
 function renderSidebarAccount(user) {
   const slot = document.getElementById("sidebarAccountSlot");
   if (!slot) return;
@@ -6615,18 +6632,21 @@ function renderSidebarAccount(user) {
     return;
   }
   const companyName = companySidebarName(user);
+  const userName = user?.name || user?.fullName || "User";
+  const userRole = companySidebarUserRole(user);
   slot.innerHTML = `
     <button class="sidebar-account-card" type="button" aria-expanded="false" data-sidebar-account-toggle>
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
         <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
-        <span class="sidebar-company-type">Company</span>
+        <span class="sidebar-user-name">${escapeHtml(userName)}</span>
+        <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
       </span>
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
-      <button type="button" data-sidebar-account-action="profile">Company Profile</button>
-      <button type="button" data-sidebar-account-action="settings">Settings</button>
-      <button type="button" data-sidebar-account-action="signout">Sign out</button>
+      <button type="button" data-sidebar-account-action="profile">My Profile</button>
+      <button type="button" data-sidebar-account-action="settings">Company Settings</button>
+      <button type="button" data-sidebar-account-action="signout">Sign Out</button>
     </div>`;
   bindSidebarAccountMenu(slot);
 }
