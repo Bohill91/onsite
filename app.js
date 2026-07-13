@@ -8816,7 +8816,7 @@ function companyProjectCardHTML(job, user) {
     .join("");
   const selected = activeCompanyProjectId === job.id;
   return `
-    <article class="company-project-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
+    <article class="company-project-card jw-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
       <div class="company-project-top">
         <div>
           <div class="company-project-kicker">PROJECT</div>
@@ -9817,7 +9817,7 @@ function renderContractorHome(user) {
       : companyProjectEmptyStateHTML();
 
   el.innerHTML = `
-    <section class="company-dashboard-page company-dashboard-workspace">
+    <section class="company-dashboard-page request-labour-page">
       <header class="request-labour-page-head">
         <div>
           <p class="company-home-kicker">DASHBOARD</p>
@@ -9825,7 +9825,7 @@ function renderContractorHome(user) {
           <p>Monitor your live projects, staffing, attendance and project health.</p>
         </div>
       </header>
-      <section class="company-dashboard-filter-card">
+      <section class="company-dashboard-filter-card jw-card">
         <div class="company-project-toolbar">
           ${companyProjectSearchHTML("companyDashboardProjectSearch")}
           ${companyProjectFilterHTML()}
