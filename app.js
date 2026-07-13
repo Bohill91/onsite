@@ -8647,10 +8647,18 @@ function projectRequirementExperienceLabel(req, job) {
 
 function projectCardAttendanceHTML(job, summary) {
   const startDays = projectStartDays(job);
-  const attendanceStarted = startDays !== null && startDays <= 0;
+  const attendanceStarted = startDays !== null && startDays < 0;
   if (!attendanceStarted) {
+    const startLabel =
+      startDays === 0
+        ? "Starts today"
+        : startDays === 1
+          ? "Starts tomorrow"
+          : startDays !== null && startDays > 1
+            ? `Starts in ${startDays} days`
+            : "Start date TBC";
     return `<div class="company-project-attendance-note">
-      <strong>Attendance tracking begins on ${job.start ? formatDateOnly(job.start) : "TBC"}.</strong>
+      <strong>${escapeHtml(startLabel)}</strong>
     </div>`;
   }
   const notSignedIn = Math.max(0, summary.expectedToday - summary.signedInToday);
@@ -8678,7 +8686,7 @@ function projectHealthGuidanceHTML(health) {
       <span class="company-project-health-led" aria-hidden="true"></span>
       <span class="company-project-health-label">${escapeHtml(health.label)}</span>
     </div>
-    <p>${escapeHtml(messages[health.level] || "Project health is being monitored.")}</p>
+    <p class="company-project-health-reason-line">${escapeHtml(messages[health.level] || "Project health is being monitored.")}</p>
     ${
       suggestions.length
         ? `<div class="company-project-health-suggestions">${suggestions

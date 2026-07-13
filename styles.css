@@ -7150,6 +7150,10 @@ body.modal-open {
   justify-content: space-between;
 }
 
+.company-project-card .company-project-top {
+  gap: 24px;
+}
+
 .company-project-title {
   color: var(--ink);
   font-size: 1.18rem;
@@ -7218,7 +7222,9 @@ body.modal-open {
   display: grid;
   gap: 4px;
   justify-items: start;
-  max-width: 190px;
+  margin-right: 14px;
+  max-width: 260px;
+  min-width: min(260px, 100%);
   text-align: left;
 }
 
@@ -7261,6 +7267,11 @@ body.modal-open {
   font-size: 0.74rem;
   line-height: 1.35;
   margin: 0;
+}
+
+.company-project-health-reason-line,
+.company-project-health-suggestions span {
+  white-space: nowrap;
 }
 
 .company-project-health-panel.healthy .company-project-health-led {
@@ -7515,7 +7526,6 @@ body.modal-open {
   color: var(--ink-3);
   display: grid;
   font-size: 0.78rem;
-  gap: 3px;
   line-height: 1.35;
 }
 
@@ -7869,7 +7879,13 @@ body.modal-open {
   .company-project-health-panel {
     align-items: flex-start;
     max-width: none;
+    min-width: 0;
     text-align: left;
+  }
+
+  .company-project-health-reason-line,
+  .company-project-health-suggestions span {
+    white-space: normal;
   }
 
   .company-project-health-line {
