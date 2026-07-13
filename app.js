@@ -9820,7 +9820,7 @@ function renderContractorHome(user) {
     <section class="company-dashboard-page request-labour-page">
       <div class="request-labour-page-body">
         <div class="jw-form">
-          <header class="request-labour-page-head">
+          <header class="request-labour-page-head company-dashboard-head">
             <div>
               <p class="company-home-kicker">DASHBOARD</p>
               <h2>Dashboard</h2>
