@@ -87,9 +87,8 @@ button, input, select, textarea {
     max-width: 100%;
     display: grid;
     grid-template-columns: 220px 1fr;
-    grid-template-rows: 64px 1fr;
+    grid-template-rows: 1fr;
     grid-template-areas:
-      "topbar topbar"
       "sidenav content";
     min-height: 100vh;
   }
@@ -166,8 +165,8 @@ button, input, select, textarea {
     padding: 16px 12px;
     gap: 4px;
     position: sticky;
-    top: 60px;
-    height: calc(100vh - 60px);
+    top: 0;
+    height: 100vh;
   }
 
   .tab-btn {
@@ -216,6 +215,107 @@ button, input, select, textarea {
 .tab-btn.active .tab-count {
   background: rgba(249, 115, 22, 0.2);
   color: var(--orange);
+}
+
+.sidebar-account-slot {
+  display: none;
+}
+
+@media (min-width: 860px) {
+  .sidebar-account-slot {
+    margin-top: auto;
+    position: relative;
+  }
+
+  .sidebar-account-card {
+    align-items: center;
+    background: var(--surface-2);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    text-align: left;
+    width: 100%;
+  }
+
+  .sidebar-account-card:hover,
+  .sidebar-account-card[aria-expanded="true"] {
+    border-color: rgba(249, 115, 22, 0.34);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  .sidebar-company-avatar {
+    align-items: center;
+    background: var(--orange);
+    border-radius: 999px;
+    color: white;
+    display: inline-flex;
+    flex: 0 0 34px;
+    font-size: 0.78rem;
+    font-weight: 900;
+    height: 34px;
+    justify-content: center;
+    width: 34px;
+  }
+
+  .sidebar-company-text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .sidebar-company-name {
+    color: var(--ink);
+    font-size: 0.84rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-company-type {
+    color: var(--ink-3);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .sidebar-account-menu {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    bottom: calc(100% + 8px);
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+    display: grid;
+    gap: 4px;
+    left: 0;
+    padding: 6px;
+    position: absolute;
+    right: 0;
+    z-index: 20;
+  }
+
+  .sidebar-account-menu.hidden {
+    display: none;
+  }
+
+  .sidebar-account-menu button {
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-xs);
+    color: var(--ink-2);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 9px 10px;
+    text-align: left;
+  }
+
+  .sidebar-account-menu button:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
 }
 
 /* ─── Content Area ─────────────────────────────────────── */

@@ -56,23 +56,26 @@ function showScreen(id) {
 function updateTopbarUser(user) {
   const userSection = document.getElementById('topbar-user');
   const resetBtn    = document.getElementById('resetDemoBtn');
-  if (!userSection || !user) return;
+  if (!user) return;
 
   const ini = user.name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-  document.getElementById('topbar-user-initials').textContent = ini;
-  document.getElementById('topbar-user-name').textContent =
-    user.type === 'company' ? user.companyName : user.name;
-
+  const initialsEl = document.getElementById('topbar-user-initials');
+  const nameEl = document.getElementById('topbar-user-name');
   const statusEl = document.getElementById('topbar-user-status');
-  if (user.type === 'worker') {
-    const map = { incomplete: 'Unverified', pending: 'Pending Review', verified: 'Verified' };
-    statusEl.textContent = map[user.verificationStatus || 'incomplete'];
-    statusEl.className   = 'user-status-badge status-' + (user.verificationStatus || 'incomplete');
-  } else {
-    statusEl.textContent = 'Company';
-    statusEl.className   = 'user-status-badge status-company';
+  if (initialsEl) initialsEl.textContent = ini;
+  if (nameEl) nameEl.textContent = user.type === 'company' ? user.companyName : user.name;
+
+  if (statusEl) {
+    if (user.type === 'worker') {
+      const map = { incomplete: 'Unverified', pending: 'Pending Review', verified: 'Verified' };
+      statusEl.textContent = map[user.verificationStatus || 'incomplete'];
+      statusEl.className   = 'user-status-badge status-' + (user.verificationStatus || 'incomplete');
+    } else {
+      statusEl.textContent = 'Company';
+      statusEl.className   = 'user-status-badge status-company';
+    }
   }
-  userSection.style.display = 'flex';
+  if (userSection) userSection.style.display = 'flex';
   if (resetBtn) resetBtn.style.display = 'none';
 
   if (user.type === 'worker' && typeof ensureWorkerProfileForUser === 'function') {
@@ -457,7 +460,7 @@ document.getElementById('companySuccessContinueBtn').addEventListener('click', f
 });
 
 // ─── Logout ────────────────────────────────────────────────
-document.getElementById('logoutBtn').addEventListener('click', function() {
+function logoutCurrentUser() {
   clearCurrentUser();
   workerRegData   = {};
   companyRegData  = {};
@@ -471,7 +474,10 @@ document.getElementById('logoutBtn').addEventListener('click', function() {
 
   showAuthOverlay();
   showScreen('welcome');
-});
+}
+
+window.logoutCurrentUser = logoutCurrentUser;
+document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUser);
 
 // ─── Init ──────────────────────────────────────────────────
 (function init() {

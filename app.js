@@ -6568,7 +6568,7 @@ function rebuildNav(tabDefs, activeId) {
       ${NAV_SM[t.icon] || ""}${t.label}
     </button>`,
     )
-    .join("");
+    .join("") + `<div id="sidebarAccountSlot" class="sidebar-account-slot"></div>`;
   bottomNav.innerHTML = tabDefs
     .map(
       (t) => `
@@ -6579,6 +6579,7 @@ function rebuildNav(tabDefs, activeId) {
     )
     .join("");
   bindTabEvents();
+  renderSidebarAccount(getSessionUser());
 }
 
 function restoreNav() {
@@ -6586,6 +6587,84 @@ function restoreNav() {
   document.querySelector(".bottom-nav").innerHTML = ORIG_BOTTOM_NAV;
   bindTabEvents();
 }
+
+function companySidebarName(user) {
+  return (
+    user?.companyName ||
+    user?.tradingName ||
+    user?.registeredCompanyName ||
+    user?.name ||
+    "Company"
+  );
+}
+
+function companySidebarInitials(name) {
+  return String(name || "C")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() || "")
+    .join("") || "C";
+}
+
+function renderSidebarAccount(user) {
+  const slot = document.getElementById("sidebarAccountSlot");
+  if (!slot) return;
+  if (user?.type !== "company") {
+    slot.innerHTML = "";
+    return;
+  }
+  const companyName = companySidebarName(user);
+  slot.innerHTML = `
+    <button class="sidebar-account-card" type="button" aria-expanded="false" data-sidebar-account-toggle>
+      <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
+      <span class="sidebar-company-text">
+        <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
+        <span class="sidebar-company-type">Company</span>
+      </span>
+    </button>
+    <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
+      <button type="button" data-sidebar-account-action="profile">Company Profile</button>
+      <button type="button" data-sidebar-account-action="settings">Settings</button>
+      <button type="button" data-sidebar-account-action="signout">Sign out</button>
+    </div>`;
+  bindSidebarAccountMenu(slot);
+}
+
+function bindSidebarAccountMenu(slot) {
+  const toggle = slot.querySelector("[data-sidebar-account-toggle]");
+  const menu = slot.querySelector("[data-sidebar-account-menu]");
+  if (!toggle || !menu) return;
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = !menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", isOpen);
+    toggle.setAttribute("aria-expanded", String(!isOpen));
+  });
+  menu.querySelectorAll("[data-sidebar-account-action]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const action = btn.dataset.sidebarAccountAction;
+      menu.classList.add("hidden");
+      toggle.setAttribute("aria-expanded", "false");
+      if (action === "signout") {
+        if (typeof logoutCurrentUser === "function") logoutCurrentUser();
+        return;
+      }
+      switchTab("account");
+      if (action === "settings") showToast("Settings are available in the company profile");
+    });
+  });
+}
+
+document.addEventListener("click", (event) => {
+  const slot = document.getElementById("sidebarAccountSlot");
+  if (!slot || slot.contains(event.target)) return;
+  slot.querySelector("[data-sidebar-account-menu]")?.classList.add("hidden");
+  slot
+    .querySelector("[data-sidebar-account-toggle]")
+    ?.setAttribute("aria-expanded", "false");
+});
 
 // ─── Role-Based View ─────────────────────────────────────
 function applyRoleView(user) {
@@ -9719,13 +9798,6 @@ function renderContractorHome(user) {
 
   el.innerHTML = `
     <section class="company-dashboard-page">
-      <header class="request-labour-page-head">
-        <div>
-          <p class="company-home-kicker">DASHBOARD</p>
-          <h2>Dashboard</h2>
-          <p>Monitor your live projects, staffing, attendance and project health.</p>
-        </div>
-      </header>
       <section class="company-dashboard-filter-card">
         <div class="company-project-toolbar">
           ${companyProjectSearchHTML("companyDashboardProjectSearch")}
@@ -10474,7 +10546,7 @@ function renderContractorAccount(user) {
   bindAgreementOpeners(el);
   bindCompanyDocsForm(el, user);
   document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
-    document.getElementById("logoutBtn")?.click();
+    if (typeof logoutCurrentUser === "function") logoutCurrentUser();
   });
 }
 
@@ -11133,7 +11205,7 @@ jobForm.addEventListener("submit", (e) => {
   closeLabourRequestWorkflow();
 });
 
-resetDemoBtn.addEventListener("click", () => {
+resetDemoBtn?.addEventListener("click", () => {
   state = structuredClone(demoData);
   activityLog = [];
   saveActivity();
@@ -11159,6 +11231,7 @@ function renderCompanyRequestLabourPage(user) {
 function render() {
   const user = getSessionUser();
   const role = user?.type || null;
+  renderSidebarAccount(user);
 
   // Advance any booking extension/reallocation states before drawing.
   if (processExtensionLifecycle()) saveState();
