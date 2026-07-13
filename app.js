@@ -8203,6 +8203,7 @@ function companyProjectSearchText(job, summary = companyProjectSummary(job, getS
     job.jobNumber,
     job.location,
     job.trade,
+    job.role,
     job.specialism,
     assignmentTypeLabel(job),
     ...(summary.labourRequirements || []).flatMap((req) => [
@@ -8223,7 +8224,7 @@ function filterCompanyProjects(jobs, user) {
   return jobs
     .filter((job) => {
       const summary = companyProjectSummary(job, user);
-      const health = companyProjectHealth(job, summary);
+      const health = calculateProjectHealth(job, summary);
       if (
         query &&
         !companyProjectSearchText(job, summary).includes(query)
@@ -8254,8 +8255,8 @@ function companyProjectSearchHTML(id) {
 function companyProjectFilterHTML() {
   const healthOptions = [
     ["healthy", "Healthy"],
-    ["needs_attention", "Needs attention"],
-    ["at_risk", "At risk"],
+    ["needsAttention", "Needs attention"],
+    ["atRisk", "At risk"],
     ["critical", "Critical"],
   ];
   return `<details class="company-project-filter">
@@ -8419,75 +8420,212 @@ function sortCompanyProjects(a, b, sortBy) {
     return projectDateValue(a.start) - projectDateValue(b.start);
   }
   if (sortBy === "end_asc") {
-    return projectDateValue(a.end || a.estimatedEndDate) -
-      projectDateValue(b.end || b.estimatedEndDate);
+    return projectDateValue(a.noFixedEndDate ? "" : a.end || a.estimatedEndDate) -
+      projectDateValue(b.noFixedEndDate ? "" : b.end || b.estimatedEndDate);
   }
   return projectDateValue(b.createdAt || b.postedAt || b.start, 0) -
     projectDateValue(a.createdAt || a.postedAt || a.start, 0);
 }
 
-function companyProjectHealth(job, summary) {
+function projectStartDays(job) {
+  return calendarDaysUntil(job?.start || job?.startDate || "");
+}
+
+function projectEndDays(job) {
+  if (job?.noFixedEndDate) return null;
+  return calendarDaysUntil(job?.end || job?.estimatedEndDate || job?.endDate || "");
+}
+
+function expiringWorkerDocumentCount(workers, days = 30) {
+  return workers.reduce((count, worker) => {
+    const docs = Array.isArray(worker?.documents) ? worker.documents : [];
+    return (
+      count +
+      docs.filter((doc) => {
+        if (!doc?.expiryDate) return false;
+        const daysUntil = calendarDaysUntil(doc.expiryDate);
+        return daysUntil !== null && daysUntil >= 0 && daysUntil <= days;
+      }).length
+    );
+  }, 0);
+}
+
+function overdueAttendanceApprovalCount(summary) {
+  return (summary.projectAttendanceRecords || []).filter((record) => {
+    const status =
+      record.approvalStatus ||
+      record.commercial?.approvalStatus ||
+      (record.supervisorConfirmed ? "manager_reviewed" : "draft");
+    const daysUntil = calendarDaysUntil(record.date);
+    return (
+      daysUntil !== null &&
+      daysUntil < 0 &&
+      ["draft", "manager_reviewed"].includes(status)
+    );
+  }).length;
+}
+
+function mostUnderfilledRequirement(summary) {
+  return uniqueLabourRequirements(summary.labourRequirements)
+    .map((req) => ({ req, stats: companyRequirementStats(req, summary) }))
+    .filter((item) => item.stats.remaining > 0)
+    .sort((a, b) => b.stats.remaining - a.stats.remaining)[0] || null;
+}
+
+function workerLabel(count, fallback = "worker") {
+  return `${count} ${fallback}${count === 1 ? "" : "s"}`;
+}
+
+function calculateProjectHealth(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
+  const reasons = {
+    critical: [],
+    atRisk: [],
+    needsAttention: [],
+  };
+  const startDays = projectStartDays(job);
+  const endDays = projectEndDays(job);
+  const live = startDays !== null && startDays <= 0 && !job.completed;
+  const startsTodayOrTomorrow =
+    startDays !== null && startDays >= 0 && startDays <= 1;
+  const imminent = startDays !== null && startDays >= 0 && startDays <= 7;
+  const mostUnderfilled = mostUnderfilledRequirement(summary);
+  const openLabel = mostUnderfilled
+    ? workerLabel(
+        mostUnderfilled.stats.remaining,
+        mostUnderfilled.req.trade || "worker",
+      )
+    : workerLabel(summary.openRoles);
+  const lateOrAbsentReports =
+    summary.lateReports +
+    summary.plannedAbsences.length +
+    summary.attendanceIssues.filter((record) =>
+      ["late", "reportedIssue", "unconfirmed"].includes(record.status),
+    ).length;
+  const overdueApprovals = overdueAttendanceApprovalCount(summary);
+  const expiringDocs = expiringWorkerDocumentCount(summary.assignedWorkers);
+  const finishingSoon =
+    endDays !== null && endDays >= 0 && endDays <= 7
+      ? summary.assignedWorkers.length
+      : 0;
+
   if (summary.noShows > 0) {
-    return {
-      level: "critical",
-      label: "Critical",
-      reason: `${summary.noShows} worker${summary.noShows === 1 ? "" : "s"} did not sign in`,
-      requiresAction: true,
-    };
+    reasons.critical.push(
+      `${workerLabel(summary.noShows)} did not sign in today`,
+    );
   }
   if (summary.replacements.length > 0) {
-    return {
-      level: "critical",
-      label: "Critical",
-      reason: `${summary.replacements.length} replacement${summary.replacements.length === 1 ? "" : "s"} required`,
-      requiresAction: true,
-    };
-  }
-  if (summary.openRoles > 0) {
-    const req = uniqueLabourRequirements(summary.labourRequirements).find(
-      (item) => companyRequirementStats(item, summary).remaining > 0,
+    reasons.critical.push(
+      `${summary.replacements.length} urgent replacement${summary.replacements.length === 1 ? "" : "s"} required`,
     );
-    const stats = req ? companyRequirementStats(req, summary) : null;
-    return {
-      level: "at_risk",
-      label: "At risk",
-      reason: req
-        ? `${stats.remaining} ${req.trade || "worker"}${stats.remaining === 1 ? "" : "s"} still required`
-        : `${summary.openRoles} worker${summary.openRoles === 1 ? "" : "s"} still required`,
-      requiresAction: true,
-    };
+  }
+  if (summary.openRoles > 0 && startsTodayOrTomorrow) {
+    reasons.critical.push(
+      `${openLabel} still required for ${startDays === 0 ? "today" : "tomorrow"}`,
+    );
+  }
+  if (summary.openRoles > 0 && live) {
+    reasons.critical.push("Labour is below the required level");
+  }
+
+  if (
+    summary.openRoles > 0 &&
+    imminent &&
+    !startsTodayOrTomorrow &&
+    summary.openRoles >= Math.max(2, Math.ceil(summary.required / 2))
+  ) {
+    reasons.atRisk.push(`${openLabel} still required soon`);
+  }
+  if (lateOrAbsentReports >= 2) {
+    reasons.atRisk.push(
+      `${lateOrAbsentReports} late or absence updates require review`,
+    );
+  }
+  if (
+    summary.outstandingPreStart > 0 &&
+    startDays !== null &&
+    startDays >= 0 &&
+    startDays <= 3
+  ) {
+    reasons.atRisk.push(
+      `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding close to start`,
+    );
+  }
+  if (overdueApprovals > 0) {
+    reasons.atRisk.push(
+      `${overdueApprovals} attendance approval${overdueApprovals === 1 ? "" : "s"} overdue`,
+    );
+  }
+  if (finishingSoon >= 2 && !summary.replacements.length) {
+    reasons.atRisk.push(
+      `${finishingSoon} workers due to finish shortly`,
+    );
+  }
+
+  if (summary.openRoles > 0) {
+    reasons.needsAttention.push(`${openLabel} still required`);
+  }
+  if (summary.pendingOffers.length > 0) {
+    reasons.needsAttention.push(
+      `${summary.pendingOffers.length} offer${summary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
+    );
+  }
+  if (summary.reviewWorkers.length > 0) {
+    reasons.needsAttention.push(
+      `${summary.reviewWorkers.length} worker${summary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
+    );
   }
   if (summary.outstandingPreStart > 0) {
-    return {
-      level: "needs_attention",
-      label: "Needs attention",
-      reason: `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding`,
-      requiresAction: true,
-    };
+    reasons.needsAttention.push(
+      `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding`,
+    );
   }
-  if (summary.lateReports > 0 || summary.plannedAbsences.length > 0 || summary.reviewWorkers.length > 0) {
-    return {
-      level: "needs_attention",
-      label: "Needs attention",
-      reason: summary.reviewWorkers.length
-        ? `${summary.reviewWorkers.length} worker${summary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`
-        : summary.lateReports
-          ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}`
-          : `${summary.plannedAbsences.length} planned absence update${summary.plannedAbsences.length === 1 ? "" : "s"}`,
-      requiresAction: true,
-    };
+  if (expiringDocs > 0) {
+    reasons.needsAttention.push(
+      `${expiringDocs} document${expiringDocs === 1 ? "" : "s"} expiring soon`,
+    );
   }
+  if (finishingSoon > 0) {
+    reasons.needsAttention.push(
+      `${workerLabel(finishingSoon)} due to finish soon`,
+    );
+  }
+  if (summary.plannedAbsences.length > 0) {
+    reasons.needsAttention.push(
+      `${summary.plannedAbsences.length} planned absence update${summary.plannedAbsences.length === 1 ? "" : "s"}`,
+    );
+  }
+
+  const level =
+    reasons.critical.length
+      ? "critical"
+      : reasons.atRisk.length
+        ? "atRisk"
+        : reasons.needsAttention.length
+          ? "needsAttention"
+          : "healthy";
+  const labelMap = {
+    healthy: "Healthy",
+    needsAttention: "Needs attention",
+    atRisk: "At risk",
+    critical: "Critical",
+  };
+  const allReasons = [
+    ...reasons.critical,
+    ...reasons.atRisk,
+    ...reasons.needsAttention,
+  ];
   return {
-    level: "healthy",
-    label: "Healthy",
-    reason: "No current issues requiring attention.",
-    requiresAction: false,
+    level,
+    label: labelMap[level],
+    primaryReason: allReasons[0] || "No current issues",
+    reasons: allReasons,
+    requiresAction: level !== "healthy",
   };
 }
 
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
-  const health = companyProjectHealth(job, summary);
+  const health = calculateProjectHealth(job, summary);
   const title = companyProjectTitle(job);
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
@@ -8536,7 +8674,7 @@ function companyProjectCardHTML(job, user) {
         <span><strong>${summary.reviewWorkers.length}</strong> Awaiting approval</span>
         <span class="${urgentFlags.length ? "urgent" : ""}"><strong>${urgentFlags.length}</strong> Urgent issues</span>
       </div>
-      <div class="company-project-health-reason${health.requiresAction ? " attention" : ""}">${escapeHtml(health.reason)}</div>
+      <div class="company-project-health-reason${health.requiresAction ? " attention" : ""}">${escapeHtml(health.primaryReason)}</div>
       ${urgentFlags.length ? `<div class="company-project-urgent-list">${urgentFlags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
       <div class="company-project-action-row">
         <div class="primary-btn company-project-open">View Project</div>

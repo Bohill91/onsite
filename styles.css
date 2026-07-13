@@ -7189,11 +7189,22 @@ body.modal-open {
   white-space: nowrap;
 }
 
-.company-project-health.needs_attention,
-.company-project-health.at_risk {
+.company-project-health.healthy {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: rgba(22, 163, 74, 0.22);
+  color: var(--green-text);
+}
+
+.company-project-health.needsAttention {
   background: rgba(249, 115, 22, 0.08);
   border-color: rgba(249, 115, 22, 0.22);
   color: var(--orange);
+}
+
+.company-project-health.atRisk {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #92400e;
 }
 
 .company-project-health.critical {
