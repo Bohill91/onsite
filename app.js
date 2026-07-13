@@ -6602,7 +6602,7 @@ function companySidebarInitials(name) {
   return String(name || "C")
     .trim()
     .split(/\s+/)
-    .slice(0, 2)
+    .slice(0, 1)
     .map((word) => word[0]?.toUpperCase() || "")
     .join("") || "C";
 }
@@ -6639,9 +6639,9 @@ function renderSidebarAccount(user) {
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
         <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
-        <span class="sidebar-user-name">${escapeHtml(userName)}</span>
-        <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
+        <span class="sidebar-user-meta">${escapeHtml(userName)} · ${escapeHtml(userRole)}</span>
       </span>
+      <span class="sidebar-account-chevron" aria-hidden="true">⌄</span>
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
       <button type="button" data-sidebar-account-action="profile">My Profile</button>
