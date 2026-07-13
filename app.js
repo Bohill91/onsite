@@ -8650,8 +8650,7 @@ function projectCardAttendanceHTML(job, summary) {
   const attendanceStarted = startDays !== null && startDays <= 0;
   if (!attendanceStarted) {
     return `<div class="company-project-attendance-note">
-      <strong>Project has not started yet.</strong>
-      <span>Starts ${job.start ? formatDateOnly(job.start) : "TBC"}.</span>
+      <strong>Attendance tracking begins on ${job.start ? formatDateOnly(job.start) : "TBC"}.</strong>
     </div>`;
   }
   const notSignedIn = Math.max(0, summary.expectedToday - summary.signedInToday);
