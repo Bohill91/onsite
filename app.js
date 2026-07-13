@@ -9817,7 +9817,7 @@ function renderContractorHome(user) {
       : companyProjectEmptyStateHTML();
 
   el.innerHTML = `
-    <section class="company-dashboard-page">
+    <section class="company-dashboard-page company-dashboard-workspace">
       <header class="request-labour-page-head">
         <div>
           <p class="company-home-kicker">DASHBOARD</p>
