@@ -346,6 +346,7 @@ button, input, select, textarea {
   }
 
   .content-area:has(#tab-request-labour.active),
+  .content-area:has(#tab-dashboard.active .request-labour-page),
   .content-area:has(#tab-dashboard.active .company-dashboard-page) {
     max-width: 1044px;
   }
