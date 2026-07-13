@@ -8662,6 +8662,35 @@ function projectCardAttendanceHTML(job, summary) {
   </div>`;
 }
 
+function projectHealthGuidanceHTML(health) {
+  const messages = {
+    healthy: "Labour requests are progressing as expected.",
+    needsAttention: "Labour demand is currently high for one or more labour requirements.",
+    atRisk: health.primaryReason || "Project health needs review.",
+    critical: health.primaryReason || "Project health needs urgent review.",
+  };
+  const suggestions =
+    health.level === "needsAttention"
+      ? [
+          "To improve the likelihood of filling this requirement sooner, consider increasing the advertised day rate.",
+        ]
+      : [];
+  return `<div class="company-project-health-panel ${escapeHtml(health.level)}">
+    <div class="company-project-health-line">
+      <span class="company-project-health-led" aria-hidden="true"></span>
+      <span class="company-project-health-label">${escapeHtml(health.label)}</span>
+    </div>
+    <p>${escapeHtml(messages[health.level] || "Project health is being monitored.")}</p>
+    ${
+      suggestions.length
+        ? `<div class="company-project-health-suggestions">${suggestions
+            .map((item) => `<span>${escapeHtml(item)}</span>`)
+            .join("")}</div>`
+        : ""
+    }
+  </div>`;
+}
+
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
   const health = calculateProjectHealth(job, summary);
@@ -8690,7 +8719,7 @@ function companyProjectCardHTML(job, user) {
           <div class="company-project-title">${escapeHtml(title)}</div>
           <div class="company-project-meta">Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
         </div>
-        <span class="company-project-health ${escapeHtml(health.level)}">${escapeHtml(health.label)}</span>
+        ${projectHealthGuidanceHTML(health)}
       </div>
       <div class="company-project-facts">
         <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
