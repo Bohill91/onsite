@@ -6533,6 +6533,7 @@ const NAV_SM = {
   workforce: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
   account: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
   offers: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+  notifications: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
 };
 
 const NAV_LG = Object.fromEntries(
@@ -6551,10 +6552,10 @@ const WORKER_TABS = [
 ];
 
 const CONTRACTOR_TABS = [
-  { id: "dashboard", icon: "home", label: "Home" },
+  { id: "dashboard", icon: "home", label: "Dashboard" },
   { id: "request-labour", icon: "requests", label: "Request Labour" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
-  { id: "account", icon: "account", label: "Profile" },
+  { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
 function rebuildNav(tabDefs, activeId) {
@@ -6639,7 +6640,8 @@ function renderSidebarAccount(user) {
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
         <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
-        <span class="sidebar-user-meta">${escapeHtml(userName)} · ${escapeHtml(userRole)}</span>
+        <span class="sidebar-user-name">${escapeHtml(userName)}</span>
+        <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
       </span>
       <span class="sidebar-account-chevron" aria-hidden="true">⌄</span>
     </button>
@@ -10581,6 +10583,26 @@ function renderContractorAccount(user) {
   });
 }
 
+function renderCompanyNotificationsPage() {
+  const el = document.getElementById("notificationsContent");
+  if (!el) return;
+  el.innerHTML = `
+    <section class="request-labour-page">
+      <header class="request-labour-page-head">
+        <div>
+          <p class="company-home-kicker">NOTIFICATIONS</p>
+          <h2>Notifications</h2>
+          <p>Central activity feed for labour, attendance, project and payment updates.</p>
+        </div>
+      </header>
+      <div class="request-labour-page-body">
+        <section class="jw-card">
+          <div class="att-empty">No notifications.</div>
+        </section>
+      </div>
+    </section>`;
+}
+
 function companyPreferredAccountSection(user) {
   const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
   const rows = prefs.length
@@ -11288,6 +11310,7 @@ function render() {
     renderCompanyWorkerDirectory(user);
     renderAttendance();
     renderContractorAccount(user);
+    renderCompanyNotificationsPage();
     renderJobPreferredWorkerChoices(user);
     if (document.getElementById("tab-request-labour")?.classList.contains("active")) {
       renderCompanyRequestLabourPage(user);

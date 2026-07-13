@@ -277,9 +277,18 @@ button, input, select, textarea {
     white-space: nowrap;
   }
 
-  .sidebar-user-meta {
+  .sidebar-user-name {
     color: var(--ink-2);
     font-size: 0.76rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-user-role {
+    color: var(--ink-3);
+    font-size: 0.72rem;
     font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
