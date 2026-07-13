@@ -6475,7 +6475,18 @@ function switchTab(tab) {
 
 function bindTabEvents() {
   document.querySelectorAll("[data-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    btn.addEventListener("click", () => {
+      if (btn.dataset.tab === "request-labour") {
+        activeCompanyProjectId = "";
+        switchTab("dashboard");
+        render();
+        openLabourRequestWorkflow();
+        return;
+      }
+      if (btn.dataset.tab === "dashboard") activeCompanyProjectId = "";
+      switchTab(btn.dataset.tab);
+      if (btn.dataset.tab === "dashboard") render();
+    });
   });
 }
 bindTabEvents();
@@ -6513,7 +6524,7 @@ const WORKER_TABS = [
 
 const CONTRACTOR_TABS = [
   { id: "dashboard", icon: "home", label: "Home" },
-  { id: "jobs", icon: "jobs", label: "Projects" },
+  { id: "request-labour", icon: "requests", label: "Request Labour" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
   { id: "account", icon: "account", label: "Profile" },
 ];
@@ -8744,13 +8755,9 @@ function renderContractorHome(user) {
         <div class="company-home-head">
           <div>
             <div class="company-home-kicker">DASHBOARD</div>
-            <h2>Live Projects</h2>
-            <p>Find and monitor current projects, labour requirements, offers and urgent flags.</p>
+            <h2>Dashboard</h2>
+            <p>Monitor your live projects, staffing, attendance and project health.</p>
           </div>
-          <button class="ch-request-btn company-home-request" type="button" data-company-request-labour>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Labour Request
-          </button>
         </div>
         <div class="company-project-toolbar">
           ${companyProjectSearchHTML("companyDashboardProjectSearch")}
