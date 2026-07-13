@@ -7472,6 +7472,13 @@ body.modal-open {
   padding: 20px;
 }
 
+.company-project-head-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .company-project-detail-meta {
   color: var(--ink-3);
   display: flex;
@@ -7634,6 +7641,86 @@ body.modal-open {
   margin-bottom: 10px;
 }
 
+.project-edit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.project-edit-photo-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-edit-photo-card {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.project-edit-photo-preview {
+  align-items: center;
+  aspect-ratio: 4 / 3;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--ink-3);
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 800;
+  justify-content: center;
+  overflow: hidden;
+  text-align: center;
+}
+
+.project-edit-photo-preview img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.project-edit-photo-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.project-edit-photo-main strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.project-edit-photo-main span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+}
+
+.project-edit-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.project-edit-photo-actions .secondary-btn,
+.project-edit-photo-actions label.secondary-btn {
+  cursor: pointer;
+  font-size: 0.78rem;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.secondary-btn.danger {
+  border-color: rgba(239, 68, 68, 0.22);
+  color: #b42318;
+}
+
 @media (max-width: 720px) {
   .prestart-add-form,
   .prestart-doc-row {
@@ -7649,6 +7736,10 @@ body.modal-open {
   .company-project-mini-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .company-project-head-actions {
+    align-items: flex-start;
   }
 
   .company-empty-card,
@@ -7689,6 +7780,15 @@ body.modal-open {
   .company-command-grid,
   .company-issue-grid {
     grid-template-columns: 1fr;
+  }
+
+  .project-edit-actions,
+  .project-edit-photo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-edit-actions {
+    flex-direction: column-reverse;
   }
 
   .labour-request-modal {

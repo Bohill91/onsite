@@ -8039,6 +8039,12 @@ let activeCompanyProjectSearch = "";
 let activeCompanyProjectSort = "created_desc";
 let activeCompanyProjectHealthFilters = [];
 let activeCompanyProjectRequiresAction = false;
+let activeCompanyProjectEditId = "";
+let projectEditPin = { lat: null, lng: null };
+let projectEditPhotos = {};
+let projectEditPhotoMeta = {};
+let projectEditMap = null;
+let projectEditMarker = null;
 
 const COMPANY_PROJECT_SECTIONS = [
   { id: "overview", label: "Overview" },
@@ -8195,6 +8201,12 @@ function companyRequirementStats(req, summary) {
 
 function companyProjectTitle(job) {
   return job?.projectName || job?.siteName || job?.trade || "Project";
+}
+
+function canEditCompanyProject(job, user) {
+  // TODO: Replace this owner check with granular project-edit permissions when
+  // the company permission model exists.
+  return user?.type === "company" && companyOwnsJob(job, user.id);
 }
 
 function companyProjectSearchText(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
@@ -8705,9 +8717,15 @@ function projectInvoicePlaceholderHTML(job) {
 
 function companyProjectDetailHTML(job, user) {
   if (!job) return "";
+  if (activeCompanyProjectEditId === job.id && canEditCompanyProject(job, user)) {
+    return companyProjectEditHTML(job, user);
+  }
   const summary = companyProjectSummary(job, user);
   const detailBody = companyProjectSectionHTML(job, user, summary);
   const endDate = job.estimatedEndDate || job.endDate || "";
+  const editButton = canEditCompanyProject(job, user)
+    ? `<button class="secondary-btn" type="button" data-company-project-edit="${job.id}">Edit Project</button>`
+    : "";
   return `
     <section class="company-project-detail-page">
       <button class="company-project-back" type="button" data-company-project-close>&larr; Back to Live Projects</button>
@@ -8723,7 +8741,10 @@ function companyProjectDetailHTML(job, user) {
             <span>${summary.filled}/${summary.required} filled</span>
           </div>
         </div>
-        <span class="company-project-status">${escapeHtml(summary.status)}</span>
+        <div class="company-project-head-actions">
+          <span class="company-project-status">${escapeHtml(summary.status)}</span>
+          ${editButton}
+        </div>
       </div>
       <div class="company-project-tabs" role="tablist" aria-label="Project detail sections">
         ${COMPANY_PROJECT_SECTIONS.map(
@@ -8731,6 +8752,222 @@ function companyProjectDetailHTML(job, user) {
         ).join("")}
       </div>
       ${detailBody}
+    </section>`;
+}
+
+function initProjectEditDraft(job) {
+  projectEditPin =
+    job?.sitePin && job.sitePin.lat != null && job.sitePin.lng != null
+      ? { lat: Number(job.sitePin.lat), lng: Number(job.sitePin.lng) }
+      : { lat: null, lng: null };
+  projectEditPhotos = { ...(job?.sitePhotos || {}) };
+  projectEditPhotoMeta = { ...(job?.sitePhotoMeta || {}) };
+  resetProjectEditMap();
+}
+
+function resetProjectEditMap() {
+  if (projectEditMap) {
+    projectEditMap.remove();
+    projectEditMap = null;
+    projectEditMarker = null;
+  }
+}
+
+function projectEditDateTime(value) {
+  return value ? String(value).slice(0, 16) : "";
+}
+
+function projectEditDate(value) {
+  return value ? String(value).slice(0, 10) : "";
+}
+
+function projectEditWorkingDayChips(job) {
+  const selected = new Set(normalizeWorkingDays(job?.workingDays));
+  return Object.entries(WORKING_DAY_LABELS)
+    .map(
+      ([value, label]) => `<label class="jw-day-chip"><input type="checkbox" name="projectEditWorkingDays" value="${value}"${selected.has(value) ? " checked" : ""} /><span>${label}</span></label>`,
+    )
+    .join("");
+}
+
+function projectEditPhotoCards() {
+  const labels = {
+    entrance: "Site entrance photo",
+    welfare: "Welfare photo",
+    gate: "Parking photo",
+    other: "Additional site photo",
+  };
+  return ["entrance", "welfare", "gate", "other"]
+    .map((key) => {
+      const src = projectEditPhotos[key] || "";
+      const meta = projectEditPhotoMeta[key] || {};
+      const label = meta.label || labels[key];
+      return `<div class="project-edit-photo-card${src ? " has-photo" : ""}" data-edit-photo-card="${key}">
+        <div class="project-edit-photo-preview">
+          ${
+            src
+              ? `<img src="${src}" alt="${escapeHtml(label)}" />`
+              : `<span>${escapeHtml(label)}</span>`
+          }
+        </div>
+        <div class="project-edit-photo-main">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${src ? "Photo added" : "No photo added"}</span>
+        </div>
+        <div class="project-edit-photo-actions">
+          ${src ? `<button class="secondary-btn" type="button" data-lightbox-src="${src}" data-lightbox-label="${escapeHtml(label)}">View</button>` : ""}
+          <label class="secondary-btn" for="projectEditPhoto-${key}">Replace</label>
+          <input id="projectEditPhoto-${key}" class="photo-file-input" type="file" accept="image/*" data-project-edit-photo="${key}" />
+          ${src ? `<button class="secondary-btn danger" type="button" data-project-edit-photo-remove="${key}">Remove</button>` : ""}
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function companyProjectEditHTML(job, user) {
+  const hasOffersOrWorkers =
+    !!job.assignedWorkerId ||
+    (state.applications || []).some((app) => app.jobId === job.id);
+  return `
+    <section class="company-project-detail-page">
+      <button class="company-project-back" type="button" data-company-project-edit-cancel>&larr; Back to Project</button>
+      <form id="companyProjectEditForm" class="jw-form project-edit-form" data-project-edit-form="${job.id}">
+        <section class="jw-card">
+          <header class="jw-card-head">
+            <p class="jw-kicker">Project</p>
+            <h3 class="jw-card-title">Edit Project Details</h3>
+            <p class="jw-card-sub">Update project and site information without changing labour requirements, rates or assignments.</p>
+          </header>
+          <div class="jw-grid">
+            <label class="field-label">
+              Job Number *
+              <input id="projectEditJobNumber" type="text" required value="${escapeHtml(job.jobNumber || "")}" />
+            </label>
+            <label class="field-label">
+              Project Name *
+              <input id="projectEditProjectName" type="text" required value="${escapeHtml(job.projectName || companyProjectTitle(job))}" />
+            </label>
+            <label class="field-label">
+              Assignment Type *
+              <select id="projectEditAssignmentType"${hasOffersOrWorkers ? " disabled" : ""} required>
+                <option value="site_project"${normalizeAssignmentType(job.assignmentType || job.jobType) === "site_project" ? " selected" : ""}>Site-based project</option>
+                <option value="ongoing_placement"${normalizeAssignmentType(job.assignmentType || job.jobType) === "ongoing_placement" ? " selected" : ""}>Ongoing placement</option>
+              </select>
+              ${hasOffersOrWorkers ? `<p class="form-helper">Assignment type is locked once offers or workers exist.</p>` : ""}
+            </label>
+            <label class="field-label">
+              Location *
+              <input id="projectEditLocation" type="text" required value="${escapeHtml(job.location || "")}" />
+            </label>
+          </div>
+        </section>
+        <section class="jw-card">
+          <header class="jw-card-head">
+            <p class="jw-kicker">Schedule</p>
+            <h3 class="jw-card-title">Dates &amp; Shift Pattern</h3>
+          </header>
+          <div class="jw-grid">
+            <label class="field-label">
+              Start Date &amp; Time *
+              <input id="projectEditStart" type="datetime-local" required value="${escapeHtml(projectEditDateTime(job.start || job.startDate))}" />
+            </label>
+            <div class="field-label">
+              <span>Estimated End Date *</span>
+              <input id="projectEditEndDate" type="date" value="${escapeHtml(projectEditDate(job.estimatedEndDate || job.endDate || job.end))}"${job.noFixedEndDate ? " disabled" : " required"} />
+            </div>
+            <div class="jw-schedule-spacer" aria-hidden="true"></div>
+            <label class="checkbox-row jw-check">
+              <input id="projectEditNoFixedEndDate" type="checkbox"${job.noFixedEndDate ? " checked" : ""} />
+              <span>No fixed end date</span>
+            </label>
+            <label class="field-label">
+              Shift Start Time *
+              <input id="projectEditShiftStart" type="time" required value="${escapeHtml(job.shiftStartTime || "")}" />
+            </label>
+            <label class="field-label">
+              Shift Finish Time *
+              <input id="projectEditShiftFinish" type="time" required value="${escapeHtml(job.shiftFinishTime || "")}" />
+            </label>
+          </div>
+          <div class="field-label jw-days-wrap">
+            Working Days *
+            <div class="jw-days" role="group" aria-label="Working days">
+              ${projectEditWorkingDayChips(job)}
+            </div>
+          </div>
+        </section>
+        <section class="jw-card">
+          <header class="jw-card-head">
+            <p class="jw-kicker">Site Information</p>
+            <h3 class="jw-card-title">Arrival &amp; Access</h3>
+          </header>
+          <label class="field-label">
+            Site Address *
+            <input id="projectEditSiteAddress" type="text" required value="${escapeHtml(job.siteAddress || "")}" />
+          </label>
+          <div class="field-label">
+            Exact Entrance Pin *
+            <p class="field-hint">Click or drag the map pin to update the worker arrival point.</p>
+            <div id="projectEditMap" class="picker-map project-edit-map"></div>
+            <div id="projectEditPinCoords" class="pin-coords-display${projectEditPin.lat == null ? " hidden" : ""}">
+              Pin set: <span>${projectEditPin.lat == null ? "" : `${projectEditPin.lat}, ${projectEditPin.lng}`}</span>
+            </div>
+          </div>
+          <div class="jw-grid">
+            <label class="field-label">
+              Site Contact Name *
+              <input id="projectEditContactName" type="text" required value="${escapeHtml(job.siteContact?.name || "")}" />
+            </label>
+            <label class="field-label">
+              Site Contact Number *
+              <input id="projectEditContactPhone" type="tel" required value="${escapeHtml(job.siteContact?.phone || "")}" />
+            </label>
+            <label class="field-label jw-span-2">
+              Arrival Instructions
+              <textarea id="projectEditArrivalInstructions" rows="2">${escapeHtml(job.arrivalInstructions || "")}</textarea>
+            </label>
+            <label class="field-label">
+              Parking Information
+              <input id="projectEditParking" type="text" value="${escapeHtml(job.parking || "")}" />
+            </label>
+            <label class="field-label">
+              PPE Requirements
+              <input id="projectEditPpe" type="text" value="${escapeHtml(job.ppe || "")}" />
+            </label>
+            <label class="field-label jw-span-2">
+              Additional Notes for Workers
+              <textarea id="projectEditGateAccess" rows="2">${escapeHtml(job.gateAccess || "")}</textarea>
+            </label>
+            <label class="field-label">
+              Attendance Manager Name
+              <input id="projectEditAttendanceName" type="text" value="${escapeHtml(job.attendanceManager?.name || "")}" />
+            </label>
+            <label class="field-label">
+              Attendance Manager Email
+              <input id="projectEditAttendanceEmail" type="email" value="${escapeHtml(job.attendanceManager?.email || "")}" />
+            </label>
+            <label class="field-label">
+              Attendance Manager Phone
+              <input id="projectEditAttendancePhone" type="tel" value="${escapeHtml(job.attendanceManager?.phone || "")}" />
+            </label>
+          </div>
+        </section>
+        <section class="jw-card">
+          <header class="jw-card-head">
+            <p class="jw-kicker">Site Photos</p>
+            <h3 class="jw-card-title">Edit Site Photos</h3>
+            <p class="jw-card-sub">View, replace or remove local prototype photos for this project.</p>
+          </header>
+          <div class="project-edit-photo-grid">
+            ${projectEditPhotoCards()}
+          </div>
+        </section>
+        <div class="project-edit-actions">
+          <button class="secondary-btn" type="button" data-company-project-edit-cancel>Cancel</button>
+          <button class="primary-btn" type="submit">Save Changes</button>
+        </div>
+      </form>
     </section>`;
 }
 
@@ -8998,6 +9235,9 @@ function companyProjectSiteInfoHTML(job) {
 }
 
 function companyProjectActivityHTML(job, summary) {
+  const projectRows = (job.projectActivity || [])
+    .slice(0, 8)
+    .map((item) => `<div class="company-project-mini-row"><span>${escapeHtml(item.message || "Project updated")}</span><strong>${item.createdAt ? formatDateOnly(item.createdAt) : "Update"}</strong></div>`);
   const offerRows = summary.apps
     .slice(0, 8)
     .map((app) => `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || "Worker")} · ${escapeHtml(app.status || "offer")}</span><strong>${app.createdAt ? formatDateOnly(app.createdAt) : "Offer"}</strong></div>`);
@@ -9008,12 +9248,379 @@ function companyProjectActivityHTML(job, summary) {
     .filter((n) => n.jobId === job.id)
     .slice(0, 8)
     .map((n) => `<div class="company-project-mini-row"><span>${escapeHtml(n.title || n.type || "Notification")}</span><strong>${n.createdAt ? formatDateOnly(n.createdAt) : "Update"}</strong></div>`);
-  const rows = [...notificationRows, ...offerRows, ...attendanceRows];
+  const rows = [...projectRows, ...notificationRows, ...offerRows, ...attendanceRows];
   return `
     <div class="company-project-section">
       <h4>Activity</h4>
       ${rows.length ? rows.join("") : `<div class="att-empty">No project activity yet.</div>`}
     </div>`;
+}
+
+function updateProjectEditPinDisplay() {
+  const wrap = document.getElementById("projectEditPinCoords");
+  const text = wrap?.querySelector("span");
+  if (!wrap || !text) return;
+  if (projectEditPin.lat == null || projectEditPin.lng == null) {
+    wrap.classList.add("hidden");
+    text.textContent = "";
+    return;
+  }
+  text.textContent = `${projectEditPin.lat}, ${projectEditPin.lng}`;
+  wrap.classList.remove("hidden");
+}
+
+function initProjectEditMap() {
+  const el = document.getElementById("projectEditMap");
+  if (!el || typeof L === "undefined") return;
+  const start = projectEditPin.lat != null && projectEditPin.lng != null
+    ? [projectEditPin.lat, projectEditPin.lng]
+    : [52.4862, -1.8904];
+  if (projectEditMap) {
+    projectEditMap.invalidateSize();
+    return;
+  }
+  projectEditMap = L.map("projectEditMap", { zoomControl: true }).setView(
+    start,
+    projectEditPin.lat != null ? 17 : 11,
+  );
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxZoom: 20,
+    subdomains: "abcd",
+  }).addTo(projectEditMap);
+
+  const pinIcon = L.divIcon({
+    className: "",
+    html: `<div class="site-drop-pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+  });
+
+  const setPin = (latlng) => {
+    projectEditPin = {
+      lat: parseFloat(latlng.lat.toFixed(6)),
+      lng: parseFloat(latlng.lng.toFixed(6)),
+    };
+    if (projectEditMarker) projectEditMarker.setLatLng(latlng);
+    else {
+      projectEditMarker = L.marker(latlng, { icon: pinIcon, draggable: true }).addTo(
+        projectEditMap,
+      );
+      projectEditMarker.on("dragend", (ev) => setPin(ev.target.getLatLng()));
+    }
+    updateProjectEditPinDisplay();
+  };
+
+  if (projectEditPin.lat != null && projectEditPin.lng != null) {
+    setPin({ lat: projectEditPin.lat, lng: projectEditPin.lng });
+  }
+  projectEditMap.on("click", (event) => setPin(event.latlng));
+  setTimeout(() => projectEditMap?.invalidateSize(), 250);
+}
+
+function projectEditRequiresAcknowledgement(field) {
+  return [
+    "siteAddress",
+    "sitePin",
+    "arrivalInstructions",
+    "siteContact",
+    "workingDays",
+    "shiftTimes",
+    "ppe",
+    "gateAccess",
+  ].includes(field);
+}
+
+function projectEditFieldEqual(a, b) {
+  return JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
+}
+
+function addProjectEditChange(changes, field, before, after, message) {
+  if (projectEditFieldEqual(before, after)) return;
+  changes.push({
+    field,
+    before,
+    after,
+    message,
+    requiresWorkerAcknowledgement: projectEditRequiresAcknowledgement(field),
+  });
+}
+
+function projectEditActivityValue(field, value) {
+  if (field === "siteContact" || field === "attendanceManager") {
+    return value && Object.values(value).some(Boolean) ? "contact details set" : "";
+  }
+  if (field.startsWith("sitePhoto:")) return value ? "photo" : "";
+  if (typeof value === "string") {
+    return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  }
+  return value;
+}
+
+function recordProjectEditActivity(job, changes, user) {
+  if (!changes.length) return;
+  if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
+  const createdAt = new Date().toISOString();
+  const actor = user?.companyName || user?.name || "Company";
+  changes.forEach((change) => {
+    job.projectActivity.unshift({
+      id: createId(),
+      type: "project_edit",
+      field: change.field,
+      message: change.message,
+      before: projectEditActivityValue(change.field, change.before),
+      after: projectEditActivityValue(change.field, change.after),
+      createdAt,
+      actor,
+    });
+  });
+  job.projectActivity = job.projectActivity.slice(0, 50);
+
+  const ackFields = changes
+    .filter((change) => change.requiresWorkerAcknowledgement)
+    .map((change) => change.field);
+  if (ackFields.length) {
+    if (!Array.isArray(job.workerAcknowledgementChanges)) {
+      job.workerAcknowledgementChanges = [];
+    }
+    job.workerAcknowledgementChanges.unshift({
+      id: createId(),
+      type: "project_update",
+      fields: Array.from(new Set(ackFields)),
+      createdAt,
+      createdBy: user?.id || "",
+      acknowledgedBy: [],
+    });
+  }
+}
+
+function readProjectEditValues() {
+  const noFixedEndDate = !!document.getElementById("projectEditNoFixedEndDate")?.checked;
+  return {
+    jobNumber: document.getElementById("projectEditJobNumber")?.value.trim() || "",
+    projectName: document.getElementById("projectEditProjectName")?.value.trim() || "",
+    assignmentType:
+      document.getElementById("projectEditAssignmentType")?.value || "",
+    location: document.getElementById("projectEditLocation")?.value.trim() || "",
+    start: document.getElementById("projectEditStart")?.value || "",
+    estimatedEndDate: noFixedEndDate
+      ? ""
+      : document.getElementById("projectEditEndDate")?.value || "",
+    noFixedEndDate,
+    shiftStartTime: document.getElementById("projectEditShiftStart")?.value || "",
+    shiftFinishTime: document.getElementById("projectEditShiftFinish")?.value || "",
+    workingDays: normalizeWorkingDays(
+      Array.from(document.querySelectorAll('input[name="projectEditWorkingDays"]:checked')).map(
+        (input) => input.value,
+      ),
+    ),
+    siteAddress: document.getElementById("projectEditSiteAddress")?.value.trim() || "",
+    siteContact: {
+      name: document.getElementById("projectEditContactName")?.value.trim() || "",
+      phone: document.getElementById("projectEditContactPhone")?.value.trim() || "",
+    },
+    arrivalInstructions:
+      document.getElementById("projectEditArrivalInstructions")?.value.trim() || "",
+    parking: document.getElementById("projectEditParking")?.value.trim() || "",
+    ppe: document.getElementById("projectEditPpe")?.value.trim() || "",
+    gateAccess: document.getElementById("projectEditGateAccess")?.value.trim() || "",
+    attendanceManager: {
+      name: document.getElementById("projectEditAttendanceName")?.value.trim() || "",
+      email: document.getElementById("projectEditAttendanceEmail")?.value.trim() || "",
+      phone: document.getElementById("projectEditAttendancePhone")?.value.trim() || "",
+    },
+  };
+}
+
+function validateProjectEdit(values) {
+  if (!values.jobNumber) return "Job number is required";
+  if (!values.projectName) return "Project name is required";
+  if (!values.location) return "Location is required";
+  if (!values.start) return "Start date and time is required";
+  if (!values.noFixedEndDate && !values.estimatedEndDate) {
+    return "Estimated end date is required unless No fixed end date is selected";
+  }
+  if (!values.shiftStartTime) return "Shift start time is required";
+  if (!values.shiftFinishTime) return "Shift finish time is required";
+  if (!values.workingDays.length) return "Select at least one working day";
+  if (!values.siteAddress) return "Site address is required";
+  if (projectEditPin.lat == null || projectEditPin.lng == null) {
+    return "Exact entrance pin is required";
+  }
+  if (!values.siteContact.name || !values.siteContact.phone) {
+    return "Site contact name and number are required";
+  }
+  return "";
+}
+
+function saveProjectEdit(jobId) {
+  const job = findJob(jobId);
+  const user = getSessionUser();
+  if (!job || !canEditCompanyProject(job, user)) return;
+  const values = readProjectEditValues();
+  const error = validateProjectEdit(values);
+  if (error) {
+    showToast(error);
+    return;
+  }
+  const changes = [];
+  const oldPin = job.sitePin ? { ...job.sitePin } : null;
+  const newPin = { ...projectEditPin };
+  const assignmentLocked =
+    !!job.assignedWorkerId ||
+    (state.applications || []).some((app) => app.jobId === job.id);
+  const nextAssignmentType = assignmentLocked
+    ? normalizeAssignmentType(job.assignmentType || job.jobType)
+    : normalizeAssignmentType(values.assignmentType);
+
+  addProjectEditChange(changes, "projectName", job.projectName || "", values.projectName, "Project name updated");
+  addProjectEditChange(changes, "jobNumber", job.jobNumber || "", values.jobNumber, "Job number updated");
+  addProjectEditChange(changes, "location", job.location || "", values.location, "Location updated");
+  addProjectEditChange(changes, "assignmentType", normalizeAssignmentType(job.assignmentType || job.jobType), nextAssignmentType, "Assignment type updated");
+  addProjectEditChange(changes, "start", job.start || "", values.start, "Start date updated");
+  addProjectEditChange(changes, "estimatedEndDate", job.noFixedEndDate ? "" : job.estimatedEndDate || job.endDate || "", values.estimatedEndDate, values.noFixedEndDate ? "No fixed end date enabled" : "Estimated end date updated");
+  addProjectEditChange(changes, "noFixedEndDate", !!job.noFixedEndDate, values.noFixedEndDate, "No fixed end date updated");
+  addProjectEditChange(changes, "shiftTimes", { start: job.shiftStartTime || "", finish: job.shiftFinishTime || "" }, { start: values.shiftStartTime, finish: values.shiftFinishTime }, "Shift times updated");
+  addProjectEditChange(changes, "workingDays", normalizeWorkingDays(job.workingDays), values.workingDays, "Working days updated");
+  addProjectEditChange(changes, "siteAddress", job.siteAddress || "", values.siteAddress, "Site address updated");
+  addProjectEditChange(changes, "sitePin", oldPin, newPin, "Site entrance pin updated");
+  addProjectEditChange(changes, "siteContact", job.siteContact || {}, values.siteContact, "Site contact changed");
+  addProjectEditChange(changes, "arrivalInstructions", job.arrivalInstructions || "", values.arrivalInstructions, "Arrival instructions updated");
+  addProjectEditChange(changes, "parking", job.parking || "", values.parking, "Parking information updated");
+  addProjectEditChange(changes, "ppe", job.ppe || "", values.ppe, "PPE requirements updated");
+  addProjectEditChange(changes, "gateAccess", job.gateAccess || "", values.gateAccess, "Additional notes updated");
+  addProjectEditChange(changes, "attendanceManager", job.attendanceManager || {}, values.attendanceManager, "Attendance responsibility updated");
+
+  PHOTO_KEYS.forEach(({ key, label }) => {
+    const before = job.sitePhotos?.[key] || "";
+    const after = projectEditPhotos[key] || "";
+    if (before === after) return;
+    addProjectEditChange(
+      changes,
+      `sitePhoto:${key}`,
+      before ? "photo" : "",
+      after ? "photo" : "",
+      `${label} photo ${before && after ? "replaced" : after ? "added" : "removed"}`,
+    );
+  });
+
+  job.jobNumber = values.jobNumber;
+  job.projectName = values.projectName;
+  job.location = values.location;
+  job.assignmentType = nextAssignmentType;
+  job.jobType = nextAssignmentType;
+  job.ongoing = nextAssignmentType === "ongoing_placement";
+  job.noFixedEndDate = values.noFixedEndDate;
+  job.start = values.start;
+  job.startDate = values.start;
+  job.estimatedEndDate = values.estimatedEndDate;
+  job.shiftStartTime = values.shiftStartTime;
+  job.shiftFinishTime = values.shiftFinishTime;
+  job.workingDays = values.workingDays;
+  job.defaultWorkingDays = values.workingDays;
+  job.requiresSaturday = values.workingDays.includes("saturday");
+  job.requiresSunday = values.workingDays.includes("sunday");
+  job.siteAddress = values.siteAddress;
+  job.sitePin = newPin;
+  job.siteContact = values.siteContact;
+  job.arrivalInstructions = values.arrivalInstructions;
+  job.parking = values.parking;
+  job.ppe = values.ppe;
+  job.gateAccess = values.gateAccess;
+  job.sitePhotos = { ...projectEditPhotos };
+  job.sitePhotoMeta = { ...projectEditPhotoMeta };
+  if (values.attendanceManager.name || values.attendanceManager.email || values.attendanceManager.phone) {
+    job.attendanceManager = {
+      ...(job.attendanceManager || {}),
+      name: values.attendanceManager.name,
+      email: values.attendanceManager.email,
+      phone: values.attendanceManager.phone,
+    };
+  } else {
+    delete job.attendanceManager;
+  }
+
+  recordProjectEditActivity(job, changes, user);
+  if (changes.length) {
+    logActivity("job", `<strong>${escapeHtml(companyProjectTitle(job))}</strong> project details updated`);
+  }
+  activeCompanyProjectEditId = "";
+  resetProjectEditMap();
+  saveAndRender();
+  showToast(changes.length ? "Project changes saved" : "No project changes to save");
+}
+
+function syncProjectEditEndDate() {
+  const noFixed = !!document.getElementById("projectEditNoFixedEndDate")?.checked;
+  const endInput = document.getElementById("projectEditEndDate");
+  if (!endInput) return;
+  endInput.required = !noFixed;
+  endInput.disabled = noFixed;
+  if (noFixed) endInput.value = "";
+}
+
+function bindProjectEditControls(scope) {
+  scope.querySelectorAll("[data-company-project-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const job = findJob(btn.dataset.companyProjectEdit);
+      const user = getSessionUser();
+      if (!job || !canEditCompanyProject(job, user)) return;
+      activeCompanyProjectEditId = job.id;
+      initProjectEditDraft(job);
+      render();
+      requestAnimationFrame(() => initProjectEditMap());
+    });
+  });
+  scope.querySelectorAll("[data-company-project-edit-cancel]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCompanyProjectEditId = "";
+      resetProjectEditMap();
+      render();
+    });
+  });
+  scope.querySelector("[data-project-edit-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveProjectEdit(event.currentTarget.dataset.projectEditForm);
+  });
+  scope
+    .querySelector("#projectEditNoFixedEndDate")
+    ?.addEventListener("change", syncProjectEditEndDate);
+  if (scope.querySelector("#projectEditMap")) {
+    syncProjectEditEndDate();
+    requestAnimationFrame(() => initProjectEditMap());
+  }
+  scope.querySelectorAll("[data-project-edit-photo]").forEach((input) => {
+    input.addEventListener("change", async (event) => {
+      const key = event.currentTarget.dataset.projectEditPhoto;
+      const file = event.currentTarget.files?.[0];
+      if (!key || !file) return;
+      try {
+        const compressed = await compressImage(file);
+        const label = PHOTO_KEYS.find((item) => item.key === key)?.label || "Site photo";
+        projectEditPhotos[key] = compressed;
+        projectEditPhotoMeta[key] = {
+          photoType: key,
+          label,
+          fileName: file.name || "",
+          uploadedAt: new Date().toISOString(),
+        };
+        resetProjectEditMap();
+        render();
+      } catch (_) {
+        showToast("Photo upload failed — try a different image");
+      }
+    });
+  });
+  scope.querySelectorAll("[data-project-edit-photo-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.projectEditPhotoRemove;
+      delete projectEditPhotos[key];
+      delete projectEditPhotoMeta[key];
+      resetProjectEditMap();
+      render();
+    });
+  });
 }
 
 function renderContractorHome(user) {
@@ -9592,6 +10199,8 @@ function bindCompanyProjectDashboardButtons(scope) {
   scope.querySelectorAll("[data-company-project-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
+      activeCompanyProjectEditId = "";
+      resetProjectEditMap();
       activeCompanyProjectSection = "overview";
       render();
     });
@@ -9599,12 +10208,16 @@ function bindCompanyProjectDashboardButtons(scope) {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
+      activeCompanyProjectEditId = "";
+      resetProjectEditMap();
       activeCompanyProjectSection = "overview";
       render();
     });
   });
   scope.querySelector("[data-company-project-close]")?.addEventListener("click", () => {
     activeCompanyProjectId = "";
+    activeCompanyProjectEditId = "";
+    resetProjectEditMap();
     render();
   });
   scope.querySelectorAll("[data-project-request-more]").forEach((btn) => {
@@ -9639,6 +10252,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       ),
     );
   });
+  bindProjectEditControls(scope);
 }
 
 function bindCompanyProjectSearch(scope) {
