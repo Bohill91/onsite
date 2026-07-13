@@ -5924,7 +5924,43 @@ let activeFilter = "all";
 
 workerSearch.addEventListener("input", () => renderWorkers());
 
+function prepareLabourRequestForm({ focus = false } = {}) {
+  renderJobPreferredWorkerChoices(getSessionUser());
+  syncTradeReqBuilderState();
+  updateAssignmentTypeForm();
+  updateAccommodationForm();
+  updateOvertimeForm();
+  requestAnimationFrame(() => initPickerMap());
+  if (focus) setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
+}
+
+function hideLabourRequestModal() {
+  const modal = document.getElementById("labourRequestModal");
+  modal?.classList.add("hidden");
+  modal?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function openLabourRequestPage({ focus = true } = {}) {
+  const formWrap = document.getElementById("formJob");
+  const body = document.getElementById("requestLabourPageBody");
+  if (!formWrap || !body) {
+    switchTab("add");
+    return;
+  }
+  activeCompanyProjectId = "";
+  hideLabourRequestModal();
+  body.appendChild(formWrap);
+  formWrap.classList.remove("hidden");
+  switchTab("request-labour");
+  prepareLabourRequestForm({ focus });
+}
+
 function openLabourRequestWorkflow() {
+  if (getSessionUser()?.type === "company") {
+    openLabourRequestPage();
+    return;
+  }
   const formWrap = document.getElementById("formJob");
   const modal = document.getElementById("labourRequestModal");
   const body = document.getElementById("labourRequestModalBody");
@@ -5937,11 +5973,7 @@ function openLabourRequestWorkflow() {
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  renderJobPreferredWorkerChoices(getSessionUser());
-  syncTradeReqBuilderState();
-  updateAssignmentTypeForm();
-  requestAnimationFrame(() => initPickerMap());
-  setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
+  prepareLabourRequestForm({ focus: true });
 }
 
 function closeLabourRequestWorkflow() {
@@ -6477,10 +6509,7 @@ function bindTabEvents() {
   document.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.dataset.tab === "request-labour") {
-        activeCompanyProjectId = "";
-        switchTab("dashboard");
-        render();
-        openLabourRequestWorkflow();
+        openLabourRequestPage();
         return;
       }
       if (btn.dataset.tab === "dashboard") activeCompanyProjectId = "";
@@ -10147,6 +10176,20 @@ resetDemoBtn.addEventListener("click", () => {
   showToast("Demo data restored");
 });
 
+function renderCompanyRequestLabourPage(user) {
+  const formWrap = document.getElementById("formJob");
+  const body = document.getElementById("requestLabourPageBody");
+  if (!formWrap || !body) return;
+  body.appendChild(formWrap);
+  formWrap.classList.remove("hidden");
+  renderJobPreferredWorkerChoices(user);
+  syncTradeReqBuilderState();
+  updateAssignmentTypeForm();
+  updateAccommodationForm();
+  updateOvertimeForm();
+  requestAnimationFrame(() => initPickerMap());
+}
+
 // ─── Render ───────────────────────────────────────────────
 function render() {
   const user = getSessionUser();
@@ -10177,10 +10220,16 @@ function render() {
     renderAttendance();
     renderContractorAccount(user);
     renderJobPreferredWorkerChoices(user);
-    // Company's labour request form is opened from Request Labour buttons only.
+    if (document.getElementById("tab-request-labour")?.classList.contains("active")) {
+      renderCompanyRequestLabourPage(user);
+    }
     document.querySelector("#formWorker")?.classList.add("hidden");
-    if (!document.getElementById("labourRequestModalBody")?.contains(document.querySelector("#formJob"))) {
-      document.querySelector("#formJob")?.classList.add("hidden");
+    const formJob = document.querySelector("#formJob");
+    const formIsOpen =
+      document.getElementById("labourRequestModalBody")?.contains(formJob) ||
+      document.getElementById("requestLabourPageBody")?.contains(formJob);
+    if (!formIsOpen) {
+      formJob?.classList.add("hidden");
     }
   } else {
     renderStats();

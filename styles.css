@@ -232,6 +232,10 @@ button, input, select, textarea {
     max-width: 760px;
     width: 100%;
   }
+
+  .content-area:has(#tab-request-labour.active) {
+    max-width: 1044px;
+  }
 }
 
 /* ─── Tab Panels ───────────────────────────────────────── */
@@ -6925,6 +6929,54 @@ body.modal-open {
   border: 0;
   box-shadow: none;
   padding: 0;
+}
+
+.request-labour-page {
+  display: grid;
+  gap: 18px;
+  margin-inline: auto;
+  max-width: 980px;
+  width: 100%;
+}
+
+.request-labour-page-head,
+.request-labour-page-body {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.06);
+}
+
+.request-labour-page-head {
+  padding: 20px;
+}
+
+.request-labour-page-head h2 {
+  color: var(--ink);
+  font-size: 1.45rem;
+  margin: 2px 0 0;
+}
+
+.request-labour-page-head p:not(.company-home-kicker) {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.request-labour-page-body {
+  padding: 20px;
+}
+
+.request-labour-page-body #formJob {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .request-labour-page-head,
+  .request-labour-page-body {
+    padding: 16px;
+  }
 }
 
 .labour-project-req-row {
