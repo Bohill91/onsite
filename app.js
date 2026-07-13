@@ -8036,6 +8036,9 @@ function agreementHistorySection(agreements) {
 let activeCompanyProjectId = "";
 let activeCompanyProjectSection = "overview";
 let activeCompanyProjectSearch = "";
+let activeCompanyProjectSort = "created_desc";
+let activeCompanyProjectHealthFilters = [];
+let activeCompanyProjectRequiresAction = false;
 
 const COMPANY_PROJECT_SECTIONS = [
   { id: "overview", label: "Overview" },
@@ -8217,10 +8220,28 @@ function companyProjectSearchText(job, summary = companyProjectSummary(job, getS
 
 function filterCompanyProjects(jobs, user) {
   const query = activeCompanyProjectSearch.trim().toLowerCase();
-  if (!query) return jobs;
-  return jobs.filter((job) =>
-    companyProjectSearchText(job, companyProjectSummary(job, user)).includes(query),
-  );
+  return jobs
+    .filter((job) => {
+      const summary = companyProjectSummary(job, user);
+      const health = companyProjectHealth(job, summary);
+      if (
+        query &&
+        !companyProjectSearchText(job, summary).includes(query)
+      ) {
+        return false;
+      }
+      if (
+        activeCompanyProjectHealthFilters.length &&
+        !activeCompanyProjectHealthFilters.includes(health.level)
+      ) {
+        return false;
+      }
+      if (activeCompanyProjectRequiresAction && !health.requiresAction) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => sortCompanyProjects(a, b, activeCompanyProjectSort));
 }
 
 function companyProjectSearchHTML(id) {
@@ -8228,6 +8249,44 @@ function companyProjectSearchHTML(id) {
     <span>Search projects</span>
     <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" />
   </label>`;
+}
+
+function companyProjectFilterHTML() {
+  const healthOptions = [
+    ["healthy", "Healthy"],
+    ["needs_attention", "Needs attention"],
+    ["at_risk", "At risk"],
+    ["critical", "Critical"],
+  ];
+  return `<details class="company-project-filter">
+    <summary>Filter</summary>
+    <div class="company-project-filter-menu">
+      <label class="field-label">
+        Sort by
+        <select id="companyProjectSort">
+          <option value="created_desc"${activeCompanyProjectSort === "created_desc" ? " selected" : ""}>Date created — newest</option>
+          <option value="created_asc"${activeCompanyProjectSort === "created_asc" ? " selected" : ""}>Date created — oldest</option>
+          <option value="start_asc"${activeCompanyProjectSort === "start_asc" ? " selected" : ""}>Start date — soonest</option>
+          <option value="end_asc"${activeCompanyProjectSort === "end_asc" ? " selected" : ""}>End date — soonest</option>
+        </select>
+      </label>
+      <div class="company-project-filter-group">
+        <span>Project health</span>
+        ${healthOptions
+          .map(
+            ([value, label]) => `<label class="checkbox-row compact">
+              <input type="checkbox" value="${value}" data-company-health-filter${activeCompanyProjectHealthFilters.includes(value) ? " checked" : ""} />
+              <span>${label}</span>
+            </label>`,
+          )
+          .join("")}
+      </div>
+      <label class="checkbox-row compact">
+        <input id="companyProjectRequiresAction" type="checkbox"${activeCompanyProjectRequiresAction ? " checked" : ""} />
+        <span>Requires action</span>
+      </label>
+    </div>
+  </details>`;
 }
 
 function companyProjectEmptyStateHTML(message = "Create your first labour request and it will appear here as a Live Project.") {
@@ -8345,8 +8404,90 @@ function companyDashboardSummary(user) {
   };
 }
 
+function projectDateValue(value, fallback = Number.MAX_SAFE_INTEGER) {
+  if (!value) return fallback;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : fallback;
+}
+
+function sortCompanyProjects(a, b, sortBy) {
+  if (sortBy === "created_asc") {
+    return projectDateValue(a.createdAt || a.postedAt || a.start, 0) -
+      projectDateValue(b.createdAt || b.postedAt || b.start, 0);
+  }
+  if (sortBy === "start_asc") {
+    return projectDateValue(a.start) - projectDateValue(b.start);
+  }
+  if (sortBy === "end_asc") {
+    return projectDateValue(a.end || a.estimatedEndDate) -
+      projectDateValue(b.end || b.estimatedEndDate);
+  }
+  return projectDateValue(b.createdAt || b.postedAt || b.start, 0) -
+    projectDateValue(a.createdAt || a.postedAt || a.start, 0);
+}
+
+function companyProjectHealth(job, summary) {
+  if (summary.noShows > 0) {
+    return {
+      level: "critical",
+      label: "Critical",
+      reason: `${summary.noShows} worker${summary.noShows === 1 ? "" : "s"} did not sign in`,
+      requiresAction: true,
+    };
+  }
+  if (summary.replacements.length > 0) {
+    return {
+      level: "critical",
+      label: "Critical",
+      reason: `${summary.replacements.length} replacement${summary.replacements.length === 1 ? "" : "s"} required`,
+      requiresAction: true,
+    };
+  }
+  if (summary.openRoles > 0) {
+    const req = uniqueLabourRequirements(summary.labourRequirements).find(
+      (item) => companyRequirementStats(item, summary).remaining > 0,
+    );
+    const stats = req ? companyRequirementStats(req, summary) : null;
+    return {
+      level: "at_risk",
+      label: "At risk",
+      reason: req
+        ? `${stats.remaining} ${req.trade || "worker"}${stats.remaining === 1 ? "" : "s"} still required`
+        : `${summary.openRoles} worker${summary.openRoles === 1 ? "" : "s"} still required`,
+      requiresAction: true,
+    };
+  }
+  if (summary.outstandingPreStart > 0) {
+    return {
+      level: "needs_attention",
+      label: "Needs attention",
+      reason: `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding`,
+      requiresAction: true,
+    };
+  }
+  if (summary.lateReports > 0 || summary.plannedAbsences.length > 0 || summary.reviewWorkers.length > 0) {
+    return {
+      level: "needs_attention",
+      label: "Needs attention",
+      reason: summary.reviewWorkers.length
+        ? `${summary.reviewWorkers.length} worker${summary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`
+        : summary.lateReports
+          ? `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"}`
+          : `${summary.plannedAbsences.length} planned absence update${summary.plannedAbsences.length === 1 ? "" : "s"}`,
+      requiresAction: true,
+    };
+  }
+  return {
+    level: "healthy",
+    label: "Healthy",
+    reason: "No current issues requiring attention.",
+    requiresAction: false,
+  };
+}
+
 function companyProjectCardHTML(job, user) {
   const summary = companyProjectSummary(job, user);
+  const health = companyProjectHealth(job, summary);
   const title = companyProjectTitle(job);
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
@@ -8374,15 +8515,16 @@ function companyProjectCardHTML(job, user) {
     <article class="company-project-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
       <div class="company-project-top">
         <div>
-          <div class="company-project-kicker">Project</div>
+          <div class="company-project-kicker">PROJECT</div>
           <div class="company-project-title">${escapeHtml(title)}</div>
           <div class="company-project-meta">Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
         </div>
-        <span class="company-project-status">${escapeHtml(summary.status)}</span>
+        <span class="company-project-health ${escapeHtml(health.level)}">${escapeHtml(health.label)}</span>
       </div>
       <div class="company-project-facts">
         <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
         <span><strong>Start date</strong> ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
+        <span><strong>End date</strong> ${job.noFixedEndDate ? "No fixed end date" : job.end || job.estimatedEndDate ? formatDateOnly(job.end || job.estimatedEndDate) : "TBC"}</span>
       </div>
       <div class="company-project-requirements">
         <span class="company-project-requirements-label">Labour Requirements</span>
@@ -8394,6 +8536,7 @@ function companyProjectCardHTML(job, user) {
         <span><strong>${summary.reviewWorkers.length}</strong> Awaiting approval</span>
         <span class="${urgentFlags.length ? "urgent" : ""}"><strong>${urgentFlags.length}</strong> Urgent issues</span>
       </div>
+      <div class="company-project-health-reason${health.requiresAction ? " attention" : ""}">${escapeHtml(health.reason)}</div>
       ${urgentFlags.length ? `<div class="company-project-urgent-list">${urgentFlags.map((flag) => `<span>${escapeHtml(flag)}</span>`).join("")}</div>` : ""}
       <div class="company-project-action-row">
         <div class="primary-btn company-project-open">View Project</div>
@@ -8750,7 +8893,7 @@ function renderContractorHome(user) {
   }
   const selectedProject = companyJobs.find((job) => job.id === activeCompanyProjectId);
   if (selectedProject) {
-    el.innerHTML = `<section class="company-home">${companyProjectDetailHTML(selectedProject, user)}</section>`;
+    el.innerHTML = `<section class="company-dashboard-page">${companyProjectDetailHTML(selectedProject, user)}</section>`;
     bindWorkerReleaseButtons(el);
     bindCancelBookingButtons(el);
     bindAgreementOpeners(el);
@@ -8779,20 +8922,21 @@ function renderContractorHome(user) {
       : companyProjectEmptyStateHTML();
 
   el.innerHTML = `
-    <section class="company-home">
-      <div class="company-live-projects-head">
-        <div class="company-home-head">
-          <div>
-            <div class="company-home-kicker">DASHBOARD</div>
-            <h2>Dashboard</h2>
-            <p>Monitor your live projects, staffing, attendance and project health.</p>
-          </div>
+    <section class="company-dashboard-page">
+      <header class="request-labour-page-head">
+        <div>
+          <p class="company-home-kicker">DASHBOARD</p>
+          <h2>Dashboard</h2>
+          <p>Monitor your live projects, staffing, attendance and project health.</p>
         </div>
+      </header>
+      <section class="company-dashboard-filter-card">
         <div class="company-project-toolbar">
           ${companyProjectSearchHTML("companyDashboardProjectSearch")}
+          ${companyProjectFilterHTML()}
           <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
         </div>
-      </div>
+      </section>
       <div class="company-project-grid">${projectCards}</div>
     </section>`;
 
@@ -9375,6 +9519,24 @@ function bindCompanyProjectSearch(scope) {
           nextInput.setSelectionRange(cursor, cursor);
         });
       });
+    });
+  scope.querySelector("#companyProjectSort")?.addEventListener("change", (event) => {
+    activeCompanyProjectSort = event.target.value || "created_desc";
+    render();
+  });
+  scope.querySelectorAll("[data-company-health-filter]").forEach((input) => {
+    input.addEventListener("change", () => {
+      activeCompanyProjectHealthFilters = Array.from(
+        scope.querySelectorAll("[data-company-health-filter]:checked"),
+      ).map((item) => item.value);
+      render();
+    });
+  });
+  scope
+    .querySelector("#companyProjectRequiresAction")
+    ?.addEventListener("change", (event) => {
+      activeCompanyProjectRequiresAction = !!event.target.checked;
+      render();
     });
 }
 
