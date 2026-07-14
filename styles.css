@@ -7277,7 +7277,9 @@ body.modal-open {
 }
 
 .company-project-card .company-project-top {
+  display: grid;
   gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .company-project-title {
@@ -7344,9 +7346,10 @@ body.modal-open {
 }
 
 .company-project-health-panel {
-  margin-right: 26px;
-  max-width: 300px;
-  min-width: min(300px, 100%);
+  justify-self: end;
+  margin: 0;
+  max-width: max-content;
+  min-width: 0;
   position: relative;
   text-align: left;
 }
@@ -7356,7 +7359,7 @@ body.modal-open {
   cursor: pointer;
   display: inline-flex;
   gap: 7px;
-  justify-self: start;
+  justify-self: end;
   list-style: none;
 }
 
