@@ -7344,21 +7344,24 @@ body.modal-open {
 }
 
 .company-project-health-panel {
-  align-items: start;
-  display: grid;
-  gap: 4px;
-  justify-items: start;
   margin-right: 26px;
   max-width: 300px;
   min-width: min(300px, 100%);
+  position: relative;
   text-align: left;
 }
 
 .company-project-health-line {
   align-items: center;
+  cursor: pointer;
   display: inline-flex;
   gap: 7px;
   justify-self: start;
+  list-style: none;
+}
+
+.company-project-health-line::-webkit-details-marker {
+  display: none;
 }
 
 .company-project-health-led {
@@ -7388,46 +7391,118 @@ body.modal-open {
   white-space: nowrap;
 }
 
-.company-project-health-panel p {
+.company-project-health-info {
   color: var(--ink-3);
-  font-size: 0.74rem;
-  line-height: 1.35;
-  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
-.company-project-health-reason-line,
-.company-project-health-suggestions span {
-  white-space: nowrap;
+.company-project-health-popover {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+  display: grid;
+  gap: 10px;
+  min-width: 260px;
+  padding: 14px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
 }
 
-.company-project-health-panel.healthy .company-project-health-led {
-  background: #16c75f;
-  color: #16c75f;
+.company-project-health-popover > strong {
+  color: var(--ink);
+  font-size: 0.88rem;
 }
 
-.company-project-health-panel.needsAttention .company-project-health-led {
-  background: #facc15;
-  color: #facc15;
-}
-
-.company-project-health-panel.atRisk .company-project-health-led {
-  background: #ff7a1a;
-  color: #ff7a1a;
-}
-
-.company-project-health-panel.critical .company-project-health-led {
-  background: #ef4444;
-  color: #ef4444;
-}
-
-.company-project-health-suggestions {
+.company-project-health-pop-section {
   display: grid;
   gap: 4px;
 }
 
-.company-project-health-suggestions span {
+.company-project-health-pop-section span {
+  color: var(--orange);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.company-project-health-pop-section p,
+.company-project-health-pop-section li {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.company-project-health-pop-section ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.company-project-health-panel.filled .company-project-health-led {
+  background: #16c75f;
+  color: #16c75f;
+}
+
+.company-project-health-panel.matching .company-project-health-led {
+  background: var(--orange);
+  color: var(--orange);
+}
+
+.company-project-health-panel.atRisk .company-project-health-led {
+  background: #facc15;
+  color: #facc15;
+}
+
+.company-project-health-panel.urgent .company-project-health-led {
+  background: #ef4444;
+  color: #ef4444;
+}
+
+.company-notification-row {
+  align-items: flex-start;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.company-notification-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.company-notification-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.company-notification-row ul {
+  color: var(--ink-2);
+  display: grid;
+  font-size: 0.76rem;
+  gap: 3px;
+  line-height: 1.35;
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.company-notification-row strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.company-notification-row span,
+.company-notification-row small {
   color: var(--ink-3);
-  font-size: 0.7rem;
+  font-size: 0.76rem;
   line-height: 1.35;
 }
 
@@ -8013,9 +8088,10 @@ body.modal-open {
     text-align: left;
   }
 
-  .company-project-health-reason-line,
-  .company-project-health-suggestions span {
-    white-space: normal;
+  .company-project-health-popover {
+    left: 0;
+    min-width: min(260px, 88vw);
+    right: auto;
   }
 
   .company-project-health-line {

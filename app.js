@@ -8366,10 +8366,10 @@ function companyProjectSearchHTML(id) {
 
 function companyProjectFilterHTML() {
   const healthOptions = [
-    ["healthy", "Healthy"],
-    ["needsAttention", "Needs attention"],
+    ["matching", "Matching"],
+    ["filled", "Filled"],
     ["atRisk", "At risk"],
-    ["critical", "Critical"],
+    ["urgent", "Urgent"],
   ];
   return `<details class="company-project-filter">
     <summary>Filter</summary>
@@ -8548,6 +8548,13 @@ function projectEndDays(job) {
   return calendarDaysUntil(job?.end || job?.estimatedEndDate || job?.endDate || "");
 }
 
+function projectCreatedLeadDays(job) {
+  const createdMs = dateOnlyMs(job?.createdAt || job?.postedAt || "");
+  const startMs = dateOnlyMs(job?.start || job?.startDate || "");
+  if (createdMs === null || startMs === null) return null;
+  return Math.round((startMs - createdMs) / 86400000);
+}
+
 function expiringWorkerDocumentCount(workers, days = 30) {
   return workers.reduce((count, worker) => {
     const docs = Array.isArray(worker?.documents) ? worker.documents : [];
@@ -8589,149 +8596,57 @@ function workerLabel(count, fallback = "worker") {
 }
 
 function calculateProjectHealth(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
-  const reasons = {
-    critical: [],
-    atRisk: [],
-    needsAttention: [],
-  };
   const startDays = projectStartDays(job);
-  const endDays = projectEndDays(job);
-  const live = startDays !== null && startDays <= 0 && !job.completed;
-  const startsTodayOrTomorrow =
-    startDays !== null && startDays >= 0 && startDays <= 1;
-  const imminent = startDays !== null && startDays >= 0 && startDays <= 7;
   const mostUnderfilled = mostUnderfilledRequirement(summary);
+  const leadDays = projectCreatedLeadDays(job);
+  const shortLead = leadDays !== null && leadDays <= 3;
   const openLabel = mostUnderfilled
-    ? workerLabel(
-        mostUnderfilled.stats.remaining,
-        mostUnderfilled.req.trade || "worker",
-      )
+    ? workerLabel(mostUnderfilled.stats.remaining, mostUnderfilled.req.trade || "worker")
     : workerLabel(summary.openRoles);
-  const lateOrAbsentReports =
-    summary.lateReports +
-    summary.plannedAbsences.length +
-    summary.attendanceIssues.filter((record) =>
-      ["late", "reportedIssue", "unconfirmed"].includes(record.status),
-    ).length;
-  const overdueApprovals = overdueAttendanceApprovalCount(summary);
-  const expiringDocs = expiringWorkerDocumentCount(summary.assignedWorkers);
-  const finishingSoon =
-    endDays !== null && endDays >= 0 && endDays <= 7
-      ? summary.assignedWorkers.length
-      : 0;
-
-  if (summary.noShows > 0) {
-    reasons.critical.push(
-      `${workerLabel(summary.noShows)} did not sign in today`,
-    );
-  }
-  if (summary.replacements.length > 0) {
-    reasons.critical.push(
-      `${summary.replacements.length} urgent replacement${summary.replacements.length === 1 ? "" : "s"} required`,
-    );
-  }
-  if (summary.openRoles > 0 && startsTodayOrTomorrow) {
-    reasons.critical.push(
-      `${openLabel} still required for ${startDays === 0 ? "today" : "tomorrow"}`,
-    );
-  }
-  if (summary.openRoles > 0 && live) {
-    reasons.critical.push("Labour is below the required level");
-  }
-
-  if (
-    summary.openRoles > 0 &&
-    imminent &&
-    !startsTodayOrTomorrow &&
-    summary.openRoles >= Math.max(2, Math.ceil(summary.required / 2))
-  ) {
-    reasons.atRisk.push(`${openLabel} still required soon`);
-  }
-  if (lateOrAbsentReports >= 2) {
-    reasons.atRisk.push(
-      `${lateOrAbsentReports} late or absence updates require review`,
-    );
-  }
-  if (
-    summary.outstandingPreStart > 0 &&
-    startDays !== null &&
-    startDays >= 0 &&
-    startDays <= 3
-  ) {
-    reasons.atRisk.push(
-      `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding close to start`,
-    );
-  }
-  if (overdueApprovals > 0) {
-    reasons.atRisk.push(
-      `${overdueApprovals} attendance approval${overdueApprovals === 1 ? "" : "s"} overdue`,
-    );
-  }
-  if (finishingSoon >= 2 && !summary.replacements.length) {
-    reasons.atRisk.push(
-      `${finishingSoon} workers due to finish shortly`,
-    );
-  }
-
+  const filledBreakdown = uniqueLabourRequirements(summary.labourRequirements)
+    .map((req) => {
+      const stats = companyRequirementStats(req, summary);
+      return `${stats.filled}/${stats.required} ${req.trade || "Workers"}`;
+    });
+  const recommendations = [];
+  const req = mostUnderfilled?.req || {};
   if (summary.openRoles > 0) {
-    reasons.needsAttention.push(`${openLabel} still required`);
+    recommendations.push("Increase the advertised day rate.");
+    if (!job.accommodationPaid && !req.accommodationPaid) {
+      recommendations.push("Add a working-away allowance.");
+    }
+    if (req.grade || job.grade) recommendations.push("Review the required experience level.");
+    if (req.workActivity || job.workActivity) recommendations.push("Review or clarify the work activity.");
   }
-  if (summary.pendingOffers.length > 0) {
-    reasons.needsAttention.push(
-      `${summary.pendingOffers.length} offer${summary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
-    );
+  let level = "matching";
+  let why = "OnSite is actively matching suitable workers.";
+  if (summary.openRoles === 0) {
+    level = "filled";
+    why = "All labour requirements have been filled.";
+  } else if (shortLead || (startDays !== null && startDays <= 3)) {
+    level = "urgent";
+    why = shortLead
+      ? "This labour request was created with a short lead time."
+      : "Labour requirements remain unfilled with three calendar days or fewer until project start.";
+  } else if (startDays !== null && startDays <= 7) {
+    level = "atRisk";
+    why = `${openLabel} remain unfilled with one week or less until project start.`;
   }
-  if (summary.reviewWorkers.length > 0) {
-    reasons.needsAttention.push(
-      `${summary.reviewWorkers.length} worker${summary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
-    );
-  }
-  if (summary.outstandingPreStart > 0) {
-    reasons.needsAttention.push(
-      `${summary.outstandingPreStart} induction${summary.outstandingPreStart === 1 ? "" : "s"} outstanding`,
-    );
-  }
-  if (expiringDocs > 0) {
-    reasons.needsAttention.push(
-      `${expiringDocs} document${expiringDocs === 1 ? "" : "s"} expiring soon`,
-    );
-  }
-  if (finishingSoon > 0) {
-    reasons.needsAttention.push(
-      `${workerLabel(finishingSoon)} due to finish soon`,
-    );
-  }
-  if (summary.plannedAbsences.length > 0) {
-    reasons.needsAttention.push(
-      `${summary.plannedAbsences.length} planned absence update${summary.plannedAbsences.length === 1 ? "" : "s"}`,
-    );
-  }
-
-  const level =
-    reasons.critical.length
-      ? "critical"
-      : reasons.atRisk.length
-        ? "atRisk"
-        : reasons.needsAttention.length
-          ? "needsAttention"
-          : "healthy";
   const labelMap = {
-    healthy: "Healthy",
-    needsAttention: "Needs attention",
-    atRisk: "At risk",
-    critical: "Critical",
+    matching: "Matching",
+    filled: "Filled",
+    atRisk: "At Risk",
+    urgent: "Urgent",
   };
-  const allReasons = [
-    ...reasons.critical,
-    ...reasons.atRisk,
-    ...reasons.needsAttention,
-  ];
   return {
     level,
     label: labelMap[level],
-    primaryReason: allReasons[0] || "No current issues",
-    reasons: allReasons,
-    requiresAction: level !== "healthy",
+    primaryReason: why,
+    reasons: [why],
+    recommendations: level === "atRisk" || level === "urgent" ? recommendations : [],
+    filledBreakdown,
+    startDate: job?.start || job?.startDate || "",
+    requiresAction: level === "atRisk" || level === "urgent",
   };
 }
 
@@ -8771,30 +8686,105 @@ function projectCardAttendanceHTML(job, summary) {
 }
 
 function projectHealthGuidanceHTML(health) {
-  const messages = {
-    healthy: "Labour requests are progressing as expected.",
-    needsAttention: "Labour demand is high for this requirement.",
-    atRisk: health.primaryReason || "Project health needs review.",
-    critical: health.primaryReason || "Project health needs urgent review.",
-  };
-  const suggestions =
-    health.level === "needsAttention"
-      ? ["Consider increasing the advertised day rate."]
-      : [];
-  return `<div class="company-project-health-panel ${escapeHtml(health.level)}">
-    <div class="company-project-health-line">
+  const recommendations = Array.isArray(health.recommendations)
+    ? health.recommendations
+    : [];
+  const filledDetails =
+    health.level === "filled"
+      ? `<div class="company-project-health-pop-section">
+          <span>Labour breakdown</span>
+          ${(health.filledBreakdown || [])
+            .map((item) => `<p>${escapeHtml(item)}</p>`)
+            .join("")}
+          ${health.startDate ? `<p>Workers are due to arrive on ${escapeHtml(formatDateOnly(health.startDate))}.</p>` : ""}
+        </div>`
+      : "";
+  return `<details class="company-project-health-panel ${escapeHtml(health.level)}" data-project-health-popover>
+    <summary class="company-project-health-line">
       <span class="company-project-health-led" aria-hidden="true"></span>
       <span class="company-project-health-label">${escapeHtml(health.label)}</span>
+      <span class="company-project-health-info" aria-label="Project Health information">ⓘ</span>
+    </summary>
+    <div class="company-project-health-popover">
+      <strong>Project Health</strong>
+      <div class="company-project-health-pop-section">
+        <span>Status</span>
+        <p>${escapeHtml(health.label)}</p>
+      </div>
+      <div class="company-project-health-pop-section">
+        <span>Why?</span>
+        <p>${escapeHtml(health.primaryReason || "Project health is being monitored.")}</p>
+      </div>
+      ${filledDetails}
+      ${
+        recommendations.length
+          ? `<div class="company-project-health-pop-section">
+              <span>Recommendations</span>
+              <ul>${recommendations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>`
+          : ""
+      }
     </div>
-    <p class="company-project-health-reason-line">${escapeHtml(messages[health.level] || "Project health is being monitored.")}</p>
-    ${
-      suggestions.length
-        ? `<div class="company-project-health-suggestions">${suggestions
-            .map((item) => `<span>${escapeHtml(item)}</span>`)
-            .join("")}</div>`
-        : ""
-    }
-  </div>`;
+  </details>`;
+}
+
+function projectHealthNotificationTitle(job, health) {
+  const title = companyProjectTitle(job);
+  const number = job?.jobNumber ? ` (${job.jobNumber})` : "";
+  if (health.level === "filled") {
+    return `Congratulations — all labour requirements have been filled for ${title}${number}.`;
+  }
+  if (health.level === "urgent") {
+    return `Project ${title}${number} is now Urgent.`;
+  }
+  return `Project ${title}${number} is now At Risk.`;
+}
+
+function syncProjectHealthNotifications(user) {
+  if (!user?.id) return false;
+  if (!Array.isArray(state.notifications)) state.notifications = [];
+  const companyJobs = (state.jobs || []).filter(
+    (job) => companyOwnsJob(job, user.id) && !job.completed,
+  );
+  let changed = false;
+  companyJobs.forEach((job) => {
+    const summary = companyProjectSummary(job, user);
+    const health = calculateProjectHealth(job, summary);
+    if (!["filled", "atRisk", "urgent"].includes(health.level)) return;
+    const alreadySent = state.notifications.some(
+      (n) =>
+        n.type === "project_health" &&
+        n.jobId === job.id &&
+        n.healthLevel === health.level,
+    );
+    if (alreadySent) return;
+    state.notifications.unshift({
+      id: createId(),
+      type: "project_health",
+      healthLevel: health.level,
+      healthLabel: health.label,
+      jobId: job.id,
+      companyId: job.companyId || user.id,
+      companyName: job.companyName || user.companyName || "Company",
+      title: projectHealthNotificationTitle(job, health),
+      message: health.primaryReason || "",
+      recommendations: health.recommendations || [],
+      labourBreakdown: health.filledBreakdown || [],
+      preStartQuestions:
+        health.level === "filled"
+          ? [
+              "Are the site details correct?",
+              "Do workers need to view any site documents?",
+              "Do workers need to sign any site documents?",
+              "Do workers need to watch an induction video?",
+            ]
+          : [],
+      createdAt: new Date().toISOString(),
+      readAt: "",
+    });
+    changed = true;
+  });
+  return changed;
 }
 
 function companyProjectCardHTML(job, user) {
@@ -9779,6 +9769,7 @@ function renderContractorHome(user) {
   const el = document.getElementById("tab-dashboard");
   if (!el) return;
 
+  if (syncProjectHealthNotifications(user)) saveState();
   const summary = companyDashboardSummary(user);
   const { companyJobs, activeJobs } = summary;
   const visibleProjects = filterCompanyProjects(activeJobs, user);
@@ -10352,6 +10343,10 @@ function bindMobileDailyJobButtons(scope) {
 }
 
 function bindCompanyProjectDashboardButtons(scope) {
+  scope.querySelectorAll("[data-project-health-popover]").forEach((el) => {
+    el.addEventListener("click", (event) => event.stopPropagation());
+    el.addEventListener("keydown", (event) => event.stopPropagation());
+  });
   scope.querySelectorAll("[data-company-project-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
@@ -10586,6 +10581,33 @@ function renderContractorAccount(user) {
 function renderCompanyNotificationsPage() {
   const el = document.getElementById("notificationsContent");
   if (!el) return;
+  const user = getSessionUser();
+  const rows = (state.notifications || [])
+    .filter(
+      (n) =>
+        n.type === "project_health" &&
+        (!user?.id || n.companyId === user.id || !n.companyId),
+    )
+    .map(
+      (n) => `<div class="company-notification-row">
+        <div>
+          <strong>${escapeHtml(n.title || "Project health updated")}</strong>
+          ${n.message ? `<span>${escapeHtml(n.message)}</span>` : ""}
+          ${
+            Array.isArray(n.labourBreakdown) && n.labourBreakdown.length
+              ? `<span>${n.labourBreakdown.map((item) => escapeHtml(item)).join(" · ")}</span>`
+              : ""
+          }
+          ${
+            Array.isArray(n.preStartQuestions) && n.preStartQuestions.length
+              ? `<ul>${n.preStartQuestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              : ""
+          }
+        </div>
+        <small>${n.createdAt ? formatDateOnly(n.createdAt) : "Now"}</small>
+      </div>`,
+    )
+    .join("");
   el.innerHTML = `
     <section class="request-labour-page">
       <header class="request-labour-page-head">
@@ -10597,7 +10619,7 @@ function renderCompanyNotificationsPage() {
       </header>
       <div class="request-labour-page-body">
         <section class="jw-card">
-          <div class="att-empty">No notifications.</div>
+          ${rows || `<div class="att-empty">No notifications.</div>`}
         </section>
       </div>
     </section>`;
