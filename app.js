@@ -8593,12 +8593,22 @@ function attendanceProjectCardHTML(job, user) {
   const selected = activeAttendanceProjectId === job.id;
   const workers = attendanceProjectWorkers(job);
   const todaySummary = projectAttendanceSummary(workers, job);
-  return `<button class="attendance-project-card${selected ? " active" : ""}" type="button" data-attendance-project="${job.id}">
-    <span class="company-home-kicker">Project</span>
-    <strong>${escapeHtml(companyProjectTitle(job))}</strong>
-    <span>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</span>
-    <em>${todaySummary.signedIn}/${todaySummary.expected} attending today</em>
-  </button>`;
+  return `<article class="company-project-card jw-card attendance-project-card${selected ? " active" : ""}" tabindex="0" role="button" data-attendance-project="${job.id}">
+    <div class="company-project-top">
+      <div>
+        <div class="company-project-kicker">PROJECT</div>
+        <div class="company-project-title">${escapeHtml(companyProjectTitle(job))}</div>
+        <div class="company-project-meta">${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</div>
+      </div>
+    </div>
+    <div class="company-project-attendance attendance-project-card-attendance">
+      <span class="company-project-requirements-label">Today&apos;s attendance</span>
+      <strong>${todaySummary.signedIn}/${todaySummary.expected} attending today</strong>
+    </div>
+    <div class="company-project-action-row">
+      <div class="primary-btn company-project-open">View Attendance</div>
+    </div>
+  </article>`;
 }
 
 function attendanceSelectedProjectHeaderHTML(job) {
@@ -13397,6 +13407,11 @@ function bindCompanyAttendanceProjectControls(scope) {
     btn.addEventListener("click", () => {
       navigateToAttendanceProject(btn.dataset.attendanceProject || "");
     });
+    btn.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      navigateToAttendanceProject(btn.dataset.attendanceProject || "");
+    });
   });
   scope.querySelector("[data-attendance-back]")?.addEventListener("click", () => {
     navigateToAttendanceList();
@@ -13624,6 +13639,55 @@ function openProjectSignInPrintSheet(jobId) {
     setTimeout(() => {
       if (document.body.classList.contains("onsite-printing-signin")) cleanup();
     }, 10000);
+  });
+}
+
+function closeQrRegenerationConfirm() {
+  document.getElementById("qrRegenerationConfirmModal")?.remove();
+}
+
+function openQrRegenerationConfirm(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  closeQrRegenerationConfirm();
+  const modal = document.createElement("div");
+  modal.id = "qrRegenerationConfirmModal";
+  modal.className = "modal-overlay";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "qrRegenerationTitle");
+  modal.innerHTML = `
+    <div class="dispute-sheet qr-confirm-sheet">
+      <div class="dispute-sheet-header">
+        <div>
+          <h3 class="dispute-sheet-title" id="qrRegenerationTitle">Regenerate Site Sign-In QR?</h3>
+        </div>
+        <button class="modal-close-btn" type="button" aria-label="Close" data-qr-regen-cancel>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="dispute-sheet-body">
+        <p class="qr-confirm-copy">Regenerating this QR will immediately deactivate the current site QR.</p>
+        <p class="qr-confirm-copy">Any printed signs or saved copies using the existing QR will stop working.</p>
+        <p class="qr-confirm-copy">You will need to print and replace the sign displayed on site.</p>
+        <div class="qr-confirm-actions">
+          <button class="secondary-btn wide" type="button" data-qr-regen-cancel>Cancel</button>
+          <button class="danger-btn wide" type="button" data-qr-regen-confirm>Confirm Regeneration</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-qr-regen-cancel]").forEach((btn) =>
+    btn.addEventListener("click", closeQrRegenerationConfirm),
+  );
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeQrRegenerationConfirm();
+  });
+  modal.querySelector("[data-qr-regen-confirm]")?.addEventListener("click", () => {
+    generateSiteCode(jobId);
+    closeQrRegenerationConfirm();
+    showToast("Project sign-in QR regenerated");
+    renderSiteQrPanel();
   });
 }
 
@@ -15131,9 +15195,7 @@ function renderSiteQrPanel() {
   const gen = document.getElementById("qrGenBtn");
   if (gen)
     gen.addEventListener("click", () => {
-      generateSiteCode(qrSelectedJobId);
-      showToast("Project sign-in QR regenerated");
-      renderSiteQrPanel();
+      openQrRegenerationConfirm(qrSelectedJobId);
     });
   document
     .getElementById("qrPrintBtn")

@@ -5537,44 +5537,27 @@ margin-bottom: 12px;
 
 .attendance-project-list {
   display: grid;
-  gap: 10px;
+  gap: 18px;
 }
 
 .attendance-project-card {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
   color: inherit;
-  cursor: pointer;
-  display: grid;
-  gap: 4px;
-  padding: 14px;
-  text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  width: 100%;
 }
 
-.attendance-project-card:hover,
 .attendance-project-card.active {
-  border-color: rgba(249, 115, 22, 0.45);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  border-color: var(--border-light);
 }
 
-.attendance-project-card strong {
+.attendance-project-card-attendance {
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  gap: 6px;
+  padding-top: 14px;
+}
+
+.attendance-project-card-attendance strong {
   color: var(--ink);
-  font-size: 1rem;
-}
-
-.attendance-project-card span:not(.company-home-kicker),
-.attendance-project-card small,
-.attendance-project-card em {
-  color: var(--ink-3);
-  font-size: 0.8rem;
-  font-style: normal;
-}
-
-.attendance-project-card em {
-  color: var(--ink-2);
+  font-size: 1.08rem;
   font-weight: 800;
 }
 
@@ -5880,12 +5863,30 @@ margin-bottom: 12px;
 }
 .qr-gen-btn--ghost:hover { background: var(--surface-3); }
 
+.qr-confirm-copy {
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
+
+.qr-confirm-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
 .signin-print-sheet {
   display: none;
 }
 
 @media (max-width: 640px) {
   .qr-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .qr-confirm-actions {
     grid-template-columns: 1fr;
   }
 }
