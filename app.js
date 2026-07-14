@@ -6512,12 +6512,42 @@ function bindTabEvents() {
         return;
       }
       if (btn.dataset.tab === "dashboard") activeCompanyProjectId = "";
+      if (btn.dataset.tab === "attendance") {
+        navigateToAttendanceList({ replace: true });
+        switchTab("attendance");
+        return;
+      }
+      if (window.location.hash.startsWith("#attendance/project/")) {
+        activeAttendanceProjectId = "";
+        history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+      }
       switchTab(btn.dataset.tab);
       if (btn.dataset.tab === "dashboard") render();
     });
   });
 }
 bindTabEvents();
+
+window.addEventListener("hashchange", () => {
+  if (window.location.hash.startsWith("#attendance/project/")) {
+    syncAttendanceProjectFromHash();
+    switchTab("attendance");
+    renderAttendance();
+  } else if (activeAttendanceProjectId) {
+    activeAttendanceProjectId = "";
+    renderAttendance();
+  }
+});
+
+window.addEventListener("popstate", () => {
+  if (window.location.hash.startsWith("#attendance/project/")) {
+    syncAttendanceProjectFromHash();
+    switchTab("attendance");
+  } else if (activeAttendanceProjectId) {
+    activeAttendanceProjectId = "";
+  }
+  renderAttendance();
+});
 
 // ─── Nav Rebuild ──────────────────────────────────────────
 const ORIG_TOP_NAV = document.querySelector(".tab-nav").innerHTML;
@@ -8142,6 +8172,35 @@ let activeCompanyProjectRequiresAction = false;
 let activeCompanyProjectEditId = "";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
+
+function attendanceProjectHash(jobId) {
+  return `#attendance/project/${encodeURIComponent(jobId)}`;
+}
+
+function syncAttendanceProjectFromHash() {
+  const match = window.location.hash.match(/^#attendance\/project\/(.+)$/);
+  activeAttendanceProjectId = match ? decodeURIComponent(match[1]) : "";
+}
+
+function navigateToAttendanceProject(jobId) {
+  activeAttendanceProjectId = jobId || "";
+  qrSelectedJobId = activeAttendanceProjectId || qrSelectedJobId;
+  todayAttendanceMap = {};
+  if (activeAttendanceProjectId) {
+    history.pushState({ attendanceProjectId: activeAttendanceProjectId }, "", attendanceProjectHash(activeAttendanceProjectId));
+  }
+  renderAttendance();
+}
+
+function navigateToAttendanceList({ replace = false } = {}) {
+  activeAttendanceProjectId = "";
+  todayAttendanceMap = {};
+  if (window.location.hash.startsWith("#attendance/project/")) {
+    const method = replace ? "replaceState" : "pushState";
+    history[method]({}, "", `${window.location.pathname}${window.location.search}`);
+  }
+  renderAttendance();
+}
 let projectEditPin = { lat: null, lng: null };
 let projectEditPhotos = {};
 let projectEditPhotoMeta = {};
@@ -8531,34 +8590,33 @@ function attendanceProjectSearchHTML() {
 }
 
 function attendanceProjectCardHTML(job, user) {
-  const summary = companyProjectSummary(job, user);
   const selected = activeAttendanceProjectId === job.id;
-  const start = job.startDate || job.start || "";
-  const end = job.noFixedEndDate ? "No fixed end date" : formatDateOnly(job.estimatedEndDate || job.endDate || "");
+  const workers = attendanceProjectWorkers(job);
+  const todaySummary = projectAttendanceSummary(workers, job);
   return `<button class="attendance-project-card${selected ? " active" : ""}" type="button" data-attendance-project="${job.id}">
     <span class="company-home-kicker">Project</span>
     <strong>${escapeHtml(companyProjectTitle(job))}</strong>
     <span>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</span>
-    <small>${start ? formatDateOnly(start) : "Start date not set"} · ${escapeHtml(end)}</small>
-    <em>${summary.assignedWorkers.length} assigned worker${summary.assignedWorkers.length === 1 ? "" : "s"}</em>
+    <em>${todaySummary.signedIn}/${todaySummary.expected} attending today</em>
   </button>`;
 }
 
-function attendanceSelectedProjectSummaryHTML(job) {
+function attendanceSelectedProjectHeaderHTML(job) {
   if (!job) return "";
   const workers = attendanceProjectWorkers(job);
-  return `<section class="jw-card attendance-project-summary">
+  const todaySummary = projectAttendanceSummary(workers, job);
+  return `<header class="request-labour-page-head attendance-project-detail-head">
+    <button class="company-project-back attendance-back-link" type="button" data-attendance-back>&larr; Back to Attendance</button>
     <div>
-      <p class="company-home-kicker">Selected Project</p>
+      <p class="company-home-kicker">PROJECT ATTENDANCE</p>
       <h3>${escapeHtml(companyProjectTitle(job))}</h3>
       <p>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</p>
     </div>
     <div class="attendance-project-summary-grid">
-      <span><strong>${job.startDate || job.start ? formatDateOnly(job.startDate || job.start) : "Not set"}</strong>Start date</span>
-      <span><strong>${job.noFixedEndDate ? "No fixed end date" : formatDateOnly(job.estimatedEndDate || job.endDate || "")}</strong>End date</span>
-      <span><strong>${workers.length}</strong>Assigned workers</span>
+      <span><strong>${formatAttDate(todayDateStr())}</strong>Today&apos;s date</span>
+      <span><strong>${todaySummary.expected}</strong>Expected today</span>
     </div>
-  </section>`;
+  </header>`;
 }
 
 function companyProjectSearchHTML(id) {
@@ -13266,6 +13324,37 @@ function renderAttendanceDemoControls() {
 function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, allProjects) {
   const tab = document.getElementById("tab-attendance");
   if (!tab) return;
+  if (selectedProject) {
+    tab.innerHTML = `
+      <section class="request-labour-page attendance-page attendance-project-page">
+        ${attendanceSelectedProjectHeaderHTML(selectedProject)}
+        <div class="request-labour-page-body attendance-page-body">
+          <div class="jw-form">
+            <section class="jw-card attendance-workspace-card">
+              <div id="siteQrPanel"></div>
+              <div id="attendanceCards" class="card-list"></div>
+              <div id="adminAttReview"></div>
+              <div class="att-submit-wrap">
+                <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirm Attendance
+                </button>
+              </div>
+            </section>
+            <section class="jw-card attendance-history-card">
+              <div class="panel-header" id="attHistoryHeader">
+                <div>
+                  <h2 class="panel-title" id="attHistoryTitle">Attendance History</h2>
+                  <p class="panel-subtitle" id="attHistorySub">Past attendance records for this project</p>
+                </div>
+              </div>
+              <div id="attendanceHistory"></div>
+            </section>
+          </div>
+        </div>
+      </section>`;
+    return;
+  }
   const projectList = visibleProjects.length
     ? `<div class="attendance-project-list">
         ${visibleProjects.map((job) => attendanceProjectCardHTML(job, user)).join("")}
@@ -13291,35 +13380,6 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
             ${projectList}
           </section>
           <div id="attendanceDemoControls"></div>
-          ${
-            selectedProject
-              ? `${attendanceSelectedProjectSummaryHTML(selectedProject)}
-                <section class="jw-card attendance-workspace-card">
-                  <div id="siteQrPanel"></div>
-                  <div id="attendanceCards" class="card-list"></div>
-                  <div id="adminAttReview"></div>
-                  <div class="att-submit-wrap">
-                    <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                      Confirm Attendance
-                    </button>
-                  </div>
-                </section>
-                <section class="jw-card attendance-history-card">
-                  <div class="panel-header" id="attHistoryHeader">
-                    <div>
-                      <h2 class="panel-title" id="attHistoryTitle">Attendance History</h2>
-                      <p class="panel-subtitle" id="attHistorySub">Past attendance records for this project</p>
-                    </div>
-                  </div>
-                  <div id="attendanceHistory"></div>
-                </section>`
-              : `<section class="jw-card attendance-empty-select">
-                  <p class="company-home-kicker">Select Project</p>
-                  <h3>Choose a project to manage attendance</h3>
-                  <p>QR codes, worker attendance and history are shown project by project.</p>
-                </section>`
-          }
         </div>
       </div>
     </section>`;
@@ -13340,11 +13400,11 @@ function bindCompanyAttendanceProjectControls(scope) {
   });
   scope.querySelectorAll("[data-attendance-project]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      activeAttendanceProjectId = btn.dataset.attendanceProject || "";
-      qrSelectedJobId = activeAttendanceProjectId || qrSelectedJobId;
-      todayAttendanceMap = {};
-      renderAttendance();
+      navigateToAttendanceProject(btn.dataset.attendanceProject || "");
     });
+  });
+  scope.querySelector("[data-attendance-back]")?.addEventListener("click", () => {
+    navigateToAttendanceList();
   });
 }
 
@@ -14732,6 +14792,10 @@ function renderAttendance() {
   const user = getSessionUser();
   const isAdmin = !user;
   if (user?.type === "company") {
+    if (window.location.hash.startsWith("#attendance/project/")) {
+      syncAttendanceProjectFromHash();
+      switchTab("attendance");
+    }
     const projects = companyAttendanceProjects(user);
     if (
       activeAttendanceProjectId &&
