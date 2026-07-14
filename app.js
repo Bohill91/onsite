@@ -8159,11 +8159,26 @@ const COMPANY_PROJECT_SECTIONS = [
 
 function companyAssignedWorkers(job) {
   const workers = [];
+  const assignedIds = Array.isArray(job?.assignedWorkerIds)
+    ? job.assignedWorkerIds
+    : [];
+  assignedIds.forEach((id) => {
+    const worker = findWorker(id);
+    if (worker && !workers.some((w) => w.id === worker.id)) workers.push(worker);
+  });
   if (job?.assignedWorkerId) {
     const worker = findWorker(job.assignedWorkerId);
-    if (worker) workers.push(worker);
+    if (worker && !workers.some((w) => w.id === worker.id)) workers.push(worker);
   }
   return workers;
+}
+
+function assignedJobForWorker(workerId) {
+  return state.jobs.find(
+    (j) =>
+      j.assignedWorkerId === workerId ||
+      (Array.isArray(j.assignedWorkerIds) && j.assignedWorkerIds.includes(workerId)),
+  );
 }
 
 function labourRequirementsForJob(job) {
@@ -12780,6 +12795,282 @@ const LATE_CLASSIFICATION = {
   worker_did_not_arrive: "Worker did not arrive",
 };
 
+const ATTENDANCE_DEMO_MARK = "dev-attendance-demo";
+
+function attendanceDemoDevEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("devAttendance") === "1") {
+      localStorage.setItem("onsite_dev_tools", "1");
+    }
+    const host = window.location.hostname;
+    return (
+      localStorage.getItem("onsite_dev_tools") === "1" ||
+      window.location.protocol === "file:" ||
+      ["", "localhost", "127.0.0.1", "0.0.0.0"].includes(host)
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function attendanceDemoTimeIso(date, hhmm) {
+  const [h, m] = String(hhmm || "07:30").split(":").map(Number);
+  const d = new Date(`${date}T00:00:00`);
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d.toISOString();
+}
+
+function attendanceDemoWorkerRows() {
+  return [
+    ["dev-att-worker-01", "Oliver Bennett", "Electrical Supervisor"],
+    ["dev-att-worker-02", "James Carter", "Approved Electrician"],
+    ["dev-att-worker-03", "Daniel Hughes", "Electrician"],
+    ["dev-att-worker-04", "Ryan Patel", "Electrician"],
+    ["dev-att-worker-05", "Thomas Walker", "Electrical Improver"],
+    ["dev-att-worker-06", "Matthew Evans", "Approved Electrician"],
+    ["dev-att-worker-07", "Adam Clarke", "Electrical Mate"],
+    ["dev-att-worker-08", "Samuel Wright", "Electrician"],
+    ["dev-att-worker-09", "Benjamin Scott", "Electrical Improver"],
+    ["dev-att-worker-10", "George Turner", "Electrical Mate"],
+  ];
+}
+
+function removeAttendanceDemoData({ rerender = true } = {}) {
+  const demoWorkerIds = new Set(attendanceDemoWorkerRows().map(([id]) => id));
+  state.workers = (state.workers || []).filter(
+    (w) => !w.devAttendanceDemo && !demoWorkerIds.has(w.id),
+  );
+  state.jobs = (state.jobs || []).filter((j) => !j.devAttendanceDemo);
+  state.siteCodes = (state.siteCodes || []).filter((c) => !c.devAttendanceDemo);
+  state.notifications = (state.notifications || []).filter(
+    (n) => !n.devAttendanceDemo,
+  );
+  attendanceRecords = attendanceRecords.filter(
+    (r) => !r.devAttendanceDemo && !demoWorkerIds.has(r.workerId),
+  );
+  demoWorkerIds.forEach((id) => delete todayAttendanceMap[id]);
+  saveAttendanceRecords();
+  saveState();
+  if (rerender) {
+    render();
+    showToast("Attendance demo removed");
+  }
+}
+
+function loadAttendanceDemoData() {
+  const user = getSessionUser();
+  if (!user?.id || user.type !== "company") {
+    showToast("Log in as a company to load the attendance demo");
+    return;
+  }
+  removeAttendanceDemoData({ rerender: false });
+  const today = todayDateStr();
+  const yesterdayDate = new Date(`${today}T00:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().split("T")[0];
+  const companyName = user.companyName || user.tradingName || user.name || "Company";
+  const workers = attendanceDemoWorkerRows().map(([id, name, grade], index) => ({
+    id,
+    name,
+    trade: "Electrical",
+    grade,
+    specialism: grade,
+    availability: "available",
+    assignedProjectId: "dev-att-project-northgate",
+    expectedStartTime: "07:30",
+    reliability: 100,
+    punctuality: 100,
+    devAttendanceDemo: true,
+    demoLabel: ATTENDANCE_DEMO_MARK,
+    companyId: user.id,
+    createdAt: new Date().toISOString(),
+    yearsExp: Math.max(1, 12 - index),
+  }));
+  const workerIds = workers.map((worker) => worker.id);
+  const job = {
+    id: "dev-att-project-northgate",
+    projectName: "Northgate Tower",
+    siteName: "Northgate Tower",
+    jobNumber: "HS2-001",
+    companyId: user.id,
+    companyName,
+    location: "London",
+    siteAddress: "Northgate Tower, Euston Road, London",
+    trade: "Electrical",
+    specialism: "Electrical installation",
+    grade: "Mixed electrical team",
+    quantity: 10,
+    labourRequirements: [
+      { id: "dev-att-req-1", trade: "Electrical", grade: "Electrical Supervisor", quantity: 1 },
+      { id: "dev-att-req-2", trade: "Electrical", grade: "Approved Electrician", quantity: 2 },
+      { id: "dev-att-req-3", trade: "Electrical", grade: "Electrician", quantity: 3 },
+      { id: "dev-att-req-4", trade: "Electrical", grade: "Electrical Improver", quantity: 2 },
+      { id: "dev-att-req-5", trade: "Electrical", grade: "Electrical Mate", quantity: 2 },
+    ],
+    assignedWorkerId: workerIds[0],
+    assignedWorkerIds: workerIds,
+    bookingStatus: "confirmed",
+    bookingActive: true,
+    shiftStartTime: "07:30",
+    shiftFinishTime: "16:30",
+    start: `${today}T07:30`,
+    startDate: `${today}T07:30`,
+    estimatedEndDate: "",
+    noFixedEndDate: true,
+    workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    sitePin: { lat: 51.5286, lng: -0.1347 },
+    siteContact: { name: "Aisha Morgan", phone: "07700 900145" },
+    arrivalInstructions: "Report to Gate B and ask for the electrical supervisor.",
+    parking: "Use the temporary contractor bay on Midland Road.",
+    ppe: "Hard hat, hi-vis, gloves, boots and safety glasses.",
+    devAttendanceDemo: true,
+    demoLabel: ATTENDANCE_DEMO_MARK,
+    createdAt: new Date().toISOString(),
+  };
+  const baseRecord = (workerId, status, extras = {}) => ({
+    id: createId(),
+    workerId,
+    date: today,
+    status,
+    jobId: job.id,
+    companyId: user.id,
+    companyName,
+    jobTrade: "Electrical",
+    jobLocation: job.location,
+    projectName: job.projectName,
+    jobNumber: job.jobNumber,
+    expectedStartTime: "07:30",
+    expectedFinishTime: "16:30",
+    recordedAt: Date.now(),
+    devAttendanceDemo: true,
+    demoLabel: ATTENDANCE_DEMO_MARK,
+    ...extras,
+  });
+  const todayRecords = [
+    baseRecord(workerIds[0], "checkedIn", { suggestedStatus: "onTime", checkInTime: attendanceDemoTimeIso(today, "07:18"), scanToken: "DEMO-QR-001" }),
+    baseRecord(workerIds[1], "checkedIn", { suggestedStatus: "onTime", checkInTime: attendanceDemoTimeIso(today, "07:21"), scanToken: "DEMO-QR-002" }),
+    baseRecord(workerIds[2], "checkedIn", { suggestedStatus: "onTime", checkInTime: attendanceDemoTimeIso(today, "07:24"), scanToken: "DEMO-QR-003" }),
+    baseRecord(workerIds[3], "checkedIn", { suggestedStatus: "onTime", checkInTime: attendanceDemoTimeIso(today, "07:28"), scanToken: "DEMO-QR-004" }),
+    baseRecord(workerIds[4], "checkedIn", { suggestedStatus: "onTime", checkInTime: attendanceDemoTimeIso(today, "07:29"), scanToken: "DEMO-QR-005" }),
+    baseRecord(workerIds[5], "checkedIn", { suggestedStatus: "late", checkInTime: attendanceDemoTimeIso(today, "07:48"), scanToken: "DEMO-QR-006" }),
+    baseRecord(workerIds[6], "reportedIssue", {
+      reportedIssue: { reason: "Road traffic", expectedArrival: "08:10", unableToAttend: false },
+      lateReport: {
+        id: createId(),
+        workerId: workerIds[6],
+        jobId: job.id,
+        reason: "Road traffic",
+        comment: "A406 delays after an incident near Brent Cross.",
+        expectedStartTime: "07:30",
+        estimatedArrivalTime: "08:10",
+        supervisorDecision: "",
+      },
+    }),
+    baseRecord(workerIds[8], "excused", {
+      supervisorConfirmed: true,
+      supervisorDecision: "excused",
+      approvalStatus: "manager_reviewed",
+      rating: 0,
+    }),
+    baseRecord(workerIds[9], "checkedIn", {
+      suggestedStatus: "late",
+      checkInTime: attendanceDemoTimeIso(today, "07:56"),
+      scanToken: "DEMO-QR-010",
+      selfReported: true,
+      supervisorConfirmed: false,
+      approvalStatus: "draft",
+      manualReviewRequired: true,
+    }),
+  ];
+  const historyRecords = workerIds.map((workerId, index) => ({
+    id: createId(),
+    workerId,
+    date: yesterday,
+    status: index === 5 ? "late" : "onTime",
+    rating: index === 5 ? 3 : 4,
+    recordedAt: Date.now() - 86400000,
+    supervisorConfirmed: true,
+    supervisorDecision: index === 5 ? "late" : "onTime",
+    confirmedAt: Date.now() - 86400000,
+    jobId: job.id,
+    companyId: user.id,
+    companyName,
+    jobTrade: "Electrical",
+    jobLocation: job.location,
+    projectName: job.projectName,
+    jobNumber: job.jobNumber,
+    expectedStartTime: "07:30",
+    expectedFinishTime: "16:30",
+    approvalStatus: "manager_reviewed",
+    devAttendanceDemo: true,
+    demoLabel: ATTENDANCE_DEMO_MARK,
+  }));
+  state.workers.push(...workers);
+  state.jobs.unshift(job);
+  if (!Array.isArray(state.siteCodes)) state.siteCodes = [];
+  state.siteCodes.unshift({
+    id: createId(),
+    jobId: job.id,
+    date: today,
+    token: "OS-DEMOQR",
+    startTime: "07:30",
+    expiresAt: new Date(`${today}T23:59:59`).getTime(),
+    createdAt: Date.now(),
+    devAttendanceDemo: true,
+    demoLabel: ATTENDANCE_DEMO_MARK,
+  });
+  attendanceRecords.unshift(...todayRecords, ...historyRecords);
+  todayAttendanceMap = {};
+  saveAttendanceRecords();
+  saveState();
+  render();
+  showToast("Attendance demo loaded");
+}
+
+function attendanceDemoSummaryHTML() {
+  if (!attendanceRecords.some((r) => r.devAttendanceDemo && r.date === todayDateStr())) return "";
+  const today = todayDateStr();
+  const demoWorkers = state.workers.filter((w) => w.devAttendanceDemo);
+  const demoRecords = attendanceRecords.filter((r) => r.devAttendanceDemo && r.date === today);
+  const signedIn = demoRecords.filter((r) => r.status === "checkedIn").length;
+  const lateReports = demoRecords.filter((r) => r.lateReport).length;
+  const approvedAbsences = demoRecords.filter((r) => r.status === "excused").length;
+  const manualReview = demoRecords.filter((r) => r.manualReviewRequired || r.approvalStatus === "draft").length;
+  const notSignedIn = Math.max(0, demoWorkers.length - signedIn - approvedAbsences);
+  return `<div class="attendance-demo-summary">
+    <span><strong>${demoWorkers.length}</strong> Expected</span>
+    <span><strong>${signedIn}</strong> Signed in</span>
+    <span><strong>${lateReports}</strong> Late reports</span>
+    <span><strong>${notSignedIn}</strong> Not signed in</span>
+    <span><strong>${approvedAbsences}</strong> Approved absence</span>
+    <span><strong>${manualReview}</strong> Manual review</span>
+  </div>`;
+}
+
+function renderAttendanceDemoControls() {
+  const el = document.getElementById("attendanceDemoControls");
+  if (!el) return;
+  if (!attendanceDemoDevEnabled()) {
+    el.innerHTML = "";
+    return;
+  }
+  const loaded = state.workers.some((w) => w.devAttendanceDemo);
+  el.innerHTML = `<div class="attendance-demo-panel">
+    <div>
+      <strong>Development attendance demo</strong>
+      <span>${loaded ? "Demo data is loaded for this company." : "Load realistic attendance data for layout review."}</span>
+    </div>
+    <div class="attendance-demo-actions">
+      <button type="button" data-att-demo-load>Load Attendance Demo</button>
+      <button type="button" data-att-demo-reset ${loaded ? "" : "disabled"}>Reset Demo</button>
+    </div>
+  </div>
+  ${attendanceDemoSummaryHTML()}`;
+  el.querySelector("[data-att-demo-load]")?.addEventListener("click", loadAttendanceDemoData);
+  el.querySelector("[data-att-demo-reset]")?.addEventListener("click", () => removeAttendanceDemoData());
+}
+
 // ─── Attendance timing rules ──────────────────────────────
 const GRACE_MIN = 10; // within this many minutes of start = On Time
 const CUTOFF_MIN = 60; // no scan after this many minutes = Unconfirmed
@@ -13151,7 +13442,7 @@ function submitDayAttendance() {
     const prevRec = attendanceRecords.find(
       (r) => r.workerId === wid && r.date === today,
     );
-    const linkedJob = state.jobs.find((j) => j.assignedWorkerId === wid);
+    const linkedJob = assignedJobForWorker(wid);
     const lateReport = prevRec?.lateReport ? { ...prevRec.lateReport } : null;
     if (lateReport && data.lateSupervisorDecision) {
       lateReport.supervisorDecision = data.lateSupervisorDecision;
@@ -13277,7 +13568,7 @@ function attendanceCard(worker, today) {
   const saved = todayAttendanceMap[worker.id] || {};
   const stats = getWorkerStats(worker.id);
   const rating = buildWorkerRating(worker.id);
-  const job = state.jobs.find((j) => j.assignedWorkerId === worker.id);
+  const job = assignedJobForWorker(worker.id);
 
   const statusBtns = SUPERVISOR_DECISIONS.map((key) => {
     const cfg = ATT_CFG[key];
@@ -13455,7 +13746,7 @@ function bindAttendanceEvents(container) {
       btn.disabled = true;
       try {
         const { lat, lng } = await getGPS();
-        const job = state.jobs.find((j) => j.assignedWorkerId === wid);
+        const job = assignedJobForWorker(wid);
         const dist = job?.sitePin
           ? haversine(lat, lng, job.sitePin.lat, job.sitePin.lng)
           : null;
@@ -14062,6 +14353,8 @@ function renderAttendance() {
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
   const today = todayDateStr();
+
+  renderAttendanceDemoControls();
 
   // Daily site QR generator (supervisor / admin)
   renderSiteQrPanel();
