@@ -8603,19 +8603,13 @@ function attendanceProjectCardHTML(job, user) {
 
 function attendanceSelectedProjectHeaderHTML(job) {
   if (!job) return "";
-  const workers = attendanceProjectWorkers(job);
-  const todaySummary = projectAttendanceSummary(workers, job);
   return `<header class="request-labour-page-head attendance-project-detail-head">
-    <button class="company-project-back attendance-back-link" type="button" data-attendance-back>&larr; Back to Attendance</button>
     <div>
       <p class="company-home-kicker">PROJECT ATTENDANCE</p>
       <h3>${escapeHtml(companyProjectTitle(job))}</h3>
       <p>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</p>
     </div>
-    <div class="attendance-project-summary-grid">
-      <span><strong>${formatAttDate(todayDateStr())}</strong>Today&apos;s date</span>
-      <span><strong>${todaySummary.expected}</strong>Expected today</span>
-    </div>
+    <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
   </header>`;
 }
 
@@ -13327,6 +13321,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
   if (selectedProject) {
     tab.innerHTML = `
       <section class="request-labour-page attendance-page attendance-project-page">
+        <button class="company-project-back attendance-back-link" type="button" data-attendance-back>&larr; Back to Attendance</button>
         ${attendanceSelectedProjectHeaderHTML(selectedProject)}
         <div class="request-labour-page-body attendance-page-body">
           <div class="jw-form">
@@ -15057,18 +15052,17 @@ function renderSiteQrPanel() {
       ? findJob(activeAttendanceProjectId)
       : null;
 
-  // Only jobs with an assigned worker are live sites that need check-in.
   const liveJobs = (scopedProject
     ? [scopedProject]
     : state.jobs.filter((j) => !user?.id || companyOwnsJob(j, user.id))
-  ).filter((j) => j.assignedWorkerId || companyAssignedWorkers(j).length);
+  );
   if (!liveJobs.length) {
     panel.innerHTML = `
       <div class="qr-panel">
         <div class="qr-panel-head">
           <h3 class="qr-panel-title">Site Sign-In QR</h3>
         </div>
-        <div class="qr-empty">Assign a worker to a project to generate a site sign-in code.</div>
+        <div class="qr-empty">Select a project to view its site sign-in QR.</div>
       </div>`;
     return;
   }

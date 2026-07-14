@@ -5507,9 +5507,9 @@ margin-bottom: 12px;
 .attendance-project-detail-head {
   align-items: center;
   border-radius: 0;
-  display: grid;
+  display: flex;
   gap: 16px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-content: space-between;
 }
 
 .attendance-project-detail-head h3 {
@@ -5523,10 +5523,6 @@ margin-bottom: 12px;
   font-size: 0.86rem;
   line-height: 1.4;
   margin: 4px 0 0;
-}
-
-.attendance-back-link {
-  align-self: start;
 }
 
 .attendance-page-body .jw-card {
@@ -5762,7 +5758,7 @@ margin-bottom: 12px;
   .attendance-page-head,
   .attendance-project-detail-head {
     align-items: stretch;
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .attendance-project-summary-grid {
