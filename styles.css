@@ -5742,9 +5742,117 @@ margin-bottom: 12px;
 }
 .qr-gen-btn--ghost:hover { background: var(--surface-3); }
 
+.signin-print-sheet {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .qr-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: A4 portrait;
+  }
+
+  body.onsite-printing-signin {
+    background: #fff !important;
+  }
+
+  body.onsite-printing-signin > :not(#projectSignInPrintSheet) {
+    display: none !important;
+  }
+
+  body.onsite-printing-signin #projectSignInPrintSheet {
+    box-sizing: border-box;
+    color: #111827;
+    display: flex !important;
+    font-family: Inter, Arial, sans-serif;
+    height: 273mm;
+    justify-content: center;
+    padding: 0;
+    width: 186mm;
+  }
+
+  .signin-print-inner {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: flex-start;
+    text-align: center;
+    width: 100%;
+  }
+
+  .signin-print-logo {
+    display: block;
+    height: auto;
+    margin: 6mm 0 14mm;
+    width: 56mm;
+  }
+
+  .signin-print-heading h1 {
+    color: #111827;
+    font-size: 34pt;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 1.05;
+    margin: 0;
+  }
+
+  .signin-print-heading p {
+    color: #374151;
+    font-size: 15pt;
+    font-weight: 700;
+    margin: 5mm 0 11mm;
+  }
+
+  .signin-print-qr {
+    border: 2mm solid #f97316;
+    border-radius: 5mm;
+    padding: 8mm;
+  }
+
+  .signin-print-qr .qr-glyph {
+    border: 0;
+    display: block;
+    height: 118mm;
+    width: 118mm;
+  }
+
+  .signin-print-project {
+    margin-top: 11mm;
+    max-width: 150mm;
+  }
+
+  .signin-print-project h2 {
+    color: #111827;
+    font-size: 23pt;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 1.1;
+    margin: 0 0 4mm;
+  }
+
+  .signin-print-project p {
+    color: #374151;
+    font-size: 13pt;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 1.5mm 0;
+  }
+
+  .signin-print-inner footer {
+    border-top: 0.7mm solid #f97316;
+    color: #111827;
+    font-size: 14pt;
+    font-weight: 800;
+    margin-top: auto;
+    padding-top: 7mm;
+    width: 100%;
   }
 }
 

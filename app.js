@@ -13427,6 +13427,52 @@ function renderQrGlyph(token) {
   return `<svg class="qr-glyph" viewBox="0 0 ${N} ${N}" width="120" height="120" shape-rendering="crispEdges" aria-hidden="true"><rect width="${N}" height="${N}" fill="#fff"/><g fill="#18181b">${cells}</g></svg>`;
 }
 
+function openProjectSignInPrintSheet(jobId) {
+  const job = findJob(jobId);
+  const code = job ? ensureSiteCode(job.id) : null;
+  if (!job || !code) {
+    showToast("Select a project before printing the sign-in sheet");
+    return;
+  }
+  document.getElementById("projectSignInPrintSheet")?.remove();
+  const projectLocation = job.siteAddress || job.location || "Location not set";
+  const sheet = document.createElement("section");
+  sheet.id = "projectSignInPrintSheet";
+  sheet.className = "signin-print-sheet";
+  sheet.setAttribute("aria-label", "Printable project sign-in sheet");
+  sheet.innerHTML = `
+    <div class="signin-print-inner">
+      <img src="/logo.png" alt="OnSite" class="signin-print-logo" />
+      <div class="signin-print-heading">
+        <h1>Scan to sign in</h1>
+        <p>All workers must sign in every day.</p>
+      </div>
+      <div class="signin-print-qr">
+        ${renderQrGlyph(code.token)}
+      </div>
+      <div class="signin-print-project">
+        <h2>${escapeHtml(companyProjectTitle(job))}</h2>
+        <p>Job ${escapeHtml(job.jobNumber || "Not set")}</p>
+        <p>${escapeHtml(projectLocation)}</p>
+      </div>
+      <footer>Open OnSite and scan this code when you arrive on site.</footer>
+    </div>`;
+  document.body.appendChild(sheet);
+  document.body.classList.add("onsite-printing-signin");
+  const cleanup = () => {
+    document.body.classList.remove("onsite-printing-signin");
+    sheet.remove();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  requestAnimationFrame(() => {
+    window.print();
+    setTimeout(() => {
+      if (document.body.classList.contains("onsite-printing-signin")) cleanup();
+    }, 10000);
+  });
+}
+
 // ─── 90-day Exception Counters (internal / admin-only) ────
 function getExceptionInfo(workerId) {
   const cutoff = Date.now() - 90 * 86400000;
@@ -14903,7 +14949,7 @@ function renderSiteQrPanel() {
     });
   document
     .getElementById("qrPrintBtn")
-    ?.addEventListener("click", () => window.print());
+    ?.addEventListener("click", () => openProjectSignInPrintSheet(qrSelectedJobId));
   document
     .getElementById("qrSiteDetailsBtn")
     ?.addEventListener("click", () => openSiteMap(qrSelectedJobId));
