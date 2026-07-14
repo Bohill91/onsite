@@ -8712,7 +8712,7 @@ function projectHealthGuidanceHTML(health) {
         <p>${escapeHtml(health.label)}</p>
       </div>
       <div class="company-project-health-pop-section">
-        <span>Why?</span>
+        <span>Reason</span>
         <p>${escapeHtml(health.primaryReason || "Project health is being monitored.")}</p>
       </div>
       ${filledDetails}
@@ -9815,7 +9815,7 @@ function renderContractorHome(user) {
         <div>
           <p class="company-home-kicker">DASHBOARD</p>
           <h2>Dashboard</h2>
-          <p>Monitor your live projects, staffing, attendance and project health.</p>
+          <p>Monitor your live projects, staffing and attendance.</p>
         </div>
       </header>
       <div class="request-labour-page-body">
