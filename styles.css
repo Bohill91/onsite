@@ -5504,6 +5504,11 @@ margin-bottom: 12px;
   flex-shrink: 0;
 }
 
+.attendance-landing-content {
+  display: grid;
+  gap: 18px;
+}
+
 .attendance-project-detail-head {
   align-items: center;
   border-radius: 0;
@@ -5550,10 +5555,8 @@ margin-bottom: 12px;
 }
 
 .attendance-project-card-attendance {
-  border-top: 1px solid var(--border-light);
   display: grid;
-  gap: 8px;
-  padding-top: 16px;
+  gap: 6px;
 }
 
 .attendance-project-card-attendance strong {
@@ -5602,7 +5605,6 @@ margin-bottom: 12px;
   font-size: 0.9rem;
 }
 
-.attendance-workspace-card,
 .attendance-history-card,
 .attendance-empty-select {
   display: grid;
@@ -5876,6 +5878,18 @@ margin-bottom: 12px;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 16px;
+}
+
+.qr-confirm-sheet {
+  border-radius: var(--radius-lg);
+  bottom: auto;
+  left: auto;
+  margin: auto;
+  max-height: min(88vh, 560px);
+  max-width: 520px;
+  position: relative;
+  right: auto;
+  width: min(520px, calc(100vw - 32px));
 }
 
 .signin-print-sheet {

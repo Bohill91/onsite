@@ -8172,6 +8172,8 @@ let activeCompanyProjectRequiresAction = false;
 let activeCompanyProjectEditId = "";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
+let activeAttendanceProjectFilters = [];
+let activeAttendanceProjectSort = "attendance_required";
 
 function attendanceProjectHash(jobId) {
   return `#attendance/project/${encodeURIComponent(jobId)}`;
@@ -8461,8 +8463,14 @@ function attendanceProjectSearchText(job) {
 
 function filterAttendanceProjects(projects) {
   const query = activeAttendanceProjectSearch.trim().toLowerCase();
-  if (!query) return projects;
-  return projects.filter((job) => attendanceProjectSearchText(job).includes(query));
+  return projects
+    .filter((job) => {
+      if (query && !attendanceProjectSearchText(job).includes(query)) return false;
+      if (!activeAttendanceProjectFilters.length) return true;
+      const state = attendanceProjectState(job);
+      return activeAttendanceProjectFilters.some((filter) => !!state[filter]);
+    })
+    .sort(sortAttendanceProjects);
 }
 
 function attendanceProjectWorkers(job) {
@@ -8519,6 +8527,51 @@ function projectAttendanceSummary(workers, job, today = todayDateStr()) {
     reportingLate,
     unconfirmed: rows.filter((row) => row.unconfirmed).length,
   };
+}
+
+function attendanceProjectState(job) {
+  const workers = attendanceProjectWorkers(job);
+  const summary = projectAttendanceSummary(workers, job);
+  const today = todayDateStr();
+  const workerIds = new Set(workers.map((worker) => worker.id));
+  const records = attendanceRecords.filter(
+    (record) =>
+      record.date === today &&
+      attendanceRecordMatchesProject(record, job, workerIds),
+  );
+  const noShows = records.some((record) => record.status === "noShow");
+  const requiresReview = records.some(
+    (record) => record.manualReviewRequired || record.approvalStatus === "draft",
+  );
+  return {
+    attendance_required: summary.unconfirmed > 0 || summary.reportingLate > 0 || requiresReview,
+    fully_confirmed: summary.expected > 0 && summary.unconfirmed === 0 && summary.reportingLate === 0 && !requiresReview,
+    reporting_late: summary.reportingLate > 0,
+    no_shows: noShows,
+    requires_review: requiresReview,
+    summary,
+  };
+}
+
+function sortAttendanceProjects(a, b) {
+  if (activeAttendanceProjectSort === "project_name") {
+    return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
+  }
+  if (activeAttendanceProjectSort === "site_start_time") {
+    return jobExpectedStartTime(a).localeCompare(jobExpectedStartTime(b));
+  }
+  if (activeAttendanceProjectSort === "location") {
+    return String(a.location || a.siteAddress || "").localeCompare(String(b.location || b.siteAddress || ""));
+  }
+  const aState = attendanceProjectState(a);
+  const bState = attendanceProjectState(b);
+  if (aState.attendance_required !== bState.attendance_required) {
+    return aState.attendance_required ? -1 : 1;
+  }
+  if (aState.summary.unconfirmed !== bState.summary.unconfirmed) {
+    return bState.summary.unconfirmed - aState.summary.unconfirmed;
+  }
+  return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
 }
 
 function attendanceGroupKey(worker) {
@@ -8590,14 +8643,24 @@ function attendanceProjectSearchHTML() {
 }
 
 function attendanceProjectToolbarControlsHTML() {
+  const filters = [
+    ["attendance_required", "Attendance required"],
+    ["fully_confirmed", "Fully confirmed"],
+    ["reporting_late", "Reporting late"],
+    ["no_shows", "No shows"],
+    ["requires_review", "Requires review"],
+  ];
   return `
     <details class="company-project-filter attendance-project-filter">
       <summary>Filter</summary>
       <div class="company-project-filter-menu">
         <div class="company-project-filter-group">
           <span>Attendance status</span>
-          <label class="checkbox-row compact"><input type="checkbox" disabled /> <span>Requires attention</span></label>
-          <label class="checkbox-row compact"><input type="checkbox" disabled /> <span>QR sign-ins today</span></label>
+          ${filters
+            .map(
+              ([value, label]) => `<label class="checkbox-row compact"><input type="checkbox" value="${value}" data-attendance-filter${activeAttendanceProjectFilters.includes(value) ? " checked" : ""} /> <span>${label}</span></label>`,
+            )
+            .join("")}
         </div>
       </div>
     </details>
@@ -8606,10 +8669,11 @@ function attendanceProjectToolbarControlsHTML() {
       <div class="company-project-filter-menu">
         <label class="field-label">
           Sort by
-          <select disabled>
-            <option>Project name</option>
-            <option>Today's attendance</option>
-            <option>Start date</option>
+          <select id="attendanceProjectSort">
+            <option value="attendance_required"${activeAttendanceProjectSort === "attendance_required" ? " selected" : ""}>Attendance required</option>
+            <option value="project_name"${activeAttendanceProjectSort === "project_name" ? " selected" : ""}>Project name</option>
+            <option value="site_start_time"${activeAttendanceProjectSort === "site_start_time" ? " selected" : ""}>Site start time</option>
+            <option value="location"${activeAttendanceProjectSort === "location" ? " selected" : ""}>Location</option>
           </select>
         </label>
       </div>
@@ -13362,17 +13426,15 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
         ${attendanceSelectedProjectHeaderHTML(selectedProject)}
         <div class="request-labour-page-body attendance-page-body">
           <div class="jw-form">
-            <section class="jw-card attendance-workspace-card">
-              <div id="siteQrPanel"></div>
-              <div id="attendanceCards" class="card-list"></div>
-              <div id="adminAttReview"></div>
-              <div class="att-submit-wrap">
-                <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Confirm Attendance
-                </button>
-              </div>
-            </section>
+            <div id="siteQrPanel"></div>
+            <div id="attendanceCards" class="card-list"></div>
+            <div id="adminAttReview"></div>
+            <div class="att-submit-wrap">
+              <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Confirm Attendance
+              </button>
+            </div>
             <section class="jw-card attendance-history-card">
               <div class="panel-header" id="attHistoryHeader">
                 <div>
@@ -13402,18 +13464,16 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
         </div>
         <span class="att-today-badge" id="attTodayBadge"></span>
       </header>
-      <div class="request-labour-page-body attendance-page-body">
-        <div class="jw-form">
-          <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
-            <div class="company-project-toolbar attendance-project-toolbar">
-              ${attendanceProjectSearchHTML()}
-              ${attendanceProjectToolbarControlsHTML()}
-              <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
-            </div>
-          </section>
-          ${projectList}
-          <div id="attendanceDemoControls"></div>
-        </div>
+      <div class="attendance-landing-content">
+        <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
+          <div class="company-project-toolbar attendance-project-toolbar">
+            ${attendanceProjectSearchHTML()}
+            ${attendanceProjectToolbarControlsHTML()}
+            <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+          </div>
+        </section>
+        ${projectList}
+        <div id="attendanceDemoControls"></div>
       </div>
     </section>`;
 }
@@ -13430,6 +13490,18 @@ function bindCompanyAttendanceProjectControls(scope) {
       next.focus();
       next.setSelectionRange(cursor, cursor);
     });
+  });
+  scope.querySelectorAll("[data-attendance-filter]").forEach((input) => {
+    input.addEventListener("change", () => {
+      activeAttendanceProjectFilters = Array.from(
+        scope.querySelectorAll("[data-attendance-filter]:checked"),
+      ).map((item) => item.value);
+      renderAttendance();
+    });
+  });
+  scope.querySelector("#attendanceProjectSort")?.addEventListener("change", (event) => {
+    activeAttendanceProjectSort = event.target.value || "attendance_required";
+    renderAttendance();
   });
   scope.querySelectorAll("[data-attendance-project]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -15172,10 +15244,6 @@ function renderSiteQrPanel() {
         `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`,
     )
     .join("");
-  const siteDetailsButton = job?.sitePin
-    ? `<button class="site-loc-view-btn" type="button" id="qrSiteDetailsBtn">Site Details</button>`
-    : "";
-
   const start = code?.startTime || jobExpectedStartTime(job);
   const startDate = jobStartDateOnly(job) ? formatDateOnly(jobStartDateOnly(job)) : "Not set";
   const endDate = jobEndDateOnly(job) ? formatDateOnly(jobEndDateOnly(job)) : "No fixed end date";
@@ -15190,7 +15258,7 @@ function renderSiteQrPanel() {
         <div class="qr-meta-row"><span>Site/location</span><strong>${escapeHtml(projectLocation)}</strong></div>
         <div class="qr-meta-row"><span>Project start</span><strong>${escapeHtml(startDate)}</strong></div>
         <div class="qr-meta-row"><span>Project end</span><strong>${escapeHtml(endDate)}</strong></div>
-        <div class="qr-meta-row"><span>Expected start</span><strong>${escapeHtml(start)}</strong></div>
+        <div class="qr-meta-row"><span>Site start time</span><strong>${escapeHtml(start)}</strong></div>
       </div>
     </div>
     <div class="qr-actions">
@@ -15210,7 +15278,6 @@ function renderSiteQrPanel() {
           : `<label class="qr-job-label" for="qrJobSelect">Site</label>
              <select class="qr-job-select" id="qrJobSelect">${options}</select>`
       }
-      ${siteDetailsButton}
       ${codeBlock}
     </div>`;
 
@@ -15228,9 +15295,6 @@ function renderSiteQrPanel() {
   document
     .getElementById("qrPrintBtn")
     ?.addEventListener("click", () => openProjectSignInPrintSheet(qrSelectedJobId));
-  document
-    .getElementById("qrSiteDetailsBtn")
-    ?.addEventListener("click", () => openSiteMap(qrSelectedJobId));
 }
 
 // ─── Admin Attendance Review (full audit) ─────────────────
