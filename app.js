@@ -8424,6 +8424,105 @@ function attendanceProjectRecords(job, { includeToday = true } = {}) {
   });
 }
 
+function attendanceTodayRecordForWorker(workerId, job, today = todayDateStr()) {
+  return attendanceRecords.find(
+    (r) =>
+      r.workerId === workerId &&
+      r.date === today &&
+      (!job || attendanceRecordMatchesProject(r, job, new Set([workerId]))),
+  );
+}
+
+function attendanceStatusForWorker(worker, job, today = todayDateStr()) {
+  const saved = todayAttendanceMap[worker.id] || {};
+  const rec = attendanceTodayRecordForWorker(worker.id, job, today);
+  const status = saved.status || rec?.status || "";
+  const lateReport = rec?.lateReport || null;
+  const signedIn = ["checkedIn", "onTime", "late", "sentHome"].includes(status) || !!rec?.checkInTime;
+  const reportingLate = !!lateReport || status === "reportedIssue";
+  return {
+    rec,
+    status,
+    lateReport,
+    signedIn,
+    reportingLate,
+    unconfirmed: !signedIn && !reportingLate && !saved.status && !rec?.status,
+  };
+}
+
+function projectAttendanceSummary(workers, job, today = todayDateStr()) {
+  const rows = workers.map((worker) => attendanceStatusForWorker(worker, job, today));
+  const signedIn = rows.filter((row) => row.signedIn).length;
+  const reportingLate = rows.filter((row) => row.reportingLate && !row.signedIn).length;
+  return {
+    expected: workers.length,
+    signedIn,
+    reportingLate,
+    unconfirmed: rows.filter((row) => row.unconfirmed).length,
+  };
+}
+
+function attendanceGroupKey(worker) {
+  return [worker.trade || "Trade", worker.grade || worker.specialism || "Experience level not set"].join("||");
+}
+
+function attendanceGroupLabel(worker) {
+  const trade = worker.trade || "Trade";
+  const grade = worker.grade || worker.specialism || "Experience level not set";
+  return grade.toLowerCase().includes(trade.toLowerCase()) ? grade : `${trade} ${grade}`;
+}
+
+function groupedAttendanceWorkers(workers) {
+  const groups = new Map();
+  workers.forEach((worker) => {
+    const key = attendanceGroupKey(worker);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        label: attendanceGroupLabel(worker),
+        workers: [],
+      });
+    }
+    groups.get(key).workers.push(worker);
+  });
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    workers: group.workers.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
+  }));
+}
+
+function attendanceLiveSummaryHTML(workers, job, today = todayDateStr()) {
+  const summary = projectAttendanceSummary(workers, job, today);
+  return `<section class="attendance-live-overview" id="attendanceLiveOverview">
+    <div class="attendance-live-head">
+      <p class="company-home-kicker">Today&apos;s Attendance</p>
+      <h3>Live attendance overview</h3>
+    </div>
+    <div class="attendance-live-grid">
+      <div class="attendance-live-stat"><span>Expected Today</span><strong>${summary.signedIn}/${summary.expected}</strong></div>
+      <div class="attendance-live-stat"><span>Signed In</span><strong>${summary.signedIn}</strong></div>
+      <div class="attendance-live-stat"><span>Reporting Late</span><strong>${summary.reportingLate}</strong></div>
+      <div class="attendance-live-stat"><span>Unconfirmed</span><strong>${summary.unconfirmed}</strong></div>
+    </div>
+  </section>`;
+}
+
+function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
+  if (!workers.length) return emptyState("No workers assigned to this project yet.");
+  return groupedAttendanceWorkers(workers)
+    .map((group) => {
+      const summary = projectAttendanceSummary(group.workers, job, today);
+      return `<section class="attendance-worker-group">
+        <div class="attendance-worker-group-head">
+          <h3>${escapeHtml(group.label)} <span>(${summary.signedIn}/${summary.expected})</span></h3>
+        </div>
+        <div class="attendance-worker-group-list">
+          ${group.workers.map((worker) => attendanceCard(worker, today, job)).join("")}
+        </div>
+      </section>`;
+    })
+    .join("");
+}
+
 function attendanceProjectSearchHTML() {
   return `<label class="company-project-search attendance-project-search" for="attendanceProjectSearch">
     <span>Search projects</span>
@@ -13832,14 +13931,14 @@ function submitDayAttendance() {
 }
 
 // ─── Attendance Card ──────────────────────────────────────
-function attendanceCard(worker, today) {
+function attendanceCard(worker, today, scopedJob = null) {
   const avCls = avatarColor(worker.name);
   const saved = todayAttendanceMap[worker.id] || {};
   const stats = getWorkerStats(worker.id);
   const rating = buildWorkerRating(worker.id);
-  const job = assignedJobForWorker(worker.id);
+  const job = scopedJob || assignedJobForWorker(worker.id);
 
-  const statusBtns = SUPERVISOR_DECISIONS.map((key) => {
+  const statusBtns = ["onTime", "late", "noShow", "excused", "sentHome"].map((key) => {
     const cfg = ATT_CFG[key];
     const active = saved.status === key;
     const style = active
@@ -13853,20 +13952,19 @@ function attendanceCard(worker, today) {
   }).join("");
 
   // Check-in context from any record the worker logged today (scan / report).
-  const rec = attendanceRecords.find(
-    (r) => r.workerId === worker.id && r.date === today,
-  );
+  const rec = attendanceTodayRecordForWorker(worker.id, job, today);
+  const expectedStart = rec?.expectedStartTime || jobExpectedStartTime(job);
+  const signInTime = rec?.checkInTime
+    ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
   let checkInBanner = "";
   if (rec && rec.status === "checkedIn") {
-    const t = rec.checkInTime
-      ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "";
     const sug = rec.suggestedStatus ? ATT_CFG[rec.suggestedStatus] : null;
     checkInBanner = `<div class="att-checkin-banner att-checkin--in" data-att-worker="${worker.id}" data-att-suggested="${rec.suggestedStatus || ""}">
-        <span>${ATT_CFG.checkedIn.icon} Checked in ${t}${sug ? ` · Suggested <strong style="color:${sug.color}">${sug.label}</strong>` : ""}</span>
+        <span>${ATT_CFG.checkedIn.icon} Signed in ${signInTime}${sug ? ` · Suggested <strong style="color:${sug.color}">${sug.label}</strong>` : ""}</span>
       </div>`;
   } else if (rec && rec.status === "reportedIssue") {
     const ri = rec.reportedIssue || {};
@@ -13942,7 +14040,13 @@ function attendanceCard(worker, today) {
 
   const savedStatus = saved.status
     ? `<span style="color:${ATT_CFG[saved.status]?.color};font-weight:600;">${ATT_CFG[saved.status]?.icon} ${ATT_CFG[saved.status]?.label}</span>`
-    : '<span style="color:var(--ink-3)">Not recorded</span>';
+    : rec?.status === "checkedIn"
+      ? `<span style="color:${ATT_CFG.checkedIn.color};font-weight:600;">${ATT_CFG.checkedIn.icon} Signed In</span>`
+      : rec?.status === "reportedIssue" || rec?.lateReport
+        ? `<span style="color:${ATT_CFG.reportedIssue.color};font-weight:600;">Reported Late</span>`
+        : rec?.status && ATT_CFG[rec.status]
+          ? `<span style="color:${ATT_CFG[rec.status].color};font-weight:600;">${ATT_CFG[rec.status].icon} ${ATT_CFG[rec.status].label}</span>`
+        : '<span style="color:var(--ink-3)">Unconfirmed</span>';
 
   // GPS capture row — shown when a status is selected
   const showGps =
@@ -13973,7 +14077,13 @@ function attendanceCard(worker, today) {
       <div class="worker-avatar ${avCls}" style="width:38px;height:38px;font-size:0.8rem;flex-shrink:0;">${initials(worker.name)}</div>
       <div class="att-worker-info">
         <div class="att-worker-name">${escapeHtml(worker.name)}</div>
-        <div class="att-worker-sub">${escapeHtml(worker.trade)}${job ? ` · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span>` : ""} · ${savedStatus}</div>
+        <div class="att-worker-sub">${escapeHtml(worker.trade)}${worker.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</div>
+      </div>
+      <div class="att-live-meta">
+        <span><strong>${escapeHtml(expectedStart)}</strong> Expected start</span>
+        <span><strong>${savedStatus}</strong> Current status</span>
+        <span><strong>${signInTime || "—"}</strong> Sign-in time</span>
+        ${rec?.lateReport?.estimatedArrivalTime ? `<span><strong>Reported Late</strong> ETA ${escapeHtml(rec.lateReport.estimatedArrivalTime)}</span>` : ""}
       </div>
     </div>
     ${checkInBanner}
@@ -13995,6 +14105,10 @@ function bindAttendanceEvents(container) {
         todayAttendanceMap[wid].status === status ? null : status;
       if (status !== "onTime" && status !== "late")
         todayAttendanceMap[wid].rating = 0;
+      if (getSessionUser()?.type === "company" && activeAttendanceProjectId) {
+        renderAttendance();
+        return;
+      }
       refreshAttCard(wid);
     });
   });
@@ -14005,6 +14119,10 @@ function bindAttendanceEvents(container) {
       if (!todayAttendanceMap[wid]) todayAttendanceMap[wid] = {};
       todayAttendanceMap[wid].rating =
         todayAttendanceMap[wid].rating === n ? 0 : n;
+      if (getSessionUser()?.type === "company" && activeAttendanceProjectId) {
+        renderAttendance();
+        return;
+      }
       refreshAttCard(wid);
     });
   });
@@ -14026,6 +14144,10 @@ function bindAttendanceEvents(container) {
           distance: dist,
           timestamp: Date.now(),
         };
+        if (getSessionUser()?.type === "company" && activeAttendanceProjectId) {
+          renderAttendance();
+          return;
+        }
         refreshAttCard(wid);
       } catch (_) {
         showToast(
@@ -14065,6 +14187,11 @@ function classifyLateReport(workerId, decision) {
   upsertWorkerLateReport(workerId, rec.lateReport, today);
   saveAttendanceRecords();
   saveState();
+  if (getSessionUser()?.type === "company" && activeAttendanceProjectId) {
+    renderAttendance();
+    showToast(`Late report classified: ${LATE_CLASSIFICATION[decision]}`);
+    return;
+  }
   refreshAttCard(workerId);
   showToast(`Late report classified: ${LATE_CLASSIFICATION[decision]}`);
 }
@@ -14743,9 +14870,12 @@ function renderAttendance() {
     : "";
 
   container.innerHTML =
-    (rosterWorkers.length > 0 ? requiredBanner : "") +
+    (selectedProject ? attendanceLiveSummaryHTML(rosterWorkers, selectedProject, today) : "") +
+    (!selectedProject && rosterWorkers.length > 0 ? requiredBanner : "") +
     bulkBar +
-    (rosterWorkers.length
+    (selectedProject
+      ? groupedAttendanceCardsHTML(rosterWorkers, selectedProject, today)
+      : rosterWorkers.length
       ? rosterWorkers.map((w) => attendanceCard(w, today)).join("")
       : emptyState(
           selectedProject

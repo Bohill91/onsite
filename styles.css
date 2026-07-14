@@ -5594,6 +5594,102 @@ margin-bottom: 12px;
   gap: 14px;
 }
 
+.attendance-live-overview {
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.attendance-live-head h3 {
+  color: var(--ink);
+  font-size: 1.15rem;
+  margin: 2px 0 0;
+}
+
+.attendance-live-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.attendance-live-stat {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  padding: 12px;
+}
+
+.attendance-live-stat span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.attendance-live-stat strong {
+  color: var(--ink);
+  display: block;
+  font-size: 1.35rem;
+  margin-top: 4px;
+}
+
+.attendance-worker-group {
+  border-top: 1px solid var(--border-light);
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.attendance-worker-group-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.attendance-worker-group-head h3 {
+  color: var(--ink);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.attendance-worker-group-head span {
+  color: var(--orange);
+  font-weight: 800;
+}
+
+.attendance-worker-group-list {
+  display: grid;
+  gap: 10px;
+}
+
+.att-live-meta {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-left: auto;
+  min-width: min(520px, 100%);
+}
+
+.att-live-meta span {
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  padding: 8px;
+}
+
+.att-live-meta strong {
+  color: var(--ink);
+  display: block;
+  font-size: 0.8rem;
+}
+
 .qr-job-static {
   background: var(--surface-2);
   border: 1px solid var(--border-light);
@@ -5631,6 +5727,11 @@ margin-bottom: 12px;
   .attendance-project-summary-grid {
     grid-template-columns: 1fr;
     min-width: 0;
+  }
+
+  .attendance-live-grid,
+  .att-live-meta {
+    grid-template-columns: 1fr;
   }
 }
 
