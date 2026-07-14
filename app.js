@@ -8529,6 +8529,27 @@ function projectAttendanceSummary(workers, job, today = todayDateStr()) {
   };
 }
 
+function attendanceProjectBreakdownRowsHTML(workers, job, today = todayDateStr()) {
+  if (!workers.length) {
+    return `<div class="company-project-req-line"><div><strong>No workers assigned yet</strong><span>Attendance will appear once workers are assigned.</span></div><dl><div><dt>Total attending today</dt><dd>0/0</dd></div></dl></div>`;
+  }
+  return groupedAttendanceWorkers(workers)
+    .map((group) => {
+      const first = group.workers[0] || {};
+      const summary = projectAttendanceSummary(group.workers, job, today);
+      return `<div class="company-project-req-line">
+        <div>
+          <strong>${escapeHtml(first.trade || "Trade")}</strong>
+          <span>${escapeHtml(first.grade || first.specialism || "Experience level not set")}</span>
+        </div>
+        <dl>
+          <div><dt>Total attending today</dt><dd>${summary.signedIn}/${summary.expected}</dd></div>
+        </dl>
+      </div>`;
+    })
+    .join("");
+}
+
 function attendanceProjectState(job) {
   const workers = attendanceProjectWorkers(job);
   const summary = projectAttendanceSummary(workers, job);
@@ -8637,8 +8658,7 @@ function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
 
 function attendanceProjectSearchHTML() {
   return `<label class="company-project-search attendance-project-search" for="attendanceProjectSearch">
-    <span>Search projects</span>
-    <input id="attendanceProjectSearch" type="search" value="${escapeHtml(activeAttendanceProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" />
+    <input id="attendanceProjectSearch" type="search" value="${escapeHtml(activeAttendanceProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" aria-label="Search projects" />
   </label>`;
 }
 
@@ -8684,6 +8704,11 @@ function attendanceProjectCardHTML(job, user) {
   const selected = activeAttendanceProjectId === job.id;
   const workers = attendanceProjectWorkers(job);
   const todaySummary = projectAttendanceSummary(workers, job);
+  const endDate = job.noFixedEndDate
+    ? "No fixed end date"
+    : job.end || job.estimatedEndDate
+      ? formatDateOnly(job.end || job.estimatedEndDate)
+      : "TBC";
   return `<article class="company-project-card jw-card attendance-project-card${selected ? " active" : ""}" tabindex="0" role="button" data-attendance-project="${job.id}">
     <div class="company-project-top">
       <div>
@@ -8692,9 +8717,20 @@ function attendanceProjectCardHTML(job, user) {
         <div class="company-project-meta">${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</div>
       </div>
     </div>
+    <div class="company-project-facts">
+      <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
+      <span><strong>Start date</strong> ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
+      <span><strong>End date</strong> ${escapeHtml(endDate)}</span>
+    </div>
     <div class="company-project-attendance attendance-project-card-attendance">
       <span class="company-project-requirements-label">TODAY&apos;S ATTENDANCE</span>
-      <strong>${todaySummary.signedIn}/${todaySummary.expected} attending today</strong>
+      <div class="attendance-project-total">
+        <span>Total attending today</span>
+        <strong>${todaySummary.signedIn}/${todaySummary.expected}</strong>
+      </div>
+      <div class="company-project-req-list attendance-project-breakdown">
+        ${attendanceProjectBreakdownRowsHTML(workers, job)}
+      </div>
     </div>
     <div class="company-project-action-row">
       <div class="primary-btn company-project-open">View Attendance</div>
@@ -13464,16 +13500,21 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
         </div>
         <span class="att-today-badge" id="attTodayBadge"></span>
       </header>
-      <div class="attendance-landing-content">
-        <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
-          <div class="company-project-toolbar attendance-project-toolbar">
-            ${attendanceProjectSearchHTML()}
-            ${attendanceProjectToolbarControlsHTML()}
-            <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
-          </div>
-        </section>
-        ${projectList}
-        <div id="attendanceDemoControls"></div>
+      <div class="request-labour-page-body attendance-page-body">
+        <div class="jw-form attendance-landing-content">
+          <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
+            <div class="attendance-search-card-head">
+              <span>Search projects</span>
+              <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+            </div>
+            <div class="company-project-toolbar attendance-project-toolbar">
+              ${attendanceProjectSearchHTML()}
+              ${attendanceProjectToolbarControlsHTML()}
+            </div>
+          </section>
+          ${projectList}
+          <div id="attendanceDemoControls"></div>
+        </div>
       </div>
     </section>`;
 }

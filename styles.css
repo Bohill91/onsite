@@ -5509,6 +5509,20 @@ margin-bottom: 12px;
   gap: 18px;
 }
 
+.attendance-search-card-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.attendance-search-card-head > span {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .attendance-project-detail-head {
   align-items: center;
   border-radius: 0;
@@ -5536,7 +5550,7 @@ margin-bottom: 12px;
 
 .attendance-project-toolbar {
   align-items: end;
-  grid-template-columns: minmax(240px, 1fr) auto auto auto;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
   margin-bottom: 0;
 }
 
@@ -5556,10 +5570,21 @@ margin-bottom: 12px;
 
 .attendance-project-card-attendance {
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
-.attendance-project-card-attendance strong {
+.attendance-project-total {
+  display: grid;
+  gap: 2px;
+}
+
+.attendance-project-total span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.attendance-project-total strong {
   color: var(--ink);
   font-size: 1rem;
   font-weight: 800;
