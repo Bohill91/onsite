@@ -8589,6 +8589,33 @@ function attendanceProjectSearchHTML() {
   </label>`;
 }
 
+function attendanceProjectToolbarControlsHTML() {
+  return `
+    <details class="company-project-filter attendance-project-filter">
+      <summary>Filter</summary>
+      <div class="company-project-filter-menu">
+        <div class="company-project-filter-group">
+          <span>Attendance status</span>
+          <label class="checkbox-row compact"><input type="checkbox" disabled /> <span>Requires attention</span></label>
+          <label class="checkbox-row compact"><input type="checkbox" disabled /> <span>QR sign-ins today</span></label>
+        </div>
+      </div>
+    </details>
+    <details class="company-project-filter attendance-project-sort">
+      <summary>Sort By</summary>
+      <div class="company-project-filter-menu">
+        <label class="field-label">
+          Sort by
+          <select disabled>
+            <option>Project name</option>
+            <option>Today's attendance</option>
+            <option>Start date</option>
+          </select>
+        </label>
+      </div>
+    </details>`;
+}
+
 function attendanceProjectCardHTML(job, user) {
   const selected = activeAttendanceProjectId === job.id;
   const workers = attendanceProjectWorkers(job);
@@ -8602,7 +8629,7 @@ function attendanceProjectCardHTML(job, user) {
       </div>
     </div>
     <div class="company-project-attendance attendance-project-card-attendance">
-      <span class="company-project-requirements-label">Today&apos;s attendance</span>
+      <span class="company-project-requirements-label">TODAY&apos;S ATTENDANCE</span>
       <strong>${todaySummary.signedIn}/${todaySummary.expected} attending today</strong>
     </div>
     <div class="company-project-action-row">
@@ -13361,7 +13388,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
     return;
   }
   const projectList = visibleProjects.length
-    ? `<div class="attendance-project-list">
+    ? `<div class="company-project-grid attendance-project-list">
         ${visibleProjects.map((job) => attendanceProjectCardHTML(job, user)).join("")}
       </div>`
     : `<div class="att-empty">${allProjects.length ? "No projects match that search." : "No live projects yet. Create a labour request first."}</div>`;
@@ -13380,10 +13407,11 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
           <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
             <div class="company-project-toolbar attendance-project-toolbar">
               ${attendanceProjectSearchHTML()}
+              ${attendanceProjectToolbarControlsHTML()}
               <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
             </div>
-            ${projectList}
           </section>
+          ${projectList}
           <div id="attendanceDemoControls"></div>
         </div>
       </div>
