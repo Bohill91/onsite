@@ -5634,7 +5634,7 @@ margin-bottom: 12px;
   }
 }
 
-/* Daily Site QR panel (supervisor / admin) */
+/* Project Site Sign-In QR panel (supervisor / admin) */
 .qr-panel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -5730,12 +5730,23 @@ margin-bottom: 12px;
   transition: background 0.15s;
 }
 .qr-gen-btn:hover { background: var(--orange-dark); }
+.qr-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .qr-gen-btn--ghost {
   color: var(--ink-2);
   background: var(--surface-2);
   border: 1px solid var(--border);
 }
 .qr-gen-btn--ghost:hover { background: var(--surface-3); }
+
+@media (max-width: 640px) {
+  .qr-actions {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* Supervisor check-in banner inside attendance cards */
 .att-checkin-banner {

@@ -13102,10 +13102,13 @@ function loadAttendanceDemoData() {
   state.siteCodes.unshift({
     id: createId(),
     jobId: job.id,
-    date: today,
+    scope: "project",
+    date: "",
     token: "OS-DEMOQR",
     startTime: "07:30",
-    expiresAt: new Date(`${today}T23:59:59`).getTime(),
+    validFrom: today,
+    validUntil: "",
+    active: true,
     createdAt: Date.now(),
     devAttendanceDemo: true,
     demoLabel: ATTENDANCE_DEMO_MARK,
@@ -13319,44 +13322,79 @@ function notifyLateReport(worker, job, lateReport) {
   });
 }
 
-// ─── Daily Site QR Codes ──────────────────────────────────
-function getSiteCode(jobId, date) {
+// ─── Project Site Sign-In QR Codes ────────────────────────
+function jobStartDateOnly(job) {
+  const value = job?.startDate || job?.start || "";
+  if (!value) return "";
+  return String(value).split("T")[0];
+}
+
+function jobEndDateOnly(job) {
+  if (job?.noFixedEndDate || job?.ongoing || job?.noFixedEndDate === true) return "";
+  const value = job?.estimatedEndDate || job?.endDate || "";
+  if (!value) return "";
+  return String(value).split("T")[0];
+}
+
+function isDateWithinProjectDates(job, date = todayDateStr()) {
+  if (!job) return false;
+  const start = jobStartDateOnly(job);
+  const end = jobEndDateOnly(job);
+  if (start && date < start) return false;
+  if (end && date > end) return false;
+  return true;
+}
+
+function getSiteCode(jobId) {
   return (
-    (state.siteCodes || []).find((c) => c.jobId === jobId && c.date === date) ||
+    (state.siteCodes || [])
+      .filter(
+        (c) =>
+          c.jobId === jobId &&
+          !c.invalidatedAt &&
+          (c.scope === "project" || c.validFrom !== undefined),
+      )
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0] ||
     null
   );
 }
-function activeSiteCode(jobId) {
-  const today = todayDateStr();
-  const code = getSiteCode(jobId, today);
-  return code && code.date === today && Date.now() < code.expiresAt
-    ? code
-    : null;
+
+function activeSiteCode(jobId, date = todayDateStr()) {
+  const job = findJob(jobId);
+  const code = getSiteCode(jobId);
+  return code && isDateWithinProjectDates(job, date) ? code : null;
 }
+
 function generateSiteCode(jobId) {
   const job = findJob(jobId);
   if (!job) return null;
-  const today = todayDateStr();
   if (!Array.isArray(state.siteCodes)) state.siteCodes = [];
-  // Refresh: drop any prior code for this job/day, then create fresh.
-  state.siteCodes = state.siteCodes.filter(
-    (c) => !(c.jobId === jobId && c.date === today),
+  const now = Date.now();
+  state.siteCodes = state.siteCodes.map((code) =>
+    code.jobId === jobId && !code.invalidatedAt
+      ? { ...code, invalidatedAt: now, active: false }
+      : code,
   );
   const startTime = job.shiftStartTime || jobExpectedStartTime(job);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 0);
   const code = {
     id: createId(),
     jobId,
-    date: today,
+    scope: "project",
+    date: "",
     token: "OS-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
     startTime,
-    expiresAt: endOfDay.getTime(),
-    createdAt: Date.now(),
+    validFrom: jobStartDateOnly(job),
+    validUntil: jobEndDateOnly(job),
+    active: true,
+    createdAt: now,
   };
   state.siteCodes.unshift(code);
   saveState();
   return code;
+}
+
+function ensureSiteCode(jobId) {
+  return getSiteCode(jobId) || generateSiteCode(jobId);
 }
 
 // Render a deterministic QR-style grid from a token (visual only — simulated scan).
@@ -14200,7 +14238,7 @@ function closeWorkerQrScanner() {
 
 function openWorkerQrScanner(uid, workerObj) {
   closeWorkerQrScanner();
-  const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+  const job = assignedJobForWorker(uid);
   const modal = document.createElement("div");
   modal.id = "workerQrScanModal";
   modal.className = "qr-scan-modal";
@@ -14217,10 +14255,10 @@ function openWorkerQrScanner(uid, workerObj) {
         <span class="qr-scan-line"></span>
       </div>
       <div class="qr-scan-site">${job ? `${escapeHtml(job.trade)} · ${escapeHtml(job.location)}` : "No active site assigned"}</div>
-      <p class="qr-scan-copy">Camera scanner-ready flow. This MVP validates today's active site QR token.</p>
+      <p class="qr-scan-copy">Camera scanner-ready flow. This MVP validates the active project sign-in QR token.</p>
       <div class="qr-scan-actions">
         <button class="secondary-btn" type="button" data-qr-scan-close>Cancel</button>
-        <button class="primary-btn" type="button" data-qr-scan-use>Use Today's Site QR</button>
+        <button class="primary-btn" type="button" data-qr-scan-use>Use Site Sign-In QR</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -14237,10 +14275,10 @@ function openWorkerQrScanner(uid, workerObj) {
 }
 
 // camera-scanner-ready / future QR camera integration:
-// validates today's active site token without opening a real camera yet.
+// validates the active project sign-in token without opening a real camera yet.
 async function workerScanCheckIn(uid, workerObj) {
   const today = todayDateStr();
-  const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+  const job = assignedJobForWorker(uid);
   if (!job) {
     showToast("You're not assigned to a site today");
     return;
@@ -14257,8 +14295,16 @@ async function workerScanCheckIn(uid, workerObj) {
   const code = activeSiteCode(job.id);
   if (!code) {
     showToast(
-      "No active site QR yet — ask your supervisor to generate today's code",
+      "No active site sign-in QR is available for this project today",
     );
+    return;
+  }
+  if (!companyAssignedWorkers(job).some((worker) => worker.id === uid)) {
+    showToast("You're not assigned to this project");
+    return;
+  }
+  if (!isDateWithinProjectDates(job, today)) {
+    showToast("This project QR is not active today");
     return;
   }
 
@@ -14276,8 +14322,12 @@ async function workerScanCheckIn(uid, workerObj) {
     gps = null;
   }
   const previous = attendanceRecords.find(
-    (r) => r.workerId === uid && r.date === today,
+    (r) => r.workerId === uid && r.jobId === job.id && r.date === today,
   );
+  if (previous?.status === "checkedIn" || previous?.scanToken || previous?.checkInTime) {
+    showToast("You're already signed in for this project today");
+    return;
+  }
   const lateReport = previous?.lateReport
     ? {
         ...previous.lateReport,
@@ -14320,7 +14370,8 @@ async function workerScanCheckIn(uid, workerObj) {
       minute: "2-digit",
     }),
     qrCodeId: code.id,
-    qrDate: code.date,
+    qrScope: code.scope || "project",
+    qrDate: today,
     scanToken: code.token,
   };
   rec.commercial = attendanceCommercialSnapshot(rec, job);
@@ -14337,7 +14388,7 @@ async function workerScanCheckIn(uid, workerObj) {
     saveState();
   }
   attendanceRecords = attendanceRecords.filter(
-    (r) => !(r.workerId === uid && r.date === today),
+    (r) => !(r.workerId === uid && r.jobId === job.id && r.date === today),
   );
   attendanceRecords.unshift(rec);
   saveAttendanceRecords();
@@ -14756,7 +14807,7 @@ function renderAttendance() {
   });
 }
 
-// ─── Daily Site QR Panel (supervisor / admin) ─────────────
+// ─── Project Site Sign-In QR Panel (supervisor / admin) ───
 function renderSiteQrPanel() {
   const panel = document.getElementById("siteQrPanel");
   if (!panel) return;
@@ -14775,9 +14826,9 @@ function renderSiteQrPanel() {
     panel.innerHTML = `
       <div class="qr-panel">
         <div class="qr-panel-head">
-          <h3 class="qr-panel-title">Daily Site QR</h3>
+          <h3 class="qr-panel-title">Site Sign-In QR</h3>
         </div>
-        <div class="qr-empty">Assign a worker to a job to generate a site check-in code.</div>
+        <div class="qr-empty">Assign a worker to a project to generate a site sign-in code.</div>
       </div>`;
     return;
   }
@@ -14787,7 +14838,7 @@ function renderSiteQrPanel() {
     qrSelectedJobId = liveJobs[0].id;
   }
   const job = findJob(qrSelectedJobId);
-  const code = activeSiteCode(qrSelectedJobId);
+  const code = ensureSiteCode(qrSelectedJobId);
 
   const options = liveJobs
     .map(
@@ -14799,36 +14850,33 @@ function renderSiteQrPanel() {
     ? `<button class="site-loc-view-btn" type="button" id="qrSiteDetailsBtn">Site Details</button>`
     : "";
 
-  let codeBlock;
-  if (code) {
-    const start = code.startTime || "08:00";
-    const expiry = new Date(code.expiresAt).toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    codeBlock = `
-      <div class="qr-display">
-        ${renderQrGlyph(code.token)}
-        <div class="qr-meta">
-          <div class="qr-token">${escapeHtml(code.token)}</div>
-          <div class="qr-meta-row"><span>Site</span><strong>${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</strong></div>
-          <div class="qr-meta-row"><span>Date</span><strong>${formatAttDate(code.date)}</strong></div>
-          <div class="qr-meta-row"><span>Start</span><strong>${escapeHtml(start)}</strong></div>
-          <div class="qr-meta-row"><span>Valid until</span><strong>${expiry}</strong></div>
-        </div>
+  const start = code?.startTime || jobExpectedStartTime(job);
+  const startDate = jobStartDateOnly(job) ? formatDateOnly(jobStartDateOnly(job)) : "Not set";
+  const endDate = jobEndDateOnly(job) ? formatDateOnly(jobEndDateOnly(job)) : "No fixed end date";
+  const projectLocation = job?.siteAddress || job?.location || "Location not set";
+  const codeBlock = `
+    <div class="qr-display">
+      ${renderQrGlyph(code.token)}
+      <div class="qr-meta">
+        <div class="qr-token">${escapeHtml(code.token)}</div>
+        <div class="qr-meta-row"><span>Project</span><strong>${escapeHtml(companyProjectTitle(job))}</strong></div>
+        <div class="qr-meta-row"><span>Job number</span><strong>${escapeHtml(job.jobNumber || "Not set")}</strong></div>
+        <div class="qr-meta-row"><span>Site/location</span><strong>${escapeHtml(projectLocation)}</strong></div>
+        <div class="qr-meta-row"><span>Project start</span><strong>${escapeHtml(startDate)}</strong></div>
+        <div class="qr-meta-row"><span>Project end</span><strong>${escapeHtml(endDate)}</strong></div>
+        <div class="qr-meta-row"><span>Expected start</span><strong>${escapeHtml(start)}</strong></div>
       </div>
-      <button class="qr-gen-btn qr-gen-btn--ghost" id="qrGenBtn" type="button">Regenerate code</button>`;
-  } else {
-    codeBlock = `
-      <div class="qr-empty">No active code for today. Generate one so assigned workers can check in.</div>
-      <button class="qr-gen-btn" id="qrGenBtn" type="button">Generate today's QR</button>`;
-  }
+    </div>
+    <div class="qr-actions">
+      <button class="qr-gen-btn" id="qrPrintBtn" type="button">Print Sign-In Sheet</button>
+      <button class="qr-gen-btn qr-gen-btn--ghost" id="qrGenBtn" type="button">Regenerate QR</button>
+    </div>`;
 
   panel.innerHTML = `
     <div class="qr-panel">
       <div class="qr-panel-head">
-        <h3 class="qr-panel-title">Daily Site QR</h3>
-        <span class="qr-panel-sub">Workers scan this to check in</span>
+        <h3 class="qr-panel-title">Site Sign-In QR</h3>
+        <span class="qr-panel-sub">Valid for this project during its active dates</span>
       </div>
       ${
         scopedProject
@@ -14850,9 +14898,12 @@ function renderSiteQrPanel() {
   if (gen)
     gen.addEventListener("click", () => {
       generateSiteCode(qrSelectedJobId);
-      showToast("Site QR generated for today");
+      showToast("Project sign-in QR regenerated");
       renderSiteQrPanel();
     });
+  document
+    .getElementById("qrPrintBtn")
+    ?.addEventListener("click", () => window.print());
   document
     .getElementById("qrSiteDetailsBtn")
     ?.addEventListener("click", () => openSiteMap(qrSelectedJobId));
