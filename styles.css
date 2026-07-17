@@ -5491,16 +5491,17 @@ margin-bottom: 12px;
   gap: 18px;
 }
 
-.attendance-page-head {
+.attendance-page-head,
+.company-dashboard-head {
   align-items: center;
   border-radius: 0;
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  margin-bottom: 18px;
 }
 
-.attendance-page-head .att-today-badge {
+.attendance-page-head .att-today-badge,
+.company-dashboard-head .att-today-badge {
   flex-shrink: 0;
 }
 
@@ -5555,9 +5556,7 @@ margin-bottom: 12px;
 }
 
 .attendance-project-list {
-  display: grid;
-  gap: 18px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .attendance-project-card {
@@ -5569,7 +5568,6 @@ margin-bottom: 12px;
 }
 
 .attendance-project-card-attendance {
-  display: grid;
   gap: 10px;
 }
 
@@ -5767,6 +5765,7 @@ margin-bottom: 12px;
   }
 
   .attendance-page-head,
+  .company-dashboard-head,
   .attendance-project-detail-head {
     align-items: stretch;
     flex-direction: column;

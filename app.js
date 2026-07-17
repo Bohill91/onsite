@@ -10210,6 +10210,7 @@ function renderContractorHome(user) {
           <h2>Dashboard</h2>
           <p>Monitor your live projects, staffing and attendance.</p>
         </div>
+        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
       </header>
       <div class="request-labour-page-body">
         <div class="jw-form">
