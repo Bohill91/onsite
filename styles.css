@@ -5510,7 +5510,7 @@ margin-bottom: 12px;
   gap: 18px;
 }
 
-.attendance-search-card-head {
+.company-project-search-card-head {
   align-items: center;
   display: flex;
   gap: 12px;
@@ -5518,14 +5518,14 @@ margin-bottom: 12px;
   margin-bottom: 7px;
 }
 
-.attendance-search-card-head > span {
+.company-project-search-card-head > span {
   color: var(--ink-2);
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1.35;
 }
 
-.attendance-search-card-head .company-project-count {
+.company-project-search-card-head .company-project-count {
   line-height: 1.35;
   padding: 0;
 }

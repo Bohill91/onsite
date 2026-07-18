@@ -8750,10 +8750,10 @@ function attendanceSelectedProjectHeaderHTML(job) {
   </header>`;
 }
 
-function companyProjectSearchHTML(id) {
+function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
   return `<label class="company-project-search" for="${id}">
-    <span>Search projects</span>
-    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" />
+    ${showInlineLabel ? "<span>Search projects</span>" : ""}
+    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" aria-label="Search projects" />
   </label>`;
 }
 
@@ -8767,15 +8767,6 @@ function companyProjectFilterHTML() {
   return `<details class="company-project-filter">
     <summary>Filter</summary>
     <div class="company-project-filter-menu">
-      <label class="field-label">
-        Sort by
-        <select id="companyProjectSort">
-          <option value="created_desc"${activeCompanyProjectSort === "created_desc" ? " selected" : ""}>Date created — newest</option>
-          <option value="created_asc"${activeCompanyProjectSort === "created_asc" ? " selected" : ""}>Date created — oldest</option>
-          <option value="start_asc"${activeCompanyProjectSort === "start_asc" ? " selected" : ""}>Start date — soonest</option>
-          <option value="end_asc"${activeCompanyProjectSort === "end_asc" ? " selected" : ""}>End date — soonest</option>
-        </select>
-      </label>
       <div class="company-project-filter-group">
         <span>Project health</span>
         ${healthOptions
@@ -8790,6 +8781,23 @@ function companyProjectFilterHTML() {
       <label class="checkbox-row compact">
         <input id="companyProjectRequiresAction" type="checkbox"${activeCompanyProjectRequiresAction ? " checked" : ""} />
         <span>Requires action</span>
+      </label>
+    </div>
+  </details>`;
+}
+
+function companyProjectSortHTML() {
+  return `<details class="company-project-filter company-project-sort">
+    <summary>Sort By</summary>
+    <div class="company-project-filter-menu">
+      <label class="field-label">
+        Sort by
+        <select id="companyProjectSort">
+          <option value="created_desc"${activeCompanyProjectSort === "created_desc" ? " selected" : ""}>Date created — newest</option>
+          <option value="created_asc"${activeCompanyProjectSort === "created_asc" ? " selected" : ""}>Date created — oldest</option>
+          <option value="start_asc"${activeCompanyProjectSort === "start_asc" ? " selected" : ""}>Start date — soonest</option>
+          <option value="end_asc"${activeCompanyProjectSort === "end_asc" ? " selected" : ""}>End date — soonest</option>
+        </select>
       </label>
     </div>
   </details>`;
@@ -9206,7 +9214,7 @@ function companyProjectCardHTML(job, user) {
         <div>
           <div class="company-project-kicker">PROJECT</div>
           <div class="company-project-title">${escapeHtml(title)}</div>
-          <div class="company-project-meta">Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
+          <div class="company-project-meta">${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
         </div>
         ${projectHealthGuidanceHTML(health)}
       </div>
@@ -10215,10 +10223,14 @@ function renderContractorHome(user) {
       <div class="request-labour-page-body">
         <div class="jw-form">
           <section class="company-dashboard-filter-card jw-card">
-            <div class="company-project-toolbar">
-              ${companyProjectSearchHTML("companyDashboardProjectSearch")}
-              ${companyProjectFilterHTML()}
+            <div class="company-project-search-card-head">
+              <span>Search projects</span>
               <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+            </div>
+            <div class="company-project-toolbar">
+              ${companyProjectSearchHTML("companyDashboardProjectSearch", { showInlineLabel: false })}
+              ${companyProjectFilterHTML()}
+              ${companyProjectSortHTML()}
             </div>
           </section>
           <div class="company-project-grid">${projectCards}</div>
@@ -13504,7 +13516,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
       <div class="request-labour-page-body attendance-page-body">
         <div class="jw-form attendance-landing-content">
           <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
-            <div class="attendance-search-card-head">
+            <div class="company-project-search-card-head">
               <span>Search projects</span>
               <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
             </div>
