@@ -5492,7 +5492,8 @@ margin-bottom: 12px;
 }
 
 .attendance-page-head,
-.company-dashboard-head {
+.company-dashboard-head,
+.company-page-head {
   align-items: center;
   border-radius: 0;
   display: flex;
@@ -5501,7 +5502,8 @@ margin-bottom: 12px;
 }
 
 .attendance-page-head .att-today-badge,
-.company-dashboard-head .att-today-badge {
+.company-dashboard-head .att-today-badge,
+.company-page-head .att-today-badge {
   flex-shrink: 0;
 }
 
@@ -5776,6 +5778,7 @@ margin-bottom: 12px;
 
   .attendance-page-head,
   .company-dashboard-head,
+  .company-page-head,
   .attendance-project-detail-head {
     align-items: stretch;
     flex-direction: column;
@@ -8015,9 +8018,10 @@ body.modal-open {
   color: inherit;
   cursor: pointer;
   display: grid;
-  gap: 14px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  padding: 16px;
+  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 20px;
+  position: relative;
   text-align: left;
   transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
 }
@@ -8031,15 +8035,15 @@ body.modal-open {
 }
 
 .notification-card.unread {
-  background: linear-gradient(90deg, rgba(249, 115, 22, 0.06), var(--surface) 34%);
+  background: var(--surface);
   border-color: rgba(249, 115, 22, 0.3);
 }
 
 .notification-priority-dot {
   border-radius: 999px;
-  height: 10px;
-  margin-top: 4px;
-  width: 10px;
+  height: 11px;
+  margin-top: 6px;
+  width: 11px;
 }
 
 .notification-card.critical .notification-priority-dot { background: #ef4444; }
@@ -8049,62 +8053,71 @@ body.modal-open {
 
 .notification-card-body {
   display: grid;
-  gap: 9px;
+  gap: 12px;
   min-width: 0;
 }
 
-.notification-card-title-row {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.notification-card-title-row strong {
+.notification-card-title {
   color: var(--ink);
-  font-size: 0.95rem;
+  font-size: 1.02rem;
   font-weight: 800;
+  line-height: 1.28;
 }
 
-.notification-unread-label {
-  color: var(--orange);
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
+.notification-unread-dot {
+  background: var(--orange);
+  border-radius: 999px;
+  height: 7px;
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 7px;
 }
 
 .notification-description {
   color: var(--ink-2);
   display: grid;
-  font-size: 0.82rem;
-  gap: 3px;
-  line-height: 1.4;
+  font-size: 0.88rem;
+  gap: 4px;
+  line-height: 1.45;
 }
 
 .notification-description p {
   margin: 0;
 }
 
-.notification-project-ref {
+.notification-next-action {
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
   display: grid;
-  gap: 2px;
+  gap: 4px;
+  padding: 12px;
 }
 
-.notification-project-ref span,
+.notification-next-action span {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 .notification-card time {
   color: var(--ink-3);
   font-size: 0.74rem;
   line-height: 1.35;
 }
 
-.notification-project-ref strong {
+.notification-next-action strong {
   color: var(--ink);
   font-size: 0.84rem;
   font-weight: 800;
+  line-height: 1.35;
 }
 
 .notification-action-btn {
-  align-self: center;
+  justify-self: flex-start;
   font-size: 0.82rem;
   min-height: 38px;
   padding: 9px 12px;
@@ -8727,7 +8740,6 @@ body.modal-open {
   }
 
   .notification-action-btn {
-    grid-column: 2;
     justify-self: flex-start;
   }
 

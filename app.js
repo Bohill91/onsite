@@ -11006,12 +11006,13 @@ function renderCompanyNotificationsPage() {
   const groups = groupCompanyNotifications(user);
   el.innerHTML = `
     <section class="request-labour-page">
-      <header class="request-labour-page-head">
+      <header class="request-labour-page-head company-page-head">
         <div>
           <p class="company-home-kicker">NOTIFICATIONS</p>
           <h2>Notifications</h2>
           <p>Central activity feed for labour, attendance, project and payment updates.</p>
         </div>
+        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
       </header>
       <div class="request-labour-page-body">
         <div class="notification-feed">
@@ -11022,6 +11023,13 @@ function renderCompanyNotificationsPage() {
   bindCompanyNotificationActions(el);
   updateCompanyNotificationBadges(user);
 }
+
+const COMPANY_NOTIFICATION_SECTIONS = [
+  ["action", "Action Required"],
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
+  ["earlier", "Earlier"],
+];
 
 function companyVisibleNotifications(user = getSessionUser()) {
   return (state.notifications || [])
@@ -11066,15 +11074,11 @@ function notificationViewModel(notification) {
   const title = notification.title || notificationTitle(notification, job);
   const action = notificationAction(notification);
   const priority = notificationPriority(notification);
-  const details = notificationDetails(notification, job);
-  const projectRef = job
-    ? `${companyProjectTitle(job)}${job.jobNumber ? ` (${job.jobNumber})` : ""}`
-    : notification.companyName || "OnSite";
+  const copy = notificationCopy(notification, job);
   return {
     notification,
     action,
-    details,
-    projectRef,
+    copy,
     priority,
     title,
     createdLabel: notification.createdAt ? formatDate(notification.createdAt) : "Now",
@@ -11141,38 +11145,31 @@ function notificationAction(notification) {
   return { section, label };
 }
 
-function notificationDetails(notification, job) {
-  const parts = [];
+function notificationCopy(notification, job) {
+  let reason = notification.message || "";
+  let recommendation = "";
   if (notification.type === "project_health") {
-    if (notification.healthLabel) parts.push(`Project Health changed: ${notification.healthLabel}`);
-    if (notification.message) parts.push(notification.message);
+    reason = notification.message || "Project health has changed.";
     if (Array.isArray(notification.recommendations) && notification.recommendations.length) {
-      parts.push(`Recommended action: ${notification.recommendations.slice(0, 2).join(" or ")}`);
-    }
-    if (Array.isArray(notification.labourBreakdown) && notification.labourBreakdown.length) {
-      parts.push(notification.labourBreakdown.join(" · "));
+      recommendation = notification.recommendations.slice(0, 2).join(" or ");
     }
   } else if (notification.type === "worker_late_report") {
-    parts.push(notification.message || "A worker has reported they are running late.");
+    reason = notification.message || "A worker has reported they are running late.";
+    recommendation = "Open Attendance to review today's sign-in status.";
   } else if (notification.type === "worker_offer_accepted") {
-    parts.push(notification.message || "A worker accepted an offer and is awaiting review.");
+    reason = notification.message || "A worker accepted an offer and is awaiting review.";
+    recommendation = "Review the worker before confirming the assignment.";
   } else {
-    parts.push(notification.message || `${companyProjectTitle(job) || "Project"} activity updated.`);
+    reason = notification.message || `${companyProjectTitle(job) || "Project"} activity updated.`;
   }
   if (Array.isArray(notification.preStartQuestions) && notification.preStartQuestions.length) {
-    parts.push(notification.preStartQuestions.join(" "));
+    recommendation = notification.preStartQuestions.join(" ");
   }
-  return parts.filter(Boolean);
+  return { reason, recommendation };
 }
 
 function notificationFeedHTML(groups) {
-  const sections = [
-    ["action", "Action Required"],
-    ["today", "Today"],
-    ["yesterday", "Yesterday"],
-    ["earlier", "Earlier"],
-  ];
-  const html = sections
+  const html = COMPANY_NOTIFICATION_SECTIONS
     .filter(([key]) => groups[key]?.length)
     .map(([key, label]) => `<section class="notification-group jw-card">
       <div class="notification-group-head">
@@ -11190,21 +11187,20 @@ function notificationCardHTML(view) {
   const n = view.notification;
   return `<article class="notification-card ${escapeHtml(view.priority)}${view.unread ? " unread" : ""}" tabindex="0" role="button" data-notification-open="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">
     <span class="notification-priority-dot" aria-hidden="true"></span>
+    ${view.unread ? `<span class="notification-unread-dot" aria-label="Unread"></span>` : ""}
     <div class="notification-card-body">
-      <div class="notification-card-title-row">
-        <strong>${escapeHtml(view.title)}</strong>
-        ${view.unread ? `<span class="notification-unread-label">Unread</span>` : ""}
-      </div>
+      <strong class="notification-card-title">${escapeHtml(view.title)}</strong>
       <div class="notification-description">
-        ${view.details.map((detail) => `<p>${escapeHtml(detail)}</p>`).join("")}
+        <p>${escapeHtml(view.copy.reason || "Notification updated.")}</p>
       </div>
-      <div class="notification-project-ref">
-        <span>Project</span>
-        <strong>${escapeHtml(view.projectRef)}</strong>
-      </div>
+      ${
+        view.copy.recommendation
+          ? `<div class="notification-next-action"><span>Recommended action</span><strong>${escapeHtml(view.copy.recommendation)}</strong></div>`
+          : ""
+      }
+      <button class="primary-btn notification-action-btn" type="button" data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">${escapeHtml(view.action.label)} &rarr;</button>
       <time>${escapeHtml(view.createdLabel)}</time>
     </div>
-    <button class="primary-btn notification-action-btn" type="button" data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">${escapeHtml(view.action.label)} &rarr;</button>
   </article>`;
 }
 
@@ -11914,6 +11910,8 @@ function renderCompanyRequestLabourPage(user) {
   const formWrap = document.getElementById("formJob");
   const body = document.getElementById("requestLabourPageBody");
   if (!formWrap || !body) return;
+  const badge = document.getElementById("requestLabourTodayBadge");
+  if (badge) badge.textContent = formatAttDate(todayDateStr());
   body.appendChild(formWrap);
   formWrap.classList.remove("hidden");
   renderJobPreferredWorkerChoices(user);
