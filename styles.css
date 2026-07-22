@@ -8737,9 +8737,10 @@ body.modal-open {
   border-bottom: 1px solid var(--border);
 }
 .jw-kicker {
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
+  line-height: normal;
   text-transform: uppercase;
   color: var(--orange);
   margin: 0;
