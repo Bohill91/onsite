@@ -6588,24 +6588,39 @@ const CONTRACTOR_TABS = [
   { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
+function companyUnreadNotificationCount(user = getSessionUser()) {
+  return companyVisibleNotifications(user).filter((n) => !n.readAt).length;
+}
+
+function updateCompanyNotificationBadges(user = getSessionUser()) {
+  if (user?.type !== "company") return;
+  const count = companyUnreadNotificationCount(user);
+  document.querySelectorAll('[data-tab="notifications"]').forEach((btn) => {
+    btn.querySelector(".nav-unread-badge")?.remove();
+    if (!count) return;
+    btn.insertAdjacentHTML("beforeend", `<span class="nav-unread-badge">${count}</span>`);
+  });
+}
+
 function rebuildNav(tabDefs, activeId) {
   const topNav = document.querySelector(".tab-nav");
   const bottomNav = document.querySelector(".bottom-nav");
   if (!topNav || !bottomNav) return;
+  const unreadCount = getSessionUser()?.type === "company" ? companyUnreadNotificationCount() : 0;
   topNav.innerHTML = tabDefs
     .map(
       (t) => `
     <button class="tab-btn${t.id === activeId ? " active" : ""}" data-tab="${t.id}" type="button">
-      ${NAV_SM[t.icon] || ""}${t.label}
+      ${NAV_SM[t.icon] || ""}<span>${t.label}</span>${t.id === "notifications" && unreadCount ? `<span class="nav-unread-badge">${unreadCount}</span>` : ""}
     </button>`,
-    )
+  )
     .join("") + `<div id="sidebarAccountSlot" class="sidebar-account-slot"></div>`;
   bottomNav.innerHTML = tabDefs
     .map(
       (t) => `
     <button class="bottom-nav-btn${t.id === activeId ? " active" : ""}" data-tab="${t.id}" type="button">
       ${NAV_LG[t.icon] || ""}
-      <span>${t.label}</span>
+      <span>${t.label}</span>${t.id === "notifications" && unreadCount ? `<span class="nav-unread-badge">${unreadCount}</span>` : ""}
     </button>`,
     )
     .join("");
@@ -10988,32 +11003,7 @@ function renderCompanyNotificationsPage() {
   const el = document.getElementById("notificationsContent");
   if (!el) return;
   const user = getSessionUser();
-  const rows = (state.notifications || [])
-    .filter(
-      (n) =>
-        n.type === "project_health" &&
-        (!user?.id || n.companyId === user.id || !n.companyId),
-    )
-    .map(
-      (n) => `<div class="company-notification-row">
-        <div>
-          <strong>${escapeHtml(n.title || "Project health updated")}</strong>
-          ${n.message ? `<span>${escapeHtml(n.message)}</span>` : ""}
-          ${
-            Array.isArray(n.labourBreakdown) && n.labourBreakdown.length
-              ? `<span>${n.labourBreakdown.map((item) => escapeHtml(item)).join(" · ")}</span>`
-              : ""
-          }
-          ${
-            Array.isArray(n.preStartQuestions) && n.preStartQuestions.length
-              ? `<ul>${n.preStartQuestions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-              : ""
-          }
-        </div>
-        <small>${n.createdAt ? formatDateOnly(n.createdAt) : "Now"}</small>
-      </div>`,
-    )
-    .join("");
+  const groups = groupCompanyNotifications(user);
   el.innerHTML = `
     <section class="request-labour-page">
       <header class="request-labour-page-head">
@@ -11024,11 +11014,237 @@ function renderCompanyNotificationsPage() {
         </div>
       </header>
       <div class="request-labour-page-body">
-        <section class="jw-card">
-          ${rows || `<div class="att-empty">No notifications.</div>`}
-        </section>
+        <div class="notification-feed">
+          ${notificationFeedHTML(groups)}
+        </div>
       </div>
     </section>`;
+  bindCompanyNotificationActions(el);
+  updateCompanyNotificationBadges(user);
+}
+
+function companyVisibleNotifications(user = getSessionUser()) {
+  return (state.notifications || [])
+    .filter((n) => !user?.id || n.companyId === user.id || !n.companyId)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+function groupCompanyNotifications(user) {
+  const groups = {
+    action: [],
+    today: [],
+    yesterday: [],
+    earlier: [],
+  };
+  companyVisibleNotifications(user).forEach((notification) => {
+    const view = notificationViewModel(notification);
+    if (view.requiresAction && !notification.readAt) {
+      groups.action.push(view);
+      return;
+    }
+    const bucket = notificationDateBucket(notification.createdAt);
+    groups[bucket].push(view);
+  });
+  return groups;
+}
+
+function notificationDateBucket(value) {
+  const created = value ? new Date(value) : new Date();
+  if (Number.isNaN(created.getTime())) return "earlier";
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const startCreated = new Date(created);
+  startCreated.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((startToday - startCreated) / 86400000);
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  return "earlier";
+}
+
+function notificationViewModel(notification) {
+  const job = findJob(notification.jobId);
+  const title = notification.title || notificationTitle(notification, job);
+  const action = notificationAction(notification);
+  const priority = notificationPriority(notification);
+  const details = notificationDetails(notification, job);
+  const projectRef = job
+    ? `${companyProjectTitle(job)}${job.jobNumber ? ` (${job.jobNumber})` : ""}`
+    : notification.companyName || "OnSite";
+  return {
+    notification,
+    action,
+    details,
+    projectRef,
+    priority,
+    title,
+    createdLabel: notification.createdAt ? formatDate(notification.createdAt) : "Now",
+    unread: !notification.readAt,
+    requiresAction: ["critical", "warning"].includes(priority),
+  };
+}
+
+function notificationTitle(notification, job) {
+  const worker = findWorker(notification.workerId);
+  const project = job ? companyProjectTitle(job) : "Project";
+  const titles = {
+    worker_offer_accepted: `${worker?.name || notification.workerName || "Worker"} accepted your offer`,
+    worker_offer_declined: `${worker?.name || notification.workerName || "Worker"} declined your offer`,
+    worker_late_report: "Worker reported late",
+    worker_planned_absence: "Worker added Planned Absence",
+    worker_notice: "Worker notice logged",
+    shift_change_accepted: "Shift change accepted",
+    shift_change_declined: "Shift change declined",
+    invoice_generated: `${notification.invoiceNumber || "Invoice"} generated`,
+    project_created: `Project ${project} created`,
+    qr_downloaded: "Site Sign-In QR downloaded",
+    worker_added: "Worker added",
+  };
+  if (notification.type === "project_health") return notification.title || `Project ${project} health changed`;
+  return titles[notification.type] || notification.title || notification.message || "Project update";
+}
+
+function notificationPriority(notification) {
+  if (notification.type === "project_health") {
+    if (notification.healthLevel === "urgent") return "critical";
+    if (notification.healthLevel === "atRisk") return "warning";
+    if (notification.healthLevel === "filled") return "success";
+    return "info";
+  }
+  if (["worker_late_report", "worker_notice", "worker_planned_absence", "shift_change_declined", "worker_offer_declined"].includes(notification.type)) return "warning";
+  if (["worker_offer_accepted", "shift_change_accepted", "worker_signed_in", "attendance_completed", "labour_requirement_filled"].includes(notification.type)) return "success";
+  if (["no_show", "labour_shortage", "project_at_risk"].includes(notification.type)) return "critical";
+  return "info";
+}
+
+function notificationAction(notification) {
+  const defaults = {
+    project_health: notification.healthLevel === "filled"
+      ? ["overview", "Review Project"]
+      : ["requirements", "Review Labour Requirement"],
+    worker_offer_accepted: ["workers", "View Worker"],
+    worker_offer_declined: ["workers", "View Workers"],
+    worker_late_report: ["attendance", "Open Attendance"],
+    worker_signed_in: ["attendance", "Open Attendance"],
+    no_show: ["attendance", "Open Attendance"],
+    attendance_completed: ["attendance", "Open Attendance"],
+    worker_planned_absence: ["workers", "View Workers"],
+    worker_notice: ["workers", "View Workers"],
+    documents_expiring: ["documents", "View Documents"],
+    invoice_generated: ["invoices", "View Invoice"],
+    project_created: ["overview", "View Project"],
+    qr_downloaded: ["attendance", "Open Attendance"],
+    worker_added: ["workers", "View Worker"],
+    shift_change_accepted: ["workers", "View Workers"],
+    shift_change_declined: ["workers", "View Workers"],
+  };
+  const [section, label] = defaults[notification.type] || ["overview", "Open Project"];
+  return { section, label };
+}
+
+function notificationDetails(notification, job) {
+  const parts = [];
+  if (notification.type === "project_health") {
+    if (notification.healthLabel) parts.push(`Project Health changed: ${notification.healthLabel}`);
+    if (notification.message) parts.push(notification.message);
+    if (Array.isArray(notification.recommendations) && notification.recommendations.length) {
+      parts.push(`Recommended action: ${notification.recommendations.slice(0, 2).join(" or ")}`);
+    }
+    if (Array.isArray(notification.labourBreakdown) && notification.labourBreakdown.length) {
+      parts.push(notification.labourBreakdown.join(" · "));
+    }
+  } else if (notification.type === "worker_late_report") {
+    parts.push(notification.message || "A worker has reported they are running late.");
+  } else if (notification.type === "worker_offer_accepted") {
+    parts.push(notification.message || "A worker accepted an offer and is awaiting review.");
+  } else {
+    parts.push(notification.message || `${companyProjectTitle(job) || "Project"} activity updated.`);
+  }
+  if (Array.isArray(notification.preStartQuestions) && notification.preStartQuestions.length) {
+    parts.push(notification.preStartQuestions.join(" "));
+  }
+  return parts.filter(Boolean);
+}
+
+function notificationFeedHTML(groups) {
+  const sections = [
+    ["action", "Action Required"],
+    ["today", "Today"],
+    ["yesterday", "Yesterday"],
+    ["earlier", "Earlier"],
+  ];
+  const html = sections
+    .filter(([key]) => groups[key]?.length)
+    .map(([key, label]) => `<section class="notification-group jw-card">
+      <div class="notification-group-head">
+        <p class="company-home-kicker">${escapeHtml(label)}</p>
+      </div>
+      <div class="notification-card-list">
+        ${groups[key].map(notificationCardHTML).join("")}
+      </div>
+    </section>`)
+    .join("");
+  return html || `<section class="jw-card"><div class="att-empty">No notifications.</div></section>`;
+}
+
+function notificationCardHTML(view) {
+  const n = view.notification;
+  return `<article class="notification-card ${escapeHtml(view.priority)}${view.unread ? " unread" : ""}" tabindex="0" role="button" data-notification-open="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">
+    <span class="notification-priority-dot" aria-hidden="true"></span>
+    <div class="notification-card-body">
+      <div class="notification-card-title-row">
+        <strong>${escapeHtml(view.title)}</strong>
+        ${view.unread ? `<span class="notification-unread-label">Unread</span>` : ""}
+      </div>
+      <div class="notification-description">
+        ${view.details.map((detail) => `<p>${escapeHtml(detail)}</p>`).join("")}
+      </div>
+      <div class="notification-project-ref">
+        <span>Project</span>
+        <strong>${escapeHtml(view.projectRef)}</strong>
+      </div>
+      <time>${escapeHtml(view.createdLabel)}</time>
+    </div>
+    <button class="primary-btn notification-action-btn" type="button" data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">${escapeHtml(view.action.label)} &rarr;</button>
+  </article>`;
+}
+
+function bindCompanyNotificationActions(scope) {
+  scope.querySelectorAll("[data-notification-open], [data-notification-action]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCompanyNotification(el);
+    });
+    el.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openCompanyNotification(el);
+    });
+  });
+}
+
+function openCompanyNotification(el) {
+  const id = el.dataset.notificationOpen || el.dataset.notificationAction || "";
+  const notification = (state.notifications || []).find((n) => n.id === id);
+  if (notification && !notification.readAt) {
+    notification.readAt = new Date().toISOString();
+    saveState();
+  }
+  const jobId = el.dataset.notificationJob || notification?.jobId || "";
+  const section = el.dataset.notificationSection || notificationAction(notification || {}).section;
+  if (section === "attendance" && jobId) {
+    switchTab("attendance");
+    navigateToAttendanceProject(jobId);
+    render();
+    return;
+  }
+  if (jobId) {
+    activeCompanyProjectId = jobId;
+    activeCompanyProjectEditId = "";
+    activeCompanyProjectSection = section || "overview";
+    resetProjectEditMap();
+  }
+  switchTab("dashboard");
+  render();
 }
 
 function companyPreferredAccountSection(user) {
@@ -11713,6 +11929,7 @@ function render() {
   const user = getSessionUser();
   const role = user?.type || null;
   renderSidebarAccount(user);
+  updateCompanyNotificationBadges(user);
 
   // Advance any booking extension/reallocation states before drawing.
   if (processExtensionLifecycle()) saveState();
