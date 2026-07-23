@@ -5952,6 +5952,7 @@ function openLabourRequestPage({ focus = true } = {}) {
   body.appendChild(formWrap);
   formWrap.classList.remove("hidden");
   switchTab("request-labour");
+  updateRequestLabourDatePill();
   prepareLabourRequestForm({ focus });
 }
 
@@ -11906,12 +11907,16 @@ resetDemoBtn?.addEventListener("click", () => {
   showToast("Demo data restored");
 });
 
+function updateRequestLabourDatePill() {
+  const badge = document.getElementById("requestLabourTodayBadge");
+  if (badge) badge.textContent = formatAttDate(todayDateStr());
+}
+
 function renderCompanyRequestLabourPage(user) {
   const formWrap = document.getElementById("formJob");
   const body = document.getElementById("requestLabourPageBody");
   if (!formWrap || !body) return;
-  const badge = document.getElementById("requestLabourTodayBadge");
-  if (badge) badge.textContent = formatAttDate(todayDateStr());
+  updateRequestLabourDatePill();
   body.appendChild(formWrap);
   formWrap.classList.remove("hidden");
   renderJobPreferredWorkerChoices(user);
