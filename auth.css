@@ -538,7 +538,7 @@
 /* ─── Document Select ───────────────────────────────────── */
 .auth-select {
   background: var(--surface);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 36px;
@@ -858,6 +858,25 @@
 .auth-divider::before,
 .auth-divider::after {
   background: var(--card-divider);
+}
+
+/* ─── Shared Auth Icon System ──────────────────────────── */
+.auth-overlay svg {
+  flex-shrink: 0;
+  stroke-width: 2;
+}
+
+.cta-icon,
+.auth-back-btn svg,
+.auth-submit-btn svg,
+.auth-mini-btn svg {
+  height: 16px;
+  width: 16px;
+}
+
+.success-icon svg {
+  height: 32px;
+  width: 32px;
 }
 
 /* ─── Shared Auth Button Interaction Polish ─────────────── */
