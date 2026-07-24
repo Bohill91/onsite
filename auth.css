@@ -783,6 +783,65 @@
   color: var(--red-text);
 }
 
+/* ─── Shared Auth Spacing System ────────────────────────── */
+.auth-inner,
+.welcome-inner,
+.success-inner {
+  padding-inline: var(--space-3);
+}
+
+.welcome-actions,
+.auth-form,
+.auth-step,
+.success-actions,
+.completion-items {
+  gap: var(--space-2);
+}
+
+.auth-title,
+.success-title {
+  margin-bottom: var(--space-1);
+}
+
+.auth-subtitle,
+.success-sub {
+  margin-bottom: var(--space-3);
+}
+
+.auth-section-heading {
+  margin-bottom: var(--space-1);
+  margin-top: var(--space-3);
+}
+
+.auth-field-group {
+  gap: var(--space-1);
+}
+
+.auth-form {
+  margin-bottom: var(--space-3);
+}
+
+.completion-card {
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.completion-header {
+  margin-bottom: var(--space-2);
+}
+
+@media (max-width: 500px) {
+  .auth-inner,
+  .welcome-inner,
+  .success-inner {
+    padding-inline: var(--space-2);
+  }
+
+  .completion-card {
+    padding: var(--space-2);
+  }
+}
+
 /* ─── Shared Auth Button Interaction Polish ─────────────── */
 .cta-btn,
 .auth-submit-btn {

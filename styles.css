@@ -34,8 +34,18 @@
   --amber-text: #b45309;
 
   --radius: 12px;
+  --radius-lg: 16px;
   --radius-sm: 8px;
   --radius-xs: 6px;
+
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-section: var(--space-2);
+  --space-card: var(--space-3);
+  --space-card-mobile: var(--space-2);
+  --space-divider: var(--space-2);
 
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -9220,6 +9230,223 @@ body.modal-open {
 }
 .jw-submit {
   margin-top: 2px;
+}
+
+/* ─── Shared Spacing System ─────────────────────────────── */
+.request-labour-page,
+.company-dashboard-page,
+.company-project-grid,
+.company-project-detail-page,
+.attendance-landing-content,
+.attendance-page .jw-form,
+.notification-feed,
+.worker-page {
+  gap: var(--space-section);
+}
+
+.request-labour-page-head,
+.request-labour-page-body,
+.company-dashboard-head,
+.company-dashboard-filter-card,
+.company-live-projects-head,
+.company-command-centre,
+.company-home-band,
+.company-project-card,
+.company-project-detail-page .company-project-detail-head,
+.company-project-section,
+.notification-card,
+.attendance-page-head,
+.attendance-project-detail-head,
+.attendance-live-overview,
+.attendance-history-card,
+.attendance-empty-select,
+.form-card,
+.jw-card,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.worker-status-card,
+.attendance-card,
+.prof-section {
+  padding: var(--space-card);
+}
+
+.company-project-card,
+.notification-card,
+.form-card,
+.jw-card,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.worker-status-card,
+.attendance-card,
+.attendance-live-overview,
+.company-project-section,
+.company-empty-card,
+.attendance-demo-panel,
+.attendance-demo-summary {
+  border-radius: var(--radius-lg);
+}
+
+.company-project-card,
+.notification-card,
+.jw-card,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.attendance-card,
+.attendance-live-overview,
+.company-project-section,
+.attendance-history-card,
+.attendance-empty-select {
+  gap: var(--space-section);
+}
+
+.company-project-search-card-head,
+.company-home-head,
+.company-home-section-head,
+.company-project-page-head,
+.attendance-project-detail-head,
+.attendance-page-head,
+.company-dashboard-head,
+.worker-section-head,
+.form-card-header,
+.jw-card-head {
+  gap: var(--space-section);
+}
+
+.request-labour-page-head h2,
+.company-home-head h2,
+.company-project-page-head h2,
+.attendance-project-detail-head h3,
+.company-project-detail-head h3,
+.jw-card-title,
+.form-card-header h3 {
+  margin: 0;
+}
+
+.request-labour-page-head p:not(.company-home-kicker),
+.company-home-head p,
+.company-project-page-head p,
+.attendance-project-detail-head p:not(.company-home-kicker),
+.jw-card-sub,
+.form-card-header p {
+  margin: var(--space-1) 0 0;
+}
+
+.form-helper,
+.field-hint,
+.section-helper,
+.jw-rate-option .form-helper,
+.site-details-card .form-helper {
+  margin: 0 0 var(--space-2);
+}
+
+.form-card-header,
+.jw-card-head {
+  margin-bottom: 0;
+  padding-bottom: var(--space-divider);
+}
+
+.company-project-requirements,
+.company-project-metrics,
+.company-project-attendance,
+.company-project-worker-row,
+.attendance-worker-group,
+.agr-section,
+.company-project-requirements + .company-project-attendance {
+  margin-top: 0;
+  padding-top: var(--space-divider);
+}
+
+.company-project-req-line,
+.company-project-req-detail,
+.ts-row,
+.att-worker-row {
+  gap: var(--space-section);
+}
+
+.company-project-req-line {
+  padding: var(--space-2) 0;
+}
+
+.company-project-req-line:first-child {
+  padding-top: 0;
+}
+
+.company-project-req-line:last-child {
+  padding-bottom: 0;
+}
+
+.company-project-facts,
+.company-project-detail-meta,
+.company-project-actions,
+.company-project-worker-actions,
+.worker-flow-actions,
+.project-edit-actions,
+.project-edit-photo-actions {
+  gap: var(--space-1);
+}
+
+.company-project-toolbar,
+.attendance-project-toolbar,
+.form-grid,
+.jw-grid,
+.jw-overtime-grid,
+.project-edit-photo-grid,
+.worker-calendar-grid,
+.attendance-live-grid,
+.attendance-project-summary-grid,
+.company-project-detail-grid {
+  gap: var(--space-section);
+}
+
+.jw-conditional,
+.jw-pricing-panel,
+.jw-price-row,
+.jw-req-card,
+.notification-next-action,
+.attendance-live-stat,
+.project-edit-photo-card,
+.company-worker-card {
+  padding: var(--space-2);
+}
+
+.jw-card {
+  gap: var(--space-section);
+}
+
+.jw-form {
+  gap: var(--space-section);
+}
+
+@media (max-width: 640px) {
+  .request-labour-page-head,
+  .request-labour-page-body,
+  .company-dashboard-head,
+  .company-dashboard-filter-card,
+  .company-live-projects-head,
+  .company-command-centre,
+  .company-home-band,
+  .company-project-card,
+  .company-project-detail-page .company-project-detail-head,
+  .company-project-section,
+  .notification-card,
+  .attendance-page-head,
+  .attendance-project-detail-head,
+  .attendance-live-overview,
+  .attendance-history-card,
+  .attendance-empty-select,
+  .form-card,
+  .jw-card,
+  .worker-daily-card,
+  .worker-flow-card,
+  .worker-timesheet-panel,
+  .worker-status-card,
+  .attendance-card,
+  .prof-section {
+    padding: var(--space-card-mobile);
+  }
 }
 
 /* ─── Shared Button Interaction Polish ─────────────────── */
