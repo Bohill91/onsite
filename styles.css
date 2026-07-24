@@ -10034,6 +10034,284 @@ body.modal-open {
   line-height: 1.2;
 }
 
+/* ─── Responsive Audit Fixes ───────────────────────────── */
+.content-area,
+.tab-panel,
+.request-labour-page,
+.request-labour-page-body,
+.company-dashboard-page,
+.company-project-card,
+.attendance-card,
+.notification-card,
+.jw-card,
+.form-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.prof-section {
+  min-width: 0;
+}
+
+.company-project-title,
+.company-project-meta,
+.company-project-role,
+.company-project-card,
+.notification-card-title,
+.notification-description,
+.jw-card-title,
+.jw-card-sub,
+.field-label,
+.form-helper,
+.att-worker-name,
+.att-worker-sub,
+.worker-flow-card,
+.worker-timesheet-panel,
+.prof-field,
+.qr-meta-row {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 859px) {
+  .app-root {
+    max-width: none;
+    width: 100%;
+  }
+
+  .content-area {
+    width: 100%;
+  }
+
+  .tab-panel {
+    padding-inline: clamp(12px, 4vw, 20px);
+  }
+
+  .bottom-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .bottom-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .jw-grid,
+  .form-grid,
+  .project-edit-grid,
+  .project-edit-actions,
+  .company-project-detail-grid,
+  .company-project-section-grid,
+  .company-worker-profile-grid,
+  .attendance-live-grid,
+  .att-live-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .jw-overtime-grid,
+  .site-photo-grid,
+  .project-edit-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-project-card .company-project-top,
+  .company-project-top {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .company-project-health-panel {
+    justify-self: start;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .company-project-health-popover {
+    left: 0;
+    max-width: calc(100vw - 48px);
+    min-width: min(280px, 100%);
+    right: auto;
+  }
+
+  .company-project-facts,
+  .company-project-actions,
+  .company-project-head-actions,
+  .company-project-action-row,
+  .worker-flow-actions,
+  .agreement-actions,
+  .att-late-actions,
+  .qr-panel-actions,
+  .project-edit-photo-actions,
+  .attendance-demo-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .company-project-open,
+  .notification-action-btn,
+  .worker-flow-actions button,
+  .agreement-actions button,
+  .att-late-actions button,
+  .qr-panel-actions button,
+  .project-edit-photo-actions button,
+  .project-edit-photo-actions label,
+  .attendance-demo-actions button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .company-project-toolbar,
+  .attendance-project-toolbar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .company-project-filter,
+  .company-project-filter summary,
+  .company-project-search {
+    width: 100%;
+  }
+
+  .company-project-filter-menu {
+    left: 0;
+    max-width: calc(100vw - 48px);
+    min-width: 0;
+    right: auto;
+    width: 100%;
+  }
+
+  .company-project-search-card-head,
+  .request-labour-page-head,
+  .attendance-page-head,
+  .company-dashboard-head,
+  .company-page-head,
+  .attendance-project-detail-head,
+  .company-project-detail-head,
+  .worker-section-head,
+  .panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .att-today-badge {
+    align-self: flex-start;
+  }
+
+  .modal-overlay,
+  .qr-scan-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .dispute-sheet,
+  .agreement-sheet,
+  .planned-calendar-sheet,
+  .company-worker-profile-sheet,
+  .qr-scan-sheet {
+    max-height: min(88vh, 720px);
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .request-labour-page-head,
+  .request-labour-page-body,
+  .company-dashboard-head,
+  .company-dashboard-filter-card,
+  .attendance-page-head,
+  .attendance-project-detail-head,
+  .notification-card,
+  .company-project-card,
+  .jw-card,
+  .form-card,
+  .attendance-card,
+  .worker-flow-card,
+  .worker-timesheet-panel,
+  .prof-section {
+    padding: 14px;
+  }
+
+  .jw-overtime-grid,
+  .site-photo-grid,
+  .project-edit-photo-grid,
+  .attendance-demo-summary,
+  .company-project-req-line dl,
+  .company-project-req-detail dl {
+    grid-template-columns: 1fr;
+  }
+
+  .jw-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jw-price-lines span,
+  .jw-price-total span,
+  .prof-field,
+  .qr-meta-row,
+  .company-project-mini-row,
+  .bill-inv-row,
+  .pay-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .prof-field strong,
+  .qr-meta-row strong,
+  .company-project-mini-row strong,
+  .company-project-req-line dd,
+  .company-project-req-detail dd,
+  .attendance-live-stat strong,
+  .att-live-meta strong,
+  .cf-val {
+    text-align: left;
+  }
+
+  .att-status-btns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .att-btn-label {
+    white-space: normal;
+  }
+
+  .notification-card {
+    grid-template-columns: 14px minmax(0, 1fr);
+  }
+
+  .notification-unread-dot {
+    right: 12px;
+    top: 12px;
+  }
+
+  .photo-card {
+    min-height: 88px;
+  }
+
+  .toast {
+    left: 12px;
+    max-width: calc(100vw - 24px);
+    right: 12px;
+    text-align: center;
+    transform: translateY(20px);
+    white-space: normal;
+  }
+
+  .toast.show {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 380px) {
+  .jw-days,
+  .att-status-btns {
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-nav-btn {
+    min-width: 64px;
+  }
+}
+
 /* ─── Shared Icon System ───────────────────────────────── */
 svg:not(.qr-glyph) {
   flex-shrink: 0;

@@ -872,6 +872,78 @@
   }
 }
 
+/* ─── Responsive Audit Fixes ───────────────────────────── */
+.auth-card,
+.auth-form,
+.auth-field-group,
+.auth-input,
+.auth-submit-btn,
+.auth-mini-btn,
+.cta-btn {
+  min-width: 0;
+}
+
+.auth-title,
+.auth-subtitle,
+.welcome-title,
+.welcome-sub,
+.success-title,
+.success-sub,
+.auth-label,
+.auth-link-row {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .auth-input-row,
+  .auth-inline-action {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-inline-action {
+    align-items: stretch;
+  }
+
+  .auth-mini-btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .auth-step-indicator {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .cert-checkbox {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .cert-expiry-input {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .auth-card,
+  .completion-card {
+    padding: 18px;
+  }
+
+  .auth-header {
+    gap: 8px;
+  }
+
+  .auth-title {
+    font-size: clamp(1.35rem, 8vw, 1.8rem);
+  }
+
+  .auth-submit-btn,
+  .cta-btn {
+    white-space: normal;
+  }
+}
+
 /* ─── Shared Auth Card Polish ──────────────────────────── */
 .completion-card,
 .auth-field-group input,
