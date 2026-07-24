@@ -579,7 +579,11 @@
 
         <!-- DASHBOARD TAB -->
         <div class="tab-panel active" id="tab-dashboard">
-          <div class="stats-row" id="statsRow"></div>
+          <div class="stats-row" id="statsRow">
+            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
+            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
+            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
+          </div>
           <div id="extensionReminders"></div>
           <div id="agreementsOverview"></div>
           <div class="panel-header">
@@ -588,7 +592,10 @@
               <p class="panel-subtitle">Best available workers ranked by reliability score</p>
             </div>
           </div>
-          <div id="matchResults" class="card-list"></div>
+          <div id="matchResults" class="card-list">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
 
           <div class="panel-header" style="margin-top:28px;">
             <div>
@@ -596,7 +603,9 @@
               <p class="panel-subtitle">Recent assignments, score updates &amp; new additions</p>
             </div>
           </div>
-          <div id="activityFeed" class="activity-feed"></div>
+          <div id="activityFeed" class="activity-feed">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
+          </div>
 
           <div class="panel-header" style="margin-top:28px;">
             <div>
@@ -604,7 +613,9 @@
               <p class="panel-subtitle">Bookings cancelled by companies &amp; any payment owed to workers</p>
             </div>
           </div>
-          <div id="cancelledBookingsList" class="card-list"></div>
+          <div id="cancelledBookingsList" class="card-list">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
+          </div>
         </div>
 
         <!-- WORKERS TAB -->
@@ -628,7 +639,10 @@
             </div>
           </div>
           <div id="workersEmpty" class="empty-state" style="display:none">No workers match your search.</div>
-          <div id="workersList" class="card-list"></div>
+          <div id="workersList" class="card-list">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- ATTENDANCE TAB -->
@@ -642,7 +656,10 @@
           </div>
           <div id="attendanceDemoControls"></div>
           <div id="siteQrPanel"></div>
-          <div id="attendanceCards" class="card-list"></div>
+          <div id="attendanceCards" class="card-list">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
           <div id="adminAttReview"></div>
           <div class="att-submit-wrap">
             <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
@@ -656,7 +673,9 @@
               <p class="panel-subtitle" id="attHistorySub">Past attendance records by day</p>
             </div>
           </div>
-          <div id="attendanceHistory"></div>
+          <div id="attendanceHistory">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
+          </div>
 
         </div>
 
@@ -668,7 +687,9 @@
               <p class="panel-subtitle">Company requests awaiting assignment</p>
             </div>
           </div>
-          <div id="jobsList" class="card-list"></div>
+          <div id="jobsList" class="card-list">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- OFFERS TAB (Worker) -->
@@ -679,7 +700,9 @@
               <p class="panel-subtitle">Active job offers, decisions and offer history</p>
             </div>
           </div>
-          <div id="offersContent"></div>
+          <div id="offersContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- CALENDAR TAB (Worker) -->
@@ -690,7 +713,9 @@
               <p class="panel-subtitle">Availability, Planned Absence and upcoming commitments</p>
             </div>
           </div>
-          <div id="calendarContent"></div>
+          <div id="calendarContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- PAYMENTS TAB (Admin) -->
@@ -701,7 +726,9 @@
               <p class="panel-subtitle">Invoices, worker payouts, company terms &amp; restrictions</p>
             </div>
           </div>
-          <div id="paymentsContent"></div>
+          <div id="paymentsContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- ADD TAB -->
@@ -1123,17 +1150,23 @@
 
         <!-- PROFILE TAB (Worker) -->
         <div class="tab-panel" id="tab-profile">
-          <div id="profileContent"></div>
+          <div id="profileContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- ACCOUNT TAB (Company) -->
         <div class="tab-panel" id="tab-account">
-          <div id="accountContent"></div>
+          <div id="accountContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
         <!-- NOTIFICATIONS TAB (Company) -->
         <div class="tab-panel" id="tab-notifications">
-          <div id="notificationsContent"></div>
+          <div id="notificationsContent">
+            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
+          </div>
         </div>
 
       </main>

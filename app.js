@@ -497,6 +497,39 @@ function bindGlobalDropdownBehaviour() {
     if (option) closeAppPopovers();
   });
 
+  document.addEventListener("submit", (event) => {
+    const submitter = event.submitter;
+    if (submitter instanceof Element && submitter.closest(".auth-overlay")) return;
+    if (submitter instanceof HTMLButtonElement) {
+      setButtonLoading(submitter, true, "Saving");
+      releaseButtonLoading(submitter);
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest("button");
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (button.disabled || button.getAttribute("aria-busy") === "true") return;
+    if (button.type === "submit") return;
+    if (
+      button.matches(
+        ".tab-btn, .bottom-nav-btn, .filter-chip, .modal-close-btn, .sidebar-account-card, .sidebar-account-menu button, .worker-bell-btn, [data-tab], [data-labour-request-close]",
+      )
+    ) {
+      return;
+    }
+    if (
+      button.matches(
+        ".primary-btn, .secondary-btn, .danger-btn, .ghost-btn, .ch-request-btn, .qr-gen-btn, .qr-gen-btn--ghost, .pay-btn, .auto-assign-btn, .geocode-btn, .jw-add-trade-btn",
+      )
+    ) {
+      setButtonLoading(button, true);
+      releaseButtonLoading(button);
+    }
+  });
+
   window.addEventListener("hashchange", () => closeAppPopovers());
   window.addEventListener("popstate", () => closeAppPopovers());
 }
@@ -2647,6 +2680,49 @@ function escapeHtml(value) {
 
 function emptyState(msg) {
   return `<div class="empty-state">${msg}</div>`;
+}
+
+function loadingSkeleton({ rows = 3, cards = 2, compact = false } = {}) {
+  return Array.from({ length: cards }, () => {
+    const rowHtml = Array.from(
+      { length: rows },
+      (_, index) =>
+        `<span class="skeleton-line${index === 0 ? " wide" : ""}${compact ? " compact" : ""}"></span>`,
+    ).join("");
+    return `<div class="skeleton-card" aria-hidden="true">${rowHtml}</div>`;
+  }).join("");
+}
+
+function setButtonLoading(button, isLoading, label = "Working") {
+  if (!(button instanceof HTMLButtonElement)) return;
+  if (isLoading) {
+    if (!button.dataset.loadingOriginalHtml) {
+      button.dataset.loadingOriginalHtml = button.innerHTML;
+      button.dataset.loadingOriginalMinWidth = button.style.minWidth || "";
+      if (button.offsetWidth) button.style.minWidth = `${button.offsetWidth}px`;
+    }
+    button.classList.add("is-loading");
+    button.setAttribute("aria-busy", "true");
+    button.disabled = true;
+    button.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
+    return;
+  }
+  button.classList.remove("is-loading");
+  button.removeAttribute("aria-busy");
+  button.disabled = false;
+  if (button.dataset.loadingOriginalHtml) {
+    button.innerHTML = button.dataset.loadingOriginalHtml;
+    button.style.minWidth = button.dataset.loadingOriginalMinWidth || "";
+    delete button.dataset.loadingOriginalHtml;
+    delete button.dataset.loadingOriginalMinWidth;
+  }
+}
+
+function releaseButtonLoading(button) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  window.setTimeout(() => {
+    if (document.body.contains(button)) setButtonLoading(button, false);
+  }, 450);
 }
 
 function showToast(msg) {
@@ -13019,6 +13095,8 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
   document.getElementById(inputId)?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const card = e.target.closest(".photo-card");
+    card?.classList.add("is-loading");
     try {
       const compressed = await compressImage(file);
       currentJobPhotos[key] = compressed;
@@ -13026,7 +13104,6 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
         fileName: file.name || "",
         uploadedAt: new Date().toISOString(),
       };
-      const card = e.target.closest(".photo-card");
       const prev = document.getElementById(prevId);
       const ph = document.getElementById(phId);
       if (prev) {
@@ -13041,6 +13118,8 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
       }
     } catch (_) {
       showToast("Photo upload failed — try a different image");
+    } finally {
+      card?.classList.remove("is-loading");
     }
   });
 });
@@ -13095,8 +13174,7 @@ document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
     return;
   }
   const btn = document.getElementById("geocodeBtn");
-  btn.textContent = "Searching…";
-  btn.disabled = true;
+  setButtonLoading(btn, true, "Searching");
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1&countrycodes=gb`,
@@ -13114,8 +13192,7 @@ document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
   } catch (_) {
     showToast("Search failed — place pin manually on the map");
   }
-  btn.textContent = "Find on Map";
-  btn.disabled = false;
+  setButtonLoading(btn, false);
 });
 
 function initPickerMap() {

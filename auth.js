@@ -16,6 +16,40 @@ const CERT_OPTIONS = ['CSCS', 'ECS', 'JIB', 'IPAF', 'PASMA', 'SSSTS', 'SMSTS', '
 let workerRegData = {};
 let companyRegData = {};
 
+function setAuthButtonLoading(button, isLoading, label = 'Working') {
+  if (!(button instanceof HTMLButtonElement)) return;
+  if (isLoading) {
+    if (!button.dataset.loadingOriginalHtml) {
+      button.dataset.loadingOriginalHtml = button.innerHTML;
+      button.dataset.loadingOriginalMinWidth = button.style.minWidth || '';
+      if (button.offsetWidth) button.style.minWidth = button.offsetWidth + 'px';
+    }
+    button.classList.add('is-loading');
+    button.setAttribute('aria-busy', 'true');
+    button.disabled = true;
+    button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span>' + label + '</span>';
+    return;
+  }
+  button.classList.remove('is-loading');
+  button.removeAttribute('aria-busy');
+  button.disabled = false;
+  if (button.dataset.loadingOriginalHtml) {
+    button.innerHTML = button.dataset.loadingOriginalHtml;
+    button.style.minWidth = button.dataset.loadingOriginalMinWidth || '';
+    delete button.dataset.loadingOriginalHtml;
+    delete button.dataset.loadingOriginalMinWidth;
+  }
+}
+
+document.addEventListener('submit', function(e) {
+  const submitter = e.submitter;
+  if (!(submitter instanceof HTMLButtonElement) || !submitter.closest('.auth-overlay')) return;
+  setAuthButtonLoading(submitter, true, 'Saving');
+  window.setTimeout(function() {
+    if (document.body.contains(submitter)) setAuthButtonLoading(submitter, false);
+  }, 450);
+});
+
 // ─── User Storage ──────────────────────────────────────────
 function getUsers() {
   try { return JSON.parse(localStorage.getItem(AUTH_USERS_KEY)) || []; } catch (_) { return []; }
@@ -498,17 +532,14 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
     const btn = this;
     const input = document.getElementById('regLocation');
     if (!input || typeof getGPS !== 'function') return;
-    const prev = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Locating…';
+    setAuthButtonLoading(btn, true, 'Locating');
     try {
       const gps = await getGPS();
       input.value = gps.lat.toFixed(5) + ', ' + gps.lng.toFixed(5);
     } catch (_) {
       input.placeholder = 'Location unavailable — enter town or postcode';
     } finally {
-      btn.disabled = false;
-      btn.textContent = prev;
+      setAuthButtonLoading(btn, false);
     }
   });
 
