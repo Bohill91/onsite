@@ -10312,6 +10312,272 @@ body.modal-open {
   }
 }
 
+/* ─── Production UI Consistency Pass ───────────────────── */
+.panel-header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.panel-title,
+.company-project-title,
+.notification-card-title,
+.jw-card-title,
+.form-card-header h3,
+.attendance-live-head h3,
+.attendance-worker-group-head h3,
+.settings-card strong {
+  letter-spacing: -0.01em;
+  line-height: 1.22;
+}
+
+.panel-subtitle,
+.company-project-meta,
+.notification-description,
+.jw-card-sub,
+.form-card-header p,
+.form-helper,
+.field-hint,
+.section-helper,
+.att-worker-sub,
+.settings-card small,
+.activity-time {
+  line-height: 1.45;
+}
+
+.empty-state,
+.att-empty,
+.activity-empty,
+.preferred-worker-empty,
+.attendance-empty-select {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: none;
+  color: var(--ink-3);
+  line-height: 1.45;
+  padding: var(--space-card);
+}
+
+.activity-empty,
+.att-empty {
+  display: block;
+  text-align: center;
+}
+
+.stat-card,
+.settings-card,
+.worker-card,
+.job-card,
+.match-card,
+.form-card,
+.attendance-card,
+.worker-job-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.prof-section,
+.qr-panel,
+.attendance-history-card,
+.company-project-section,
+.company-empty-card,
+.notification-group,
+.prestart-panel,
+.prestart-company-panel,
+.mobile-day-panel,
+.pay-company,
+.pay-invoice,
+.pay-sum-card,
+.bill-banner,
+.doc-row,
+.bill-inv-row,
+.pay-line {
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+.activity-feed,
+.card-list,
+.pay-company-list,
+.pay-invoice-list,
+.doc-list,
+.prestart-doc-list,
+.attendance-worker-group-list {
+  gap: var(--space-section);
+}
+
+.activity-item,
+.ts-row,
+.dd-row,
+.prof-field,
+.qr-meta-row,
+.company-project-mini-row,
+.doc-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row {
+  min-width: 0;
+}
+
+.activity-text,
+.att-worker-info,
+.doc-row-info,
+.bill-inv-main,
+.pay-line-info,
+.project-edit-photo-main,
+.jw-req-main {
+  min-width: 0;
+}
+
+.primary-btn,
+.secondary-btn,
+.danger-btn,
+.ghost-btn,
+.ch-request-btn,
+.qr-gen-btn,
+.qr-gen-btn--ghost,
+.company-project-open,
+.notification-action-btn,
+.pay-btn,
+.auto-assign-btn,
+.geocode-btn,
+.site-loc-view-btn,
+.site-map-back,
+.site-nav-btn,
+.att-late-actions button,
+.attendance-demo-actions button,
+.jw-add-trade-btn,
+.jw-req-remove,
+.worker-flow-actions button,
+.agreement-actions button {
+  align-items: center;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 40px;
+  text-decoration: none;
+}
+
+.primary-btn.wide,
+.secondary-btn.wide,
+.danger-btn.wide,
+.att-submit-btn,
+.jw-submit {
+  min-height: 46px;
+}
+
+.field-label input,
+.field-label select,
+.field-label textarea,
+.jw-form textarea,
+.company-project-search input,
+.worker-select,
+.job-assign-select,
+.pay-term-select,
+.qr-job-select,
+.ai-input {
+  border-color: var(--card-border);
+  border-radius: var(--radius-xs);
+  min-height: 44px;
+}
+
+.field-label,
+.auth-label,
+.company-project-search,
+.pay-term-label,
+.att-rating-label {
+  letter-spacing: 0;
+}
+
+.company-project-filter summary,
+.filter-chip,
+.company-project-status,
+.company-project-health,
+.att-today-badge,
+.bill-status,
+.nav-unread-badge {
+  letter-spacing: 0;
+}
+
+.company-project-card,
+.notification-card,
+.jw-card,
+.form-card,
+.attendance-card,
+.worker-card,
+.job-card,
+.match-card,
+.worker-job-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.prof-section {
+  background: var(--surface);
+}
+
+.company-project-requirements,
+.company-project-attendance,
+.company-project-tabs,
+.jw-card-head,
+.form-card-header,
+.dispute-sheet-header,
+.ai-panel-header,
+.ai-input-area,
+.agreement-actions,
+.att-history-header {
+  border-color: var(--card-divider);
+}
+
+.company-project-filter-menu,
+.company-project-health-popover,
+.sidebar-account-menu,
+.worker-notification-panel {
+  border-color: var(--card-border);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12);
+}
+
+.skeleton-card {
+  border-color: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+@media (hover: hover) {
+  .stat-card:hover,
+  .settings-card:hover,
+  .worker-card:hover,
+  .job-card:hover,
+  .match-card:hover,
+  .attendance-card:hover,
+  .worker-job-card:hover,
+  .worker-flow-card:hover,
+  .worker-timesheet-panel:hover,
+  .prof-section:hover,
+  .doc-row:hover,
+  .bill-inv-row:hover,
+  .pay-line:hover {
+    border-color: rgba(249, 115, 22, 0.24);
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 640px) {
+  .panel-header {
+    flex-direction: column;
+  }
+
+  .empty-state,
+  .att-empty,
+  .activity-empty,
+  .preferred-worker-empty,
+  .attendance-empty-select {
+    padding: var(--space-card-mobile);
+  }
+}
+
 /* ─── Shared Icon System ───────────────────────────────── */
 svg:not(.qr-glyph) {
   flex-shrink: 0;

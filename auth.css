@@ -1051,6 +1051,84 @@
   transform: none;
 }
 
+/* ─── Production Auth UI Consistency Pass ──────────────── */
+.auth-card,
+.completion-card,
+.auth-step-indicator,
+.cert-checkbox,
+.returning-worker-note,
+.success-icon {
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+.auth-card,
+.completion-card {
+  border-radius: var(--card-radius);
+}
+
+.auth-title,
+.welcome-title,
+.success-title,
+.completion-title {
+  letter-spacing: -0.01em;
+  line-height: 1.18;
+}
+
+.auth-subtitle,
+.welcome-sub,
+.success-sub,
+.auth-link-row,
+.completion-sub,
+.completion-item,
+.returning-worker-note {
+  line-height: 1.45;
+}
+
+.auth-label,
+.auth-input,
+.auth-select,
+.auth-mini-btn,
+.auth-submit-btn,
+.cta-btn {
+  letter-spacing: 0;
+}
+
+.auth-input,
+.auth-select,
+.cert-expiry-input {
+  border-color: var(--card-border);
+  border-radius: var(--radius-xs);
+}
+
+.auth-submit-btn,
+.cta-btn,
+.auth-mini-btn,
+.auth-back-btn {
+  align-items: center;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.stepper-line {
+  background: var(--card-divider);
+}
+
+.auth-error {
+  border-radius: var(--radius-xs);
+  line-height: 1.45;
+}
+
+@media (hover: hover) {
+  .auth-card:hover,
+  .completion-card:hover {
+    box-shadow: var(--card-shadow-hover);
+  }
+}
+
 @media (max-width: 500px) {
   .auth-inline-action {
     flex-direction: column;
