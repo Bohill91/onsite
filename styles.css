@@ -9222,6 +9222,196 @@ body.modal-open {
   margin-top: 2px;
 }
 
+/* ─── Shared Button Interaction Polish ─────────────────── */
+button,
+[role="button"],
+.primary-btn,
+.secondary-btn,
+label.secondary-btn,
+.danger-btn,
+.ghost-btn,
+.sidebar-account-card,
+.sidebar-account-menu button,
+.tab-btn,
+.filter-chip,
+.bottom-nav-btn,
+.worker-bell-btn,
+.ch-request-btn,
+.qr-gen-btn,
+.qr-gen-btn--ghost,
+.company-project-filter summary,
+.company-project-open,
+.pay-btn,
+.auto-assign-btn,
+.geocode-btn,
+.site-loc-view-btn,
+.site-map-back,
+.site-nav-btn,
+.ai-fab,
+.att-late-actions button,
+.attendance-demo-actions button,
+.jw-add-trade-btn,
+.jw-req-remove {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
+.primary-btn,
+.ch-request-btn,
+.qr-gen-btn,
+.company-project-open,
+.jw-submit {
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.14);
+}
+
+.secondary-btn,
+label.secondary-btn,
+.ghost-btn,
+.sidebar-account-card,
+.sidebar-account-menu button,
+.filter-chip,
+.worker-bell-btn,
+.company-project-filter summary,
+.qr-gen-btn--ghost,
+.pay-btn,
+.geocode-btn,
+.site-loc-view-btn,
+.site-map-back,
+.site-nav-btn,
+.att-late-actions button,
+.attendance-demo-actions button,
+.jw-add-trade-btn,
+.jw-req-remove {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+@media (hover: hover) {
+  .primary-btn:hover,
+  .ch-request-btn:hover,
+  .qr-gen-btn:hover,
+  .company-project-open:hover,
+  .jw-submit:hover {
+    box-shadow: 0 12px 26px rgba(249, 115, 22, 0.22);
+    transform: translateY(-1px);
+  }
+
+  .secondary-btn:hover,
+  label.secondary-btn:hover,
+  .ghost-btn:hover,
+  .sidebar-account-card:hover,
+  .sidebar-account-menu button:hover,
+  .tab-btn:hover,
+  .filter-chip:hover,
+  .bottom-nav-btn:hover,
+  .worker-bell-btn:hover,
+  .company-project-filter summary:hover,
+  .qr-gen-btn--ghost:hover,
+  .pay-btn:hover,
+  .geocode-btn:hover,
+  .site-loc-view-btn:hover,
+  .site-map-back:hover,
+  .site-nav-btn:hover,
+  .att-late-actions button:hover,
+  .attendance-demo-actions button:hover,
+  .jw-add-trade-btn:hover,
+  .jw-req-remove:hover {
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+}
+
+button:active,
+[role="button"]:active,
+.primary-btn:active,
+.secondary-btn:active,
+label.secondary-btn:active,
+.danger-btn:active,
+.ghost-btn:active,
+.sidebar-account-card:active,
+.sidebar-account-menu button:active,
+.tab-btn:active,
+.filter-chip:active,
+.bottom-nav-btn:active,
+.worker-bell-btn:active,
+.ch-request-btn:active,
+.qr-gen-btn:active,
+.qr-gen-btn--ghost:active,
+.company-project-filter summary:active,
+.company-project-open:active,
+.pay-btn:active,
+.auto-assign-btn:active,
+.geocode-btn:active,
+.site-loc-view-btn:active,
+.site-map-back:active,
+.site-nav-btn:active,
+.ai-fab:active,
+.att-late-actions button:active,
+.attendance-demo-actions button:active,
+.jw-add-trade-btn:active,
+.jw-req-remove:active {
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.14);
+  transform: translateY(0) scale(0.985);
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+.primary-btn:focus-visible,
+.secondary-btn:focus-visible,
+label.secondary-btn:focus-visible,
+.danger-btn:focus-visible,
+.ghost-btn:focus-visible,
+.sidebar-account-card:focus-visible,
+.sidebar-account-menu button:focus-visible,
+.tab-btn:focus-visible,
+.filter-chip:focus-visible,
+.bottom-nav-btn:focus-visible,
+.worker-bell-btn:focus-visible,
+.ch-request-btn:focus-visible,
+.qr-gen-btn:focus-visible,
+.qr-gen-btn--ghost:focus-visible,
+.company-project-filter summary:focus-visible,
+.company-project-open:focus-visible,
+.pay-btn:focus-visible,
+.auto-assign-btn:focus-visible,
+.geocode-btn:focus-visible,
+.site-loc-view-btn:focus-visible,
+.site-map-back:focus-visible,
+.site-nav-btn:focus-visible,
+.ai-fab:focus-visible,
+.att-late-actions button:focus-visible,
+.attendance-demo-actions button:focus-visible,
+.jw-add-trade-btn:focus-visible,
+.jw-req-remove:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.65);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
+}
+
+button:disabled,
+button[aria-disabled="true"],
+.primary-btn:disabled,
+.primary-btn[aria-disabled="true"],
+.secondary-btn:disabled,
+.secondary-btn[aria-disabled="true"],
+.danger-btn:disabled,
+.danger-btn[aria-disabled="true"],
+.ghost-btn:disabled,
+.ghost-btn[aria-disabled="true"],
+.qr-gen-btn:disabled,
+.qr-gen-btn[aria-disabled="true"],
+.pay-btn:disabled,
+.pay-btn[aria-disabled="true"],
+.geocode-btn:disabled,
+.geocode-btn[aria-disabled="true"] {
+  box-shadow: none;
+  transform: none;
+}
+
 @media (max-width: 640px) {
   .jw-grid,
   .jw-overtime-grid {

@@ -783,6 +783,76 @@
   color: var(--red-text);
 }
 
+/* ─── Shared Auth Button Interaction Polish ─────────────── */
+.cta-btn,
+.auth-submit-btn {
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.14);
+}
+
+.auth-back-btn,
+.auth-mini-btn,
+.auth-link {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cta-btn,
+.auth-submit-btn,
+.auth-back-btn,
+.auth-mini-btn,
+.auth-link {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
+@media (hover: hover) {
+  .cta-btn:hover,
+  .auth-submit-btn:hover {
+    box-shadow: 0 12px 26px rgba(249, 115, 22, 0.22);
+    transform: translateY(-1px);
+  }
+
+  .auth-back-btn:hover,
+  .auth-mini-btn:hover,
+  .auth-link:hover {
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+}
+
+.cta-btn:active,
+.auth-submit-btn:active,
+.auth-back-btn:active,
+.auth-mini-btn:active,
+.auth-link:active {
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.14);
+  transform: translateY(0) scale(0.985);
+}
+
+.cta-btn:focus-visible,
+.auth-submit-btn:focus-visible,
+.auth-back-btn:focus-visible,
+.auth-mini-btn:focus-visible,
+.auth-link:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.65);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
+}
+
+.cta-btn:disabled,
+.cta-btn[aria-disabled="true"],
+.auth-submit-btn:disabled,
+.auth-submit-btn[aria-disabled="true"],
+.auth-mini-btn:disabled,
+.auth-mini-btn[aria-disabled="true"] {
+  box-shadow: none;
+  transform: none;
+}
+
 @media (max-width: 500px) {
   .auth-inline-action {
     flex-direction: column;
