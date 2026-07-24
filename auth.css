@@ -330,6 +330,36 @@
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
 }
 
+.auth-input:focus-visible,
+.auth-field-group input:focus-visible,
+.auth-field-group select:focus-visible,
+.auth-field-group textarea:focus-visible {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
+  outline: 2px solid rgba(249, 115, 22, 0.55);
+  outline-offset: 2px;
+}
+
+.auth-input[type="date"],
+.auth-input[type="time"],
+.auth-input[type="datetime-local"] {
+  color-scheme: light;
+}
+
+.auth-input[type="date"]::-webkit-calendar-picker-indicator,
+.auth-input[type="time"]::-webkit-calendar-picker-indicator,
+.auth-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 180ms ease;
+}
+
+.auth-input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.auth-input[type="time"]::-webkit-calendar-picker-indicator:hover,
+.auth-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 .auth-input-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

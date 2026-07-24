@@ -417,6 +417,17 @@ function closeAppPopovers(except = null) {
   }
 }
 
+const DISMISSIBLE_FORM_CONTROL_SELECTOR =
+  "select, input[type='date'], input[type='time'], input[type='datetime-local']";
+
+function blurActiveFormControlIfOutside(target) {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return;
+  if (!active.matches(DISMISSIBLE_FORM_CONTROL_SELECTOR)) return;
+  if (target instanceof Node && active.contains(target)) return;
+  active.blur();
+}
+
 function bindGlobalDropdownBehaviour() {
   document.addEventListener(
     "toggle",
@@ -424,6 +435,14 @@ function bindGlobalDropdownBehaviour() {
       const details = event.target;
       if (!(details instanceof HTMLDetailsElement) || !details.open) return;
       closeAppPopovers(details);
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      blurActiveFormControlIfOutside(event.target);
     },
     true,
   );
@@ -443,15 +462,28 @@ function bindGlobalDropdownBehaviour() {
     closeAppPopovers();
   });
 
+  document.addEventListener("focusin", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const openDetails = target.closest("details[open]");
+    const openSidebarMenu = target.closest("[data-sidebar-account-menu]");
+    const openWorkerPanel = target.closest("#workerNotificationPanel");
+    if (openDetails || openSidebarMenu || openWorkerPanel) return;
+    closeAppPopovers();
+  });
+
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     closeAppPopovers();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   });
 
   document.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.matches("select, input[type='date'], input[type='time']")) {
+    if (target.matches(DISMISSIBLE_FORM_CONTROL_SELECTOR)) {
       target.blur();
     }
     const details = target.closest("details[open]");
@@ -464,6 +496,9 @@ function bindGlobalDropdownBehaviour() {
     const option = target.closest("details[open] button, details[open] [role='option']");
     if (option) closeAppPopovers();
   });
+
+  window.addEventListener("hashchange", () => closeAppPopovers());
+  window.addEventListener("popstate", () => closeAppPopovers());
 }
 
 bindGlobalDropdownBehaviour();
