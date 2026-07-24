@@ -842,6 +842,24 @@
   }
 }
 
+/* ─── Shared Auth Card Polish ──────────────────────────── */
+.completion-card,
+.auth-field-group input,
+.auth-field-group select,
+.auth-step-indicator {
+  border-color: var(--card-border);
+}
+
+.completion-card {
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  background: var(--card-divider);
+}
+
 /* ─── Shared Auth Button Interaction Polish ─────────────── */
 .cta-btn,
 .auth-submit-btn {

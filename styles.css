@@ -35,6 +35,7 @@
 
   --radius: 12px;
   --radius-lg: 16px;
+  --radius-md: 12px;
   --radius-sm: 8px;
   --radius-xs: 6px;
 
@@ -46,6 +47,12 @@
   --space-card: var(--space-3);
   --space-card-mobile: var(--space-2);
   --space-divider: var(--space-2);
+
+  --card-radius: var(--radius-lg);
+  --card-border: rgba(212, 212, 216, 0.78);
+  --card-divider: rgba(212, 212, 216, 0.62);
+  --card-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
+  --card-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.08);
 
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -9447,6 +9454,250 @@ body.modal-open {
   .prof-section {
     padding: var(--space-card-mobile);
   }
+}
+
+/* ─── Shared Content Card Polish ────────────────────────── */
+.settings-card,
+.stat-card,
+.worker-card,
+.job-card,
+.match-card,
+.form-card,
+.photo-card,
+.worker-status-card,
+.worker-job-card,
+.wsa-card,
+.wh-signin-panel,
+.worker-notification-panel,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.ts-summary,
+.ts-rows,
+.planned-calendar-row,
+.prof-section,
+.attendance-card,
+.wh-offer-card,
+.wh-offer-history,
+.cancelled-card,
+.qr-panel,
+.attendance-demo-panel,
+.attendance-demo-summary,
+.attendance-live-overview,
+.attendance-live-stat,
+.attendance-history-card,
+.attendance-project-card,
+.attendance-empty-select,
+.company-command-card,
+.company-issue-card,
+.company-worker-card,
+.company-empty-card,
+.company-project-card,
+.company-project-section,
+.notification-card,
+.notification-next-action,
+.jw-card,
+.jw-subcard,
+.jw-conditional,
+.jw-pricing-panel,
+.jw-price-row,
+.jw-req-card,
+.jw-note,
+.labour-project-req-meta,
+.site-details-card,
+.preferred-worker-choice,
+.preferred-worker-empty,
+.prestart-panel,
+.prestart-company-panel,
+.prestart-project-card,
+.prestart-doc-row,
+.mobile-day-panel,
+.wh-stat-card,
+.wh-booking-card,
+.dupe-card,
+.ext-card,
+.dispute-card,
+.agr-hist-row,
+.agr-overview,
+.doc-row,
+.bill-inv-row,
+.pay-sum-card,
+.pay-company-card,
+.pay-inv-card,
+.pay-line,
+.project-edit-photo-card {
+  border-color: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.job-card:hover,
+.match-card:hover,
+.worker-card:hover,
+.worker-job-card:hover,
+.attendance-project-card:hover,
+.photo-card:hover,
+.dupe-card:hover,
+.ext-card:hover,
+.company-project-card:hover,
+.company-project-card:focus-visible,
+.notification-card:hover,
+.notification-card:focus-visible,
+.preferred-worker-choice:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+.worker-card-actions,
+.job-card-footer,
+.match-workers-list,
+.form-card-header,
+.photo-list-row,
+.ai-panel-header,
+.ai-input-area,
+.worker-job-card .wjc-bar,
+.wjc-meta-strip,
+.wjc-reliability,
+.wjc-actions,
+.wsa-stats-row,
+.worker-notification-row,
+.ts-row,
+.att-gps-row,
+.dispute-sheet-header,
+.dd-header,
+.dd-row,
+.dd-actions,
+.agr-section,
+.agreement-actions,
+.ch-agr-row,
+.mobile-day-row,
+.company-project-requirements,
+.company-project-metrics,
+.company-project-attendance,
+.company-project-tabs,
+.company-project-worker-row,
+.company-project-req-line,
+.company-project-req-detail,
+.labour-project-req-row,
+.jw-card-head,
+.jw-price-total {
+  border-color: var(--card-divider);
+}
+
+.company-project-req-line,
+.company-project-req-detail,
+.company-project-worker-row,
+.mobile-day-row,
+.dd-row,
+.ts-row,
+.worker-notification-row,
+.ch-agr-row,
+.labour-project-req-row {
+  padding-block: var(--space-2);
+}
+
+.company-project-req-line:first-child,
+.company-project-req-detail:first-of-type,
+.company-project-worker-row:first-of-type,
+.mobile-day-row:first-of-type,
+.dd-row:first-child,
+.ts-row:first-child,
+.worker-notification-row:first-child,
+.ch-agr-row:first-of-type,
+.labour-project-req-row:first-of-type {
+  padding-top: 0;
+}
+
+.company-project-req-line:last-child,
+.company-project-req-detail:last-of-type,
+.company-project-worker-row:last-of-type,
+.mobile-day-row:last-of-type,
+.dd-row:last-child,
+.ts-row:last-child,
+.worker-notification-row:last-child,
+.ch-agr-row:last-of-type,
+.labour-project-req-row:last-of-type {
+  padding-bottom: 0;
+}
+
+.prof-field,
+.dd-row,
+.qr-meta-row,
+.cancelled-field,
+.company-project-mini-row,
+.company-project-req-line,
+.company-project-req-detail,
+.company-project-worker-row,
+.mobile-day-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row {
+  gap: var(--space-2);
+}
+
+.prof-field,
+.qr-meta-row,
+.company-project-mini-row,
+.bill-inv-row,
+.pay-line {
+  align-items: center;
+}
+
+.prof-field span,
+.qr-meta-row span,
+.company-project-mini-row span,
+.company-project-req-line dt,
+.company-project-req-detail dt,
+.attendance-live-stat span,
+.att-live-meta span,
+.cf-label,
+.pay-line-sub,
+.bill-inv-sub,
+.worker-doc-meta,
+.worker-doc-notes {
+  color: var(--ink-3);
+}
+
+.prof-field strong,
+.qr-meta-row strong,
+.company-project-mini-row strong,
+.company-project-req-line dd,
+.company-project-req-detail dd,
+.attendance-live-stat strong,
+.att-live-meta strong,
+.cf-val {
+  color: var(--ink);
+  text-align: right;
+}
+
+.company-project-req-line dl,
+.company-project-req-detail dl,
+.company-project-metrics,
+.attendance-live-grid,
+.attendance-project-summary-grid,
+.att-live-meta {
+  gap: var(--space-2);
+}
+
+.company-project-requirements,
+.company-project-attendance,
+.attendance-worker-group,
+.jw-pricing-panel,
+.notification-card-body,
+.worker-page-section,
+.company-home-section,
+.company-worker-directory,
+.company-worker-profile-sheet {
+  gap: var(--space-section);
+}
+
+.company-project-requirements-label,
+.company-project-kicker,
+.company-home-kicker,
+.jw-kicker,
+.worker-daily-kicker,
+.ch-section-label,
+.wh-section-label {
+  line-height: 1.2;
 }
 
 /* ─── Shared Button Interaction Polish ─────────────────── */
