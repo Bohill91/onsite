@@ -362,6 +362,79 @@ function setupTradeSpecialismDropdowns() {
 }
 
 document.addEventListener("DOMContentLoaded", setupTradeSpecialismDropdowns);
+
+function closeAppPopovers(except = null) {
+  document.querySelectorAll("details[open]").forEach((details) => {
+    if (except && details === except) return;
+    details.removeAttribute("open");
+  });
+
+  const sidebarSlot = document.getElementById("sidebarAccountSlot");
+  if (!except || !sidebarSlot?.contains(except)) {
+    sidebarSlot?.querySelector("[data-sidebar-account-menu]")?.classList.add("hidden");
+    sidebarSlot
+      ?.querySelector("[data-sidebar-account-toggle]")
+      ?.setAttribute("aria-expanded", "false");
+  }
+
+  const workerPanel = document.getElementById("workerNotificationPanel");
+  const workerToggle = document.querySelector("[data-worker-notifications]");
+  if (!except || (except !== workerPanel && except !== workerToggle)) {
+    workerPanel?.classList.add("hidden");
+    workerToggle?.setAttribute("aria-expanded", "false");
+  }
+}
+
+function bindGlobalDropdownBehaviour() {
+  document.addEventListener(
+    "toggle",
+    (event) => {
+      const details = event.target;
+      if (!(details instanceof HTMLDetailsElement) || !details.open) return;
+      closeAppPopovers(details);
+    },
+    true,
+  );
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (
+      target.closest("details[open]") ||
+      target.closest("[data-sidebar-account-toggle]") ||
+      target.closest("[data-sidebar-account-menu]") ||
+      target.closest("[data-worker-notifications]") ||
+      target.closest("#workerNotificationPanel")
+    ) {
+      return;
+    }
+    closeAppPopovers();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    closeAppPopovers();
+  });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.matches("select, input[type='date'], input[type='time']")) {
+      target.blur();
+    }
+    const details = target.closest("details[open]");
+    if (details) closeAppPopovers();
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const option = target.closest("details[open] button, details[open] [role='option']");
+    if (option) closeAppPopovers();
+  });
+}
+
+bindGlobalDropdownBehaviour();
 // ─── Booking Protection ───────────────────────────────────
 // Number of working days (Mon–Fri) from today (inclusive) up to, but not
 // including, the job start date. Weekends are ignored. Bank holidays are not
@@ -6495,6 +6568,7 @@ function getSessionUser() {
 
 // ─── Tab Routing ──────────────────────────────────────────
 function switchTab(tab) {
+  closeAppPopovers();
   document
     .querySelectorAll("[data-tab]")
     .forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tab));
@@ -6706,6 +6780,7 @@ function bindSidebarAccountMenu(slot) {
   toggle.addEventListener("click", (event) => {
     event.stopPropagation();
     const isOpen = !menu.classList.contains("hidden");
+    closeAppPopovers(toggle);
     menu.classList.toggle("hidden", isOpen);
     toggle.setAttribute("aria-expanded", String(!isOpen));
   });
@@ -7343,8 +7418,13 @@ function renderWorkerHome(user) {
   el.querySelectorAll("[data-worker-home-late]").forEach((btn) => {
     btn.addEventListener("click", () => openReportModal(btn.dataset.workerHomeLate));
   });
-  el.querySelector("[data-worker-notifications]")?.addEventListener("click", () => {
-    document.getElementById("workerNotificationPanel")?.classList.toggle("hidden");
+  el.querySelector("[data-worker-notifications]")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const panel = document.getElementById("workerNotificationPanel");
+    const isOpen = !!panel && !panel.classList.contains("hidden");
+    closeAppPopovers(event.currentTarget);
+    panel?.classList.toggle("hidden", isOpen);
+    event.currentTarget.setAttribute("aria-expanded", String(!isOpen));
   });
   el.querySelectorAll("[data-map-job]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
