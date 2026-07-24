@@ -54,6 +54,11 @@
   --card-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
   --card-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.08);
 
+  --motion-fast: 160ms;
+  --motion-med: 220ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-pop: cubic-bezier(0.16, 1, 0.3, 1);
+
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -212,8 +217,27 @@ button.is-loading,
 @media (prefers-reduced-motion: reduce) {
   .skeleton-line,
   .btn-spinner,
-  .photo-card.is-loading::before {
+  .photo-card.is-loading::before,
+  .tab-panel.active,
+  .sidebar-account-menu,
+  .company-project-filter-menu,
+  .worker-notification-panel,
+  .notification-card,
+  .modal-overlay,
+  .modal-overlay > *,
+  .labour-request-modal,
+  .labour-request-sheet,
+  .site-map-overlay,
+  .site-map-sheet,
+  .qr-scan-modal,
+  .qr-scan-sheet {
     animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
   }
 }
 
@@ -461,6 +485,7 @@ button.is-loading,
   }
 
   .sidebar-account-menu {
+    animation: dropdown-enter var(--motion-fast) var(--motion-pop);
     background: var(--surface);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-sm);
@@ -497,6 +522,17 @@ button.is-loading,
   }
 }
 
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* ─── Content Area ─────────────────────────────────────── */
 .content-area {
   flex: 1;
@@ -528,12 +564,57 @@ button.is-loading,
 }
 
 .tab-panel.active {
+  animation: page-enter var(--motion-med) var(--motion-pop);
   display: block;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (min-width: 860px) {
   .tab-panel {
     padding: 28px 32px;
+  }
+}
+
+.jw-card,
+.form-card,
+.worker-card,
+.job-card,
+.match-card,
+.attendance-card,
+.worker-job-card,
+.worker-flow-card,
+.company-project-card,
+.notification-card,
+.settings-card,
+.site-details-card,
+.worker-timesheet-panel,
+.attendance-empty-select {
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease);
+}
+
+@media (hover: hover) {
+  .jw-card:hover,
+  .form-card:hover,
+  .worker-flow-card:hover,
+  .site-details-card:hover,
+  .worker-timesheet-panel:hover,
+  .attendance-empty-select:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-1px);
   }
 }
 
@@ -2726,6 +2807,7 @@ margin-bottom: 12px;
 }
 
 .worker-notification-panel {
+  animation: dropdown-enter var(--motion-fast) var(--motion-pop);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -3125,6 +3207,66 @@ margin-bottom: 12px;
   right: 0;
   top: 0;
   z-index: 1000;
+}
+
+.modal-overlay:not(.hidden),
+.labour-request-modal:not(.hidden),
+.site-map-overlay:not(.hidden),
+.qr-scan-modal {
+  animation: modal-backdrop-enter var(--motion-med) var(--motion-ease);
+}
+
+.modal-overlay.is-closing,
+.labour-request-modal.is-closing,
+.site-map-overlay.is-closing,
+.qr-scan-modal.is-closing {
+  animation: modal-backdrop-exit var(--motion-fast) var(--motion-ease) forwards;
+}
+
+.modal-overlay:not(.hidden) > *,
+.labour-request-modal:not(.hidden) .labour-request-sheet,
+.site-map-overlay:not(.hidden) .site-map-sheet,
+.qr-scan-modal .qr-scan-sheet {
+  animation: modal-sheet-enter var(--motion-med) var(--motion-pop);
+}
+
+.modal-overlay.is-closing > *,
+.labour-request-modal.is-closing .labour-request-sheet,
+.site-map-overlay.is-closing .site-map-sheet,
+.qr-scan-modal.is-closing .qr-scan-sheet {
+  animation: modal-sheet-exit var(--motion-fast) var(--motion-ease) forwards;
+}
+
+@keyframes modal-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-sheet-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
 }
 
 .modal-overlay.hidden { display: none; }
@@ -4178,7 +4320,9 @@ margin-bottom: 12px;
   padding: 10px 18px;
   z-index: 200;
   opacity: 0;
-  transition: all 0.25s ease;
+  transition:
+    opacity var(--motion-med) var(--motion-ease),
+    transform var(--motion-med) var(--motion-ease);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -7724,6 +7868,7 @@ margin-bottom: 12px;
 }
 
 .company-project-filter-menu {
+  animation: dropdown-enter var(--motion-fast) var(--motion-pop);
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
@@ -9975,11 +10120,23 @@ button svg,
 .notification-card {
   --notification-accent: #2563eb;
   align-items: start;
+  animation: notification-enter var(--motion-med) var(--motion-pop);
   border-color: var(--card-border);
   box-shadow: var(--card-shadow);
   gap: var(--space-2);
   grid-template-columns: 18px minmax(0, 1fr);
   padding: var(--space-card);
+}
+
+@keyframes notification-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .notification-card::before {

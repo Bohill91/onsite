@@ -1117,7 +1117,7 @@ function openExtensionModal(jobId) {
 }
 function closeExtensionModal() {
   currentExtensionJobId = null;
-  document.getElementById("extensionModal")?.classList.add("hidden");
+  hideWithMotion(document.getElementById("extensionModal"));
 }
 
 // ─── Digital Job Agreement System ─────────────────────────
@@ -1649,8 +1649,9 @@ function openAgreementModal(agreementId) {
 }
 function closeAgreementModal() {
   currentAgreementId = null;
-  document.getElementById("agreementModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("agreementModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 function handleAgreementAction(action, agreementId) {
   switch (action) {
@@ -1720,8 +1721,9 @@ function openOfferDecisionModal(role, applicationId) {
 
 function closeOfferDecisionModal() {
   currentOfferDecision = null;
-  document.getElementById("offerDecisionModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("offerDecisionModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 
 document
@@ -2252,9 +2254,10 @@ function openCancelBookingModal(jobId) {
 }
 
 function closeCancelBookingModal() {
-  document.getElementById("cancelBookingModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
-  pendingCancelJobId = null;
+  hideWithMotion(document.getElementById("cancelBookingModal"), () => {
+    document.body.style.overflow = "";
+    pendingCancelJobId = null;
+  });
 }
 
 function confirmCancelBooking() {
@@ -2314,8 +2317,9 @@ function openWorkerNoticeModal(jobId) {
 }
 
 function closeWorkerNoticeModal() {
-  document.getElementById("workerNoticeModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("workerNoticeModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 
 function confirmWorkerNotice() {
@@ -2368,8 +2372,9 @@ function openWorkerReleaseModal(jobId) {
 }
 
 function closeWorkerReleaseModal() {
-  document.getElementById("workerReleaseModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("workerReleaseModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 
 function refreshReleaseDateForType() {
@@ -2723,6 +2728,25 @@ function releaseButtonLoading(button) {
   window.setTimeout(() => {
     if (document.body.contains(button)) setButtonLoading(button, false);
   }, 450);
+}
+
+function hideWithMotion(element, afterHide, { remove = false } = {}) {
+  if (!(element instanceof HTMLElement)) {
+    if (typeof afterHide === "function") afterHide();
+    return;
+  }
+  if (element.classList.contains("is-closing")) return;
+  element.classList.add("is-closing");
+  window.setTimeout(() => {
+    element.classList.remove("is-closing");
+    if (remove) {
+      element.remove();
+    } else {
+      element.classList.add("hidden");
+      element.setAttribute("aria-hidden", "true");
+    }
+    if (typeof afterHide === "function") afterHide();
+  }, 170);
 }
 
 function showToast(msg) {
@@ -5240,8 +5264,9 @@ function openProjectTransferModal(jobId) {
 }
 
 function closeProjectTransferModal() {
-  document.getElementById("projectTransferModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("projectTransferModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 
 function createProjectTransferOffer(fromJobId, toJobId, workerId) {
@@ -5314,8 +5339,9 @@ function openShiftChangeModal(jobId) {
 }
 
 function closeShiftChangeModal() {
-  document.getElementById("shiftChangeModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(document.getElementById("shiftChangeModal"), () => {
+    document.body.style.overflow = "";
+  });
 }
 
 function createShiftChangeOffer(jobId, fields) {
@@ -6151,9 +6177,11 @@ function prepareLabourRequestForm({ focus = false } = {}) {
 
 function hideLabourRequestModal() {
   const modal = document.getElementById("labourRequestModal");
-  modal?.classList.add("hidden");
-  modal?.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
+  if (!modal || modal.classList.contains("hidden")) {
+    document.body.classList.remove("modal-open");
+    return;
+  }
+  hideWithMotion(modal, () => document.body.classList.remove("modal-open"));
 }
 
 function openLabourRequestPage({ focus = true } = {}) {
@@ -6201,9 +6229,7 @@ function closeLabourRequestWorkflow() {
     formWrap.classList.add("hidden");
     returnPoint.parentElement.insertBefore(formWrap, returnPoint.nextSibling);
   }
-  modal?.classList.add("hidden");
-  modal?.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
+  hideWithMotion(modal, () => document.body.classList.remove("modal-open"));
 }
 
 function bindLabourRequestWorkflow(scope = document) {
@@ -10749,10 +10775,10 @@ function openCompanyWorkerProfileModal(workerId, jobId = "") {
   document.body.appendChild(modal);
   modal.querySelector("[data-company-worker-profile-close]")?.addEventListener(
     "click",
-    () => modal.remove(),
+    () => hideWithMotion(modal, null, { remove: true }),
   );
   modal.addEventListener("click", (event) => {
-    if (event.target === modal) modal.remove();
+    if (event.target === modal) hideWithMotion(modal, null, { remove: true });
   });
 }
 
@@ -12479,7 +12505,9 @@ function openWorkerPlannedAbsenceCalendar(workerId) {
 }
 
 function closeWorkerPlannedAbsenceCalendar() {
-  document.getElementById("workerPlannedAbsenceModal")?.remove();
+  hideWithMotion(document.getElementById("workerPlannedAbsenceModal"), null, {
+    remove: true,
+  });
 }
 
 // ─── Job Cards ────────────────────────────────────────────
@@ -13357,8 +13385,9 @@ function openSiteMap(jobId) {
 }
 
 function closeSiteMap() {
-  siteMapModal.classList.add("hidden");
-  document.body.style.overflow = "";
+  hideWithMotion(siteMapModal, () => {
+    document.body.style.overflow = "";
+  });
 }
 
 document.getElementById("closeMapBtn")?.addEventListener("click", closeSiteMap);
@@ -14241,7 +14270,9 @@ function openProjectSignInPrintSheet(jobId) {
 }
 
 function closeQrRegenerationConfirm() {
-  document.getElementById("qrRegenerationConfirmModal")?.remove();
+  hideWithMotion(document.getElementById("qrRegenerationConfirmModal"), null, {
+    remove: true,
+  });
 }
 
 function openQrRegenerationConfirm(jobId) {
@@ -15123,7 +15154,9 @@ function refreshWorkerAttCard(uid, workerObj) {
 }
 
 function closeWorkerQrScanner() {
-  document.getElementById("workerQrScanModal")?.remove();
+  hideWithMotion(document.getElementById("workerQrScanModal"), null, {
+    remove: true,
+  });
 }
 
 function openWorkerQrScanner(uid, workerObj) {
@@ -16404,9 +16437,10 @@ function openDisputeModal(recordId) {
 }
 
 function closeDisputeModal() {
-  document.getElementById("disputeModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
-  currentDisputeRecordId = null;
+  hideWithMotion(document.getElementById("disputeModal"), () => {
+    document.body.style.overflow = "";
+    currentDisputeRecordId = null;
+  });
 }
 
 async function submitDispute() {
@@ -16480,9 +16514,10 @@ function openReportModal(uid) {
 }
 
 function closeReportModal() {
-  document.getElementById("reportModal")?.classList.add("hidden");
-  document.body.style.overflow = "";
-  currentReportWorkerId = null;
+  hideWithMotion(document.getElementById("reportModal"), () => {
+    document.body.style.overflow = "";
+    currentReportWorkerId = null;
+  });
 }
 
 function submitReport() {
