@@ -9700,6 +9700,122 @@ body.modal-open {
   line-height: 1.2;
 }
 
+/* ─── Notifications Card Polish ────────────────────────── */
+.notification-group {
+  gap: var(--space-section);
+}
+
+.notification-card-list {
+  gap: var(--space-section);
+}
+
+.notification-card {
+  --notification-accent: #2563eb;
+  align-items: start;
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+  gap: var(--space-2);
+  grid-template-columns: 18px minmax(0, 1fr);
+  padding: var(--space-card);
+}
+
+.notification-card::before {
+  background: var(--notification-accent);
+  border-radius: 999px;
+  content: "";
+  inset: var(--space-2) auto var(--space-2) 0;
+  opacity: 0.22;
+  position: absolute;
+  width: 3px;
+}
+
+.notification-card:hover,
+.notification-card:focus-visible {
+  border-color: rgba(249, 115, 22, 0.32);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.notification-card.critical { --notification-accent: #ef4444; }
+.notification-card.warning { --notification-accent: #f97316; }
+.notification-card.success { --notification-accent: #16a34a; }
+.notification-card.info { --notification-accent: #2563eb; }
+
+.notification-priority-dot {
+  background: var(--notification-accent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--notification-accent) 14%, transparent),
+    0 2px 8px color-mix(in srgb, var(--notification-accent) 22%, transparent);
+  height: 10px;
+  margin-top: 6px;
+  width: 10px;
+}
+
+.notification-card-body {
+  gap: var(--space-section);
+}
+
+.notification-card-title {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.notification-description {
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  gap: var(--space-1);
+  max-width: 760px;
+}
+
+.notification-next-action {
+  align-items: start;
+  background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
+  border-color: var(--card-divider);
+  border-left: 3px solid color-mix(in srgb, var(--notification-accent) 55%, var(--border-light));
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+.notification-next-action span {
+  color: var(--ink-3);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.notification-next-action strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.notification-action-btn {
+  justify-self: end;
+  margin-top: calc(var(--space-1) * -0.5);
+}
+
+.notification-card time {
+  border-top: 1px solid var(--card-divider);
+  display: block;
+  padding-top: var(--space-1);
+}
+
+.notification-card.unread {
+  border-color: color-mix(in srgb, var(--notification-accent) 34%, var(--card-border));
+}
+
+.notification-unread-dot {
+  background: var(--notification-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--notification-accent) 12%, transparent);
+}
+
+@media (max-width: 720px) {
+  .notification-card {
+    padding: var(--space-card-mobile);
+  }
+
+  .notification-action-btn {
+    justify-self: stretch;
+  }
+}
+
 /* ─── Shared Button Interaction Polish ─────────────────── */
 button,
 [role="button"],
