@@ -2684,7 +2684,32 @@ function escapeHtml(value) {
 }
 
 function emptyState(msg) {
-  return `<div class="empty-state">${msg}</div>`;
+  return guidedEmptyStateHTML({
+    title: msg,
+    body: "When there is something to review, it will appear here automatically.",
+  });
+}
+
+function guidedEmptyStateHTML({
+  kicker = "Empty State",
+  title = "Nothing to show yet",
+  body = "There is nothing to review right now.",
+  actionLabel = "",
+  actionAttr = "",
+} = {}) {
+  return `<div class="empty-state guided-empty-state">
+    <div class="guided-empty-icon" aria-hidden="true"></div>
+    <div>
+      <span class="guided-empty-kicker">${escapeHtml(kicker)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(body)}</p>
+    </div>
+    ${
+      actionLabel && actionAttr
+        ? `<button class="secondary-btn guided-empty-action" type="button" ${actionAttr}>${escapeHtml(actionLabel)}</button>`
+        : ""
+    }
+  </div>`;
 }
 
 function scrollAppToTop({ smooth = true } = {}) {
@@ -9084,14 +9109,13 @@ function companyProjectSortHTML() {
 }
 
 function companyProjectEmptyStateHTML(message = "Create your first labour request and it will appear here as a Live Project.") {
-  return `<div class="company-empty-card">
-    <div>
-      <span class="company-project-kicker">No Projects</span>
-      <strong>No live projects yet</strong>
-      <span>${escapeHtml(message)}</span>
-    </div>
-    <button class="ch-request-btn" type="button" data-company-request-labour>New Labour Request</button>
-  </div>`;
+  return guidedEmptyStateHTML({
+    kicker: "No Projects",
+    title: "No live projects yet",
+    body: message,
+    actionLabel: "New Labour Request",
+    actionAttr: "data-company-request-labour",
+  });
 }
 
 function companyProjectSummary(job, user) {
@@ -9198,6 +9222,75 @@ function companyDashboardSummary(user) {
   };
 }
 
+function companyDashboardFocusHTML(summary, user) {
+  const urgentProjects = summary.summaries
+    .map((projectSummary) => {
+      const health = calculateProjectHealth(projectSummary.job, projectSummary);
+      return { summary: projectSummary, health };
+    })
+    .filter((item) => item.health.requiresAction)
+    .sort((a, b) => projectDateValue(a.summary.job.start) - projectDateValue(b.summary.job.start));
+  const upcomingProjects = summary.summaries
+    .filter((projectSummary) => {
+      const days = projectStartDays(projectSummary.job);
+      return days !== null && days >= 0 && days <= 7;
+    })
+    .sort((a, b) => projectDateValue(a.job.start) - projectDateValue(b.job.start));
+  const unread = user?.type === "company" ? companyUnreadNotificationCount() : 0;
+  const focusStats = [
+    { label: "Projects requiring action", value: urgentProjects.length, tone: urgentProjects.length ? "warn" : "ok" },
+    { label: "Open labour places", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "ok" },
+    { label: "Attendance issues today", value: summary.lateReports + summary.replacements, tone: summary.lateReports + summary.replacements ? "warn" : "ok" },
+    { label: "Unread notifications", value: unread, tone: unread ? "info" : "ok" },
+  ];
+  const nextAction = urgentProjects[0]
+    ? {
+        title: `${companyProjectTitle(urgentProjects[0].summary.job)} needs attention`,
+        body: urgentProjects[0].health.primaryReason || "Review the project health guidance before the start date.",
+        action: "Open the project and review the labour requirements.",
+      }
+    : summary.pendingActions
+      ? {
+          title: "Workers are waiting for review",
+          body: `${summary.pendingActions} offer or approval item${summary.pendingActions === 1 ? "" : "s"} need a company decision.`,
+          action: "Open the relevant project and review pending workers.",
+        }
+      : upcomingProjects[0]
+        ? {
+            title: `${companyProjectTitle(upcomingProjects[0].job)} starts soon`,
+            body: upcomingProjects[0].job.start ? `Starts ${formatDateOnly(upcomingProjects[0].job.start)}.` : "Start date is approaching.",
+            action: "Check site information, QR sign-in and pre-start documents.",
+          }
+        : {
+            title: "Everything looks steady today",
+            body: summary.activeProjects
+              ? "No urgent project health, attendance or approval items are currently showing."
+              : "Create a labour request to start building your first live project.",
+            action: summary.activeProjects ? "Keep monitoring live projects from the cards below." : "Use Request Labour to create a project.",
+          };
+
+  return `<section class="company-focus-card jw-card">
+    <div class="company-focus-head">
+      <div>
+        <p class="company-home-kicker">TODAY'S FOCUS</p>
+        <h3>${escapeHtml(nextAction.title)}</h3>
+        <p>${escapeHtml(nextAction.body)}</p>
+      </div>
+      <span class="company-focus-guidance">${escapeHtml(nextAction.action)}</span>
+    </div>
+    <div class="company-focus-stats">
+      ${focusStats
+        .map(
+          (item) => `<div class="company-focus-stat ${item.tone}">
+            <strong>${item.value}</strong>
+            <span>${escapeHtml(item.label)}</span>
+          </div>`,
+        )
+        .join("")}
+    </div>
+  </section>`;
+}
+
 function projectDateValue(value, fallback = Number.MAX_SAFE_INTEGER) {
   if (!value) return fallback;
   const time = new Date(value).getTime();
@@ -9274,6 +9367,19 @@ function mostUnderfilledRequirement(summary) {
 
 function workerLabel(count, fallback = "worker") {
   return `${count} ${fallback}${count === 1 ? "" : "s"}`;
+}
+
+function pluralizeTradeLabel(trade, count = 2) {
+  const label = String(trade || "worker").trim();
+  if (count === 1) return label;
+  const lower = label.toLowerCase();
+  if (lower === "carpentry") return "carpenters";
+  if (lower === "electrical") return "electrical workers";
+  if (lower === "plumbing") return "plumbers";
+  if (lower === "groundworks") return "groundworkers";
+  if (/[sxz]$/i.test(label) || /(ch|sh)$/i.test(label)) return `${label}es`;
+  if (/[^aeiou]y$/i.test(label)) return `${label.slice(0, -1)}ies`;
+  return `${label}s`;
 }
 
 function calculateProjectHealth(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
@@ -10502,6 +10608,7 @@ function renderContractorHome(user) {
       </header>
       <div class="request-labour-page-body">
         <div class="jw-form">
+          ${companyDashboardFocusHTML(summary, user)}
           <section class="company-dashboard-filter-card jw-card">
             <div class="company-project-search-card-head">
               <span>Search projects</span>
@@ -11449,7 +11556,11 @@ function notificationFeedHTML(groups) {
       </div>
     </section>`)
     .join("");
-  return html || `<section class="jw-card"><div class="att-empty">No notifications.</div></section>`;
+  return html || `<section class="jw-card">${guidedEmptyStateHTML({
+    kicker: "Notifications",
+    title: "No notifications",
+    body: "Action items, attendance events and project updates will appear here when they need your attention.",
+  })}</section>`;
 }
 
 function notificationCardHTML(view) {
@@ -12760,7 +12871,7 @@ function matchCard(job) {
               .slice(0, 5)
               .map((w, i) => matchWorkerRow(w, i))
               .join("")
-          : `<div class="empty-state" style="border:none;border-radius:0;">No available ${escapeHtml(job.trade.toLowerCase())}s found.</div>`
+          : `<div class="empty-state" style="border:none;border-radius:0;">No available ${escapeHtml(pluralizeTradeLabel(job.trade).toLowerCase())} found.</div>`
       }
     </div>
   </article>`;
@@ -13995,7 +14106,15 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
     ? `<div class="company-project-grid attendance-project-list">
         ${visibleProjects.map((job) => attendanceProjectCardHTML(job, user)).join("")}
       </div>`
-    : `<div class="att-empty">${allProjects.length ? "No projects match that search." : "No live projects yet. Create a labour request first."}</div>`;
+    : guidedEmptyStateHTML({
+        kicker: allProjects.length ? "No Matches" : "Attendance",
+        title: allProjects.length ? "No projects match your filters" : "No projects ready for attendance",
+        body: allProjects.length
+          ? "Adjust the search, filter or sort controls to find another project."
+          : "Create a labour request first. Once a project exists, its sign-in QR and attendance roster will appear here.",
+        actionLabel: allProjects.length ? "" : "Request Labour",
+        actionAttr: allProjects.length ? "" : "data-company-request-labour",
+      });
   tab.innerHTML = `
     <section class="request-labour-page attendance-page">
       <header class="request-labour-page-head attendance-page-head">
@@ -15520,6 +15639,7 @@ function renderAttendance() {
     const badge = document.getElementById("attTodayBadge");
     if (badge) badge.textContent = formatAttDate(todayDateStr());
     bindCompanyAttendanceProjectControls(document.getElementById("tab-attendance"));
+    bindLabourRequestWorkflow(document.getElementById("tab-attendance"));
     renderAttendanceDemoControls();
     if (!selectedProject) return;
   }
