@@ -7823,7 +7823,7 @@ margin-bottom: 12px;
 
 .company-focus-card {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .company-focus-head {
@@ -7850,16 +7850,12 @@ margin-bottom: 12px;
   max-width: 62ch;
 }
 
-.company-focus-guidance {
-  background: linear-gradient(180deg, #fff, var(--surface-2));
-  border: 1px solid var(--card-divider);
-  border-left: 3px solid var(--orange);
-  border-radius: var(--radius-sm);
-  color: var(--ink-2);
-  font-size: 0.84rem;
-  font-weight: 700;
-  line-height: 1.42;
-  padding: 12px;
+.company-focus-primary-action {
+  align-self: start;
+  justify-self: end;
+  min-height: 38px;
+  padding: 9px 13px;
+  white-space: nowrap;
 }
 
 .company-focus-stats {
@@ -7909,6 +7905,137 @@ margin-bottom: 12px;
 
 .company-focus-stat.ok strong {
   color: var(--green-text);
+}
+
+.company-control-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+}
+
+.company-control-panel {
+  background: linear-gradient(180deg, #fff, var(--surface-2));
+  border: 1px solid var(--card-divider);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+}
+
+.company-control-panel-head,
+.company-action-item,
+.company-upcoming-item {
+  align-items: center;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.company-control-panel-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.company-control-panel-head small {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.company-control-list {
+  display: grid;
+  gap: 8px;
+}
+
+.company-action-item {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.company-action-dot {
+  background: var(--orange);
+  border-radius: 999px;
+  height: 9px;
+  width: 9px;
+}
+
+.company-action-item.critical .company-action-dot {
+  background: #ef4444;
+}
+
+.company-action-item.warning .company-action-dot {
+  background: #f59e0b;
+}
+
+.company-action-item.info .company-action-dot {
+  background: #2563eb;
+}
+
+.company-action-item strong,
+.company-upcoming-item strong,
+.company-control-empty strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.company-action-item p {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.company-action-item small,
+.company-upcoming-item small,
+.company-control-empty span {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.73rem;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.company-action-btn {
+  font-size: 0.78rem;
+  min-height: 34px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.company-upcoming-item {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
+  width: 100%;
+}
+
+.company-upcoming-item:hover,
+.company-upcoming-item:focus-visible {
+  border-color: rgba(249, 115, 22, 0.34);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.company-upcoming-item > span:last-child {
+  text-align: right;
+}
+
+.company-control-empty {
+  background: var(--surface);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
 }
 
 .company-home-kicker {
@@ -8200,6 +8327,10 @@ body.modal-open {
     grid-template-columns: 1fr;
   }
 
+  .company-focus-primary-action {
+    justify-self: start;
+  }
+
   .company-focus-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: var(--space-2);
@@ -8211,6 +8342,20 @@ body.modal-open {
 
   .company-focus-stat:not(:last-child) {
     border-right: 0;
+  }
+
+  .company-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-action-item {
+    align-items: flex-start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .company-action-btn {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .guided-empty-state {

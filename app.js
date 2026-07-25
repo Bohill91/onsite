@@ -9336,63 +9336,20 @@ function companyDashboardSummary(user) {
 }
 
 function companyDashboardFocusHTML(summary, user) {
-  const urgentProjects = summary.summaries
-    .map((projectSummary) => {
-      const health = calculateProjectHealth(projectSummary.job, projectSummary);
-      return { summary: projectSummary, health };
-    })
-    .filter((item) => item.health.requiresAction)
-    .sort((a, b) => projectDateValue(a.summary.job.start) - projectDateValue(b.summary.job.start));
-  const upcomingProjects = summary.summaries
-    .filter((projectSummary) => {
-      const days = projectStartDays(projectSummary.job);
-      return days !== null && days >= 0 && days <= 7;
-    })
-    .sort((a, b) => projectDateValue(a.job.start) - projectDateValue(b.job.start));
-  const unread = user?.type === "company" ? companyUnreadNotificationCount() : 0;
-  const focusStats = [
-    { label: "Projects requiring action", value: urgentProjects.length, tone: urgentProjects.length ? "warn" : "ok" },
-    { label: "Open labour places", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "ok" },
-    { label: "Attendance issues today", value: summary.lateReports + summary.replacements, tone: summary.lateReports + summary.replacements ? "warn" : "ok" },
-    { label: "Unread notifications", value: unread, tone: unread ? "info" : "ok" },
-  ];
-  const nextAction = urgentProjects[0]
-    ? {
-        title: `${companyProjectTitle(urgentProjects[0].summary.job)} needs attention`,
-        body: urgentProjects[0].health.primaryReason || "Review the project health guidance before the start date.",
-        action: "Open the project and review the labour requirements.",
-      }
-    : summary.pendingActions
-      ? {
-          title: "Workers are waiting for review",
-          body: `${summary.pendingActions} offer or approval item${summary.pendingActions === 1 ? "" : "s"} need a company decision.`,
-          action: "Open the relevant project and review pending workers.",
-        }
-      : upcomingProjects[0]
-        ? {
-            title: `${companyProjectTitle(upcomingProjects[0].job)} starts soon`,
-            body: upcomingProjects[0].job.start ? `Starts ${formatDateOnly(upcomingProjects[0].job.start)}.` : "Start date is approaching.",
-            action: "Check site information, QR sign-in and pre-start documents.",
-          }
-        : {
-            title: "Everything looks steady today",
-            body: summary.activeProjects
-              ? "No urgent project health, attendance or approval items are currently showing."
-              : "Create a labour request to start building your first live project.",
-            action: summary.activeProjects ? "Keep monitoring live projects from the cards below." : "Use Request Labour to create a project.",
-          };
-
+  const focus = companyDashboardFocusModel(summary, user);
   return `<section class="company-focus-card jw-card">
     <div class="company-focus-head">
       <div>
         <p class="company-home-kicker">TODAY'S FOCUS</p>
-        <h3>${escapeHtml(nextAction.title)}</h3>
-        <p>${escapeHtml(nextAction.body)}</p>
+        <h3>${escapeHtml(focus.primary.title)}</h3>
+        <p>${escapeHtml(focus.primary.body)}</p>
       </div>
-      <span class="company-focus-guidance">${escapeHtml(nextAction.action)}</span>
+      <button class="secondary-btn company-focus-primary-action" type="button" ${focus.primary.actionAttr}>
+        ${escapeHtml(focus.primary.actionLabel)}
+      </button>
     </div>
     <div class="company-focus-stats">
-      ${focusStats
+      ${focus.stats
         .map(
           (item) => `<div class="company-focus-stat ${item.tone}">
             <strong>${item.value}</strong>
@@ -9401,7 +9358,250 @@ function companyDashboardFocusHTML(summary, user) {
         )
         .join("")}
     </div>
+    <div class="company-control-grid">
+      <section class="company-control-panel company-control-panel--wide">
+        <div class="company-control-panel-head">
+          <span class="company-home-kicker">Action Required</span>
+          <small>${focus.actionItems.length ? `${focus.actionItems.length} item${focus.actionItems.length === 1 ? "" : "s"}` : "Clear"}</small>
+        </div>
+        <div class="company-control-list">
+          ${focus.actionItems.length
+            ? focus.actionItems.map(companyDashboardActionItemHTML).join("")
+            : `<div class="company-control-empty">
+                <strong>No urgent actions today</strong>
+                <span>Project health, attendance and approval items are currently in order.</span>
+              </div>`}
+        </div>
+      </section>
+      <section class="company-control-panel">
+        <div class="company-control-panel-head">
+          <span class="company-home-kicker">Upcoming Starts</span>
+          <small>Next 7 days</small>
+        </div>
+        <div class="company-control-list">
+          ${focus.upcoming.length
+            ? focus.upcoming.map(companyDashboardUpcomingItemHTML).join("")
+            : `<div class="company-control-empty">
+                <strong>No starts due this week</strong>
+                <span>Upcoming project starts will appear here automatically.</span>
+              </div>`}
+        </div>
+      </section>
+    </div>
   </section>`;
+}
+
+function companyDashboardFocusModel(summary, user) {
+  const healthItems = summary.summaries
+    .map((projectSummary) => {
+      const health = calculateProjectHealth(projectSummary.job, projectSummary);
+      return { summary: projectSummary, health };
+    })
+    .filter((item) => item.health.requiresAction || item.health.level === "matching")
+    .sort((a, b) => projectDateValue(a.summary.job.start) - projectDateValue(b.summary.job.start));
+  const upcomingProjects = summary.summaries
+    .filter((projectSummary) => {
+      const days = projectStartDays(projectSummary.job);
+      return days !== null && days >= 0 && days <= 7;
+    })
+    .sort((a, b) => projectDateValue(a.job.start) - projectDateValue(b.job.start));
+  const unread = user?.type === "company" ? companyUnreadNotificationCount() : 0;
+  const urgentProjects = healthItems.filter((item) => item.health.requiresAction);
+  const attendanceIssues = summary.summaries
+    .map((projectSummary) => {
+      const notSignedIn = Math.max(0, projectSummary.expectedToday - projectSummary.signedInToday);
+      const total = projectSummary.lateReports + projectSummary.noShows + notSignedIn;
+      return { summary: projectSummary, total, notSignedIn };
+    })
+    .filter((item) => item.total > 0 && projectStartDays(item.summary.job) !== null && projectStartDays(item.summary.job) < 0)
+    .sort((a, b) => b.total - a.total);
+  const approvalItems = summary.summaries
+    .map((projectSummary) => ({
+      summary: projectSummary,
+      total: projectSummary.pendingOffers.length + projectSummary.reviewWorkers.length,
+    }))
+    .filter((item) => item.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const shortages = summary.summaries
+    .map((projectSummary) => {
+      const shortage = mostUnderfilledRequirement(projectSummary);
+      return { summary: projectSummary, shortage };
+    })
+    .filter((item) => item.shortage)
+    .sort((a, b) => {
+      const dateDiff = projectDateValue(a.summary.job.start) - projectDateValue(b.summary.job.start);
+      return dateDiff || b.shortage.stats.remaining - a.shortage.stats.remaining;
+    });
+  const actionableNotifications = companyVisibleNotifications(user)
+    .map((notification) => notificationViewModel(notification))
+    .filter((view) => view.unread && view.requiresAction)
+    .slice(0, 3);
+  const focusStats = [
+    { label: "Projects needing action", value: urgentProjects.length, tone: urgentProjects.length ? "warn" : "ok" },
+    { label: "Open labour places", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "ok" },
+    { label: "Attendance issues today", value: attendanceIssues.reduce((sum, item) => sum + item.total, 0), tone: attendanceIssues.length ? "warn" : "ok" },
+    { label: "Unread notifications", value: unread, tone: unread ? "info" : "ok" },
+  ];
+  const priorityProjectIds = new Set(urgentProjects.map((item) => item.summary.job.id));
+  const actionItems = [
+    ...urgentProjects.slice(0, 2).map((item) => companyDashboardHealthAction(item)),
+    ...attendanceIssues.slice(0, 2).map((item) => companyDashboardAttendanceAction(item)),
+    ...approvalItems.slice(0, 2).map((item) => companyDashboardApprovalAction(item)),
+    ...actionableNotifications.slice(0, 2).map((view) => companyDashboardNotificationAction(view)),
+    ...shortages
+      .filter((item) => !priorityProjectIds.has(item.summary.job.id))
+      .slice(0, 2)
+      .map((item) => companyDashboardShortageAction(item)),
+  ].slice(0, 5);
+  const nextAction = urgentProjects[0]
+    ? {
+        title: `${companyProjectTitle(urgentProjects[0].summary.job)} needs attention`,
+        body: urgentProjects[0].health.primaryReason || "Review the project health guidance before the start date.",
+        actionLabel: "Review Labour",
+        actionAttr: `data-company-project-open-section="${escapeHtml(urgentProjects[0].summary.job.id)}" data-company-section-target="requirements"`,
+      }
+    : attendanceIssues[0]
+      ? {
+          title: `${companyProjectTitle(attendanceIssues[0].summary.job)} has attendance issues`,
+          body: `${attendanceIssues[0].total} attendance item${attendanceIssues[0].total === 1 ? "" : "s"} need checking today.`,
+          actionLabel: "Open Attendance",
+          actionAttr: `data-dashboard-attendance-project="${escapeHtml(attendanceIssues[0].summary.job.id)}"`,
+        }
+    : summary.pendingActions
+      ? {
+          title: "Workers are waiting for review",
+          body: `${summary.pendingActions} offer or approval item${summary.pendingActions === 1 ? "" : "s"} need a company decision.`,
+          actionLabel: "Review Workers",
+          actionAttr: approvalItems[0]
+            ? `data-company-project-open-section="${escapeHtml(approvalItems[0].summary.job.id)}" data-company-section-target="workers"`
+            : `data-empty-tab="dashboard"`,
+        }
+      : upcomingProjects[0]
+        ? {
+            title: `${companyProjectTitle(upcomingProjects[0].job)} starts soon`,
+            body: upcomingProjects[0].job.start ? `Starts ${formatDateOnly(upcomingProjects[0].job.start)}.` : "Start date is approaching.",
+            actionLabel: "Check Setup",
+            actionAttr: `data-company-project-open-section="${escapeHtml(upcomingProjects[0].job.id)}" data-company-section-target="site"`,
+          }
+        : {
+            title: "Everything looks steady today",
+            body: summary.activeProjects
+              ? "No urgent project health, attendance or approval items are currently showing."
+              : "Create a labour request to start building your first live project.",
+            actionLabel: summary.activeProjects ? "View Projects" : "Request Labour",
+            actionAttr: summary.activeProjects ? `data-empty-tab="dashboard"` : `data-empty-tab="request-labour"`,
+          };
+  return {
+    primary: nextAction,
+    stats: focusStats,
+    actionItems: dedupeDashboardActions(actionItems),
+    upcoming: upcomingProjects.slice(0, 4),
+  };
+}
+
+function dedupeDashboardActions(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.jobId || ""}:${item.title}:${item.actionLabel}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function companyDashboardHealthAction(item) {
+  return {
+    tone: item.health.level === "urgent" ? "critical" : "warning",
+    title: `${companyProjectTitle(item.summary.job)} is ${item.health.label}`,
+    body: item.health.primaryReason || "Project health needs review.",
+    meta: item.summary.job.jobNumber || item.summary.job.location || "Project",
+    actionLabel: "Review Labour",
+    actionAttr: `data-company-project-open-section="${escapeHtml(item.summary.job.id)}" data-company-section-target="requirements"`,
+    jobId: item.summary.job.id,
+  };
+}
+
+function companyDashboardAttendanceAction(item) {
+  const parts = [];
+  if (item.summary.lateReports) parts.push(`${item.summary.lateReports} late report${item.summary.lateReports === 1 ? "" : "s"}`);
+  if (item.summary.noShows) parts.push(`${item.summary.noShows} no-show${item.summary.noShows === 1 ? "" : "s"}`);
+  if (item.notSignedIn) parts.push(`${item.notSignedIn} not signed in`);
+  return {
+    tone: item.summary.noShows ? "critical" : "warning",
+    title: `${companyProjectTitle(item.summary.job)} attendance needs checking`,
+    body: parts.join(" · ") || "Attendance requires review today.",
+    meta: "Today",
+    actionLabel: "Open Attendance",
+    actionAttr: `data-dashboard-attendance-project="${escapeHtml(item.summary.job.id)}"`,
+    jobId: item.summary.job.id,
+  };
+}
+
+function companyDashboardApprovalAction(item) {
+  return {
+    tone: "info",
+    title: `${companyProjectTitle(item.summary.job)} has workers to review`,
+    body: `${item.total} pending offer or worker approval item${item.total === 1 ? "" : "s"}.`,
+    meta: item.summary.job.jobNumber || "Worker approvals",
+    actionLabel: "Review Workers",
+    actionAttr: `data-company-project-open-section="${escapeHtml(item.summary.job.id)}" data-company-section-target="workers"`,
+    jobId: item.summary.job.id,
+  };
+}
+
+function companyDashboardNotificationAction(view) {
+  const n = view.notification;
+  return {
+    tone: view.priority === "critical" ? "critical" : "warning",
+    title: view.title,
+    body: view.copy.reason || "Notification needs attention.",
+    meta: view.createdLabel,
+    actionLabel: view.action.label,
+    actionAttr: `data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}"`,
+    jobId: n.jobId || "",
+  };
+}
+
+function companyDashboardShortageAction(item) {
+  const req = item.shortage.req;
+  const stats = item.shortage.stats;
+  return {
+    tone: "warning",
+    title: `${stats.remaining} ${pluralizeTradeLabel(req.trade || "worker", stats.remaining)} still required`,
+    body: `${companyProjectTitle(item.summary.job)} still has open labour demand.`,
+    meta: item.summary.job.start ? `Starts ${formatDateOnly(item.summary.job.start)}` : "Start date TBC",
+    actionLabel: "Review Requirement",
+    actionAttr: `data-company-project-open-section="${escapeHtml(item.summary.job.id)}" data-company-section-target="requirements"`,
+    jobId: item.summary.job.id,
+  };
+}
+
+function companyDashboardActionItemHTML(item) {
+  return `<article class="company-action-item ${escapeHtml(item.tone)}">
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <div>
+      <strong>${escapeHtml(item.title)}</strong>
+      <p>${escapeHtml(item.body)}</p>
+      <small>${escapeHtml(item.meta || "")}</small>
+    </div>
+    <button class="secondary-btn company-action-btn" type="button" ${item.actionAttr}>${escapeHtml(item.actionLabel)}</button>
+  </article>`;
+}
+
+function companyDashboardUpcomingItemHTML(projectSummary) {
+  const days = projectStartDays(projectSummary.job);
+  const label = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days} days`;
+  const missing = projectSummary.openRoles > 0 ? `${projectSummary.openRoles} open` : "Fully filled";
+  return `<button class="company-upcoming-item" type="button" data-company-project-open-section="${escapeHtml(projectSummary.job.id)}" data-company-section-target="overview">
+    <span>
+      <strong>${escapeHtml(companyProjectTitle(projectSummary.job))}</strong>
+      <small>${escapeHtml(projectSummary.job.jobNumber || projectSummary.job.location || "Project")}</small>
+    </span>
+    <span>
+      <strong>${escapeHtml(label)}</strong>
+      <small>${escapeHtml(missing)}</small>
+    </span>
+  </button>`;
 }
 
 function projectDateValue(value, fallback = Number.MAX_SAFE_INTEGER) {
@@ -10798,6 +10998,7 @@ function renderContractorHome(user) {
   bindMobileDailyJobButtons(el);
   bindLabourAdjustButtons(el);
   bindCompanyProjectDashboardButtons(el);
+  bindCompanyNotificationActions(el);
   bindCompanyProjectSearch(el);
 }
 
@@ -11326,6 +11527,26 @@ function bindCompanyProjectDashboardButtons(scope) {
       activeCompanyProjectEditId = "";
       resetProjectEditMap();
       activeCompanyProjectSection = "overview";
+      render();
+      scrollAppToTop();
+    });
+  });
+  scope.querySelectorAll("[data-company-project-open-section]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      activeCompanyProjectId = btn.dataset.companyProjectOpenSection || "";
+      activeCompanyProjectEditId = "";
+      activeCompanyProjectSection = btn.dataset.companySectionTarget || "overview";
+      resetProjectEditMap();
+      render();
+      scrollAppToTop();
+    });
+  });
+  scope.querySelectorAll("[data-dashboard-attendance-project]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      switchTab("attendance");
+      navigateToAttendanceProject(btn.dataset.dashboardAttendanceProject || "");
       render();
       scrollAppToTop();
     });
