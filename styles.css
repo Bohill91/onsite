@@ -11311,3 +11311,400 @@ button[aria-disabled="true"],
     padding: 18px 15px;
   }
 }
+
+/* ─── Consistency Audit Refinements ────────────────────── */
+.auth-card,
+.auth-panel,
+.success-card,
+.settings-card,
+.stat-card,
+.worker-card,
+.job-card,
+.match-card,
+.form-card,
+.photo-card,
+.worker-status-card,
+.worker-job-card,
+.wsa-card,
+.wh-signin-panel,
+.worker-notification-panel,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.ts-summary,
+.ts-rows,
+.planned-calendar-row,
+.prof-section,
+.attendance-card,
+.wh-offer-card,
+.wh-offer-history,
+.cancelled-card,
+.qr-panel,
+.attendance-demo-panel,
+.attendance-demo-summary,
+.attendance-live-overview,
+.attendance-live-stat,
+.attendance-history-card,
+.attendance-project-card,
+.attendance-empty-select,
+.company-control-panel,
+.company-action-item,
+.company-upcoming-item,
+.company-command-card,
+.company-issue-card,
+.company-worker-card,
+.company-empty-card,
+.company-project-card,
+.company-project-section,
+.notification-group,
+.notification-card,
+.notification-next-action,
+.jw-card,
+.jw-subcard,
+.jw-conditional,
+.jw-pricing-panel,
+.jw-price-row,
+.jw-req-card,
+.jw-note,
+.site-details-card,
+.preferred-worker-choice,
+.preferred-worker-empty,
+.prestart-panel,
+.prestart-company-panel,
+.prestart-project-card,
+.prestart-doc-row,
+.mobile-day-panel,
+.wh-stat-card,
+.wh-booking-card,
+.dupe-card,
+.ext-card,
+.dispute-card,
+.agr-hist-row,
+.agr-overview,
+.doc-row,
+.bill-inv-row,
+.pay-sum-card,
+.pay-company-card,
+.pay-inv-card,
+.pay-line,
+.project-edit-photo-card {
+  border-color: var(--card-border);
+  border-radius: var(--card-radius);
+}
+
+.auth-card,
+.success-card,
+.settings-card,
+.stat-card,
+.worker-card,
+.job-card,
+.match-card,
+.form-card,
+.photo-card,
+.worker-status-card,
+.worker-job-card,
+.wsa-card,
+.worker-daily-card,
+.worker-flow-card,
+.worker-timesheet-panel,
+.prof-section,
+.attendance-card,
+.qr-panel,
+.attendance-history-card,
+.attendance-project-card,
+.company-project-card,
+.company-project-section,
+.notification-group,
+.notification-card,
+.jw-card,
+.prestart-panel,
+.prestart-company-panel,
+.mobile-day-panel,
+.doc-row,
+.bill-inv-row,
+.pay-line {
+  box-shadow: var(--card-shadow);
+}
+
+.activity-item,
+.worker-notification-row,
+.ts-row,
+.dd-row,
+.att-worker-row,
+.att-gps-row,
+.prof-field,
+.qr-meta-row,
+.company-project-mini-row,
+.company-project-req-line,
+.company-project-req-detail,
+.company-project-worker-row,
+.mobile-day-row,
+.ch-agr-row,
+.doc-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row,
+.notification-card time {
+  border-color: var(--card-divider);
+}
+
+.panel-title,
+.prof-name,
+.job-title,
+.worker-name,
+.worker-job-title,
+.wsa-title,
+.wh-card-title,
+.wh-offer-title,
+.ts-title,
+.att-worker-name,
+.company-project-title,
+.notification-card-title,
+.jw-card-title,
+.form-card-header h3,
+.attendance-live-head h3,
+.attendance-worker-group-head h3,
+.settings-card strong,
+.guided-empty-state strong {
+  letter-spacing: -0.01em;
+  line-height: 1.22;
+}
+
+.panel-subtitle,
+.prof-trade,
+.job-meta,
+.worker-meta,
+.worker-job-meta,
+.wsa-meta,
+.wh-card-sub,
+.wh-offer-meta,
+.ts-meta,
+.att-worker-sub,
+.company-project-meta,
+.notification-description,
+.jw-card-sub,
+.form-card-header p,
+.form-helper,
+.field-hint,
+.section-helper,
+.guided-empty-state p {
+  line-height: 1.45;
+}
+
+.company-home-kicker,
+.company-project-kicker,
+.company-project-requirements-label,
+.jw-kicker,
+.worker-daily-kicker,
+.ch-section-label,
+.wh-section-label,
+.notification-next-action span {
+  color: var(--orange);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.primary-btn,
+.secondary-btn,
+label.secondary-btn,
+.danger-btn,
+.ghost-btn,
+.cta-btn,
+.ch-request-btn,
+.qr-gen-btn,
+.qr-gen-btn--ghost,
+.company-project-open,
+.notification-action-btn,
+.pay-btn,
+.auto-assign-btn,
+.geocode-btn,
+.site-loc-view-btn,
+.site-map-back,
+.site-nav-btn,
+.att-submit-btn,
+.att-late-actions button,
+.attendance-demo-actions button,
+.jw-add-trade-btn,
+.jw-req-remove {
+  border-radius: var(--radius-xs);
+  font-size: 0.88rem;
+  font-weight: 800;
+  gap: var(--space-1);
+  line-height: 1.2;
+  min-height: 40px;
+  padding: 10px 14px;
+}
+
+.primary-btn.wide,
+.secondary-btn.wide,
+.danger-btn.wide,
+.cta-btn,
+.att-submit-btn,
+.jw-submit {
+  min-height: 46px;
+  padding-inline: 18px;
+}
+
+.notification-action-btn,
+.company-action-btn,
+.project-edit-photo-actions .secondary-btn,
+.project-edit-photo-actions label.secondary-btn,
+.jw-req-remove {
+  font-size: 0.8rem;
+  min-height: 36px;
+  padding: 8px 11px;
+}
+
+.auth-input,
+.field-label input,
+.field-label select,
+.field-label textarea,
+.jw-form input:not([type="checkbox"]):not([type="radio"]):not(.hidden),
+.jw-form select,
+.jw-form textarea,
+.company-project-search input,
+.search-wrap input[type="search"],
+.worker-select,
+.job-assign-select,
+.pay-term-select,
+.qr-job-select,
+.geocode-row input,
+.wh-next-date input,
+.ai-input,
+.prestart-add-form input,
+.prestart-add-form select,
+.mobile-day-form input,
+.mobile-day-form textarea {
+  border-color: var(--card-border);
+  border-radius: var(--radius-xs);
+  font-size: 0.9rem;
+  line-height: 1.25;
+  min-height: 44px;
+}
+
+.field-label input,
+.field-label select,
+.field-label textarea,
+.auth-input,
+.jw-form input:not([type="checkbox"]):not([type="radio"]):not(.hidden),
+.jw-form select,
+.jw-form textarea,
+.company-project-search input,
+.search-wrap input[type="search"],
+.geocode-row input,
+.mobile-day-form textarea {
+  padding: 10px 12px;
+}
+
+.form-grid,
+.jw-grid,
+.jw-form,
+.company-project-toolbar,
+.attendance-project-toolbar,
+.company-project-grid,
+.notification-feed,
+.notification-card-list,
+.activity-feed,
+.card-list,
+.doc-list,
+.pay-company-list,
+.pay-invoice-list,
+.attendance-worker-group-list,
+.worker-page,
+.worker-page-section,
+.company-control-list {
+  gap: var(--space-section);
+}
+
+.form-card-header,
+.jw-card-head,
+.company-project-requirements,
+.company-project-attendance,
+.company-project-tabs,
+.company-project-metrics,
+.notification-card time,
+.activity-item,
+.worker-notification-row,
+.ts-row,
+.att-worker-row,
+.company-project-req-line,
+.company-project-req-detail,
+.company-project-worker-row,
+.doc-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row {
+  border-color: var(--card-divider);
+}
+
+.form-card-header,
+.jw-card-head {
+  padding-bottom: var(--space-divider);
+}
+
+.company-project-requirements,
+.company-project-attendance,
+.company-project-metrics,
+.attendance-worker-group,
+.jw-pricing-panel {
+  padding-top: var(--space-divider);
+}
+
+.prof-field,
+.qr-meta-row,
+.company-project-mini-row,
+.company-project-req-line,
+.company-project-req-detail,
+.company-project-worker-row,
+.doc-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row {
+  gap: var(--space-2);
+}
+
+button svg,
+.primary-btn svg,
+.secondary-btn svg,
+.danger-btn svg,
+.ghost-btn svg,
+.cta-btn svg,
+.ch-request-btn svg,
+.qr-gen-btn svg,
+.notification-action-btn svg,
+.company-project-open svg {
+  height: 16px;
+  stroke-width: 2;
+  width: 16px;
+}
+
+@media (max-width: 640px) {
+  .auth-card,
+  .success-card,
+  .settings-card,
+  .stat-card,
+  .worker-card,
+  .job-card,
+  .match-card,
+  .form-card,
+  .worker-status-card,
+  .worker-job-card,
+  .worker-daily-card,
+  .worker-flow-card,
+  .worker-timesheet-panel,
+  .prof-section,
+  .attendance-card,
+  .qr-panel,
+  .attendance-history-card,
+  .attendance-project-card,
+  .company-project-card,
+  .company-project-section,
+  .notification-group,
+  .notification-card,
+  .jw-card {
+    padding: var(--space-card-mobile);
+  }
+}
