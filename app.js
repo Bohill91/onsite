@@ -2687,6 +2687,16 @@ function emptyState(msg) {
   return `<div class="empty-state">${msg}</div>`;
 }
 
+function scrollAppToTop({ smooth = true } = {}) {
+  const content = document.querySelector(".content-area");
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const behavior = smooth && !reduceMotion ? "smooth" : "auto";
+  requestAnimationFrame(() => {
+    if (content) content.scrollTo({ top: 0, behavior });
+    window.scrollTo({ top: 0, behavior });
+  });
+}
+
 function loadingSkeleton({ rows = 3, cards = 2, compact = false } = {}) {
   return Array.from({ length: cards }, () => {
     const rowHtml = Array.from(
@@ -6736,7 +6746,7 @@ function getSessionUser() {
 }
 
 // ─── Tab Routing ──────────────────────────────────────────
-function switchTab(tab) {
+function switchTab(tab, { scroll = true } = {}) {
   closeAppPopovers();
   document
     .querySelectorAll("[data-tab]")
@@ -6746,6 +6756,7 @@ function switchTab(tab) {
     .forEach((panel) =>
       panel.classList.toggle("active", panel.id === `tab-${tab}`),
     );
+  if (scroll) scrollAppToTop();
 }
 
 function bindTabEvents() {
@@ -6757,7 +6768,7 @@ function bindTabEvents() {
       }
       if (btn.dataset.tab === "dashboard") activeCompanyProjectId = "";
       if (btn.dataset.tab === "attendance") {
-        navigateToAttendanceList({ replace: true });
+        navigateToAttendanceList({ replace: true, scroll: false });
         switchTab("attendance");
         return;
       }
@@ -6780,6 +6791,7 @@ window.addEventListener("hashchange", () => {
   } else if (activeAttendanceProjectId) {
     activeAttendanceProjectId = "";
     renderAttendance();
+    scrollAppToTop();
   }
 });
 
@@ -6791,6 +6803,7 @@ window.addEventListener("popstate", () => {
     activeAttendanceProjectId = "";
   }
   renderAttendance();
+  scrollAppToTop();
 });
 
 // ─── Nav Rebuild ──────────────────────────────────────────
@@ -8449,7 +8462,7 @@ function syncAttendanceProjectFromHash() {
   activeAttendanceProjectId = match ? decodeURIComponent(match[1]) : "";
 }
 
-function navigateToAttendanceProject(jobId) {
+function navigateToAttendanceProject(jobId, { scroll = true } = {}) {
   activeAttendanceProjectId = jobId || "";
   qrSelectedJobId = activeAttendanceProjectId || qrSelectedJobId;
   todayAttendanceMap = {};
@@ -8457,9 +8470,10 @@ function navigateToAttendanceProject(jobId) {
     history.pushState({ attendanceProjectId: activeAttendanceProjectId }, "", attendanceProjectHash(activeAttendanceProjectId));
   }
   renderAttendance();
+  if (scroll) scrollAppToTop();
 }
 
-function navigateToAttendanceList({ replace = false } = {}) {
+function navigateToAttendanceList({ replace = false, scroll = true } = {}) {
   activeAttendanceProjectId = "";
   todayAttendanceMap = {};
   if (window.location.hash.startsWith("#attendance/project/")) {
@@ -8467,6 +8481,7 @@ function navigateToAttendanceList({ replace = false } = {}) {
     history[method]({}, "", `${window.location.pathname}${window.location.search}`);
   }
   renderAttendance();
+  if (scroll) scrollAppToTop();
 }
 let projectEditPin = { lat: null, lng: null };
 let projectEditPhotos = {};
@@ -11025,6 +11040,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       resetProjectEditMap();
       activeCompanyProjectSection = "overview";
       render();
+      scrollAppToTop();
     });
     btn.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -11034,6 +11050,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       resetProjectEditMap();
       activeCompanyProjectSection = "overview";
       render();
+      scrollAppToTop();
     });
   });
   scope.querySelector("[data-company-project-close]")?.addEventListener("click", () => {
@@ -11041,6 +11058,7 @@ function bindCompanyProjectDashboardButtons(scope) {
     activeCompanyProjectEditId = "";
     resetProjectEditMap();
     render();
+    scrollAppToTop();
   });
   scope.querySelectorAll("[data-project-request-more]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -11064,6 +11082,7 @@ function bindCompanyProjectDashboardButtons(scope) {
     btn.addEventListener("click", () => {
       activeCompanyProjectSection = btn.dataset.companyProjectSection || "overview";
       render();
+      scrollAppToTop();
     });
   });
   scope.querySelectorAll("[data-company-worker-profile]").forEach((btn) => {
@@ -11491,6 +11510,7 @@ function openCompanyNotification(el) {
   }
   switchTab("dashboard");
   render();
+  scrollAppToTop();
 }
 
 function companyPreferredAccountSection(user) {
@@ -15484,7 +15504,7 @@ function renderAttendance() {
   if (user?.type === "company") {
     if (window.location.hash.startsWith("#attendance/project/")) {
       syncAttendanceProjectFromHash();
-      switchTab("attendance");
+      switchTab("attendance", { scroll: false });
     }
     const projects = companyAttendanceProjects(user);
     if (
