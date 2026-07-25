@@ -2307,7 +2307,7 @@ function openWorkerNoticeModal(jobId) {
     summary.innerHTML = `
       <div class="cbk-row"><span class="cbk-label">Assignment</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
       <div class="cbk-row"><span class="cbk-label">Standard notice</span><span class="cbk-val">${DEFAULT_NOTICE_DAYS} working days</span></div>
-      <div class="cancel-window-banner safe">Weekends are not counted for this MVP unless weekend working is added to the job later.</div>`;
+      <div class="cancel-window-banner safe">Weekends are not counted unless weekend working is included on the job.</div>`;
   }
   document.getElementById("workerNoticeReason").value =
     "Project no longer suitable";
@@ -2691,7 +2691,7 @@ function emptyState(msg) {
 }
 
 function guidedEmptyStateHTML({
-  kicker = "Empty State",
+  kicker = "No Data",
   title = "Nothing to show yet",
   body = "There is nothing to review right now.",
   actionLabel = "",
@@ -4357,7 +4357,7 @@ function dailyMobileJobsPanelHTML(job, { manage = false, workerView = false } = 
       <input type="text" data-mobile-day-address="${job.id}" placeholder="Site address/location" />
       <input type="text" data-mobile-day-job-number="${job.id}" placeholder="Company job number" />
       <input type="text" data-mobile-day-client-ref="${job.id}" placeholder="Client reference" />
-      <input type="text" data-mobile-day-invoice-ref="${job.id}" placeholder="Invoice ref placeholder" />
+      <input type="text" data-mobile-day-invoice-ref="${job.id}" placeholder="Invoice reference" />
       <textarea data-mobile-day-notes="${job.id}" rows="2" placeholder="Work notes"></textarea>
       <button class="primary-btn" type="button" data-mobile-day-add="${job.id}">Add Daily Job</button>
     </div>`
@@ -4759,14 +4759,14 @@ function companyPreStartJobPanelHTML(job) {
     : guidedEmptyStateHTML({
         kicker: "Pre-start",
         title: "No pre-start documents attached",
-        body: "This project does not have RAMS, induction or site-rule placeholders yet. Add them from the project Documents tab when they are ready.",
+        body: "This project does not have RAMS, induction or site-rule records yet. Add them from the project Documents tab when they are ready.",
       });
   return `
     <div class="prestart-manage" data-prestart-manage="${job.id}">
       <div class="prestart-panel-head">
         <div>
           <div class="prestart-title">Pre-start Documents</div>
-          <div class="prestart-hint">Metadata-only placeholders for induction, RAMS and project information.</div>
+          <div class="prestart-hint">Project document records for induction, RAMS and site information.</div>
         </div>
         ${
           summary
@@ -8253,14 +8253,14 @@ function renderWorkerProfile(user) {
       val:
         workerProfile?.paymentDetailsPlaceholder ||
         user.paymentDetailsPlaceholder ||
-        "Placeholder only",
+        "Not configured",
     },
     {
       label: "Preferred Payment Method",
       val:
         workerProfile?.preferredPaymentMethod ||
         user.preferredPaymentMethod ||
-        "Placeholder only",
+        "Not configured",
     },
     {
       label: "Payment Verification",
@@ -8368,7 +8368,7 @@ function renderWorkerProfile(user) {
 
     <div class="prof-section">
       <div class="prof-section-title">Documents &amp; Certifications</div>
-      <p class="prof-section-hint">Prototype only: this stores document metadata in localStorage, not real files.</p>
+      <p class="prof-section-hint">Document records are saved to this profile so companies can review certification status before confirming work.</p>
       ${workerDocumentsHTML(workerProfile || user, { manage: true })}
       <div class="worker-doc-form">
         <div class="form-grid-2">
@@ -8414,16 +8414,16 @@ function renderWorkerProfile(user) {
     <div class="prof-section">
       <div class="prof-section-title">Company Reviews</div>
       <div class="prof-fields">
-        <div class="prof-field"><div class="prof-field-label">Reviews</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Reviews</div><div class="prof-field-val">No company reviews recorded yet</div></div>
       </div>
     </div>
 
     <div class="prof-section">
       <div class="prof-section-title">Settings, Privacy &amp; Support</div>
       <div class="prof-fields">
-        <div class="prof-field"><div class="prof-field-label">Settings</div><div class="prof-field-val">Placeholder</div></div>
-        <div class="prof-field"><div class="prof-field-label">Privacy</div><div class="prof-field-val">Placeholder</div></div>
-        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Settings</div><div class="prof-field-val">Manage account preferences from this profile</div></div>
+        <div class="prof-field"><div class="prof-field-label">Privacy</div><div class="prof-field-val">Identity and work-history controls are kept with your account</div></div>
+        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Contact OnSite support for account help</div></div>
       </div>
     </div>
 
@@ -9943,7 +9943,7 @@ function projectInvoicePlaceholderHTML(job) {
   if (!invoices.length)
     return guidedEmptyStateHTML({
       kicker: "Invoices",
-      title: "No invoice placeholders yet",
+      title: "No invoice records yet",
       body: "Approved attendance will feed future invoice records for this project. Nothing needs to be created manually here yet.",
       actionLabel: "Open Attendance",
       actionTab: "attendance",
@@ -9955,7 +9955,7 @@ function projectInvoicePlaceholderHTML(job) {
       return `<div class="bill-inv-row">
         <div class="bill-inv-main">
           <div class="bill-inv-week">${escapeHtml(inv.invoiceNumber || "Invoice")} · ${formatDateOnly(inv.weekStart)} – ${formatDateOnly(inv.weekEnd)}</div>
-          <div class="bill-inv-sub">Status placeholder · ${escapeHtml(meta.label)}</div>
+          <div class="bill-inv-sub">Invoice status · ${escapeHtml(meta.label)}</div>
         </div>
         <div class="bill-inv-amt">${formatMoney(inv.totalCharge || 0)}</div>
       </div>`;
@@ -9981,7 +9981,7 @@ function companyProjectDetailHTML(job, user) {
         <div>
           <div class="company-project-kicker">PROJECT</div>
           <h3>${escapeHtml(companyProjectTitle(job))}</h3>
-          <p>Job ${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</p>
+          <p>${escapeHtml(job.jobNumber || "Job number not set")} · ${escapeHtml(job.location || "Location to confirm")}</p>
           <div class="company-project-detail-meta">
             <span>${escapeHtml(assignmentTypeLabel(job))}</span>
             <span>Start ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
@@ -10227,7 +10227,7 @@ function companyProjectSectionHTML(job, user, summary) {
     attendance: companyProjectAttendanceHTML(job, summary),
     documents: companyProjectDocumentsHTML(job, summary),
     site: companyProjectSiteInfoHTML(job),
-    invoices: `<div class="company-project-section"><h4>Invoices / Placeholders</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
+    invoices: `<div class="company-project-section"><h4>Invoices</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
     activity: companyProjectActivityHTML(job, summary),
   }[activeCompanyProjectSection] || companyProjectOverviewHTML(job, summary);
 }
@@ -11747,10 +11747,10 @@ function renderContractorAccount(user) {
     <div class="prof-section">
       <div class="prof-section-title">Settings &amp; Support</div>
       <div class="prof-fields">
-        <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Placeholder</div></div>
-        <div class="prof-field"><div class="prof-field-label">Privacy &amp; Security</div><div class="prof-field-val">Placeholder</div></div>
-        <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Placeholder</div></div>
-        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Placeholder</div></div>
+        <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Managed from the Notifications page</div></div>
+        <div class="prof-field"><div class="prof-field-label">Privacy &amp; Security</div><div class="prof-field-val">Account controls remain tied to verified company users</div></div>
+        <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Available from OnSite support</div></div>
+        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Contact OnSite for account and project support</div></div>
       </div>
     </div>
     ${optionalSections}
@@ -12080,7 +12080,7 @@ function companyBillingSection(user) {
     : guidedEmptyStateHTML({
         kicker: "Invoices",
         title: "No invoices yet",
-        body: "Weekly invoice placeholders are created from approved attendance. Confirm attendance first, then future billing records will appear here.",
+        body: "Weekly invoice records are created from approved attendance. Confirm attendance first, then future billing records will appear here.",
         actionLabel: "Open Attendance",
         actionTab: "attendance",
       });
@@ -15766,7 +15766,7 @@ function openWorkerQrScanner(uid, workerObj) {
         <span class="qr-scan-line"></span>
       </div>
       <div class="qr-scan-site">${job ? `${escapeHtml(job.trade)} · ${escapeHtml(job.location)}` : "No active site assigned"}</div>
-      <p class="qr-scan-copy">Camera scanner-ready flow. This MVP validates the active project sign-in QR token.</p>
+      <p class="qr-scan-copy">Use this secure project sign-in flow to validate the active site QR token.</p>
       <div class="qr-scan-actions">
         <button class="secondary-btn" type="button" data-qr-scan-close>Cancel</button>
         <button class="primary-btn" type="button" data-qr-scan-use>Use Site Sign-In QR</button>
@@ -16632,7 +16632,7 @@ function renderAdminPayments(role) {
     : guidedEmptyStateHTML({
         kicker: "Billing",
         title: "No company billing activity yet",
-        body: "Companies with generated invoice placeholders, restrictions or payment activity will appear here.",
+        body: "Companies with generated invoice records, restrictions or payment activity will appear here.",
       });
 
   // Invoice list with worker-payout controls.

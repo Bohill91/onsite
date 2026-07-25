@@ -11708,3 +11708,137 @@ button svg,
     padding: var(--space-card-mobile);
   }
 }
+
+/* ─── Investor Demo Polish ─────────────────────────────── */
+.request-labour-page-body,
+.company-dashboard-page,
+.worker-page,
+.notification-feed,
+.attendance-page-body {
+  animation: page-enter var(--motion-med) var(--motion-pop);
+}
+
+.prof-section,
+.company-project-section,
+.jw-card,
+.notification-group,
+.attendance-live-overview,
+.attendance-history-card,
+.worker-page-section {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.94));
+}
+
+.prof-section-title,
+.form-card-header h3,
+.attendance-worker-group-head h3,
+.attendance-live-head h3,
+.company-project-section h4,
+.worker-section-head h3 {
+  color: var(--ink);
+  font-size: 0.96rem;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.prof-fields,
+.settings-grid,
+.prof-stats-grid {
+  gap: var(--space-1);
+}
+
+.prof-field,
+.qr-meta-row,
+.company-project-mini-row,
+.doc-row,
+.bill-inv-row,
+.pay-line,
+.prestart-doc-row {
+  background: color-mix(in srgb, var(--surface-2) 72%, #fff);
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.prof-field-label,
+.qr-meta-row span,
+.company-project-mini-row span {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.prof-field-val,
+.qr-meta-row strong,
+.company-project-mini-row strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 780;
+}
+
+.guided-empty-state {
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 249, 250, 0.9));
+  border-style: solid;
+}
+
+.guided-empty-kicker {
+  color: var(--orange);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.company-control-panel,
+.company-dashboard-filter-card,
+.attendance-project-search-card {
+  box-shadow: var(--card-shadow);
+}
+
+.company-action-item,
+.company-upcoming-item,
+.preferred-worker-choice,
+.project-edit-photo-card,
+.site-details-card,
+.jw-req-card {
+  box-shadow: none;
+}
+
+.company-action-item:hover,
+.company-upcoming-item:hover,
+.preferred-worker-choice:hover {
+  border-color: rgba(249, 115, 22, 0.28);
+}
+
+.company-project-tabs,
+.worker-tab-row,
+.bottom-nav {
+  scrollbar-width: none;
+}
+
+.company-project-tabs::-webkit-scrollbar,
+.worker-tab-row::-webkit-scrollbar,
+.bottom-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.auth-title,
+.request-labour-page-head h2,
+.company-dashboard-head h2,
+.company-page-head h2,
+.attendance-page-head h2 {
+  letter-spacing: -0.025em;
+}
+
+.auth-subtitle,
+.request-labour-page-head p:not(.company-home-kicker),
+.company-dashboard-head p,
+.company-page-head p,
+.attendance-page-head p:not(.company-home-kicker) {
+  color: var(--ink-2);
+  max-width: 62ch;
+}
