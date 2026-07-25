@@ -2696,7 +2696,9 @@ function guidedEmptyStateHTML({
   body = "There is nothing to review right now.",
   actionLabel = "",
   actionAttr = "",
+  actionTab = "",
 } = {}) {
+  const resolvedActionAttr = actionAttr || (actionTab ? `data-empty-tab="${escapeHtml(actionTab)}"` : "");
   return `<div class="empty-state guided-empty-state">
     <div class="guided-empty-icon" aria-hidden="true"></div>
     <div>
@@ -2705,8 +2707,8 @@ function guidedEmptyStateHTML({
       <p>${escapeHtml(body)}</p>
     </div>
     ${
-      actionLabel && actionAttr
-        ? `<button class="secondary-btn guided-empty-action" type="button" ${actionAttr}>${escapeHtml(actionLabel)}</button>`
+      actionLabel && resolvedActionAttr
+        ? `<button class="secondary-btn guided-empty-action" type="button" ${resolvedActionAttr}>${escapeHtml(actionLabel)}</button>`
         : ""
     }
   </div>`;
@@ -2844,7 +2846,11 @@ function renderActivity() {
   const feed = document.querySelector("#activityFeed");
   if (!feed) return;
   if (!activityLog.length) {
-    feed.innerHTML = `<div class="activity-empty">No activity yet — add workers or post jobs to get started.</div>`;
+    feed.innerHTML = guidedEmptyStateHTML({
+      kicker: "Activity",
+      title: "No activity yet",
+      body: "Assignments, score updates, offer decisions and attendance events will appear here once work starts moving through OnSite.",
+    });
     return;
   }
   feed.innerHTML = activityLog
@@ -4338,7 +4344,11 @@ function dailyMobileJobsPanelHTML(job, { manage = false, workerView = false } = 
       </div>`,
         )
         .join("")
-    : `<div class="att-empty">No daily mobile jobs added yet.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Mobile Work",
+        title: "No daily visits added",
+        body: "Daily job numbers and locations will appear here when the company adds mobile or reactive work for this assignment.",
+      });
   const form = manage
     ? `
     <div class="mobile-day-form">
@@ -4559,7 +4569,13 @@ function removeWorkerDocument(workerId, documentId) {
 function workerDocumentsHTML(worker, opts = {}) {
   const docs = workerDocumentsFor(worker);
   if (!docs.length) {
-    return `<div class="att-empty">No worker documents added yet.</div>`;
+    return guidedEmptyStateHTML({
+      kicker: "Documents",
+      title: "No documents added",
+      body: "Add document records from your profile so companies can review cards, certificates and expiry dates before confirming work.",
+      actionLabel: "Open Profile",
+      actionTab: "profile",
+    });
   }
   return `<div class="worker-doc-list">
     ${docs
@@ -4695,9 +4711,17 @@ function workerPreStartPanelHTML(job, workerId) {
           : `<div class="prestart-banner complete">All required pre-start documents acknowledged.</div>`
       }
       <div class="prestart-subtitle">Outstanding</div>
-      ${incomplete.length ? incomplete.map(docRow).join("") : `<div class="att-empty">No outstanding pre-start documents.</div>`}
+      ${incomplete.length ? incomplete.map(docRow).join("") : guidedEmptyStateHTML({
+        kicker: "Pre-start",
+        title: "No outstanding documents",
+        body: "You are up to date. Any RAMS, inductions or site rules that need acknowledgement will appear here.",
+      })}
       <div class="prestart-subtitle">Completed Acknowledgements</div>
-      ${summary.completed.length ? summary.completed.map(docRow).join("") : `<div class="att-empty">No completed acknowledgements yet.</div>`}
+      ${summary.completed.length ? summary.completed.map(docRow).join("") : guidedEmptyStateHTML({
+        kicker: "Acknowledgements",
+        title: "No completed acknowledgements yet",
+        body: "Completed acknowledgements will be stored here after you review required project documents.",
+      })}
     </div>`;
 }
 
@@ -4732,7 +4756,11 @@ function companyPreStartJobPanelHTML(job) {
         </div>`;
         })
         .join("")
-    : `<div class="att-empty">No pre-start documents attached.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Pre-start",
+        title: "No pre-start documents attached",
+        body: "This project does not have RAMS, induction or site-rule placeholders yet. Add them from the project Documents tab when they are ready.",
+      });
   return `
     <div class="prestart-manage" data-prestart-manage="${job.id}">
       <div class="prestart-panel-head">
@@ -5228,7 +5256,11 @@ function renderJobPreferredWorkerChoices(user) {
           },
         )
         .join("")
-    : `<div class="preferred-worker-empty">No previous or preferred workers available yet.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Preferred Workers",
+        title: "No previous or preferred workers available",
+        body: "Workers you have previously used or marked as preferred will appear here so you can request them first.",
+      });
 }
 
 document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
@@ -5242,7 +5274,11 @@ document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (
     const list = document.getElementById("jobPreferredWorkersList");
     list?.insertAdjacentHTML(
       "beforeend",
-      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty">No previous or preferred workers available yet.</div>`,
+      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty">${guidedEmptyStateHTML({
+        kicker: "Search",
+        title: "No workers match that search",
+        body: "Try a different name, trade or card number, or continue without selecting a preferred worker.",
+      })}</div>`,
     );
   }
 });
@@ -6808,6 +6844,19 @@ function bindTabEvents() {
 }
 bindTabEvents();
 
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-empty-tab]");
+  if (!btn) return;
+  const tab = btn.dataset.emptyTab;
+  if (!tab) return;
+  if (tab === "request-labour") {
+    openLabourRequestPage();
+    return;
+  }
+  switchTab(tab);
+  if (tab === "dashboard") render();
+});
+
 window.addEventListener("hashchange", () => {
   if (window.location.hash.startsWith("#attendance/project/")) {
     syncAttendanceProjectFromHash();
@@ -7185,7 +7234,11 @@ function renderWorkerHome(user) {
                 )
                 .join("")}
             </div>`
-          : `<div class="att-empty">No Planned Absence added.</div>`
+          : guidedEmptyStateHTML({
+              kicker: "Planned Absence",
+              title: "No planned absence added",
+              body: "Add single dates or date ranges here when you know you will be unavailable for project work.",
+            })
       }
     </div>`;
   const availabilityPanel = `
@@ -7274,7 +7327,13 @@ function renderWorkerHome(user) {
       ${
         activeOffers.length
           ? activeOffers.map(offerCardHtml).join("")
-          : `<div class="att-empty">No active job offers right now.</div>`
+          : guidedEmptyStateHTML({
+              kicker: "Offers",
+              title: "No active job offers",
+              body: "New offers will appear here when a contractor invites you to review a role. Keep your availability and travel preferences up to date.",
+              actionLabel: "Update Availability",
+              actionTab: "calendar",
+            })
       }
       ${offerHistoryHtml}
     </div>`
@@ -7349,7 +7408,11 @@ function renderWorkerHome(user) {
       ${
         homeNotifications.length
           ? homeNotifications.map((item) => `<div class="worker-notification-row"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.body)}</span></div>`).join("")
-          : `<div class="att-empty">No important notifications right now.</div>`
+          : guidedEmptyStateHTML({
+              kicker: "Notifications",
+              title: "No important notifications",
+              body: "New offers, agreement reminders, planned absence updates and attendance alerts will appear here.",
+            })
       }
     </div>`;
   const homeOffersPanel =
@@ -7472,7 +7535,13 @@ function renderWorkerHome(user) {
     <button class="wh-view-all" type="button" data-tab="jobs">View all jobs →</button>`
     : `
     <div class="wh-section-label">Recommended for You</div>
-    <div class="att-empty">No open ${escapeHtml(user.trade || "jobs")} positions right now — check back soon.</div>`;
+    ${guidedEmptyStateHTML({
+      kicker: "Matching",
+      title: "No recommended roles right now",
+      body: `There are no open ${user.trade || "job"} roles matching your profile at the moment. Keep your availability, travel radius and documents up to date for future offers.`,
+      actionLabel: "Update Profile",
+      actionTab: "profile",
+    })}`;
 
   el.innerHTML = `
     <div class="worker-home-head">
@@ -7780,7 +7849,13 @@ function renderWorkerOffersPage(user) {
           <h2>Active offers</h2>
           <span>${active.length}</span>
         </div>
-        ${active.length ? active.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : `<div class="att-empty">No active job offers right now.</div>`}
+        ${active.length ? active.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : guidedEmptyStateHTML({
+          kicker: "Offers",
+          title: "No active offers",
+          body: "You do not have any offers waiting for a response. Contractors can send offers when your availability, trade and travel preferences fit their project.",
+          actionLabel: "Review Availability",
+          actionTab: "calendar",
+        })}
       </section>
       ${
         shiftChanges.length
@@ -7816,14 +7891,24 @@ function renderWorkerOffersPage(user) {
           <h2>Open opportunities</h2>
           <span>${openJobs.length}</span>
         </div>
-        ${openJobs.length ? openJobs.map((job) => workerJobCard(job, user)).join("") : `<div class="att-empty">No open jobs matching your trade right now.</div>`}
+        ${openJobs.length ? openJobs.map((job) => workerJobCard(job, user)).join("") : guidedEmptyStateHTML({
+          kicker: "Matching",
+          title: "No matching jobs right now",
+          body: "There are no open roles matching your trade at the moment. Update your profile, travel radius and availability to improve future matching.",
+          actionLabel: "Open Profile",
+          actionTab: "profile",
+        })}
       </section>
       <section class="worker-page-section">
         <div class="worker-section-head">
           <h2>Previous offers</h2>
           <span>${history.length}</span>
         </div>
-        ${history.length ? history.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : `<div class="att-empty">No previous offers yet.</div>`}
+        ${history.length ? history.map((app) => workerOfferDecisionCardHTML(app, user)).join("") : guidedEmptyStateHTML({
+          kicker: "Offer History",
+          title: "No previous offers yet",
+          body: "Accepted, declined and expired offers will be kept here so you can track your work opportunities.",
+        })}
       </section>
     </div>`;
   bindWorkerOfferButtons(el);
@@ -7946,7 +8031,11 @@ function renderWorkerCalendarPage(user) {
         ${
           commitments.length
             ? commitments.map((job) => `<div class="worker-flow-card"><h3>${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</h3><div class="worker-flow-meta">${job.start ? formatDate(job.start) : "Start TBC"}${job.estimatedEndDate || job.endDate ? ` · ends ${formatDateOnly(job.estimatedEndDate || job.endDate)}` : ""}</div></div>`).join("")
-            : `<div class="att-empty">No future commitments recorded.</div>`
+            : guidedEmptyStateHTML({
+                kicker: "Calendar",
+                title: "No future commitments",
+                body: "Confirmed future assignments will appear here alongside your Planned Absence and availability settings.",
+              })
         }
       </section>
     </div>`;
@@ -7997,7 +8086,11 @@ function workerPlannedAbsenceFormHTML(plannedAbsences) {
               </div>`,
             )
             .join("")}</div>`
-        : `<div class="att-empty">No Planned Absence added.</div>`
+        : guidedEmptyStateHTML({
+            kicker: "Planned Absence",
+            title: "No planned absence added",
+            body: "Use the form above to add unavailable dates. Companies can see these dates when reviewing your availability for projects.",
+          })
     }
   </div>`;
 }
@@ -8424,7 +8517,13 @@ function workerPaymentsSection(user) {
     </div>`;
         })
         .join("")
-    : `<div class="att-empty">No payments yet. Earnings appear here once your worked weeks are invoiced.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Payments",
+        title: "No payments yet",
+        body: "Approved attendance will feed future invoices. Once a worked week is invoiced, payment status will appear here.",
+        actionLabel: "View Timesheet",
+        actionTab: "attendance",
+      });
 
   return `
     <div class="prof-section">
@@ -8457,7 +8556,13 @@ function agreementHistorySection(agreements) {
       </button>`;
         })
         .join("")
-    : `<div class="att-empty">No job agreements yet.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Agreements",
+        title: "No job agreements yet",
+        body: "When a company confirms you for a role, the agreement will appear here for review before attendance becomes active.",
+        actionLabel: "View Offers",
+        actionTab: "offers",
+      });
   return `
     <div class="prof-section">
       <div class="prof-section-title">Job Agreement History</div>
@@ -8836,7 +8941,11 @@ function projectAttendanceSummary(workers, job, today = todayDateStr()) {
 
 function attendanceProjectBreakdownRowsHTML(workers, job, today = todayDateStr()) {
   if (!workers.length) {
-    return `<div class="company-project-req-line"><div><strong>No workers assigned yet</strong><span>Attendance will appear once workers are assigned.</span></div><dl><div><dt>Total attending today</dt><dd>0/0</dd></div></dl></div>`;
+    return guidedEmptyStateHTML({
+      kicker: "Attendance",
+      title: "No workers assigned yet",
+      body: "Today's attendance breakdown will appear once workers are confirmed for this project.",
+    });
   }
   return groupedAttendanceWorkers(workers)
     .map((group) => {
@@ -8945,7 +9054,11 @@ function attendanceLiveSummaryHTML(workers, job, today = todayDateStr()) {
 }
 
 function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
-  if (!workers.length) return emptyState("No workers assigned to this project yet.");
+  if (!workers.length) return guidedEmptyStateHTML({
+    kicker: "Attendance Roster",
+    title: "No workers assigned to this project",
+    body: "Confirmed workers will appear here grouped by trade and experience level. Once assigned, they can scan the project QR or be updated manually.",
+  });
   return groupedAttendanceWorkers(workers)
     .map((group) => {
       const summary = projectAttendanceSummary(group.workers, job, today);
@@ -9628,7 +9741,13 @@ function projectInvoicePlaceholderHTML(job) {
     (inv.lines || []).some((line) => line.jobId === job.id),
   );
   if (!invoices.length)
-    return `<div class="att-empty">No invoice placeholders yet. Approved attendance will feed future invoice records.</div>`;
+    return guidedEmptyStateHTML({
+      kicker: "Invoices",
+      title: "No invoice placeholders yet",
+      body: "Approved attendance will feed future invoice records for this project. Nothing needs to be created manually here yet.",
+      actionLabel: "Open Attendance",
+      actionTab: "attendance",
+    });
   return invoices
     .map((inv) => {
       const status = invoiceEffectiveStatus(inv);
@@ -9947,7 +10066,11 @@ function companyProjectOverviewHTML(job, summary) {
         ${
           issues.length
             ? issues.map((issue) => `<div class="company-project-mini-row"><span>${escapeHtml(issue)}</span><strong>Review</strong></div>`).join("")
-            : `<div class="att-empty">No current issues requiring attention.</div>`
+            : guidedEmptyStateHTML({
+                kicker: "Project Health",
+                title: "No current issues",
+                body: "Project health, attendance, replacement and pre-start issues will appear here when they need action.",
+              })
         }
       </div>
     </div>`;
@@ -9956,7 +10079,13 @@ function companyProjectOverviewHTML(job, summary) {
 function companyProjectWorkersHTML(job, summary) {
   const rows = summary.assignedWorkers.length
     ? summary.assignedWorkers.map((worker) => companyProjectWorkerRowHTML(worker, job, summary)).join("")
-    : `<div class="att-empty">No worker confirmed on this project yet.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Workers",
+        title: "No workers confirmed yet",
+        body: "Accepted workers will appear here after the offer and company approval flow is complete.",
+        actionLabel: "Review Requirements",
+        actionAttr: `data-company-project-section="requirements"`,
+      });
   const approvals = summary.reviewWorkers.length
     ? `<div class="company-project-section"><h4>Workers Awaiting Approval</h4>${summary.reviewWorkers
         .map((app) => {
@@ -10025,7 +10154,11 @@ function companyProjectRequirementsHTML(job, summary) {
           return `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || worker?.name || "Worker")}</span><strong>${escapeHtml(offerExpiryLabel(app))}</strong></div>`;
         })
         .join("")
-    : `<div class="att-empty">No pending offers for this project.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Offers",
+        title: "No pending offers",
+        body: "Offers sent through matching will appear here while workers review them. If the role is still open, review the labour requirement.",
+      });
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
       const stats = companyRequirementStats(req, summary);
@@ -10061,7 +10194,13 @@ function companyProjectRequirementsHTML(job, summary) {
     <div class="company-project-detail-grid">
       <div class="company-project-section">
         <h4>Labour Requirements</h4>
-        ${requirementRows || `<div class="att-empty">No labour requirements saved for this project.</div>`}
+        ${requirementRows || guidedEmptyStateHTML({
+          kicker: "Requirements",
+          title: "No labour requirements saved",
+          body: "This project has no saved trade requirements. Use Request More Labour to add the roles needed for site.",
+          actionLabel: "Request More Labour",
+          actionAttr: `data-project-request-more="${job.id}"`,
+        })}
       </div>
       <div class="company-project-section">
         <h4>Pending Offers</h4>
@@ -10094,14 +10233,24 @@ function companyProjectAttendanceHTML(job, summary) {
         <h4>Project Attendance Records</h4>
         <div class="company-project-mini-row"><span>QR sign-in</span><strong>${summary.signedInToday}/${summary.expectedToday}</strong></div>
         <div class="company-project-mini-row"><span>Manual override</span><strong>Available in Attendance</strong></div>
-        ${historyRows || `<div class="att-empty">No attendance records saved for this project yet.</div>`}
+        ${historyRows || guidedEmptyStateHTML({
+          kicker: "Attendance",
+          title: "No attendance history yet",
+          body: "Daily records will appear here after workers sign in or attendance is manually confirmed for this project.",
+          actionLabel: "Open Attendance",
+          actionTab: "attendance",
+        })}
       </div>
       <div class="company-project-section">
         <h4>Late Reports</h4>
         ${
           lateRows.length
             ? lateRows.map((rec) => `<div class="company-project-mini-row"><span>${escapeHtml(findWorker(rec.workerId)?.name || "Worker")}</span><strong>${escapeHtml(rec.lateReport.reason || "Late report")}</strong></div>`).join("")
-            : `<div class="att-empty">No late reports today.</div>`
+            : guidedEmptyStateHTML({
+                kicker: "Late Reports",
+                title: "No late reports today",
+                body: "Worker late reports will appear here when someone informs the site before their shift starts.",
+              })
         }
       </div>
     </div>`;
@@ -10120,7 +10269,11 @@ function companyProjectDocumentsHTML(job, summary) {
         ${summary.assignedWorkers.length ? summary.assignedWorkers.map((worker) => {
           const req = preStartRequirementSummary(job, worker.id);
           return `<div class="company-project-mini-row"><span>${escapeHtml(worker.name)}</span><strong>${req.outstanding.length ? `${req.outstanding.length} outstanding` : "Complete"}</strong></div>`;
-        }).join("") : `<div class="att-empty">No assigned workers yet.</div>`}
+        }).join("") : guidedEmptyStateHTML({
+          kicker: "Acknowledgements",
+          title: "No assigned workers yet",
+          body: "Worker acknowledgement status will appear here after workers are confirmed for this project.",
+        })}
       </div>
     </div>`;
 }
@@ -10137,7 +10290,11 @@ function companyProjectSiteInfoHTML(job) {
     ? photoValues
         .map((photo) => `<div class="company-project-mini-row"><span>${escapeHtml(photo.label || photo.photoType || "Site photo")}</span><strong>${escapeHtml(photo.fileName || "Photo added")}</strong></div>`)
         .join("")
-    : `<div class="att-empty">No site photo metadata added.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Site Photos",
+        title: "No site photos added",
+        body: "Entrance, welfare and parking photos help workers find the right place before their first shift. Add them from Edit Project when available.",
+      });
   return `
     <div class="company-project-detail-grid">
       <div class="company-project-section">
@@ -10181,7 +10338,11 @@ function companyProjectActivityHTML(job, summary) {
   return `
     <div class="company-project-section">
       <h4>Activity</h4>
-      ${rows.length ? rows.join("") : `<div class="att-empty">No project activity yet.</div>`}
+      ${rows.length ? rows.join("") : guidedEmptyStateHTML({
+        kicker: "Activity",
+        title: "No project activity yet",
+        body: "Offer updates, attendance events, document acknowledgements and project edits will appear here as the project progresses.",
+      })}
     </div>`;
 }
 
@@ -10776,17 +10937,22 @@ function renderCompanyWorkerDirectory(user) {
     });
 
   if (empty) {
-    empty.style.display = rows.length ? "none" : "block";
-    empty.textContent = query
-      ? "No linked workers match your search."
-      : "No assigned, preferred, or previous workers yet.";
+    empty.style.display = "none";
   }
   list.classList.remove("card-list");
   list.innerHTML = rows.length
     ? `<div class="company-worker-directory">${rows
         .map(({ worker, tags }) => companyDirectoryWorkerCardHTML(worker, tags))
         .join("")}</div>`
-    : "";
+    : guidedEmptyStateHTML({
+        kicker: query ? "No Matches" : "Workers",
+        title: query ? "No linked workers match your search" : "No linked workers yet",
+        body: query
+          ? "Try another worker name, trade, qualification or availability filter."
+          : "Assigned, preferred and previous workers will appear here after projects begin moving through the offer workflow.",
+        actionLabel: query ? "" : "View Projects",
+        actionTab: query ? "" : "dashboard",
+      });
 
   list.querySelectorAll("[data-company-worker-profile]").forEach((btn) => {
     btn.addEventListener("click", () =>
@@ -10890,7 +11056,11 @@ function openCompanyWorkerProfileModal(workerId, jobId = "") {
                   (absence) => `<div class="company-project-mini-row"><span>${formatDateOnly(absence.startDate)}</span><strong>${absence.endDate !== absence.startDate ? `to ${formatDateOnly(absence.endDate)}` : "Single day"}</strong></div>`,
                 )
                 .join("")
-            : `<div class="att-empty">No Planned Absence added.</div>`
+            : guidedEmptyStateHTML({
+                kicker: "Planned Absence",
+                title: "No planned absence added",
+                body: "This worker has not recorded unavailable dates. Future absences will appear here for roster review.",
+              })
         }
       </div>
     </div>`;
@@ -11637,7 +11807,13 @@ function companyPreferredAccountSection(user) {
           </div>`,
         )
         .join("")
-    : `<div class="att-empty">No Preferred Workers yet. Preferred workers added from project worker profiles will appear here.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Preferred Workers",
+        title: "No Preferred Workers yet",
+        body: "Mark trusted workers from project worker profiles. They will appear here and can be requested first on future labour requests.",
+        actionLabel: "View Dashboard",
+        actionTab: "dashboard",
+      });
   return `
     <div class="prof-section">
       <div class="prof-section-title">Preferred Workers</div>
@@ -11680,7 +11856,13 @@ function companyBillingSection(user) {
     </div>`;
         })
         .join("")
-    : `<div class="att-empty">No invoices yet. Invoices are raised weekly from approved attendance.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Invoices",
+        title: "No invoices yet",
+        body: "Weekly invoice placeholders are created from approved attendance. Confirm attendance first, then future billing records will appear here.",
+        actionLabel: "Open Attendance",
+        actionTab: "attendance",
+      });
 
   return `
     <div class="prof-section">
@@ -11721,7 +11903,11 @@ function companyDocsSection(user) {
     </div>`,
         )
         .join("")
-    : `<div class="att-empty">No site documents yet. Add induction, H&amp;S or site-rules content for workers to review.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Documents",
+        title: "No site documents yet",
+        body: "Add induction, RAMS, site rules or welfare documents so assigned workers can acknowledge them before arriving on site.",
+      });
   return `
     <div class="prof-section">
       <div class="prof-section-title">Site Documents</div>
@@ -11817,7 +12003,15 @@ function renderWorkerJobBoard(user) {
     const emptyMsg = trade
       ? `No open ${escapeHtml(user?.trade || trade)} jobs right now — check back soon or update your trade in your profile.`
       : "No open jobs at the moment — check back soon.";
-    jobsList.innerHTML = statusCard + emptyState(emptyMsg);
+    jobsList.innerHTML =
+      statusCard +
+      guidedEmptyStateHTML({
+        kicker: "Open Jobs",
+        title: trade ? "No matching jobs right now" : "No open jobs right now",
+        body: emptyMsg,
+        actionLabel: "Update Profile",
+        actionTab: "profile",
+      });
     return;
   }
 
@@ -12432,7 +12626,13 @@ function renderWorkers() {
   workersEmpty.style.display =
     hasAny && filtered.length === 0 ? "block" : "none";
   workersList.innerHTML = !hasAny
-    ? emptyState("No workers in the roster yet. Add one from the Add tab.")
+    ? guidedEmptyStateHTML({
+        kicker: "Workers",
+        title: "No workers in the roster yet",
+        body: "Add worker profiles to begin matching them to labour requests and tracking attendance history.",
+        actionLabel: "Add Worker",
+        actionTab: "add",
+      })
     : filtered.map(workerCard).join("");
 
   workersList.querySelectorAll("[data-delete-worker]").forEach((btn) => {
@@ -12622,7 +12822,11 @@ function openWorkerPlannedAbsenceCalendar(workerId) {
             </div>`,
                 )
                 .join("")
-            : `<div class="att-empty">No Planned Absence added.</div>`
+            : guidedEmptyStateHTML({
+                kicker: "Planned Absence",
+                title: "No planned absence recorded",
+                body: "This worker has not added unavailable dates. Any future Planned Absence will appear on this calendar.",
+              })
         }
       </div>
     </div>`;
@@ -12645,7 +12849,13 @@ function closeWorkerPlannedAbsenceCalendar() {
 function renderJobs() {
   jobsList.innerHTML = state.jobs.length
     ? state.jobs.map(jobCard).join("")
-    : emptyState("No job requests yet. Post one from the Add tab.");
+    : guidedEmptyStateHTML({
+        kicker: "Labour Requests",
+        title: "No job requests yet",
+        body: "Post a labour request to start matching available workers and generating project cards.",
+        actionLabel: "Add Job Request",
+        actionTab: "add",
+      });
 
   jobsList.querySelectorAll("[data-delete-job]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12681,7 +12891,11 @@ function renderCancelledBookings() {
   if (!el) return;
   const list = state.cancellations || [];
   if (!list.length) {
-    el.innerHTML = emptyState("No cancelled bookings yet.");
+    el.innerHTML = guidedEmptyStateHTML({
+      kicker: "Cancelled Bookings",
+      title: "No cancelled bookings",
+      body: "Cancelled or released bookings will appear here for audit and follow-up.",
+    });
     return;
   }
   el.innerHTML = list
@@ -12826,7 +13040,13 @@ function renderMatches() {
   if (!matchResults) return;
   matchResults.innerHTML = state.jobs.length
     ? state.jobs.map(matchCard).join("")
-    : emptyState("Post a job request to see worker matches here.");
+    : guidedEmptyStateHTML({
+        kicker: "Matching",
+        title: "No labour requests to match",
+        body: "Post a job request first. OnSite will then rank suitable workers using availability, travel, ratings and preferences.",
+        actionLabel: "Add Job Request",
+        actionTab: "add",
+      });
 
   matchResults.querySelectorAll("[data-auto-assign]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -12871,7 +13091,11 @@ function matchCard(job) {
               .slice(0, 5)
               .map((w, i) => matchWorkerRow(w, i))
               .join("")
-          : `<div class="empty-state" style="border:none;border-radius:0;">No available ${escapeHtml(pluralizeTradeLabel(job.trade).toLowerCase())} found.</div>`
+          : guidedEmptyStateHTML({
+              kicker: "Matching",
+              title: `No available ${pluralizeTradeLabel(job.trade).toLowerCase()} found`,
+              body: "No eligible workers currently match this role's availability, travel and project requirements. Review the role settings or wait for more workers to become available.",
+            })
       }
     </div>
   </article>`;
@@ -13655,7 +13879,11 @@ function buildSiteInfoHtml(job) {
 
   return (
     rows ||
-    `<p style="color:var(--ink-3);font-size:0.87rem;padding:8px 0;">No site details added.</p>`
+    guidedEmptyStateHTML({
+      kicker: "Site Details",
+      title: "No site details added",
+      body: "Entrance, parking, welfare and sign-in information will appear here when the company adds it to the project.",
+    })
   );
 }
 
@@ -15492,14 +15720,24 @@ function renderWorkerTimesheet(uid, user, histEl) {
                 <button class="secondary-btn" type="button" data-map-job="${currentAssignment.id}">Site Details</button>
               </div>
             </div>`
-          : `<div class="att-empty">No active assignment. New confirmed work will appear here.</div>`
+          : guidedEmptyStateHTML({
+              kicker: "Assignment",
+              title: "No active assignment",
+              body: "Confirmed work will appear here once a company accepts you and the agreement is ready.",
+              actionLabel: "View Offers",
+              actionTab: "offers",
+            })
       }
     </div>`;
 
   if (!myRecs.length) {
     histEl.innerHTML =
       assignmentPanel +
-      `<div class="att-empty">No attendance history yet — mark your first day above.</div>` +
+      guidedEmptyStateHTML({
+        kicker: "Timesheet",
+        title: "No attendance history yet",
+        body: "Your signed-in days, late reports and weekly confirmations will appear here after your first confirmed shift.",
+      }) +
       workerPaymentsSection(user);
     histEl.querySelectorAll("[data-map-job]").forEach((btn) => {
       btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
@@ -15771,11 +16009,17 @@ function renderAttendance() {
       ? groupedAttendanceCardsHTML(rosterWorkers, selectedProject, today)
       : rosterWorkers.length
       ? rosterWorkers.map((w) => attendanceCard(w, today)).join("")
-      : emptyState(
-          selectedProject
-            ? "No workers assigned to this project yet."
-            : "No workers in the roster. Add workers first.",
-        ));
+      : guidedEmptyStateHTML({
+          kicker: selectedProject ? "Attendance Roster" : "Roster",
+          title: selectedProject
+            ? "No workers assigned to this project"
+            : "No workers in the roster",
+          body: selectedProject
+            ? "Assign workers to this project before confirming daily attendance."
+            : "Add worker profiles before using the attendance review tools.",
+          actionLabel: selectedProject ? "Back to Attendance" : "Add Worker",
+          actionTab: selectedProject ? "attendance" : "add",
+        }));
   if (rosterWorkers.length) bindAttendanceEvents(container);
 
   const bulkBtn = document.getElementById("bulkApproveBtn");
@@ -15808,7 +16052,11 @@ function renderAttendance() {
     .slice(0, 7);
 
   if (!pastDates.length) {
-    histEl.innerHTML = `<div class="att-empty">No history yet — submit today's attendance to start tracking.</div>`;
+    histEl.innerHTML = guidedEmptyStateHTML({
+      kicker: "Attendance History",
+      title: "No attendance history yet",
+      body: "Confirmed daily attendance will appear here after the first timesheet is submitted.",
+    });
     return;
   }
   histEl.innerHTML = pastDates
@@ -15987,7 +16235,11 @@ function renderAdminAttendanceReview() {
     el.innerHTML = `
       <div class="adminrev">
         <div class="adminrev-head"><h3 class="adminrev-title">Attendance Review</h3></div>
-        <div class="att-empty">No attendance records yet.</div>
+        ${guidedEmptyStateHTML({
+          kicker: "Attendance Review",
+          title: "No attendance records yet",
+          body: "Attendance records will appear here after workers sign in or supervisors submit daily attendance.",
+        })}
       </div>`;
     return;
   }
@@ -16156,7 +16408,11 @@ function renderAdminPayments(role) {
     </div>`;
         })
         .join("")
-    : `<div class="att-empty">No companies with billing activity yet.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Billing",
+        title: "No company billing activity yet",
+        body: "Companies with generated invoice placeholders, restrictions or payment activity will appear here.",
+      });
 
   // Invoice list with worker-payout controls.
   const invRows = invoices.length
@@ -16204,7 +16460,11 @@ function renderAdminPayments(role) {
     </div>`;
         })
         .join("")
-    : `<div class="att-empty">No invoices yet. They are raised weekly from approved attendance.</div>`;
+    : guidedEmptyStateHTML({
+        kicker: "Invoices",
+        title: "No invoices yet",
+        body: "Invoices are raised weekly from approved attendance. Confirm attendance first to create future billing records.",
+      });
 
   el.innerHTML = `
     ${summary}
