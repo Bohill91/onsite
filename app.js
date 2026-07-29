@@ -9500,6 +9500,7 @@ function companyProjectEmptyStateHTML(message = "Create your first labour reques
 
 function companyProjectSummary(job, user) {
   const today = todayDateStr();
+  const startDays = projectStartDays(job);
   const labourRequirements = labourRequirementsForJob(job);
   const assignedWorkers = companyAssignedWorkers(job);
   const assignedWorker = assignedWorkers[0] || null;
@@ -9576,6 +9577,7 @@ function companyProjectSummary(job, user) {
     preStart,
     outstandingPreStart,
     status,
+    startDays,
   };
 }
 
@@ -9588,9 +9590,18 @@ function companyDashboardSummary(user) {
     activeJobs,
     summaries,
     activeProjects: activeJobs.length,
+    activeProjectsToday: summaries.filter((s) => s.startDays !== null && s.startDays <= 0).length,
     workersExpected: summaries.reduce((sum, s) => sum + s.expectedToday, 0),
+    workersSignedIn: summaries.reduce((sum, s) => sum + s.signedInToday, 0),
+    workersReportingLate: summaries.reduce((sum, s) => sum + s.lateReports, 0),
+    workersUnconfirmed: summaries.reduce(
+      (sum, s) => sum + Math.max(0, s.expectedToday - s.signedInToday),
+      0,
+    ),
     attendanceConfirmed: summaries.reduce((sum, s) => sum + s.confirmedToday, 0),
     openRequirements: summaries.reduce((sum, s) => sum + s.openRoles, 0),
+    upcomingStarts: summaries.filter((s) => s.startDays !== null && s.startDays >= 0 && s.startDays <= 7).length,
+    startsTomorrow: summaries.filter((s) => s.startDays === 1).length,
     pendingActions: summaries.reduce(
       (sum, s) => sum + s.pendingOffers.length + s.reviewWorkers.length,
       0,
@@ -9602,60 +9613,161 @@ function companyDashboardSummary(user) {
   };
 }
 
-function companyDashboardFocusHTML(summary, user) {
-  const focus = companyDashboardFocusModel(summary, user);
-  return `<section class="company-focus-card jw-card">
-    <div class="company-focus-head">
+function firstNameForUser(user) {
+  const value =
+    user?.fullName ||
+    user?.name ||
+    user?.displayName ||
+    user?.contactName ||
+    "";
+  return String(value).trim().split(/\s+/)[0] || "there";
+}
+
+function companyDailyBriefingHTML(summary, user) {
+  const briefing = companyDailyBriefingModel(summary, user);
+  return `<section class="company-daily-briefing jw-card">
+    <div class="company-briefing-head">
       <div>
-        <p class="company-home-kicker">TODAY'S FOCUS</p>
-        <h3>${escapeHtml(focus.primary.title)}</h3>
-        <p>${escapeHtml(focus.primary.body)}</p>
+        <p class="company-home-kicker">DAILY BRIEFING</p>
+        <h3>Good ${escapeHtml(briefing.dayPart)}, ${escapeHtml(briefing.firstName)}</h3>
+        <p>Today</p>
       </div>
-      <button class="secondary-btn company-focus-primary-action" type="button" ${focus.primary.actionAttr}>
-        ${escapeHtml(focus.primary.actionLabel)}
-      </button>
+      ${briefing.action
+        ? `<button class="secondary-btn company-briefing-action" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>`
+        : ""}
     </div>
-    <div class="company-focus-stats">
-      ${focus.stats
+    <div class="company-briefing-metrics">
+      ${briefing.metrics
         .map(
-          (item) => `<div class="company-focus-stat ${item.tone}">
+          (item) => `<div class="company-briefing-metric ${item.tone}">
             <strong>${item.value}</strong>
             <span>${escapeHtml(item.label)}</span>
           </div>`,
         )
         .join("")}
     </div>
-    <div class="company-control-grid">
-      <section class="company-control-panel company-control-panel--wide">
-        <div class="company-control-panel-head">
-          <span class="company-home-kicker">Action Required</span>
-          <small>${focus.actionItems.length ? `${focus.actionItems.length} item${focus.actionItems.length === 1 ? "" : "s"}` : "Clear"}</small>
-        </div>
-        <div class="company-control-list">
-          ${focus.actionItems.length
-            ? focus.actionItems.map(companyDashboardActionItemHTML).join("")
-            : `<div class="company-control-empty">
-                <strong>No urgent actions today</strong>
-                <span>Project health, attendance and approval items are currently in order.</span>
-              </div>`}
-        </div>
-      </section>
-      <section class="company-control-panel">
-        <div class="company-control-panel-head">
-          <span class="company-home-kicker">Upcoming Starts</span>
-          <small>Next 7 days</small>
-        </div>
-        <div class="company-control-list">
-          ${focus.upcoming.length
-            ? focus.upcoming.map(companyDashboardUpcomingItemHTML).join("")
-            : `<div class="company-control-empty">
-                <strong>No starts due this week</strong>
-                <span>Upcoming project starts will appear here automatically.</span>
-              </div>`}
-        </div>
-      </section>
+    ${briefing.action
+      ? `<article class="company-briefing-recommendation ${escapeHtml(briefing.action.tone)}">
+          <span class="company-action-dot" aria-hidden="true"></span>
+          <div>
+            <small>Recommended action</small>
+            <strong>${escapeHtml(briefing.action.title)}</strong>
+            <p>${escapeHtml(briefing.action.body)}</p>
+          </div>
+          <button class="primary-btn" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>
+        </article>`
+      : `<div class="company-briefing-clear">
+          <strong>No immediate actions showing</strong>
+          <span>Attendance, labour demand and upcoming starts are currently in order.</span>
+        </div>`}
+    <div class="company-live-site-status">
+      <div class="company-live-site-head">
+        <span class="company-home-kicker">LIVE SITE STATUS</span>
+        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} active today` : "No active attendance"}</small>
+      </div>
+      <div class="company-live-site-list">
+        ${briefing.siteRows.length
+          ? briefing.siteRows.map(companyLiveSiteStatusRowHTML).join("")
+          : `<div class="company-control-empty">
+              <strong>No attendance expected yet</strong>
+              <span>Projects with workers expected today will appear here.</span>
+            </div>`}
+      </div>
     </div>
   </section>`;
+}
+
+function companyDailyBriefingModel(summary, user) {
+  const metrics = [
+    { label: "active projects today", value: summary.activeProjectsToday, tone: summary.activeProjectsToday ? "info" : "muted" },
+    { label: "workers expected", value: summary.workersExpected, tone: summary.workersExpected ? "info" : "muted" },
+    { label: "signed in", value: summary.workersSignedIn, tone: summary.workersSignedIn ? "ok" : "muted" },
+    { label: "reporting late", value: summary.workersReportingLate, tone: summary.workersReportingLate ? "warn" : "muted" },
+    { label: "unconfirmed", value: summary.workersUnconfirmed, tone: summary.workersUnconfirmed ? "warn" : "muted" },
+    { label: "open labour requirements", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "ok" },
+    {
+      label: summary.startsTomorrow
+        ? `project${summary.startsTomorrow === 1 ? "" : "s"} start${summary.startsTomorrow === 1 ? "s" : ""} tomorrow`
+        : "starting next 7 days",
+      value: summary.startsTomorrow || summary.upcomingStarts,
+      tone: summary.upcomingStarts ? "info" : "muted",
+    },
+  ].filter((item) => item.value > 0 || ["active projects today", "workers expected"].includes(item.label));
+  const focus = companyDashboardFocusModel(summary, user);
+  const primaryAction = briefingRecommendedAction(summary, focus);
+  return {
+    dayPart: dashboardGreetingPart(),
+    firstName: firstNameForUser(user),
+    metrics,
+    action: primaryAction,
+    siteRows: summary.summaries
+      .filter((projectSummary) => projectSummary.expectedToday > 0 || projectSummary.startDays < 0)
+      .sort((a, b) => b.expectedToday - a.expectedToday || projectDateValue(a.job.start) - projectDateValue(b.job.start))
+      .slice(0, 5)
+      .map(companyLiveSiteStatusModel),
+  };
+}
+
+function dashboardGreetingPart() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
+
+function briefingRecommendedAction(summary, focus) {
+  const first = focus.actionItems[0];
+  if (first) return first;
+  if (summary.openRequirements > 0) {
+    const nextShortage = focus.upcoming.find((projectSummary) => projectSummary.openRoles > 0);
+    if (nextShortage) return companyDashboardShortageAction({ summary: nextShortage, shortage: mostUnderfilledRequirement(nextShortage) });
+  }
+  return null;
+}
+
+function companyLiveSiteStatusModel(projectSummary) {
+  const unconfirmed = Math.max(0, projectSummary.expectedToday - projectSummary.signedInToday);
+  let stateLabel = "No attendance expected yet";
+  let tone = "muted";
+  if (projectSummary.expectedToday > 0 && unconfirmed === 0 && !projectSummary.lateReports && !projectSummary.noShows) {
+    stateLabel = "All signed in";
+    tone = "ok";
+  } else if (projectSummary.noShows || unconfirmed || projectSummary.lateReports) {
+    stateLabel = projectSummary.noShows || unconfirmed ? "Requires review" : "Attendance in progress";
+    tone = projectSummary.noShows || unconfirmed ? "warn" : "info";
+  } else if (projectSummary.expectedToday > 0) {
+    stateLabel = "Attendance in progress";
+    tone = "info";
+  }
+  return {
+    job: projectSummary.job,
+    expected: projectSummary.expectedToday,
+    signedIn: projectSummary.signedInToday,
+    late: projectSummary.lateReports,
+    unconfirmed,
+    stateLabel,
+    tone,
+  };
+}
+
+function companyLiveSiteStatusRowHTML(item) {
+  return `<button class="company-live-site-row" type="button" data-dashboard-attendance-project="${escapeHtml(item.job.id)}">
+    <div>
+      <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
+      <span>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</span>
+    </div>
+    <dl>
+      <div><dt>Expected</dt><dd>${item.expected}</dd></div>
+      <div><dt>Signed in</dt><dd>${item.signedIn}</dd></div>
+      <div><dt>Late</dt><dd>${item.late}</dd></div>
+      <div><dt>Unconfirmed</dt><dd>${item.unconfirmed}</dd></div>
+    </dl>
+    <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
+  </button>`;
+}
+
+function companyDashboardFocusHTML(summary, user) {
+  return companyDailyBriefingHTML(summary, user);
 }
 
 function companyDashboardFocusModel(summary, user) {
