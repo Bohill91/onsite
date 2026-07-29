@@ -854,6 +854,16 @@ function requestExtension(jobId, newEndDate, newRate) {
     "extension",
     `Extension requested for <strong>${escapeHtml(w?.name || "worker")}</strong> until ${formatDate(newEndDate)} at ${formatMoney(job.proposedDayRate)}/day — awaiting their response.`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
+    title: "Project extension requested.",
+    description: `${w?.name || "Worker"} asked to confirm extension to ${formatDateOnly(newEndDate)}.`,
+    workerId: job.assignedWorkerId,
+    timestamp: job.extensionRequestedAt,
+    source: "project_extension",
+    severity: "info",
+    dedupeKey: `extension_requested:${job.id}:${job.extensionRequestedAt}`,
+  });
   saveAndRender();
   showToast("Extension request sent to worker");
 }
@@ -884,6 +894,16 @@ function acceptExtension(jobId) {
     "extension",
     `<strong>${escapeHtml(w?.name || "Worker")}</strong> accepted the extension — booking now runs to ${formatDate(job.estimatedEndDate)}.`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
+    title: "Project extension accepted.",
+    description: `Booking now runs to ${formatDateOnly(job.estimatedEndDate)}.`,
+    workerId: job.assignedWorkerId,
+    timestamp: new Date().toISOString(),
+    source: "project_extension",
+    severity: "success",
+    dedupeKey: `extension_accepted:${job.id}:${job.estimatedEndDate}`,
+  });
   saveAndRender();
   showToast("Extension accepted");
 }
@@ -902,6 +922,16 @@ function declineExtension(jobId) {
     "extension",
     `<strong>${escapeHtml(w?.name || "Worker")}</strong> declined the extension — booking ends as planned on ${formatDate(job.estimatedEndDate)}; now available for future projects.`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
+    title: "Project extension declined.",
+    description: `${w?.name || "Worker"} declined the proposed extension.`,
+    workerId: job.assignedWorkerId,
+    timestamp: new Date().toISOString(),
+    source: "project_extension",
+    severity: "warning",
+    dedupeKey: `extension_declined:${job.id}:${Date.now()}`,
+  });
   saveAndRender();
   showToast("Extension declined — your booking ends on the original date");
 }
@@ -2044,6 +2074,17 @@ function createReplacementTask(job, worker, reason, source, linkedReleaseId = ""
     job.replacementRequired = true;
     job.replacementNeeded = true;
     job.replacementTaskId = task.id;
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.REPLACEMENT_REQUESTED,
+      title: "Replacement requested.",
+      description: reason || "Replacement requested.",
+      workerId: worker?.id || "",
+      timestamp: task.createdAt,
+      source: source || "replacement",
+      severity: "warning",
+      metadata: { replacementTaskId: task.id, linkedReleaseId },
+      dedupeKey: `replacement_requested:${task.id}`,
+    });
   }
   return task;
 }
@@ -2094,6 +2135,16 @@ function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
     message: `${notice.workerName} gave notice for ${job.trade} in ${job.location}. Proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)}.`,
     createdAt: notice.noticeGivenAt,
     readAt: "",
+  });
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
+    title: `${notice.workerName} gave notice.`,
+    description: `Proposed last working day ${formatDateOnly(notice.proposedLastWorkingDay)}.`,
+    workerId: notice.workerId,
+    timestamp: notice.noticeGivenAt,
+    source: "worker_notice",
+    severity: "warning",
+    dedupeKey: `worker_notice:${notice.id}`,
   });
   logActivity(
     "notice",
@@ -2164,6 +2215,17 @@ function submitWorkerRelease(
   }
   if (replacementRequired)
     createReplacementTask(job, worker, reason, `release:${releaseType}`, record.id);
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
+    title: `${releaseTypeLabel(releaseType)} logged.`,
+    description: `${record.workerName} · ${reason}`,
+    workerId: record.workerId,
+    timestamp: record.releaseGivenAt,
+    source: "worker_release",
+    severity: isImmediate ? "critical" : "warning",
+    metadata: { releaseId: record.id, replacementRequired: !!replacementRequired },
+    dedupeKey: `worker_release:${record.id}`,
+  });
   if (
     releaseType === "immediate_release" ||
     releaseType === "pre_start_stand_down" ||
@@ -2209,6 +2271,19 @@ function adjustJobQuantity(jobId, nextQuantity, reason = "") {
   job.quantityChangePending = adjustmentType === "decrease";
   if (adjustmentType === "increase")
     createReplacementTask(job, null, record.reason, "labour_increase");
+  addProjectActivity(job, {
+    type:
+      adjustmentType === "increase"
+        ? PROJECT_ACTIVITY_TYPES.REPLACEMENT_REQUESTED
+        : PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
+    title: `Labour requirement ${adjustmentType}d.`,
+    description: `${fromQuantity} to ${toQuantity}. ${record.reason}`,
+    timestamp: record.createdAt,
+    source: "labour_adjustment",
+    severity: adjustmentType === "increase" ? "warning" : "info",
+    metadata: { adjustmentId: record.id, fromQuantity, toQuantity },
+    dedupeKey: `labour_adjustment:${record.id}`,
+  });
   logActivity(
     "job",
     `${escapeHtml(job.trade)} labour requirement ${adjustmentType}d from ${fromQuantity} to ${toQuantity}.${adjustmentType === "increase" ? " Replacement task created." : ""}`,
@@ -2995,12 +3070,15 @@ const PROJECT_ACTIVITY_TYPES = Object.freeze({
   WORKER_DID_NOT_ATTEND: "worker_did_not_attend",
   WORKER_ACCEPTED_OFFER: "worker_accepted_offer",
   WORKER_DECLINED_OFFER: "worker_declined_offer",
+  WORKER_ASSIGNED: "worker_assigned",
   LABOUR_REQUIREMENT_FILLED: "labour_requirement_filled",
   REPLACEMENT_REQUESTED: "replacement_requested",
   REPLACEMENT_ASSIGNED: "replacement_assigned",
   ATTENDANCE_CONFIRMED: "attendance_confirmed",
   PROJECT_HEALTH_CHANGED: "project_health_changed",
   PROJECT_CREATED: "project_created",
+  LABOUR_REQUEST_POSTED: "labour_request_posted",
+  MATCHING_STARTED: "matching_started",
   PROJECT_UPDATED: "project_updated",
   QR_REGENERATED: "qr_regenerated",
   INVOICE_GENERATED: "invoice_generated",
@@ -3069,7 +3147,7 @@ function projectActivityList(job) {
   if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
   job.projectActivity = job.projectActivity
     .map((item) => normalizeProjectActivityRecord(item, job))
-    .slice(0, 50);
+    .slice(0, 100);
   return job.projectActivity;
 }
 
@@ -3081,6 +3159,42 @@ function syncProjectActivityStore(job, activity) {
   );
   state.projectActivities.unshift(activity);
   state.projectActivities = state.projectActivities.slice(0, 500);
+}
+
+function projectActivityWorkerName(workerId, fallback = "") {
+  if (!workerId) return fallback;
+  return findWorker(workerId)?.name || fallback;
+}
+
+function addProjectActivity(job, activity = {}) {
+  if (!job) return null;
+  const dedupeKey =
+    activity.dedupeKey ||
+    activity.metadata?.dedupeKey ||
+    `${activity.type || PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED}:${activity.workerId || ""}:${activity.timestamp || activity.createdAt || ""}:${activity.title || ""}`;
+  const list = projectActivityList(job);
+  const exists = list.some(
+    (item) =>
+      item.id === activity.id ||
+      item.metadata?.dedupeKey === dedupeKey,
+  );
+  if (exists) return null;
+  const record = createProjectActivityRecord(
+    {
+      ...activity,
+      companyId: activity.companyId || job.companyId || "",
+      projectId: activity.projectId || job.id,
+      metadata: {
+        ...(activity.metadata || {}),
+        dedupeKey,
+      },
+    },
+    job,
+  );
+  list.unshift(record);
+  job.projectActivity = list.slice(0, 100);
+  syncProjectActivityStore(job, record);
+  return record;
 }
 
 const ACTIVITY_ICONS = {
@@ -3814,6 +3928,25 @@ function generateWeeklyInvoices() {
     buildWorkerPaymentRecordsForInvoice(inv).forEach((record) => {
       state.workerPaymentRecords.push(record);
     });
+    lines.forEach((line) => {
+      const job = findJob(line.jobId);
+      if (!job) return;
+      addProjectActivity(job, {
+        type: PROJECT_ACTIVITY_TYPES.INVOICE_GENERATED,
+        title: `${inv.invoiceNumber || "Invoice"} generated.`,
+        description: `${formatDateOnly(g.weekStart)} to ${formatDateOnly(g.weekEnd)} attendance period.`,
+        timestamp: inv.createdAt || new Date().toISOString(),
+        source: "weekly_invoicing",
+        severity: "info",
+        metadata: {
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber || "",
+          weekStart: g.weekStart,
+          weekEnd: g.weekEnd,
+        },
+        dedupeKey: `invoice_generated:${line.jobId}:${inv.id}`,
+      });
+    });
     created++;
   });
   if (created) {
@@ -4263,7 +4396,7 @@ function migrateState(s) {
     if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
     job.projectActivity = job.projectActivity
       .map((activity) => normalizeProjectActivityRecord(activity, job))
-      .slice(0, 50);
+      .slice(0, 100);
     projectActivityStore.push(...job.projectActivity);
   });
   s.projectActivities = [...s.projectActivities, ...projectActivityStore]
@@ -5971,6 +6104,16 @@ function workerAcceptOffer(applicationId) {
     "assign",
     `<strong>${escapeHtml(worker.name)}</strong> accepted the offer for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} — awaiting company review.`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.WORKER_ACCEPTED_OFFER,
+    title: `${worker.name} accepted your offer.`,
+    description: `${job.trade || "Labour"} offer is awaiting company review.`,
+    workerId: worker.id,
+    timestamp: app.workerRespondedAt,
+    source: "job_offer",
+    severity: "success",
+    dedupeKey: `worker_offer_accepted:${app.id}`,
+  });
   saveAndRender();
   showToast("Offer accepted — awaiting company review");
 }
@@ -5992,6 +6135,18 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
   }
   if (worker) worker.consecutiveMissedOffers = 0;
   const next = job ? offerNextBestWorker(job.id) : { ok: false };
+  if (job) {
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
+      title: `${app.workerName || worker?.name || "Worker"} declined the offer.`,
+      description: reason + (comment.trim() ? ` · ${comment.trim()}` : ""),
+      workerId: worker?.id || app.workerId || "",
+      timestamp: app.workerRespondedAt,
+      source: "job_offer",
+      severity: "info",
+      dedupeKey: `worker_offer_declined:${app.id}`,
+    });
+  }
   logActivity(
     "assign",
     `<strong>${escapeHtml(app.workerName)}</strong> declined the offer for ${escapeHtml(job?.trade || "the job")} — ${escapeHtml(reason)}. Reliability is unaffected.${next.ok ? " Next best worker offered." : ""}`,
@@ -6040,6 +6195,28 @@ function companyAcceptWorker(applicationId) {
     "assign",
     `<strong>${escapeHtml(worker.name)}</strong> confirmed for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)} after offer review.`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.WORKER_ASSIGNED,
+    title: `${worker.name} assigned to project.`,
+    description: "Company accepted the worker after offer review.",
+    workerId: worker.id,
+    timestamp: app.confirmedAt,
+    source: "company_offer_review",
+    severity: "success",
+    dedupeKey: `worker_assignment:${app.id}`,
+  });
+  const postConfirmSummary = companyProjectSummary(job, getSessionUser() || {});
+  if (postConfirmSummary.openRoles === 0) {
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED,
+      title: "Labour requirement filled.",
+      description: "All current labour requirements are filled.",
+      timestamp: app.confirmedAt,
+      source: "company_offer_review",
+      severity: "success",
+      dedupeKey: `labour_requirement_filled:${job.id}`,
+    });
+  }
   saveAndRender();
   showToast("Worker confirmed — Job Agreement signing is required before QR Sign In becomes active");
 }
@@ -6060,6 +6237,16 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
     if (transfer) transfer.status = "declined_by_company";
   }
   const next = offerNextBestWorker(job.id);
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
+    title: `${app.workerName || "Worker"} declined by company.`,
+    description: reason + (comment.trim() ? ` · ${comment.trim()}` : ""),
+    workerId: app.workerId || "",
+    timestamp: app.companyReviewedAt,
+    source: "company_offer_review",
+    severity: "info",
+    dedupeKey: `company_declined_worker:${app.id}`,
+  });
   logActivity(
     "assign",
     `${escapeHtml(app.companyName || "Company")} declined <strong>${escapeHtml(app.workerName)}</strong> for ${escapeHtml(job.trade)} — ${escapeHtml(reason)}.${next.ok ? " Next best worker offered." : ""}`,
@@ -9770,6 +9957,81 @@ function companyDashboardFocusHTML(summary, user) {
   return companyDailyBriefingHTML(summary, user);
 }
 
+function companyRecentActivityHTML(summary, user) {
+  const rows = companyRecentActivityItems(user, summary).slice(0, 5);
+  return `<section class="company-recent-activity jw-card">
+    <div class="company-recent-activity-head">
+      <div>
+        <p class="company-home-kicker">RECENT ACTIVITY</p>
+        <h3>Latest project updates</h3>
+      </div>
+      <button class="secondary-btn company-action-btn" type="button" data-empty-tab="notifications">View All</button>
+    </div>
+    <div class="company-recent-activity-list">
+      ${rows.length
+        ? rows.map(companyRecentActivityRowHTML).join("")
+        : guidedEmptyStateHTML({
+            kicker: "Activity",
+            title: "No project activity yet",
+            body: "Project updates, attendance events, offer decisions and invoice activity will appear here as work progresses.",
+          })}
+    </div>
+  </section>`;
+}
+
+function companyRecentActivityItems(user, summary = companyDashboardSummary(user)) {
+  const companyProjectIds = new Set(summary.companyJobs.map((job) => job.id));
+  const fromStore = (state.projectActivities || []).filter(
+    (item) => companyProjectIds.has(item.projectId),
+  );
+  const fromProjects = summary.companyJobs.flatMap((job) => projectActivityList(job));
+  return [...fromStore, ...fromProjects]
+    .map((item) => normalizeProjectActivityRecord(item))
+    .filter(
+      (item, index, arr) =>
+        arr.findIndex((candidate) => candidate.id === item.id) === index,
+    )
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+}
+
+function activitySectionForType(type) {
+  if (
+    [
+      PROJECT_ACTIVITY_TYPES.WORKER_SIGNED_IN,
+      PROJECT_ACTIVITY_TYPES.WORKER_REPORTED_LATE,
+      PROJECT_ACTIVITY_TYPES.WORKER_DID_NOT_ATTEND,
+      PROJECT_ACTIVITY_TYPES.ATTENDANCE_CONFIRMED,
+      PROJECT_ACTIVITY_TYPES.QR_REGENERATED,
+    ].includes(type)
+  ) return "attendance";
+  if (
+    [
+      PROJECT_ACTIVITY_TYPES.WORKER_ACCEPTED_OFFER,
+      PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
+      PROJECT_ACTIVITY_TYPES.WORKER_ASSIGNED,
+      PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED,
+      PROJECT_ACTIVITY_TYPES.REPLACEMENT_REQUESTED,
+      PROJECT_ACTIVITY_TYPES.REPLACEMENT_ASSIGNED,
+    ].includes(type)
+  ) return "workers";
+  if (type === PROJECT_ACTIVITY_TYPES.INVOICE_GENERATED) return "invoices";
+  if (type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED) return "requirements";
+  return "overview";
+}
+
+function companyRecentActivityRowHTML(item) {
+  const job = findJob(item.projectId);
+  const workerName = projectActivityWorkerName(item.workerId);
+  return `<button class="company-recent-activity-row ${escapeHtml(item.severity || "info")}" type="button" data-company-project-open-section="${escapeHtml(item.projectId)}" data-company-section-target="${escapeHtml(activitySectionForType(item.type))}">
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <div>
+      <strong>${escapeHtml(item.title || "Project activity")}</strong>
+      <p>${escapeHtml(item.description || companyProjectTitle(job) || "Project updated.")}</p>
+      <small>${escapeHtml(companyProjectTitle(job) || "Project")} ${workerName ? `· ${workerName}` : ""} · ${escapeHtml(formatRelativeTimestamp(item.timestamp))}</small>
+    </div>
+  </button>`;
+}
+
 function companyDashboardFocusModel(summary, user) {
   const healthItems = summary.summaries
     .map((projectSummary) => {
@@ -10254,6 +10516,19 @@ function syncProjectHealthNotifications(user) {
       createdAt: new Date().toISOString(),
       readAt: "",
     });
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED,
+      title: `Project Health changed to ${health.label}.`,
+      description: health.primaryReason || "Project health changed.",
+      timestamp: new Date().toISOString(),
+      source: "project_health",
+      severity: health.level === "urgent" ? "critical" : health.level === "atRisk" ? "warning" : "success",
+      metadata: {
+        healthLevel: health.level,
+        recommendations: health.recommendations || [],
+      },
+      dedupeKey: `project_health:${job.id}:${health.level}`,
+    });
     changed = true;
   });
   return changed;
@@ -10645,7 +10920,68 @@ function companyProjectOverviewHTML(job, summary) {
               })
         }
       </div>
+      <div class="company-project-section company-project-section--wide">
+        <h4>Operational Timeline</h4>
+        ${projectOperationalTimelineHTML(job, summary)}
+      </div>
     </div>`;
+}
+
+function projectOperationalTimelineHTML(job, summary) {
+  const startDays = projectStartDays(job);
+  const endDays = projectEndDays(job);
+  const events = [
+    {
+      label: "Project created",
+      date: job.createdAt || job.postedAt,
+      state: job.createdAt || job.postedAt ? "complete" : "pending",
+    },
+    {
+      label: "Labour request posted",
+      date: job.postedAt || job.createdAt,
+      state: job.postedAt || job.createdAt ? "complete" : "pending",
+    },
+    {
+      label: "Matching started",
+      date: projectActivityList(job).find((a) => a.type === PROJECT_ACTIVITY_TYPES.MATCHING_STARTED)?.timestamp || job.postedAt || job.createdAt,
+      state: summary.openRoles > 0 ? "active" : "complete",
+    },
+    {
+      label: "Labour filled",
+      date: projectActivityList(job).find((a) => a.type === PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED || a.type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED && a.metadata?.healthLevel === "filled")?.timestamp || "",
+      state: summary.openRoles === 0 ? "complete" : "pending",
+    },
+    {
+      label: "Project start",
+      date: job.start || job.startDate,
+      state: startDays !== null && startDays <= 0 ? "complete" : "pending",
+    },
+    {
+      label: "Today",
+      date: todayDateStr(),
+      state: "active",
+    },
+    {
+      label: "Estimated project end",
+      date: job.noFixedEndDate ? "" : job.estimatedEndDate || job.endDate || job.end,
+      state: job.noFixedEndDate ? "pending" : endDays !== null && endDays < 0 ? "complete" : "pending",
+      note: job.noFixedEndDate ? "No fixed end date" : "",
+    },
+    {
+      label: "Project completed",
+      date: job.completedAt || "",
+      state: job.completed ? "complete" : "pending",
+    },
+  ];
+  return `<ol class="project-operational-timeline">
+    ${events.map((event) => `<li class="${escapeHtml(event.state)}">
+      <span class="project-timeline-dot" aria-hidden="true"></span>
+      <div>
+        <strong>${escapeHtml(event.label)}</strong>
+        <small>${escapeHtml(event.note || (event.date ? formatDateOnly(event.date) : "Not yet"))}</small>
+      </div>
+    </li>`).join("")}
+  </ol>`;
 }
 
 function companyProjectWorkersHTML(job, summary) {
@@ -10893,29 +11229,64 @@ function companyProjectSiteInfoHTML(job) {
 }
 
 function companyProjectActivityHTML(job, summary) {
-  const projectRows = projectActivityList(job)
-    .slice(0, 8)
-    .map((item) => `<div class="company-project-mini-row"><span>${escapeHtml(item.title || item.message || "Project updated")}</span><strong>${item.timestamp ? formatDateOnly(item.timestamp) : "Update"}</strong></div>`);
-  const offerRows = summary.apps
-    .slice(0, 8)
-    .map((app) => `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || "Worker")} · ${escapeHtml(app.status || "offer")}</span><strong>${app.createdAt ? formatDateOnly(app.createdAt) : "Offer"}</strong></div>`);
-  const attendanceRows = summary.todayRecords
-    .slice(0, 8)
-    .map((rec) => `<div class="company-project-mini-row"><span>${escapeHtml(findWorker(rec.workerId)?.name || "Worker")} · ${escapeHtml(ATT_CFG[rec.status]?.label || rec.status || "Attendance")}</span><strong>${formatDateOnly(rec.date)}</strong></div>`);
-  const notificationRows = (state.notifications || [])
-    .filter((n) => n.jobId === job.id)
-    .slice(0, 8)
-    .map((n) => `<div class="company-project-mini-row"><span>${escapeHtml(n.title || n.type || "Notification")}</span><strong>${n.createdAt ? formatDateOnly(n.createdAt) : "Update"}</strong></div>`);
-  const rows = [...projectRows, ...notificationRows, ...offerRows, ...attendanceRows];
+  const rows = groupedProjectActivityHTML(projectActivityList(job));
   return `
     <div class="company-project-section">
       <h4>Activity</h4>
-      ${rows.length ? rows.join("") : guidedEmptyStateHTML({
+      ${rows || guidedEmptyStateHTML({
         kicker: "Activity",
         title: "No project activity yet",
         body: "Offer updates, attendance events, document acknowledgements and project edits will appear here as the project progresses.",
       })}
     </div>`;
+}
+
+function groupedProjectActivityHTML(activityList = []) {
+  const groups = { today: [], yesterday: [], earlier: [] };
+  activityList
+    .map((item) => normalizeProjectActivityRecord(item))
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+    .forEach((item) => {
+      const bucket = activityDateBucket(item.timestamp);
+      groups[bucket].push(item);
+    });
+  return [
+    ["today", "Today"],
+    ["yesterday", "Yesterday"],
+    ["earlier", "Earlier"],
+  ]
+    .filter(([key]) => groups[key].length)
+    .map(([key, label]) => `<section class="project-activity-group">
+      <h5>${escapeHtml(label)}</h5>
+      <div class="project-activity-list">
+        ${groups[key].map(projectActivityRowHTML).join("")}
+      </div>
+    </section>`)
+    .join("");
+}
+
+function activityDateBucket(value) {
+  const d = dateFromValue(value);
+  if (!d) return "earlier";
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = dateOnlyMs(todayDateStr());
+  if (day === today) return "today";
+  if (day === today - 86400000) return "yesterday";
+  return "earlier";
+}
+
+function projectActivityRowHTML(item) {
+  const workerName = projectActivityWorkerName(item.workerId);
+  const time = item.timestamp ? formatUKTime(item.timestamp, "—") : "—";
+  return `<article class="project-activity-row ${escapeHtml(item.severity || "info")}">
+    <time>${escapeHtml(time)}</time>
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <div>
+      <strong>${escapeHtml(item.title || "Project activity")}</strong>
+      ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
+      <small>${workerName ? `${escapeHtml(workerName)} · ` : ""}${escapeHtml(item.severity || "info")}</small>
+    </div>
+  </article>`;
 }
 
 function updateProjectEditPinDisplay() {
@@ -11025,7 +11396,7 @@ function recordProjectEditActivity(job, changes, user) {
   const createdAt = new Date().toISOString();
   const actor = user?.companyName || user?.name || "Company";
   changes.forEach((change) => {
-    const activity = createProjectActivityRecord({
+    addProjectActivity(job, {
       type: PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
       title: change.message,
       description: change.message,
@@ -11039,15 +11410,13 @@ function recordProjectEditActivity(job, changes, user) {
       projectId: job.id,
       source: "company_project_edit",
       actor,
+      dedupeKey: `project_update:${job.id}:${change.field}:${createdAt}`,
       metadata: {
         field: change.field,
         requiresWorkerAcknowledgement: !!change.requiresWorkerAcknowledgement,
       },
-    }, job);
-    projectActivityList(job).unshift(activity);
-    syncProjectActivityStore(job, activity);
+    });
   });
-  job.projectActivity = job.projectActivity.slice(0, 50);
 
   const ackFields = changes
     .filter((change) => change.requiresWorkerAcknowledgement)
@@ -11352,6 +11721,7 @@ function renderContractorHome(user) {
       <div class="request-labour-page-body">
         <div class="jw-form">
           ${companyDashboardFocusHTML(summary, user)}
+          ${companyRecentActivityHTML(summary, user)}
           <section class="company-dashboard-filter-card jw-card">
             <div class="company-project-search-card-head">
               <span>Search projects</span>
@@ -12806,6 +13176,7 @@ jobForm.addEventListener("submit", (e) => {
     return;
   }
   const jobNumber = document.querySelector("#jobNumber")?.value.trim() || "";
+  const postedAt = new Date().toISOString();
 
   const projectName =
     document.querySelector("#projectName")?.value.trim() || "";
@@ -12970,6 +13341,8 @@ jobForm.addEventListener("submit", (e) => {
         : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
     accommodationPaid,
+    createdAt: postedAt,
+    postedAt,
   };
 
   if (ongoingAssignment && vehicleArrangement) {
@@ -13044,8 +13417,41 @@ jobForm.addEventListener("submit", (e) => {
   if (Object.keys(photoMeta).length) job.sitePhotoMeta = photoMeta;
 
   state.jobs.push(job);
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.LABOUR_REQUEST_POSTED,
+    title: "Project created.",
+    description: `${companyProjectTitle(job)} labour request posted.`,
+    timestamp: postedAt,
+    createdAt: postedAt,
+    source: "request_labour",
+    severity: "info",
+    dedupeKey: `project_created:${job.id}`,
+  });
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.PROJECT_CREATED,
+    title: "Labour request posted.",
+    description: `${labourRequirements.length || 1} labour requirement${labourRequirements.length === 1 ? "" : "s"} added.`,
+    timestamp: postedAt,
+    createdAt: postedAt,
+    source: "request_labour",
+    severity: "info",
+    dedupeKey: `labour_request_posted:${job.id}`,
+  });
   const preferredOffer = tryPreferredWorkerOffers(job);
   const autoOffer = preferredOffer.ok ? preferredOffer : autoOfferBestMatch(job.id);
+  if (preferredOffer.ok || autoOffer.ok) {
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.MATCHING_STARTED,
+      title: "Matching started.",
+      description: preferredOffer.ok
+        ? "Preferred worker offer created first."
+        : "OnSite started matching suitable workers.",
+      timestamp: new Date().toISOString(),
+      source: "matching",
+      severity: "info",
+      dedupeKey: `matching_started:${job.id}`,
+    });
+  }
   logActivity(
     "job",
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
@@ -15282,7 +15688,21 @@ function openQrRegenerationConfirm(jobId) {
     if (event.target === modal) closeQrRegenerationConfirm();
   });
   modal.querySelector("[data-qr-regen-confirm]")?.addEventListener("click", () => {
-    generateSiteCode(jobId);
+    const code = generateSiteCode(jobId);
+    const job = findJob(jobId);
+    if (job && code) {
+      addProjectActivity(job, {
+        type: PROJECT_ACTIVITY_TYPES.QR_REGENERATED,
+        title: "Site Sign-In QR regenerated.",
+        description: "Previous printed QR copies were invalidated.",
+        timestamp: new Date().toISOString(),
+        source: "attendance_qr",
+        severity: "warning",
+        metadata: { qrCodeId: code.id },
+        dedupeKey: `qr_regenerated:${code.id}`,
+      });
+      saveState();
+    }
     closeQrRegenerationConfirm();
     showToast("Project sign-in QR regenerated");
     renderSiteQrPanel();
@@ -15614,6 +16034,24 @@ function submitDayAttendance() {
       (r) => !(r.workerId === wid && r.date === today),
     );
     attendanceRecords.unshift(rec);
+    if (linkedJob && finalStatus === "noShow") {
+      const workerName = findWorker(wid)?.name || "Worker";
+      addProjectActivity(linkedJob, {
+        type: PROJECT_ACTIVITY_TYPES.WORKER_DID_NOT_ATTEND,
+        title: `${workerName} did not attend.`,
+        description: "Worker was marked as no-show during attendance confirmation.",
+        workerId: wid,
+        timestamp: new Date().toISOString(),
+        source: "attendance_confirmation",
+        severity: "critical",
+        metadata: {
+          attendanceRecordId: rec.id,
+          date: today,
+          status: finalStatus,
+        },
+        dedupeKey: `worker_no_show:${linkedJob.id}:${wid}:${today}`,
+      });
+    }
     const w = findWorker(wid);
     if (w) {
       const stats = getWorkerStats(wid);
@@ -15640,6 +16078,25 @@ function submitDayAttendance() {
     return;
   }
   saveAttendanceRecords();
+  const confirmedJobs = new Map();
+  Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
+    if (scopedWorkerIds && !scopedWorkerIds.has(wid)) return;
+    if (!data.status) return;
+    const job = assignedJobForWorker(wid);
+    if (job) confirmedJobs.set(job.id, job);
+  });
+  confirmedJobs.forEach((job) => {
+    addProjectActivity(job, {
+      type: PROJECT_ACTIVITY_TYPES.ATTENDANCE_CONFIRMED,
+      title: "Attendance confirmed.",
+      description: `${count} attendance record${count === 1 ? "" : "s"} confirmed for ${formatAttDate(today)}.`,
+      timestamp: new Date().toISOString(),
+      source: "attendance_confirmation",
+      severity: "success",
+      metadata: { date: today, count },
+      dedupeKey: `attendance_confirmed:${job.id}:${today}:${count}`,
+    });
+  });
   saveState();
   todayAttendanceMap = {};
   renderAttendance();
@@ -16289,6 +16746,22 @@ async function workerScanCheckIn(uid, workerObj) {
     "attend",
     `<strong>${escapeHtml(workerObj.name)}</strong> scanned in at ${escapeHtml(job.location)} — pending approval`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.WORKER_SIGNED_IN,
+    title: `${workerObj.name} signed in.`,
+    description: `Sign-in time ${rec.scanTime || formatUKTime(scanMs)}.`,
+    workerId: uid,
+    timestamp: new Date(scanMs).toISOString(),
+    source: "site_sign_in_qr",
+    severity: "success",
+    metadata: {
+      attendanceRecordId: rec.id,
+      date: today,
+      status: suggested,
+    },
+    dedupeKey: `worker_signed_in:${job.id}:${uid}:${today}`,
+  });
+  saveState();
   showToast("Checked in — pending supervisor approval");
   refreshWorkerAttCard(uid, workerObj);
 }
@@ -17607,6 +18080,23 @@ function submitReport() {
     "attend",
     `<strong>${escapeHtml(w?.name || "Worker")}</strong> reported running late for ${escapeHtml(job.trade || "work")} in ${escapeHtml(job.location || "site")} (ETA ${escapeHtml(eta)})`,
   );
+  addProjectActivity(job, {
+    type: PROJECT_ACTIVITY_TYPES.WORKER_REPORTED_LATE,
+    title: `${w?.name || "Worker"} reported late.`,
+    description: `ETA ${eta}. ${lateReport.reason}${note ? ` · ${note}` : ""}`,
+    workerId: uid,
+    timestamp: lateReport.reportedAt,
+    source: "worker_late_report",
+    severity: "warning",
+    metadata: {
+      attendanceRecordId: rec.id,
+      date: today,
+      eta,
+      reason: lateReport.reason,
+    },
+    dedupeKey: `worker_reported_late:${job.id}:${uid}:${today}:${lateReport.id}`,
+  });
+  saveState();
 
   closeReportModal();
   showToast("Report sent — your supervisor will review it");
