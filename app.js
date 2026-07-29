@@ -6914,6 +6914,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 let pendingTradeRequirements = [];
+let pendingLabourSchedulePeriods = [];
 
 function updateAssignmentTypeForm() {
   const type = normalizeAssignmentType(
@@ -6986,7 +6987,6 @@ function selectedJobWorkingDays() {
 }
 
 // ─── Multi-trade labour requirement builder ───────────────
-let pendingLabourSchedulePeriods = [];
 
 function normalizeLabourSchedule(periods = []) {
   return (periods || [])
