@@ -1,6 +1,10 @@
 const STORAGE_KEY = "sitematch_v2";
 const ACTIVITY_KEY = "sitematch_activity";
 
+if (typeof history !== "undefined" && "scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
 const AVATAR_COLORS = ["av-0", "av-1", "av-2", "av-3", "av-4", "av-5"];
 const ICON_STROKE = 2;
 const ICON_PATHS = {
@@ -2652,21 +2656,86 @@ function certExpiryWarnings(worker) {
   return `<div class="worker-doc-warnings">${parts.join("")}</div>`;
 }
 
+const UK_LOCALE = "en-GB";
+const UK_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(UK_LOCALE, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+const UK_DATE_FORMATTER = new Intl.DateTimeFormat(UK_LOCALE, {
+  dateStyle: "medium",
+});
+const UK_SHORT_DATE_FORMATTER = new Intl.DateTimeFormat(UK_LOCALE, {
+  dateStyle: "short",
+});
+const UK_TIME_FORMATTER = new Intl.DateTimeFormat(UK_LOCALE, {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const UK_PAGE_DATE_FORMATTER = new Intl.DateTimeFormat(UK_LOCALE, {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
+function dateFromValue(value) {
+  if (!value) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatUKDateTime(value, fallback = "No date set") {
+  const d = dateFromValue(value);
+  return d ? UK_DATE_TIME_FORMATTER.format(d) : fallback;
+}
+
+function formatUKDate(value, fallback = "No date set") {
+  const d = dateFromValue(value);
+  return d ? UK_DATE_FORMATTER.format(d) : fallback;
+}
+
+function formatUKShortDate(value, fallback = "No date set") {
+  const d = dateFromValue(value);
+  return d ? UK_SHORT_DATE_FORMATTER.format(d) : fallback;
+}
+
+function formatUKTime(value, fallback = "Time TBC") {
+  const d = dateFromValue(value);
+  return d ? UK_TIME_FORMATTER.format(d) : fallback;
+}
+
+function formatCurrentDatePill(value = todayDateStr()) {
+  const d = dateFromValue(value);
+  return d ? UK_PAGE_DATE_FORMATTER.format(d) : "";
+}
+
+function formatRelativeTimestamp(value) {
+  const d = dateFromValue(value);
+  if (!d) return "just now";
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return formatUKShortDate(d);
+}
+
+function countdownCopyFromDate(value) {
+  const days = calendarDaysUntil(value);
+  if (days === null) return "Start date TBC";
+  if (days < 0) return "";
+  if (days === 0) return "Starts today";
+  if (days === 1) return "Starts tomorrow";
+  return `Starts in ${days} days`;
+}
+
 function formatDate(value) {
-  if (!value) return "No date set";
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatUKDateTime(value);
 }
 
 // Date-only formatter for date strings like "2026-06-01" (no time component).
 function formatDateOnly(value) {
-  if (!value) return "No date set";
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(value + "T00:00:00")
-    : new Date(value);
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(d);
+  return formatUKDate(value);
 }
 
 function escapeHtml(value) {
@@ -2714,13 +2783,105 @@ function guidedEmptyStateHTML({
   </div>`;
 }
 
-function scrollAppToTop({ smooth = true } = {}) {
-  const content = document.querySelector(".content-area");
+function summaryMetricCardHTML({
+  label = "",
+  value = "",
+  detail = "",
+  tone = "neutral",
+} = {}) {
+  return `<div class="op-metric-card ${escapeHtml(tone)}">
+    <span>${escapeHtml(label)}</span>
+    <strong>${escapeHtml(value)}</strong>
+    ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+  </div>`;
+}
+
+function statusIndicatorHTML({ label = "", tone = "neutral" } = {}) {
+  return `<span class="op-status op-status--${escapeHtml(tone)}"><i aria-hidden="true"></i>${escapeHtml(label)}</span>`;
+}
+
+function activityRowHTML(record = {}) {
+  const activity = normalizeProjectActivityRecord(record);
+  return `<div class="op-activity-row ${escapeHtml(activity.severity)}">
+    <span class="op-activity-dot" aria-hidden="true"></span>
+    <div>
+      <strong>${escapeHtml(activity.title || "Project activity")}</strong>
+      ${activity.description ? `<p>${escapeHtml(activity.description)}</p>` : ""}
+      <small>${escapeHtml(formatRelativeTimestamp(activity.timestamp))}</small>
+    </div>
+  </div>`;
+}
+
+function sectionHeaderHTML({
+  kicker = "",
+  title = "",
+  body = "",
+  actionHTML = "",
+} = {}) {
+  return `<div class="op-section-head">
+    <div>
+      ${kicker ? `<p class="company-home-kicker">${escapeHtml(kicker)}</p>` : ""}
+      ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
+      ${body ? `<p>${escapeHtml(body)}</p>` : ""}
+    </div>
+    ${actionHTML || ""}
+  </div>`;
+}
+
+function datePillHTML(value = todayDateStr()) {
+  return `<span class="att-today-badge">${escapeHtml(formatCurrentDatePill(value))}</span>`;
+}
+
+function actionCardHTML({
+  title = "",
+  body = "",
+  actionHTML = "",
+  tone = "neutral",
+} = {}) {
+  return `<div class="op-action-card ${escapeHtml(tone)}">
+    <div>
+      <strong>${escapeHtml(title)}</strong>
+      ${body ? `<p>${escapeHtml(body)}</p>` : ""}
+    </div>
+    ${actionHTML || ""}
+  </div>`;
+}
+
+function loadingStateHTML(options = {}) {
+  return `<div class="op-loading-state">${loadingSkeleton(options)}</div>`;
+}
+
+function appScrollTargets() {
+  return Array.from(
+    new Set(
+      [
+        document.querySelector(".content-area"),
+        document.querySelector(".tab-panel.active"),
+        document.querySelector(".tab-panel.active .request-labour-page"),
+        document.querySelector(".tab-panel.active .request-labour-page-body"),
+        document.querySelector(".tab-panel.active .company-dashboard-page"),
+        document.querySelector(".tab-panel.active .attendance-page"),
+        document.scrollingElement,
+      ].filter(Boolean),
+    ),
+  );
+}
+
+function scrollAppToTop({ smooth = false } = {}) {
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   const behavior = smooth && !reduceMotion ? "smooth" : "auto";
-  requestAnimationFrame(() => {
-    if (content) content.scrollTo({ top: 0, behavior });
+  const scroll = () => {
+    appScrollTargets().forEach((target) => {
+      target.scrollTop = 0;
+      if (typeof target.scrollTo === "function") {
+        target.scrollTo({ top: 0, behavior });
+      }
+    });
     window.scrollTo({ top: 0, behavior });
+  };
+  scroll();
+  requestAnimationFrame(() => {
+    scroll();
   });
 }
 
@@ -2825,13 +2986,101 @@ function logActivity(type, text) {
 }
 
 function timeAgo(ts) {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "short" }).format(
-    new Date(ts),
+  return formatRelativeTimestamp(ts);
+}
+
+const PROJECT_ACTIVITY_TYPES = Object.freeze({
+  WORKER_SIGNED_IN: "worker_signed_in",
+  WORKER_REPORTED_LATE: "worker_reported_late",
+  WORKER_DID_NOT_ATTEND: "worker_did_not_attend",
+  WORKER_ACCEPTED_OFFER: "worker_accepted_offer",
+  WORKER_DECLINED_OFFER: "worker_declined_offer",
+  LABOUR_REQUIREMENT_FILLED: "labour_requirement_filled",
+  REPLACEMENT_REQUESTED: "replacement_requested",
+  REPLACEMENT_ASSIGNED: "replacement_assigned",
+  ATTENDANCE_CONFIRMED: "attendance_confirmed",
+  PROJECT_HEALTH_CHANGED: "project_health_changed",
+  PROJECT_CREATED: "project_created",
+  PROJECT_UPDATED: "project_updated",
+  QR_REGENERATED: "qr_regenerated",
+  INVOICE_GENERATED: "invoice_generated",
+  PROJECT_EXTENDED: "project_extended",
+  PROJECT_COMPLETED: "project_completed",
+});
+
+const PROJECT_ACTIVITY_SEVERITIES = new Set([
+  "info",
+  "success",
+  "warning",
+  "critical",
+]);
+
+function normalizeProjectActivityRecord(record = {}, project = {}) {
+  const timestamp =
+    record.timestamp ||
+    record.createdAt ||
+    record.ts ||
+    new Date().toISOString();
+  const severity = PROJECT_ACTIVITY_SEVERITIES.has(record.severity)
+    ? record.severity
+    : "info";
+  const title =
+    record.title ||
+    record.message ||
+    record.text ||
+    "Project activity";
+  return {
+    id: record.id || createId(),
+    companyId: record.companyId || project.companyId || "",
+    projectId: record.projectId || record.jobId || project.id || "",
+    workerId: record.workerId || "",
+    type: record.type || PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
+    title,
+    description: record.description || record.message || record.text || "",
+    timestamp,
+    metadata:
+      record.metadata && typeof record.metadata === "object"
+        ? record.metadata
+        : {},
+    source: record.source || record.actor || record.actorName || "onsite",
+    severity,
+    message: record.message || title,
+    field: record.field || "",
+    before: record.before || "",
+    after: record.after || "",
+    createdAt: record.createdAt || timestamp,
+    actor: record.actor || record.actorName || "",
+  };
+}
+
+function createProjectActivityRecord(activity = {}, project = {}) {
+  return normalizeProjectActivityRecord(
+    {
+      id: activity.id || createId(),
+      timestamp: activity.timestamp || new Date().toISOString(),
+      ...activity,
+    },
+    project,
   );
+}
+
+function projectActivityList(job) {
+  if (!job) return [];
+  if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
+  job.projectActivity = job.projectActivity
+    .map((item) => normalizeProjectActivityRecord(item, job))
+    .slice(0, 50);
+  return job.projectActivity;
+}
+
+function syncProjectActivityStore(job, activity) {
+  if (!job || !activity) return;
+  if (!Array.isArray(state.projectActivities)) state.projectActivities = [];
+  state.projectActivities = state.projectActivities.filter(
+    (item) => item.id !== activity.id,
+  );
+  state.projectActivities.unshift(activity);
+  state.projectActivities = state.projectActivities.slice(0, 500);
 }
 
 const ACTIVITY_ICONS = {
@@ -3948,6 +4197,7 @@ const demoData = {
   agreements: [],
   applications: [],
   notifications: [],
+  projectActivities: [],
   preferredWorkers: [],
   projectTransfers: [],
   shiftChangeOffers: [],
@@ -3986,6 +4236,7 @@ function migrateState(s) {
   if (!Array.isArray(s.workerPaymentRecords)) s.workerPaymentRecords = [];
   if (!Array.isArray(s.applications)) s.applications = [];
   if (!Array.isArray(s.notifications)) s.notifications = [];
+  if (!Array.isArray(s.projectActivities)) s.projectActivities = [];
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
   if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
   if (!Array.isArray(s.shiftChangeOffers)) s.shiftChangeOffers = [];
@@ -4007,6 +4258,22 @@ function migrateState(s) {
     if (!offer.status) offer.status = "offered";
     if (!offer.createdAt) offer.createdAt = new Date().toISOString();
   });
+  const projectActivityStore = [];
+  (s.jobs || []).forEach((job) => {
+    if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
+    job.projectActivity = job.projectActivity
+      .map((activity) => normalizeProjectActivityRecord(activity, job))
+      .slice(0, 50);
+    projectActivityStore.push(...job.projectActivity);
+  });
+  s.projectActivities = [...s.projectActivities, ...projectActivityStore]
+    .map((activity) => normalizeProjectActivityRecord(activity))
+    .filter(
+      (activity, index, arr) =>
+        arr.findIndex((item) => item.id === activity.id) === index,
+    )
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+    .slice(0, 500);
   s.preStartAcknowledgements = (s.preStartAcknowledgements || [])
     .map((ack) => ({
       workerId: ack.workerId || "",
@@ -9764,14 +10031,7 @@ function projectCardAttendanceHTML(job, summary) {
   const startDays = projectStartDays(job);
   const attendanceStarted = startDays !== null && startDays < 0;
   if (!attendanceStarted) {
-    const startLabel =
-      startDays === 0
-        ? "Starts today"
-        : startDays === 1
-          ? "Starts tomorrow"
-          : startDays !== null && startDays > 1
-            ? `Starts in ${startDays} days`
-            : "Start date TBC";
+    const startLabel = countdownCopyFromDate(job?.start || job?.startDate || "");
     return `<div class="company-project-attendance-note">
       <strong>${escapeHtml(startLabel)}</strong>
     </div>`;
@@ -10521,9 +10781,9 @@ function companyProjectSiteInfoHTML(job) {
 }
 
 function companyProjectActivityHTML(job, summary) {
-  const projectRows = (job.projectActivity || [])
+  const projectRows = projectActivityList(job)
     .slice(0, 8)
-    .map((item) => `<div class="company-project-mini-row"><span>${escapeHtml(item.message || "Project updated")}</span><strong>${item.createdAt ? formatDateOnly(item.createdAt) : "Update"}</strong></div>`);
+    .map((item) => `<div class="company-project-mini-row"><span>${escapeHtml(item.title || item.message || "Project updated")}</span><strong>${item.timestamp ? formatDateOnly(item.timestamp) : "Update"}</strong></div>`);
   const offerRows = summary.apps
     .slice(0, 8)
     .map((app) => `<div class="company-project-mini-row"><span>${escapeHtml(app.workerName || "Worker")} · ${escapeHtml(app.status || "offer")}</span><strong>${app.createdAt ? formatDateOnly(app.createdAt) : "Offer"}</strong></div>`);
@@ -10650,20 +10910,30 @@ function projectEditActivityValue(field, value) {
 
 function recordProjectEditActivity(job, changes, user) {
   if (!changes.length) return;
-  if (!Array.isArray(job.projectActivity)) job.projectActivity = [];
   const createdAt = new Date().toISOString();
   const actor = user?.companyName || user?.name || "Company";
   changes.forEach((change) => {
-    job.projectActivity.unshift({
-      id: createId(),
-      type: "project_edit",
+    const activity = createProjectActivityRecord({
+      type: PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
+      title: change.message,
+      description: change.message,
       field: change.field,
       message: change.message,
       before: projectEditActivityValue(change.field, change.before),
       after: projectEditActivityValue(change.field, change.after),
+      timestamp: createdAt,
       createdAt,
+      companyId: job.companyId || user?.id || "",
+      projectId: job.id,
+      source: "company_project_edit",
       actor,
-    });
+      metadata: {
+        field: change.field,
+        requiresWorkerAcknowledgement: !!change.requiresWorkerAcknowledgement,
+      },
+    }, job);
+    projectActivityList(job).unshift(activity);
+    syncProjectActivityStore(job, activity);
   });
   job.projectActivity = job.projectActivity.slice(0, 50);
 
@@ -14128,14 +14398,13 @@ function saveAttendanceRecords() {
   } catch (_) {}
 }
 function todayDateStr() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 function formatAttDate(d) {
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(new Date(d + "T00:00:00"));
+  return formatCurrentDatePill(d);
 }
 
 const ATT_CFG = {

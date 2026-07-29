@@ -1800,6 +1800,139 @@ margin-bottom: 12px;
   flex: 0 0 auto;
 }
 
+/* ─── Operational Foundations ──────────────────────────── */
+.op-metric-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.op-metric-card,
+.op-action-card,
+.op-activity-row {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+.op-metric-card {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-2);
+}
+
+.op-metric-card span,
+.op-metric-card small,
+.op-activity-row small {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.op-metric-card strong {
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.op-status {
+  align-items: center;
+  color: var(--ink-2);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 7px;
+  line-height: 1.2;
+}
+
+.op-status i,
+.op-activity-dot {
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.op-status--neutral i,
+.op-activity-row.info .op-activity-dot {
+  background: var(--ink-4);
+}
+
+.op-status--success i,
+.op-activity-row.success .op-activity-dot {
+  background: var(--green);
+}
+
+.op-status--warning i,
+.op-activity-row.warning .op-activity-dot {
+  background: var(--amber);
+}
+
+.op-status--critical i,
+.op-activity-row.critical .op-activity-dot {
+  background: var(--red);
+}
+
+.op-section-head,
+.op-action-card {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.op-section-head h3,
+.op-action-card strong,
+.op-activity-row strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.op-section-head p:not(.company-home-kicker),
+.op-action-card p,
+.op-activity-row p {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.op-date-pill {
+  align-items: center;
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  border-radius: 999px;
+  color: var(--orange);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1;
+  padding: 8px 10px;
+}
+
+.op-action-card {
+  padding: var(--space-card);
+}
+
+.op-activity-row {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.op-loading-state {
+  display: grid;
+  gap: var(--space-2);
+}
+
 /* ─── Bottom Nav (Mobile) ──────────────────────────────── */
 .bottom-nav {
   position: fixed;
