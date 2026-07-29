@@ -6745,6 +6745,140 @@ function openLabourRequestWorkflow() {
   prepareLabourRequestForm({ focus: true });
 }
 
+let pendingRepeatProjectTemplate = null;
+
+function clearRepeatProjectTemplate() {
+  pendingRepeatProjectTemplate = null;
+  document.getElementById("repeatProjectNotice")?.remove();
+}
+
+function cloneRepeatLabourRequirements(job) {
+  return uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) => ({
+    ...req,
+    id: createId(),
+    labourSchedule: normalizeLabourSchedule(req.labourSchedule).map((period) => ({
+      ...period,
+      id: createId(),
+    })),
+  }));
+}
+
+function setSelectValue(select, value) {
+  if (!select) return;
+  const stringValue = String(value || "");
+  if (stringValue && !Array.from(select.options).some((option) => option.value === stringValue)) {
+    select.appendChild(new Option(stringValue, stringValue));
+  }
+  select.value = stringValue;
+}
+
+function setInputValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value == null ? "" : String(value);
+}
+
+function setCheckboxValue(id, checked) {
+  const el = document.getElementById(id);
+  if (el) el.checked = !!checked;
+}
+
+function repeatProjectNoticeHTML(job) {
+  return `<div id="repeatProjectNotice" class="repeat-project-notice">
+    <div>
+      <strong>Repeating ${escapeHtml(companyProjectTitle(job))}</strong>
+      <span>Review copied site and labour details, then add fresh dates before submitting.</span>
+    </div>
+    <button class="secondary-btn" type="button" data-repeat-clear>Clear copied details</button>
+  </div>`;
+}
+
+function applyRepeatProjectToForm(job) {
+  if (!job) return;
+  clearRepeatProjectTemplate();
+  pendingRepeatProjectTemplate = {
+    sourceProjectId: job.id,
+    sourceProjectName: companyProjectTitle(job),
+    preStartDocuments: preStartDocumentsForJob(job).map((doc) => ({
+      ...doc,
+      documentId: createId(),
+      uploadedAt: new Date().toISOString(),
+    })),
+  };
+  jobForm.reset();
+  resetJobTradeRequirements();
+  resetJobPhotos();
+  currentJobPin = job.sitePin ? { ...job.sitePin } : { lat: null, lng: null };
+  currentJobPhotos = { ...(job.sitePhotos || {}) };
+  currentJobPhotoMeta = { ...(job.sitePhotoMeta || {}) };
+  setInputValue("jobNumber", "");
+  setInputValue("projectName", `${companyProjectTitle(job)} repeat`);
+  setSelectValue(document.getElementById("jobAssignmentType"), normalizeAssignmentType(job.assignmentType || job.jobType || "site_project"));
+  setInputValue("jobLocation", job.location || "");
+  const vehicle = job.vehicleArrangement || "not_required";
+  const vehicleInput = document.querySelector(`input[name="jobVehicleArrangement"][value="${vehicle}"]`);
+  if (vehicleInput) vehicleInput.checked = true;
+  pendingTradeRequirements = cloneRepeatLabourRequirements(job);
+  clearTradeReqInputs();
+  setInputValue("jobStart", "");
+  setInputValue("jobEndDate", "");
+  setCheckboxValue("jobNoFixedEndDate", !!job.noFixedEndDate);
+  setInputValue("jobShiftStart", job.shiftStartTime || "");
+  setInputValue("jobShiftFinish", job.shiftFinishTime || "");
+  const days = new Set(normalizeWorkingDays(job.workingDays));
+  document.querySelectorAll('input[name="jobWorkingDays"]').forEach((input) => {
+    input.checked = days.has(input.value);
+  });
+  setInputValue("jobSiteAddress", job.siteAddress || "");
+  setInputValue("jobContactName", job.siteContact?.name || "");
+  setInputValue("jobContactPhone", job.siteContact?.phone || "");
+  setInputValue("jobArrivalInstructions", job.arrivalInstructions || "");
+  setInputValue("jobParking", job.parking || "");
+  setInputValue("jobPpe", job.ppe || "");
+  setInputValue("jobGateAccess", job.gateAccess || "");
+  setInputValue("attendanceManagerName", job.attendanceManager?.name || "");
+  setInputValue("attendanceManagerEmail", job.attendanceManager?.email || "");
+  setInputValue("attendanceManagerPhone", job.attendanceManager?.phone || "");
+  const firstReq = pendingTradeRequirements[0] || {};
+  setCheckboxValue("jobAccommodationPaid", !!(job.accommodationPaid || firstReq.accommodationPaid));
+  setInputValue("jobAccommodationAllowance", job.accommodationAllowancePerNight || firstReq.accommodationAllowancePerNight || "");
+  setCheckboxValue("jobOvertimeAvailable", !!(job.overtimeAvailable || firstReq.overtimeAvailable));
+  const overtimeRates = job.overtimeRates || firstReq.overtimeRates || {};
+  setSelectValue(document.getElementById("jobAfterHoursRateType"), overtimeRates.afterStandardHours || "standard");
+  setSelectValue(document.getElementById("jobSaturdayRateType"), overtimeRates.saturday || "standard");
+  setSelectValue(document.getElementById("jobSundayRateType"), overtimeRates.sunday || "standard");
+  updateAssignmentTypeForm();
+  updateAccommodationForm();
+  updateOvertimeForm();
+  syncTradeReqBuilderState();
+  requestAnimationFrame(() => {
+    updateJobPhotoPreviews();
+    if (currentJobPin.lat !== null) {
+      document.querySelector("#pinCoordsDisplay")?.classList.remove("hidden");
+      const coords = document.querySelector("#pinCoordsText");
+      if (coords) coords.textContent = `${currentJobPin.lat.toFixed(5)}, ${currentJobPin.lng.toFixed(5)}`;
+    }
+    initPickerMap();
+  });
+  document.querySelector("#formJob .jw-form")?.insertAdjacentHTML("afterbegin", repeatProjectNoticeHTML(job));
+  document.querySelector("[data-repeat-clear]")?.addEventListener("click", () => {
+    clearRepeatProjectTemplate();
+    jobForm.reset();
+    resetJobTradeRequirements();
+    resetJobPhotos();
+    updateAssignmentTypeForm();
+    updateAccommodationForm();
+    updateOvertimeForm();
+  });
+}
+
+function repeatProject(jobId) {
+  const job = findJob(jobId);
+  if (!job) return;
+  openLabourRequestPage({ focus: false });
+  applyRepeatProjectToForm(job);
+  showToast("Project details copied — add new dates before submitting");
+}
+
 function closeLabourRequestWorkflow() {
   const formWrap = document.getElementById("formJob");
   const returnPoint = document.getElementById("jobFormReturnPoint");
@@ -11104,6 +11238,9 @@ function companyProjectDetailHTML(job, user) {
   const editButton = canEditCompanyProject(job, user)
     ? `<button class="secondary-btn" type="button" data-company-project-edit="${job.id}">Edit Project</button>`
     : "";
+  const repeatButton = job.completed || job.completedAt || job.cancelledAt || job.bookingStatus === "cancelled"
+    ? `<button class="secondary-btn" type="button" data-repeat-project="${job.id}">Repeat Project</button>`
+    : "";
   return `
     <section class="company-project-detail-page">
       <button class="company-project-back" type="button" data-company-project-close>&larr; Back to Live Projects</button>
@@ -11121,6 +11258,7 @@ function companyProjectDetailHTML(job, user) {
         </div>
         <div class="company-project-head-actions">
           <span class="company-project-status">${escapeHtml(summary.status)}</span>
+          ${repeatButton}
           ${editButton}
         </div>
       </div>
@@ -12205,6 +12343,9 @@ function renderContractorHome(user) {
           </div>
         </div>`
       : companyProjectEmptyStateHTML();
+  const previousProjects = companyJobs.filter(
+    (job) => job.completed || job.completedAt || job.cancelledAt || job.bookingStatus === "cancelled",
+  );
 
   el.innerHTML = `
     <section class="request-labour-page">
@@ -12232,6 +12373,7 @@ function renderContractorHome(user) {
             </div>
           </section>
           <div class="company-project-grid">${projectCards}</div>
+          ${companyPreviousProjectsHTML(previousProjects)}
         </div>
       </div>
     </section>`;
@@ -12250,6 +12392,28 @@ function renderContractorHome(user) {
   bindCompanyProjectDashboardButtons(el);
   bindCompanyNotificationActions(el);
   bindCompanyProjectSearch(el);
+}
+
+function companyPreviousProjectsHTML(projects = []) {
+  if (!projects.length) return "";
+  return `<section class="jw-card previous-projects-card">
+    <div class="company-live-site-head">
+      <div>
+        <p class="company-home-kicker">PREVIOUS PROJECTS</p>
+        <h3>Repeat a previous labour request</h3>
+      </div>
+      <small>${projects.length} previous project${projects.length === 1 ? "" : "s"}</small>
+    </div>
+    <div class="previous-project-list">
+      ${projects.slice(0, 5).map((job) => `<article class="previous-project-row">
+        <div>
+          <strong>${escapeHtml(companyProjectTitle(job))}</strong>
+          <span>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || "Location TBC")}</span>
+        </div>
+        <button class="secondary-btn" type="button" data-repeat-project="${escapeHtml(job.id)}">Repeat Project</button>
+      </article>`).join("")}
+    </div>
+  </section>`;
 }
 
 function renderCompanyProjectsPage(user) {
@@ -12815,6 +12979,12 @@ function bindCompanyProjectDashboardButtons(scope) {
       if (job) showToast(`Use this request as the reference for ${job.projectName || job.trade}`);
     });
   });
+  scope.querySelectorAll("[data-repeat-project]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      repeatProject(btn.dataset.repeatProject || "");
+    });
+  });
   scope.querySelectorAll("[data-project-attendance]").forEach((btn) => {
     btn.addEventListener("click", () => switchTab("attendance"));
   });
@@ -12912,6 +13082,113 @@ function companyAgreementPanelHTML(user) {
 }
 
 // ─── Company Account ───────────────────────────────────
+function companyTrustProfile(companyId) {
+  const jobs = (state.jobs || []).filter((job) => companyOwnsJob(job, companyId));
+  const invoices = (state.invoices || []).filter((invoice) => invoice.companyId === companyId);
+  const paidInvoices = invoices.filter((invoice) => invoice.status === "paid" || invoice.paidAt);
+  const onTimePayments = paidInvoices.filter((invoice) => {
+    const paid = dateOnlyMs(invoice.paidAt);
+    const due = dateOnlyMs(invoice.dueDate);
+    return paid !== null && due !== null && paid <= due;
+  });
+  const cancellations = (state.cancellations || []).filter((record) => record.companyId === companyId);
+  const shortNoticeCancellations = cancellations.filter((record) => {
+    const cancelled = dateOnlyMs(record.cancelledAt);
+    const start = dateOnlyMs(record.jobStart || record.start || record.startDate);
+    if (cancelled === null || start === null) return false;
+    return Math.round((start - cancelled) / 86400000) <= PROTECTION_WINDOW_DAYS;
+  });
+  const completedProjects = jobs.filter((job) => job.completed || job.completedAt);
+  const siteInfoComplete = jobs.filter(
+    (job) =>
+      job.siteAddress &&
+      job.siteContact?.name &&
+      job.siteContact?.phone &&
+      job.arrivalInstructions &&
+      job.sitePin,
+  );
+  const workerSiteIssues = attendanceRecords.filter((record) => {
+    const job = findJob(record.jobId);
+    return (
+      job?.companyId === companyId &&
+      (record.disputeStatus === "pending" ||
+        record.reportedIssue?.reason ||
+        record.lateReport?.reason ||
+        record.workerClaimReason)
+    );
+  });
+  const rateChangeFlags = (state.agreements || []).filter((agreement) => {
+    if (agreement.companyId !== companyId) return false;
+    const job = findJob(agreement.jobId);
+    const agreed = Number(agreement.terms?.dayRate || agreement.terms?.workerDayRate || 0);
+    const advertised = Number(job?.budgetMax || 0);
+    return agreed && advertised && Math.abs(agreed - advertised) > 0;
+  });
+  const historyCount =
+    paidInvoices.length +
+    cancellations.length +
+    completedProjects.length +
+    workerSiteIssues.length +
+    rateChangeFlags.length;
+  const positive = [];
+  const improvement = [];
+  if (paidInvoices.length) {
+    positive.push(`${onTimePayments.length}/${paidInvoices.length} invoices paid on or before due date`);
+    if (onTimePayments.length < paidInvoices.length) improvement.push(`${paidInvoices.length - onTimePayments.length} invoice payment${paidInvoices.length - onTimePayments.length === 1 ? "" : "s"} paid after due date`);
+  }
+  if (completedProjects.length) positive.push(`${completedProjects.length} confirmed completed project${completedProjects.length === 1 ? "" : "s"}`);
+  if (jobs.length) positive.push(`${siteInfoComplete.length}/${jobs.length} projects have complete core site information`);
+  if (shortNoticeCancellations.length) improvement.push(`${shortNoticeCancellations.length} short-notice cancellation${shortNoticeCancellations.length === 1 ? "" : "s"} recorded`);
+  if (workerSiteIssues.length) improvement.push(`${workerSiteIssues.length} worker-reported site or attendance issue${workerSiteIssues.length === 1 ? "" : "s"} recorded`);
+  if (rateChangeFlags.length) improvement.push(`${rateChangeFlags.length} rate difference${rateChangeFlags.length === 1 ? "" : "s"} detected between advertised and agreed records`);
+  return {
+    status: historyCount < 5 ? "New / Insufficient history" : improvement.length ? "Areas requiring improvement" : "Positive operational indicators",
+    historyCount,
+    positive,
+    improvement,
+    evidence: {
+      paidInvoices: paidInvoices.length,
+      onTimePayments: onTimePayments.length,
+      shortNoticeCancellations: shortNoticeCancellations.length,
+      siteInfoComplete: siteInfoComplete.length,
+      totalProjects: jobs.length,
+      completedProjects: completedProjects.length,
+      workerSiteIssues: workerSiteIssues.length,
+      rateChangeFlags: rateChangeFlags.length,
+    },
+  };
+}
+
+function companyTrustProfileHTML(companyId, { workerView = false } = {}) {
+  const profile = companyTrustProfile(companyId);
+  const positives = profile.positive.length
+    ? profile.positive.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+    : `<li>More verified project history is needed before positive indicators are shown.</li>`;
+  const improvements = profile.improvement.length
+    ? profile.improvement.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+    : `<li>No evidence-based improvement areas currently recorded.</li>`;
+  return `<div class="company-trust-card${workerView ? " worker-view" : ""}">
+    <div class="company-trust-head">
+      <div>
+        <p class="company-home-kicker">COMPANY RELIABILITY</p>
+        <h3>${escapeHtml(profile.status)}</h3>
+      </div>
+      <span>${profile.historyCount} evidence item${profile.historyCount === 1 ? "" : "s"}</span>
+    </div>
+    <div class="company-trust-grid">
+      <div>
+        <strong>Positive operational indicators</strong>
+        <ul>${positives}</ul>
+      </div>
+      <div>
+        <strong>Areas requiring improvement</strong>
+        <ul>${improvements}</ul>
+      </div>
+    </div>
+    <p class="company-trust-note">${workerView ? "Shown to workers as evidence-based trust context. No final company score is displayed." : "Evidence is based on OnSite operational records. No public star rating or final company score is generated."}</p>
+  </div>`;
+}
+
 function renderContractorAccount(user) {
   const el = document.getElementById("accountContent");
   if (!el) return;
@@ -12940,6 +13217,7 @@ function renderContractorAccount(user) {
     }
   };
   const optionalSections = [
+    optionalAccountSection(() => `<div class="prof-section">${companyTrustProfileHTML(user.id)}</div>`),
     optionalAccountSection(() => companyBillingSection(user)),
     optionalAccountSection(() => companyPreferredAccountSection(user)),
     optionalAccountSection(() => companyDocsSection(user)),
@@ -13819,6 +14097,7 @@ function workerJobCard(job, user) {
       }
     </div>
     ${job.arrivalInstructions ? `<div class="wjc-arrival">${escapeHtml(job.arrivalInstructions)}</div>` : ""}
+    ${job.companyId ? companyTrustProfileHTML(job.companyId, { workerView: true }) : ""}
     <div class="wjc-footer">
       <button class="wjc-apply-btn${applied ? " applied" : ""}" type="button" data-apply-job="${job.id}" ${applied ? "disabled" : ""}>${applied ? "✓ Interest Registered" : "Register Interest"}</button>
       ${
@@ -14058,13 +14337,14 @@ jobForm.addEventListener("submit", (e) => {
         },
     preferredWorkerIds,
     preferredFirst: preferredWorkerIds.length > 0,
-    preStartDocuments: [],
+    preStartDocuments: pendingRepeatProjectTemplate?.preStartDocuments || [],
     noticePeriodDays:
       Number.isFinite(noticeRaw) && noticeRaw > 0
         ? noticeRaw
         : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
     accommodationPaid,
+    repeatedFromProjectId: pendingRepeatProjectTemplate?.sourceProjectId || "",
     createdAt: postedAt,
     postedAt,
   };
@@ -15259,6 +15539,21 @@ function resetJobPhotos() {
   });
   currentJobPhotos = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
   currentJobPhotoMeta = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
+}
+
+function updateJobPhotoPreviews() {
+  PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
+    const card = document.getElementById(inputId)?.closest(".photo-card");
+    const prev = document.getElementById(prevId);
+    const ph = document.getElementById(phId);
+    const src = currentJobPhotos[key];
+    if (prev) {
+      prev.src = src || "";
+      prev.style.display = src ? "block" : "";
+    }
+    if (ph) ph.style.display = src ? "none" : "";
+    card?.classList.toggle("has-photo", !!src);
+  });
 }
 
 // ─── Site Location & Map System ───────────────────────────
