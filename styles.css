@@ -8923,6 +8923,16 @@ body.modal-open {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .labour-schedule-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .labour-schedule-row,
+  .labour-forecast-period {
+    grid-template-columns: 1fr;
+  }
+
   .company-recent-activity-head {
     align-items: flex-start;
     flex-direction: column;
@@ -10507,6 +10517,109 @@ body.modal-open {
   font-size: 1.05rem;
   font-weight: 800;
   line-height: 1;
+}
+
+.labour-schedule-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.labour-schedule-toggle {
+  justify-self: start;
+}
+
+.labour-schedule-head {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.labour-schedule-head strong {
+  color: var(--ink);
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.labour-schedule-head span,
+.labour-schedule-empty {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+.labour-schedule-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.labour-schedule-row {
+  align-items: end;
+  background: var(--surface-2);
+  border: 1px solid var(--card-divider);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  padding: 12px;
+}
+
+.labour-forecast-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.labour-forecast-summary span {
+  background: var(--surface-2);
+  border: 1px solid var(--card-divider);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.25;
+  padding: 6px 8px;
+}
+
+.labour-forecast-summary strong {
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.labour-forecast-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.labour-forecast-period {
+  align-items: center;
+  background: linear-gradient(180deg, #fff, var(--surface-2));
+  border: 1px solid var(--card-divider);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(150px, 1fr) auto minmax(120px, 0.7fr);
+  padding: 8px 10px;
+}
+
+.labour-forecast-period span,
+.labour-forecast-period small {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.labour-forecast-period strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 .jw-submit {
   margin-top: 2px;

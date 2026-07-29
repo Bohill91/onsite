@@ -930,6 +930,20 @@
                     No. Of Workers Required *
                     <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
                   </label>
+                  <div class="jw-span-2 labour-schedule-editor">
+                    <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle">Add labour schedule</button>
+                    <div id="jobLabourScheduleWrap" class="jw-conditional hidden">
+                      <div class="labour-schedule-head">
+                        <div>
+                          <strong>Labour schedule</strong>
+                          <span>Optional phased quantities for this trade during the project.</span>
+                        </div>
+                        <button type="button" id="jobAddLabourSchedulePeriod" class="secondary-btn">Add period</button>
+                      </div>
+                      <div id="jobLabourScheduleRows" class="labour-schedule-rows"></div>
+                      <p class="form-helper">Periods must sit inside the project dates where set. Overlapping periods are not allowed.</p>
+                    </div>
+                  </div>
                   <label class="field-label">
                     Required Qualifications &amp; Tickets *
                     <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />

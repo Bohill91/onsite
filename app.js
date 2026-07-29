@@ -6852,8 +6852,95 @@ function selectedJobWorkingDays() {
 }
 
 // ─── Multi-trade labour requirement builder ───────────────
+let pendingLabourSchedulePeriods = [];
+
+function normalizeLabourSchedule(periods = []) {
+  return (periods || [])
+    .map((period) => ({
+      id: period.id || createId(),
+      startDate: String(period.startDate || "").slice(0, 10),
+      endDate: String(period.endDate || "").slice(0, 10),
+      quantity: Math.max(1, Number(period.quantity) || 1),
+      phase: String(period.phase || period.notes || "").trim(),
+      notes: String(period.notes || period.phase || "").trim(),
+    }))
+    .filter((period) => period.startDate || period.endDate || period.quantity)
+    .sort((a, b) => dateOnlyMs(a.startDate) - dateOnlyMs(b.startDate));
+}
+
+function validateLabourSchedule(periods = [], { projectStart = "", projectEnd = "", noFixedEndDate = false } = {}) {
+  const normalized = normalizeLabourSchedule(periods);
+  for (const period of normalized) {
+    if (!period.startDate || !period.endDate) return "Each labour schedule period needs a start and end date";
+    const start = dateOnlyMs(period.startDate);
+    const end = dateOnlyMs(period.endDate);
+    if (start === null || end === null) return "Use valid dates for each labour schedule period";
+    if (end < start) return "Labour schedule end dates must be after start dates";
+    if (!Number.isFinite(Number(period.quantity)) || Number(period.quantity) < 1) return "Labour schedule quantities must be at least 1";
+    const projectStartMs = dateOnlyMs(projectStart);
+    const projectEndMs = noFixedEndDate ? null : dateOnlyMs(projectEnd);
+    if (projectStartMs !== null && start < projectStartMs) return "Labour schedule periods must start within the project dates";
+    if (projectEndMs !== null && end > projectEndMs) return "Labour schedule periods must end within the project dates";
+  }
+  for (let i = 1; i < normalized.length; i++) {
+    if (dateOnlyMs(normalized[i].startDate) <= dateOnlyMs(normalized[i - 1].endDate)) {
+      return "Labour schedule periods cannot overlap";
+    }
+  }
+  return "";
+}
+
+function currentProjectScheduleBounds() {
+  const noFixedEndDate = !!document.querySelector("#jobNoFixedEndDate")?.checked;
+  return {
+    projectStart: document.querySelector("#jobStart")?.value?.slice(0, 10) || "",
+    projectEnd: noFixedEndDate ? "" : document.querySelector("#jobEndDate")?.value || "",
+    noFixedEndDate,
+  };
+}
+
+function readLabourScheduleRows() {
+  return Array.from(document.querySelectorAll("[data-labour-schedule-row]")).map((row) => ({
+    id: row.dataset.labourScheduleRow || createId(),
+    startDate: row.querySelector("[data-schedule-start]")?.value || "",
+    endDate: row.querySelector("[data-schedule-end]")?.value || "",
+    quantity: Math.max(1, Number(row.querySelector("[data-schedule-quantity]")?.value) || 1),
+    phase: row.querySelector("[data-schedule-phase]")?.value.trim() || "",
+  }));
+}
+
+function syncLabourScheduleFromDom() {
+  pendingLabourSchedulePeriods = normalizeLabourSchedule(readLabourScheduleRows());
+}
+
+function renderLabourScheduleEditor() {
+  const wrap = document.getElementById("jobLabourScheduleWrap");
+  const rows = document.getElementById("jobLabourScheduleRows");
+  if (!wrap || !rows) return;
+  wrap.classList.toggle("hidden", !pendingLabourSchedulePeriods.length && wrap.dataset.open !== "true");
+  rows.innerHTML = pendingLabourSchedulePeriods.length
+    ? pendingLabourSchedulePeriods
+        .map((period) => `<div class="labour-schedule-row" data-labour-schedule-row="${escapeHtml(period.id)}">
+          <label class="field-label">Start date<input type="date" value="${escapeHtml(period.startDate)}" data-schedule-start /></label>
+          <label class="field-label">End date<input type="date" value="${escapeHtml(period.endDate)}" data-schedule-end /></label>
+          <label class="field-label">Required workers<input type="number" min="1" value="${escapeHtml(period.quantity)}" data-schedule-quantity /></label>
+          <label class="field-label">Work phase / notes<input type="text" value="${escapeHtml(period.phase || "")}" placeholder="e.g. 2nd fix ramp-up" data-schedule-phase /></label>
+          <button type="button" class="jw-req-remove" data-schedule-remove="${escapeHtml(period.id)}" aria-label="Remove schedule period">×</button>
+        </div>`)
+        .join("")
+    : `<div class="labour-schedule-empty">No phased periods added. Fixed quantity will be used.</div>`;
+}
+
+function scheduleSummaryLabel(periods = []) {
+  const normalized = normalizeLabourSchedule(periods);
+  if (!normalized.length) return "";
+  const peak = Math.max(...normalized.map((period) => Number(period.quantity) || 1));
+  return `${normalized.length} scheduled period${normalized.length === 1 ? "" : "s"} · peak ${peak}`;
+}
+
 function readTradeReqInputs() {
   syncDailyLabourRateFields();
+  syncLabourScheduleFromDom();
   const budgetMaxRaw = Number(document.getElementById("jobBudgetMax")?.value);
   const budgetMax =
     Number.isFinite(budgetMaxRaw) && budgetMaxRaw > 0
@@ -6879,6 +6966,7 @@ function readTradeReqInputs() {
     grade: document.getElementById("jobGrade")?.value || "",
     workActivity: document.getElementById("workActivity")?.value.trim() || "",
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
+    labourSchedule: normalizeLabourSchedule(pendingLabourSchedulePeriods),
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
     budgetMin: budgetMax,
     budgetMax,
@@ -6913,6 +7001,9 @@ function tradeReqHasCoreFields(req) {
 
 function labourRequirementKey(req) {
   const overtimeRates = req?.overtimeRates || {};
+  const scheduleKey = normalizeLabourSchedule(req?.labourSchedule)
+    .map((period) => `${period.startDate}:${period.endDate}:${period.quantity}:${period.phase || ""}`)
+    .join(",");
   return [
     req?.trade || "",
     req?.specialism || "",
@@ -6928,6 +7019,7 @@ function labourRequirementKey(req) {
     overtimeRates.sunday || "standard",
     !!req?.accommodationPaid,
     Number(req?.accommodationAllowancePerNight || 0),
+    scheduleKey,
   ].join("|");
 }
 
@@ -7050,7 +7142,15 @@ function renderJobPricingBreakdown() {
 
 function buildLabourRequirementsFromForm(shared = {}) {
   const current = readTradeReqInputs();
+  const scheduleError = validateLabourSchedule(current.labourSchedule, currentProjectScheduleBounds());
+  if (scheduleError) {
+    throw new Error(scheduleError);
+  }
   const requirements = [...pendingTradeRequirements];
+  const savedScheduleError = requirements
+    .map((req) => validateLabourSchedule(req.labourSchedule, currentProjectScheduleBounds()))
+    .find(Boolean);
+  if (savedScheduleError) throw new Error(savedScheduleError);
   if (
     tradeReqHasCoreFields(current) &&
     !requirements.some((req) => sameTradeRequirement(req, current))
@@ -7068,6 +7168,7 @@ function buildLabourRequirementsFromForm(shared = {}) {
       requiredQualifications: req.requiredQualifications || "",
       workActivity: req.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
+      labourSchedule: normalizeLabourSchedule(req.labourSchedule),
       budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
       budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
       saturdayRate: req.saturdayRate ?? shared.saturdayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
@@ -7122,6 +7223,10 @@ function applyTradeReqToInputs(req) {
   if (saturday) saturday.value = overtimeRates.saturday || "standard";
   const sunday = document.getElementById("jobSundayRateType");
   if (sunday) sunday.value = overtimeRates.sunday || "standard";
+  pendingLabourSchedulePeriods = normalizeLabourSchedule(req.labourSchedule || []);
+  const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
+  if (scheduleWrap) scheduleWrap.dataset.open = pendingLabourSchedulePeriods.length ? "true" : "";
+  renderLabourScheduleEditor();
   updateOvertimeForm();
 }
 
@@ -7132,6 +7237,7 @@ function clearTradeReqInputs() {
     grade: "",
     workActivity: "",
     quantity: 1,
+    labourSchedule: [],
     requiredQualifications: "",
     budgetMax: "",
     workerReceivesFullAdvertisedRate: true,
@@ -7154,7 +7260,7 @@ function renderTradeReqCards() {
       <div class="jw-req-main">
         <div class="jw-req-trade">${escapeHtml(r.trade)}${r.specialism ? ` — ${escapeHtml(r.specialism)}` : ""}</div>
         ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}${r.budgetMax ? ` · ${formatMoney(r.budgetMax)}/day` : ""}${r.overtimeAvailable ? " · Overtime" : ""}</div>
+        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}${r.budgetMax ? ` · ${formatMoney(r.budgetMax)}/day` : ""}${r.overtimeAvailable ? " · Overtime" : ""}${scheduleSummaryLabel(r.labourSchedule) ? ` · ${escapeHtml(scheduleSummaryLabel(r.labourSchedule))}` : ""}</div>
       </div>
       <button type="button" class="jw-req-remove" data-req-remove="${i}" aria-label="Remove requirement">×</button>
     </div>`,
@@ -7173,11 +7279,15 @@ function syncTradeReqBuilderState() {
     },
   );
   renderTradeReqCards();
+  renderLabourScheduleEditor();
   renderJobPricingBreakdown();
 }
 
 function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
+  pendingLabourSchedulePeriods = [];
+  const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
+  if (scheduleWrap) scheduleWrap.dataset.open = "";
   syncTradeReqBuilderState();
 }
 
@@ -7189,6 +7299,8 @@ document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
   if (!req.requiredQualifications)
     return showToast("Enter the required qualifications & tickets");
   if (!req.budgetMax) return showToast("Enter the daily labour rate");
+  const scheduleError = validateLabourSchedule(req.labourSchedule, currentProjectScheduleBounds());
+  if (scheduleError) return showToast(scheduleError);
   if (pendingTradeRequirements.some((existing) => sameTradeRequirement(existing, req))) {
     showToast("This labour requirement has already been added");
     return;
@@ -7196,6 +7308,51 @@ document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
   pendingTradeRequirements.push(req);
   clearTradeReqInputs();
   syncTradeReqBuilderState();
+});
+
+document.getElementById("jobToggleLabourSchedule")?.addEventListener("click", () => {
+  const wrap = document.getElementById("jobLabourScheduleWrap");
+  if (!wrap) return;
+  wrap.dataset.open = wrap.classList.contains("hidden") ? "true" : "";
+  if (!pendingLabourSchedulePeriods.length && wrap.dataset.open === "true") {
+    pendingLabourSchedulePeriods.push({
+      id: createId(),
+      startDate: document.querySelector("#jobStart")?.value?.slice(0, 10) || "",
+      endDate: document.querySelector("#jobEndDate")?.value || "",
+      quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
+      phase: "",
+    });
+  }
+  renderLabourScheduleEditor();
+});
+
+document.getElementById("jobAddLabourSchedulePeriod")?.addEventListener("click", () => {
+  syncLabourScheduleFromDom();
+  pendingLabourSchedulePeriods.push({
+    id: createId(),
+    startDate: "",
+    endDate: "",
+    quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
+    phase: "",
+  });
+  document.getElementById("jobLabourScheduleWrap")?.setAttribute("data-open", "true");
+  renderLabourScheduleEditor();
+});
+
+document.getElementById("jobLabourScheduleRows")?.addEventListener("input", () => {
+  syncLabourScheduleFromDom();
+  renderJobPricingBreakdown();
+});
+
+document.getElementById("jobLabourScheduleRows")?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-schedule-remove]");
+  if (!btn) return;
+  syncLabourScheduleFromDom();
+  pendingLabourSchedulePeriods = pendingLabourSchedulePeriods.filter(
+    (period) => period.id !== btn.dataset.scheduleRemove,
+  );
+  renderLabourScheduleEditor();
+  renderJobPricingBreakdown();
 });
 
 document.getElementById("jobTradeReqList")?.addEventListener("click", (event) => {
@@ -9119,6 +9276,7 @@ function labourRequirementsForJob(job) {
         req.requiredQualifications || job.requiredQualifications || "",
       workActivity: req.workActivity || job.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
+      labourSchedule: normalizeLabourSchedule(req.labourSchedule),
       budgetMin: req.budgetMin ?? job.budgetMin ?? null,
       budgetMax: req.budgetMax ?? job.budgetMax ?? null,
       saturdayRate: req.saturdayRate ?? job.weekendRates?.saturday ?? null,
@@ -9152,6 +9310,7 @@ function labourRequirementsForJob(job) {
       requiredQualifications: job?.requiredQualifications || "",
       workActivity: job?.workActivity || "",
       quantity: Math.max(1, Number(job?.quantity) || 1),
+      labourSchedule: normalizeLabourSchedule(job?.labourSchedule),
       budgetMin: job?.budgetMin ?? null,
       budgetMax: job?.budgetMax ?? null,
       saturdayRate: job?.weekendRates?.saturday ?? null,
@@ -9175,6 +9334,51 @@ function labourRequirementsForJob(job) {
 
 function labourRequirementLabel(req) {
   return `${req.specialism || req.trade || "Labour"} x ${req.quantity || 1}`;
+}
+
+function labourRequirementQuantityOnDate(req, date = todayDateStr()) {
+  const schedule = normalizeLabourSchedule(req?.labourSchedule);
+  if (!schedule.length) return Math.max(1, Number(req?.quantity) || 1);
+  const target = dateOnlyMs(date);
+  if (target === null) return Math.max(1, Number(req?.quantity) || 1);
+  const active = schedule.find(
+    (period) =>
+      dateOnlyMs(period.startDate) <= target && dateOnlyMs(period.endDate) >= target,
+  );
+  return Math.max(1, Number(active?.quantity ?? req?.quantity) || 1);
+}
+
+function labourRequirementPeakQuantity(req) {
+  const schedule = normalizeLabourSchedule(req?.labourSchedule);
+  const base = Math.max(1, Number(req?.quantity) || 1);
+  return schedule.length
+    ? Math.max(base, ...schedule.map((period) => Math.max(1, Number(period.quantity) || 1)))
+    : base;
+}
+
+function labourRequirementUpcomingChanges(req, fromDate = todayDateStr(), days = 30) {
+  const schedule = normalizeLabourSchedule(req?.labourSchedule);
+  const from = dateOnlyMs(fromDate);
+  if (!schedule.length || from === null) return [];
+  const until = from + days * 86400000;
+  return schedule
+    .filter((period) => {
+      const start = dateOnlyMs(period.startDate);
+      return start !== null && start >= from && start <= until;
+    })
+    .map((period) => {
+      const previous = schedule
+        .filter((candidate) => dateOnlyMs(candidate.endDate) < dateOnlyMs(period.startDate))
+        .sort((a, b) => dateOnlyMs(b.endDate) - dateOnlyMs(a.endDate))[0];
+      return {
+        ...period,
+        previousQuantity: previous ? Math.max(1, Number(previous.quantity) || 1) : Math.max(1, Number(req?.quantity) || 1),
+      };
+    });
+}
+
+function nextLabourRequirementChange(req, fromDate = todayDateStr()) {
+  return labourRequirementUpcomingChanges(req, fromDate, 365)[0] || null;
 }
 
 function uniqueLabourRequirements(requirements) {
@@ -9221,7 +9425,7 @@ function companyRequirementApplicationCount(req, summary, statuses) {
 }
 
 function companyRequirementStats(req, summary) {
-  const required = Math.max(1, Number(req.quantity) || 1);
+  const required = labourRequirementQuantityOnDate(req, todayDateStr());
   const filled = Math.min(required, companyRequirementFilledCount(req, summary));
   const offered = companyRequirementApplicationCount(req, summary, ["offered"]);
   const accepted = Math.min(
@@ -9238,6 +9442,7 @@ function companyRequirementStats(req, summary) {
     offered,
     accepted,
     remaining: Math.max(0, required - filled),
+    peak: labourRequirementPeakQuantity(req),
   };
 }
 
@@ -9797,7 +10002,25 @@ function companyDashboardSummary(user) {
     plannedAbsences: summaries.reduce((sum, s) => sum + s.plannedAbsences.length, 0),
     replacements: summaries.reduce((sum, s) => sum + s.replacements.length, 0),
     outstandingPreStart: summaries.reduce((sum, s) => sum + s.outstandingPreStart, 0),
+    upcomingLabourChanges: companyUpcomingLabourChanges(summaries),
   };
+}
+
+function companyUpcomingLabourChanges(summaries = [], days = 30) {
+  return summaries
+    .flatMap((summary) =>
+      uniqueLabourRequirements(summary.labourRequirements).flatMap((req) =>
+        labourRequirementUpcomingChanges(req, todayDateStr(), days).map((change) => ({
+          job: summary.job,
+          req,
+          change,
+          daysUntil: calendarDaysUntil(change.startDate),
+          delta: (Number(change.quantity) || 1) - (Number(change.previousQuantity) || Number(req.quantity) || 1),
+        })),
+      ),
+    )
+    .filter((item) => item.daysUntil !== null && item.daysUntil >= 0)
+    .sort((a, b) => a.daysUntil - b.daysUntil);
 }
 
 function firstNameForUser(user) {
@@ -9861,6 +10084,17 @@ function companyDailyBriefingHTML(summary, user) {
             </div>`}
       </div>
     </div>
+    ${briefing.labourChanges.length
+      ? `<div class="company-labour-forecast">
+          <div class="company-live-site-head">
+            <span class="company-home-kicker">UPCOMING LABOUR CHANGES</span>
+            <small>Next 30 days</small>
+          </div>
+          <div class="company-live-site-list">
+            ${briefing.labourChanges.map(companyLabourForecastRowHTML).join("")}
+          </div>
+        </div>`
+      : ""}
   </section>`;
 }
 
@@ -9879,6 +10113,11 @@ function companyDailyBriefingModel(summary, user) {
       value: summary.startsTomorrow || summary.upcomingStarts,
       tone: summary.upcomingStarts ? "info" : "muted",
     },
+    {
+      label: "labour changes next 30 days",
+      value: summary.upcomingLabourChanges.length,
+      tone: summary.upcomingLabourChanges.length ? "warn" : "muted",
+    },
   ].filter((item) => item.value > 0 || ["active projects today", "workers expected"].includes(item.label));
   const focus = companyDashboardFocusModel(summary, user);
   const primaryAction = briefingRecommendedAction(summary, focus);
@@ -9892,6 +10131,7 @@ function companyDailyBriefingModel(summary, user) {
       .sort((a, b) => b.expectedToday - a.expectedToday || projectDateValue(a.job.start) - projectDateValue(b.job.start))
       .slice(0, 5)
       .map(companyLiveSiteStatusModel),
+    labourChanges: summary.upcomingLabourChanges.slice(0, 3),
   };
 }
 
@@ -9950,6 +10190,28 @@ function companyLiveSiteStatusRowHTML(item) {
       <div><dt>Unconfirmed</dt><dd>${item.unconfirmed}</dd></div>
     </dl>
     <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
+  </button>`;
+}
+
+function companyLabourForecastRowHTML(item) {
+  const change = item.change;
+  const delta = Number(item.delta) || 0;
+  const direction = delta > 0 ? "needs" : "reduces by";
+  const amount = Math.abs(delta);
+  const when = item.daysUntil === 0
+    ? "today"
+    : item.daysUntil === 1
+      ? "tomorrow"
+      : `in ${item.daysUntil} days`;
+  const label = delta
+    ? `${companyProjectTitle(item.job)} ${direction} ${amount} ${pluralizeTradeLabel(item.req.trade || "worker", amount)} ${when}.`
+    : `${companyProjectTitle(item.job)} changes ${item.req.trade || "labour"} requirement ${when}.`;
+  return `<button class="company-recent-activity-row warning" type="button" data-company-project-open-section="${escapeHtml(item.job.id)}" data-company-section-target="requirements">
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <div>
+      <strong>${escapeHtml(label)}</strong>
+      <p>${escapeHtml(formatDateOnly(change.startDate))} to ${escapeHtml(formatDateOnly(change.endDate))} · ${change.previousQuantity} to ${change.quantity} required${change.phase ? ` · ${escapeHtml(change.phase)}` : ""}</p>
+    </div>
   </button>`;
 }
 
@@ -11070,6 +11332,8 @@ function companyProjectRequirementsHTML(job, summary) {
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
       const stats = companyRequirementStats(req, summary);
+      const nextChange = nextLabourRequirementChange(req);
+      const upcoming = labourRequirementUpcomingChanges(req, todayDateStr(), 60);
       const meta = [
         req.grade,
         req.workActivity,
@@ -11088,12 +11352,25 @@ function companyProjectRequirementsHTML(job, summary) {
           <strong>${escapeHtml(req.trade || "Labour")}</strong>
           <span>${escapeHtml(req.specialism || "Role / specialism TBC")}</span>
           ${meta.length ? `<small>${meta.map(escapeHtml).join(" · ")}</small>` : ""}
+          ${req.labourSchedule?.length ? `<div class="labour-forecast-summary">
+            <span>Current requirement: <strong>${stats.required}</strong></span>
+            <span>Next change: <strong>${nextChange ? `${nextChange.previousQuantity} → ${nextChange.quantity} on ${formatDateOnly(nextChange.startDate)}` : "None scheduled"}</strong></span>
+            <span>Peak workforce: <strong>${stats.peak}</strong></span>
+          </div>` : ""}
+          ${upcoming.length ? `<div class="labour-forecast-list">
+            ${upcoming.map((change) => `<div class="labour-forecast-period">
+              <span>${escapeHtml(formatDateOnly(change.startDate))} to ${escapeHtml(formatDateOnly(change.endDate))}</span>
+              <strong>${change.quantity} worker${change.quantity === 1 ? "" : "s"}</strong>
+              ${change.phase ? `<small>${escapeHtml(change.phase)}</small>` : ""}
+            </div>`).join("")}
+          </div>` : ""}
         </div>
         <dl>
           <div><dt>Required</dt><dd>${stats.required}</dd></div>
           <div><dt>Offered</dt><dd>${stats.offered}</dd></div>
           <div><dt>Accepted / assigned</dt><dd>${stats.accepted}</dd></div>
           <div><dt>Remaining</dt><dd>${stats.remaining}</dd></div>
+          <div><dt>Peak</dt><dd>${stats.peak}</dd></div>
         </dl>
       </div>`;
     })
@@ -13246,23 +13523,29 @@ jobForm.addEventListener("submit", (e) => {
       ? Math.round(sundayRateRaw)
       : budgetMax;
   const preferredWorkerIds = preferredWorkerIdsFromJobForm();
-  const labourRequirements = buildLabourRequirementsFromForm({
-    budgetMin,
-    budgetMax,
-    workerReceivesFullAdvertisedRate,
-    accommodationPaid,
-    accommodationAllowancePerNight:
-      accommodationPaid &&
-      Number.isFinite(accommodationAllowanceRaw) &&
-      accommodationAllowanceRaw > 0
-        ? Math.round(accommodationAllowanceRaw)
-        : null,
-    saturdayRate,
-    sundayRate,
-    workingDays,
-    shiftStartTime,
-    shiftFinishTime,
-  });
+  let labourRequirements = [];
+  try {
+    labourRequirements = buildLabourRequirementsFromForm({
+      budgetMin,
+      budgetMax,
+      workerReceivesFullAdvertisedRate,
+      accommodationPaid,
+      accommodationAllowancePerNight:
+        accommodationPaid &&
+        Number.isFinite(accommodationAllowanceRaw) &&
+        accommodationAllowanceRaw > 0
+          ? Math.round(accommodationAllowanceRaw)
+          : null,
+      saturdayRate,
+      sundayRate,
+      workingDays,
+      shiftStartTime,
+      shiftFinishTime,
+    });
+  } catch (err) {
+    showToast(err?.message || "Check the labour schedule");
+    return;
+  }
 
   const job = {
     id: createId(),
@@ -15097,6 +15380,11 @@ function loadAttendanceDemoData() {
   }
   removeAttendanceDemoData({ rerender: false });
   const today = todayDateStr();
+  const demoScheduleDate = (days) => {
+    const date = new Date(`${today}T00:00:00`);
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split("T")[0];
+  };
   const yesterdayDate = new Date(`${today}T00:00:00`);
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterday = yesterdayDate.toISOString().split("T")[0];
@@ -15133,11 +15421,56 @@ function loadAttendanceDemoData() {
     grade: "Mixed electrical team",
     quantity: 10,
     labourRequirements: [
-      { id: "dev-att-req-1", trade: "Electrical", grade: "Electrical Supervisor", quantity: 1 },
-      { id: "dev-att-req-2", trade: "Electrical", grade: "Approved Electrician", quantity: 2 },
-      { id: "dev-att-req-3", trade: "Electrical", grade: "Electrician", quantity: 3 },
-      { id: "dev-att-req-4", trade: "Electrical", grade: "Electrical Improver", quantity: 2 },
-      { id: "dev-att-req-5", trade: "Electrical", grade: "Electrical Mate", quantity: 2 },
+      {
+        id: "dev-att-req-1",
+        trade: "Electrical",
+        grade: "Electrical Supervisor",
+        quantity: 1,
+        labourSchedule: [
+          { id: "dev-att-req-1-p1", startDate: demoScheduleDate(0), endDate: demoScheduleDate(20), quantity: 1, phase: "Site setup and coordination" },
+        ],
+      },
+      {
+        id: "dev-att-req-2",
+        trade: "Electrical",
+        grade: "Approved Electrician",
+        quantity: 2,
+        labourSchedule: [
+          { id: "dev-att-req-2-p1", startDate: demoScheduleDate(0), endDate: demoScheduleDate(6), quantity: 2, phase: "Containment setup" },
+          { id: "dev-att-req-2-p2", startDate: demoScheduleDate(7), endDate: demoScheduleDate(20), quantity: 4, phase: "First fix ramp-up" },
+        ],
+      },
+      {
+        id: "dev-att-req-3",
+        trade: "Electrical",
+        grade: "Electrician",
+        quantity: 3,
+        labourSchedule: [
+          { id: "dev-att-req-3-p1", startDate: demoScheduleDate(0), endDate: demoScheduleDate(6), quantity: 3, phase: "Early installation" },
+          { id: "dev-att-req-3-p2", startDate: demoScheduleDate(7), endDate: demoScheduleDate(27), quantity: 6, phase: "Main installation" },
+          { id: "dev-att-req-3-p3", startDate: demoScheduleDate(28), endDate: demoScheduleDate(55), quantity: 2, phase: "Testing support" },
+        ],
+      },
+      {
+        id: "dev-att-req-4",
+        trade: "Electrical",
+        grade: "Electrical Improver",
+        quantity: 2,
+        labourSchedule: [
+          { id: "dev-att-req-4-p1", startDate: demoScheduleDate(0), endDate: demoScheduleDate(13), quantity: 2, phase: "Cable install support" },
+          { id: "dev-att-req-4-p2", startDate: demoScheduleDate(14), endDate: demoScheduleDate(34), quantity: 4, phase: "Peak support" },
+        ],
+      },
+      {
+        id: "dev-att-req-5",
+        trade: "Electrical",
+        grade: "Electrical Mate",
+        quantity: 2,
+        labourSchedule: [
+          { id: "dev-att-req-5-p1", startDate: demoScheduleDate(0), endDate: demoScheduleDate(10), quantity: 2, phase: "Material movement" },
+          { id: "dev-att-req-5-p2", startDate: demoScheduleDate(11), endDate: demoScheduleDate(27), quantity: 1, phase: "Reduced support" },
+        ],
+      },
     ],
     assignedWorkerId: workerIds[0],
     assignedWorkerIds: workerIds,
