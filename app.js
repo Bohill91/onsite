@@ -7506,6 +7506,7 @@ const NAV_SM = {
   account: onsiteIcon("user", 16),
   offers: onsiteIcon("tag", 16),
   notifications: onsiteIcon("bell", 16),
+  market: onsiteIcon("users", 16),
 };
 
 const NAV_LG = Object.fromEntries(
@@ -7527,6 +7528,7 @@ const CONTRACTOR_TABS = [
   { id: "dashboard", icon: "home", label: "Dashboard" },
   { id: "request-labour", icon: "requests", label: "Request Labour" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
+  { id: "market", icon: "market", label: "Labour Market" },
   { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
@@ -9193,6 +9195,13 @@ let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
 let activeAttendanceProjectFilters = [];
 let activeAttendanceProjectSort = "attendance_required";
+let activeMarketFilters = {
+  trade: "",
+  specialism: "",
+  location: "",
+  dateFrom: "",
+  dateTo: "",
+};
 
 function attendanceProjectHash(jobId) {
   return `#attendance/project/${encodeURIComponent(jobId)}`;
@@ -10023,6 +10032,211 @@ function companyUpcomingLabourChanges(summaries = [], days = 30) {
     .sort((a, b) => a.daysUntil - b.daysUntil);
 }
 
+const LABOUR_MARKET_MIN_RATE_SAMPLE = 3;
+
+function normaliseMarketText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function marketRegionFromLocation(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Location unverified";
+  const first = raw.split(",")[0].trim();
+  return first || raw;
+}
+
+function marketWorkerLocation(worker) {
+  const label = worker?.location || worker?.homeTown || worker?.postcode || worker?.region || "";
+  const pin = worker?.homePin || worker?.locationPin || worker?.currentLocation || null;
+  return {
+    label: marketRegionFromLocation(label),
+    raw: label,
+    verified: !!(pin?.lat != null && pin?.lng != null),
+  };
+}
+
+function marketJobLocation(job) {
+  const label = job?.location || job?.siteAddress || "";
+  return {
+    label: marketRegionFromLocation(label),
+    raw: label,
+    verified: !!(job?.sitePin?.lat != null && job?.sitePin?.lng != null),
+  };
+}
+
+function marketRequirementSpecialism(req, job) {
+  return req?.specialism || req?.grade || job?.specialism || job?.grade || "";
+}
+
+function marketRequirementRate(req, job) {
+  const value = Number(req?.budgetMax ?? req?.dailyLabourRate ?? job?.budgetMax ?? jobBudget(job));
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+}
+
+function isWorkerAvailableForMarket(worker, dateFrom = "") {
+  if (worker?.availability !== "available") return false;
+  const next = dateOnlyMs(worker?.nextAvailableDate);
+  const target = dateOnlyMs(dateFrom || todayDateStr());
+  return next === null || target === null || next <= target;
+}
+
+function workerMatchesMarketFilters(worker, filters = activeMarketFilters) {
+  if (!isWorkerAvailableForMarket(worker, filters.dateFrom)) return false;
+  if (filters.trade && canonicalTrade(worker.trade) !== canonicalTrade(filters.trade)) return false;
+  const workerText = workerSearchText(worker);
+  if (filters.specialism && !workerText.includes(normaliseMarketText(filters.specialism))) return false;
+  if (filters.location) {
+    const workerLoc = marketWorkerLocation(worker);
+    if (!normaliseMarketText(workerLoc.label).includes(normaliseMarketText(filters.location))) return false;
+  }
+  return true;
+}
+
+function requirementMatchesMarketFilters(req, job, filters = activeMarketFilters) {
+  if (filters.trade && canonicalTrade(req.trade || job?.trade) !== canonicalTrade(filters.trade)) return false;
+  const specialism = marketRequirementSpecialism(req, job);
+  if (filters.specialism && !normaliseMarketText(specialism).includes(normaliseMarketText(filters.specialism))) return false;
+  const jobLoc = marketJobLocation(job);
+  if (filters.location && !normaliseMarketText(jobLoc.label).includes(normaliseMarketText(filters.location))) return false;
+  const startMs = dateOnlyMs(job?.start || job?.startDate);
+  const fromMs = dateOnlyMs(filters.dateFrom);
+  const toMs = dateOnlyMs(filters.dateTo);
+  if (fromMs !== null && startMs !== null && startMs < fromMs) return false;
+  if (toMs !== null && startMs !== null && startMs > toMs) return false;
+  return true;
+}
+
+function liveMarketRequirements(filters = activeMarketFilters, { excludeJobId = "" } = {}) {
+  return state.jobs
+    .filter((job) => !job.completed && job.id !== excludeJobId)
+    .flatMap((job) =>
+      uniqueLabourRequirements(labourRequirementsForJob(job))
+        .filter((req) => requirementMatchesMarketFilters(req, job, filters))
+        .map((req) => ({
+          job,
+          req,
+          trade: req.trade || job.trade || "",
+          specialism: marketRequirementSpecialism(req, job),
+          location: marketJobLocation(job),
+          required: labourRequirementQuantityOnDate(req, todayDateStr()),
+          rate: marketRequirementRate(req, job),
+        })),
+    );
+}
+
+function availableMarketWorkers(filters = activeMarketFilters) {
+  return state.workers.filter((worker) => workerMatchesMarketFilters(worker, filters));
+}
+
+function medianNumber(values = []) {
+  const sorted = values
+    .map(Number)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function labourMarketRateStats(filters = activeMarketFilters, opts = {}) {
+  const requirements = liveMarketRequirements(filters, opts);
+  const rates = requirements.map((item) => item.rate).filter((rate) => rate !== null);
+  const median = medianNumber(rates);
+  return {
+    requirements,
+    rates,
+    sampleCount: rates.length,
+    median,
+    min: rates.length ? Math.min(...rates) : null,
+    max: rates.length ? Math.max(...rates) : null,
+    enoughData: rates.length >= LABOUR_MARKET_MIN_RATE_SAMPLE,
+  };
+}
+
+function labourMarketBenchmarkForRequirement(req, job) {
+  const stats = labourMarketRateStats(
+    {
+      trade: req?.trade || job?.trade || "",
+      specialism: "",
+      location: marketJobLocation(job).label,
+      dateFrom: "",
+      dateTo: "",
+    },
+    { excludeJobId: job?.id || "" },
+  );
+  const rate = marketRequirementRate(req, job);
+  if (!stats.enoughData || !rate || !stats.median || rate >= stats.median) return null;
+  return {
+    ...stats,
+    rate,
+    gap: stats.median - rate,
+  };
+}
+
+function labourMarketSupplyDemandIndicator(workerCount, requirementCount) {
+  if (!requirementCount && workerCount) return { label: "Strong availability", tone: "good" };
+  if (requirementCount > workerCount) return { label: "High demand relative to available workers", tone: "warn" };
+  if (workerCount >= requirementCount * 2 && requirementCount > 0) return { label: "Strong availability", tone: "good" };
+  return { label: "Balanced", tone: "info" };
+}
+
+function labourMarketModel(filters = activeMarketFilters) {
+  const workers = availableMarketWorkers(filters);
+  const requirements = liveMarketRequirements(filters);
+  const rateStats = labourMarketRateStats(filters);
+  const regions = new Map();
+  workers.forEach((worker) => {
+    const location = marketWorkerLocation(worker);
+    const key = location.label;
+    const entry = regions.get(key) || {
+      label: key,
+      count: 0,
+      verifiedCount: 0,
+      trades: new Map(),
+      specialisms: new Map(),
+      radiusEligible: 0,
+    };
+    entry.count += 1;
+    if (location.verified) entry.verifiedCount += 1;
+    if (Number(worker.travelRadiusMiles || 0) > 0) entry.radiusEligible += 1;
+    const trade = worker.trade || "Trade unverified";
+    entry.trades.set(trade, (entry.trades.get(trade) || 0) + 1);
+    const spec = worker.specialism || worker.grade || "Specialism unverified";
+    entry.specialisms.set(spec, (entry.specialisms.get(spec) || 0) + 1);
+    regions.set(key, entry);
+  });
+  const regionCards = Array.from(regions.values())
+    .map((entry) => ({
+      ...entry,
+      topTrade: Array.from(entry.trades.entries()).sort((a, b) => b[1] - a[1])[0] || ["Trade unverified", 0],
+      topSpecialism: Array.from(entry.specialisms.entries()).sort((a, b) => b[1] - a[1])[0] || ["Specialism unverified", 0],
+      estimated: entry.verifiedCount < entry.count,
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  const indicator = labourMarketSupplyDemandIndicator(workers.length, requirements.length);
+  const trades = Array.from(new Set([
+    ...state.workers.map((worker) => worker.trade).filter(Boolean),
+    ...state.jobs.flatMap((job) => labourRequirementsForJob(job).map((req) => req.trade || job.trade).filter(Boolean)),
+  ])).sort((a, b) => a.localeCompare(b));
+  const specialisms = Array.from(new Set([
+    ...state.workers.map((worker) => worker.specialism || worker.grade).filter(Boolean),
+    ...state.jobs.flatMap((job) => labourRequirementsForJob(job).map((req) => marketRequirementSpecialism(req, job)).filter(Boolean)),
+  ])).sort((a, b) => a.localeCompare(b));
+  const locations = Array.from(new Set([
+    ...state.workers.map((worker) => marketWorkerLocation(worker).label).filter(Boolean),
+    ...state.jobs.map((job) => marketJobLocation(job).label).filter(Boolean),
+  ])).sort((a, b) => a.localeCompare(b));
+  return {
+    workers,
+    requirements,
+    rateStats,
+    regions: regionCards,
+    indicator,
+    filters: { ...filters },
+    options: { trades, specialisms, locations },
+  };
+}
+
 function firstNameForUser(user) {
   const value =
     user?.fullName ||
@@ -10614,7 +10828,14 @@ function calculateProjectHealth(job, summary = companyProjectSummary(job, getSes
   const recommendations = [];
   const req = mostUnderfilled?.req || {};
   if (summary.openRoles > 0) {
-    recommendations.push("Increase the advertised day rate.");
+    const rateBenchmark = labourMarketBenchmarkForRequirement(req, job);
+    if (rateBenchmark) {
+      recommendations.push(
+        `Your advertised rate is ${formatMoney(rateBenchmark.gap)} below the median of comparable live OnSite requirements in this area.`,
+      );
+    } else {
+      recommendations.push("Increase the advertised day rate.");
+    }
     if (!job.accommodationPaid && !req.accommodationPaid) {
       recommendations.push("Add a working-away allowance.");
     }
@@ -12820,6 +13041,226 @@ function renderCompanyNotificationsPage() {
   updateCompanyNotificationBadges(user);
 }
 
+function marketOptionHTML(value, selectedValue) {
+  return `<option value="${escapeHtml(value)}"${value === selectedValue ? " selected" : ""}>${escapeHtml(value)}</option>`;
+}
+
+function marketFilterSelectHTML(id, label, options, selectedValue) {
+  return `<label class="field-label market-filter-field">${escapeHtml(label)}
+    <select id="${escapeHtml(id)}">
+      <option value="">All</option>
+      ${options.map((value) => marketOptionHTML(value, selectedValue)).join("")}
+    </select>
+  </label>`;
+}
+
+function marketRateCopy(stats) {
+  if (!stats.sampleCount) {
+    return {
+      title: "No comparable OnSite rate data yet",
+      body: "Rates will appear once matching live labour requirements exist on the platform.",
+      range: "Not enough data",
+    };
+  }
+  if (!stats.enoughData) {
+    return {
+      title: "Limited OnSite sample",
+      body: `${stats.sampleCount} comparable advertised rate${stats.sampleCount === 1 ? "" : "s"} found. OnSite hides medians until at least ${LABOUR_MARKET_MIN_RATE_SAMPLE} samples are available.`,
+      range: "Sample too small",
+    };
+  }
+  return {
+    title: `${formatMoney(stats.median)}/day median`,
+    body: `Typical OnSite platform range ${formatMoney(stats.min)}–${formatMoney(stats.max)} per day.`,
+    range: `${formatMoney(stats.min)}–${formatMoney(stats.max)}`,
+  };
+}
+
+function marketAvailabilityRowsHTML(model) {
+  const grouped = new Map();
+  model.workers.forEach((worker) => {
+    const key = [
+      worker.trade || "Trade unverified",
+      worker.specialism || worker.grade || "Specialism unverified",
+      marketWorkerLocation(worker).label,
+      worker.nextAvailableDate || "Available now",
+    ].join("|");
+    const current = grouped.get(key) || {
+      trade: worker.trade || "Trade unverified",
+      specialism: worker.specialism || worker.grade || "Specialism unverified",
+      location: marketWorkerLocation(worker),
+      availabilityDate: worker.nextAvailableDate || "",
+      count: 0,
+      radiusEligible: 0,
+    };
+    current.count += 1;
+    if (Number(worker.travelRadiusMiles || 0) > 0) current.radiusEligible += 1;
+    grouped.set(key, current);
+  });
+  const rows = Array.from(grouped.values())
+    .sort((a, b) => b.count - a.count || a.trade.localeCompare(b.trade))
+    .slice(0, 8);
+  if (!rows.length) {
+    return guidedEmptyStateHTML({
+      kicker: "Availability",
+      title: "No available workers match these filters",
+      body: "Try widening the trade, location or availability date filters. This view only uses OnSite worker profiles.",
+    });
+  }
+  return `<div class="market-table">
+    <div class="market-table-head">
+      <span>Trade</span>
+      <span>Specialism</span>
+      <span>Location</span>
+      <span>Travel radius eligible</span>
+      <span>Availability date</span>
+    </div>
+    ${rows.map((row) => `<div class="market-table-row">
+      <span><strong>${escapeHtml(row.trade)}</strong><small>${row.count} available</small></span>
+      <span>${escapeHtml(row.specialism)}</span>
+      <span>${escapeHtml(row.location.label)}${row.location.verified ? "" : " <small>estimated / unverified</small>"}</span>
+      <span>${row.radiusEligible}/${row.count}</span>
+      <span>${row.availabilityDate ? escapeHtml(formatDateOnly(row.availabilityDate)) : "Available now"}</span>
+    </div>`).join("")}
+  </div>`;
+}
+
+function marketRegionCardsHTML(model) {
+  if (!model.regions.length) {
+    return guidedEmptyStateHTML({
+      kicker: "Regional availability",
+      title: "No regional availability to show yet",
+      body: "Workers with saved location data will appear here as aggregated regional OnSite platform counts.",
+    });
+  }
+  return `<div class="market-region-grid">
+    ${model.regions.slice(0, 6).map((region) => `<article class="market-region-card">
+      <div>
+        <span class="company-home-kicker">${region.estimated ? "ESTIMATED REGION" : "REGION"}</span>
+        <h3>${escapeHtml(region.label)}</h3>
+        <p>${region.count} available ${escapeHtml(pluralizeTradeLabel(region.topTrade[0] || "worker", region.count))}</p>
+      </div>
+      <dl>
+        <div><dt>Top trade</dt><dd>${escapeHtml(region.topTrade[0])}</dd></div>
+        <div><dt>Top specialism</dt><dd>${escapeHtml(region.topSpecialism[0])}</dd></div>
+        <div><dt>Travel radius profiles</dt><dd>${region.radiusEligible}/${region.count}</dd></div>
+      </dl>
+    </article>`).join("")}
+  </div>`;
+}
+
+function marketDemandSupplyHTML(model) {
+  return `<section class="jw-card market-intel-card">
+    <div class="company-live-site-head">
+      <div>
+        <p class="company-home-kicker">DEMAND &amp; SUPPLY</p>
+        <h3>${escapeHtml(model.indicator.label)}</h3>
+      </div>
+      <span class="market-signal ${escapeHtml(model.indicator.tone)}">${escapeHtml(model.indicator.label)}</span>
+    </div>
+    <p class="market-disclaimer">Indicator based only on OnSite platform workers and live labour requirements matching the selected filters.</p>
+    <div class="market-metric-grid">
+      <div><span>Eligible available workers</span><strong>${model.workers.length}</strong></div>
+      <div><span>Relevant live requirements</span><strong>${model.requirements.length}</strong></div>
+      <div><span>Rate samples</span><strong>${model.rateStats.sampleCount}</strong></div>
+    </div>
+  </section>`;
+}
+
+function renderCompanyMarketPage() {
+  const el = document.getElementById("marketContent");
+  if (!el) return;
+  const model = labourMarketModel(activeMarketFilters);
+  const rate = marketRateCopy(model.rateStats);
+  el.innerHTML = `
+    <section class="request-labour-page">
+      <header class="request-labour-page-head company-page-head">
+        <div>
+          <p class="company-home-kicker">LABOUR MARKET</p>
+          <h2>OnSite Labour Market</h2>
+          <p>Platform availability, demand and advertised-rate intelligence from OnSite data only.</p>
+        </div>
+        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
+      </header>
+      <div class="request-labour-page-body">
+        <div class="jw-form">
+          <section class="jw-card market-intel-card">
+            <div class="company-live-site-head">
+              <div>
+                <p class="company-home-kicker">FILTERS</p>
+                <h3>Market view</h3>
+              </div>
+              <span class="market-sample-note">Minimum ${LABOUR_MARKET_MIN_RATE_SAMPLE} rate samples for medians</span>
+            </div>
+            <div class="market-filter-grid">
+              ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
+              ${marketFilterSelectHTML("marketSpecialismFilter", "Specialism", model.options.specialisms, activeMarketFilters.specialism)}
+              ${marketFilterSelectHTML("marketLocationFilter", "Location / region", model.options.locations, activeMarketFilters.location)}
+              <label class="field-label market-filter-field">Date from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
+              <label class="field-label market-filter-field">Date to<input id="marketDateTo" type="date" value="${escapeHtml(activeMarketFilters.dateTo)}" /></label>
+              <button class="secondary-btn" type="button" data-market-reset>Reset</button>
+            </div>
+            <p class="market-disclaimer">This is internal OnSite platform intelligence. It is not a claim about the whole UK construction market.</p>
+          </section>
+          <div class="market-overview-grid">
+            <section class="jw-card market-intel-card">
+              <p class="company-home-kicker">RATE INTELLIGENCE</p>
+              <h3>${escapeHtml(rate.title)}</h3>
+              <p>${escapeHtml(rate.body)}</p>
+              <dl class="market-rate-stats">
+                <div><dt>Median advertised day rate</dt><dd>${model.rateStats.enoughData ? formatMoney(model.rateStats.median) : "Hidden"}</dd></div>
+                <div><dt>Typical range</dt><dd>${escapeHtml(rate.range)}</dd></div>
+                <div><dt>Live requirements</dt><dd>${model.requirements.length}</dd></div>
+                <div><dt>Eligible available workers</dt><dd>${model.workers.length}</dd></div>
+              </dl>
+            </section>
+            ${marketDemandSupplyHTML(model)}
+          </div>
+          <section class="jw-card market-intel-card">
+            <div class="company-live-site-head">
+              <div>
+                <p class="company-home-kicker">AVAILABILITY OVERVIEW</p>
+                <h3>Available workers by profile</h3>
+              </div>
+              <small>No individual workers shown</small>
+            </div>
+            ${marketAvailabilityRowsHTML(model)}
+          </section>
+          <section class="jw-card market-intel-card">
+            <div class="company-live-site-head">
+              <div>
+                <p class="company-home-kicker">REGIONAL AVAILABILITY</p>
+                <h3>Availability heatmap</h3>
+              </div>
+              <small>Estimated where coordinates are missing</small>
+            </div>
+            ${marketRegionCardsHTML(model)}
+          </section>
+        </div>
+      </div>
+    </section>`;
+  bindCompanyMarketControls(el);
+}
+
+function bindCompanyMarketControls(scope) {
+  const update = () => {
+    activeMarketFilters = {
+      trade: document.getElementById("marketTradeFilter")?.value || "",
+      specialism: document.getElementById("marketSpecialismFilter")?.value || "",
+      location: document.getElementById("marketLocationFilter")?.value || "",
+      dateFrom: document.getElementById("marketDateFrom")?.value || "",
+      dateTo: document.getElementById("marketDateTo")?.value || "",
+    };
+    renderCompanyMarketPage();
+  };
+  scope.querySelectorAll("#marketTradeFilter, #marketSpecialismFilter, #marketLocationFilter, #marketDateFrom, #marketDateTo")
+    .forEach((control) => control.addEventListener("change", update));
+  scope.querySelector("[data-market-reset]")?.addEventListener("click", () => {
+    activeMarketFilters = { trade: "", specialism: "", location: "", dateFrom: "", dateTo: "" };
+    renderCompanyMarketPage();
+  });
+}
+
 const COMPANY_NOTIFICATION_SECTIONS = [
   ["action", "Action Required"],
   ["today", "Today"],
@@ -13825,6 +14266,7 @@ function render() {
     renderAttendance();
     renderContractorAccount(user);
     renderCompanyNotificationsPage();
+    renderCompanyMarketPage();
     renderJobPreferredWorkerChoices(user);
     if (document.getElementById("tab-request-labour")?.classList.contains("active")) {
       renderCompanyRequestLabourPage(user);
