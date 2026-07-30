@@ -339,34 +339,7 @@ const TRADE_SPECIALISMS = {
 
   Other: ["Other"],
 };
-document.addEventListener("DOMContentLoaded", () => {
-  const tradeSelect = document.getElementById("jobTrade");
-  const specialismSelect = document.getElementById("jobSpecialism");
 
-  if (!tradeSelect || !specialismSelect) return;
-
-  tradeSelect.addEventListener("change", () => {
-    const trade = tradeSelect.value;
-
-    specialismSelect.innerHTML = "";
-
-    if (!TRADE_SPECIALISMS[trade]) {
-      specialismSelect.innerHTML =
-        '<option value="">Select a trade first</option>';
-      return;
-    }
-
-    specialismSelect.innerHTML =
-      '<option value="">Select Role / Specialism</option>';
-
-    TRADE_SPECIALISMS[trade].forEach((specialism) => {
-      const option = document.createElement("option");
-      option.value = specialism;
-      option.textContent = specialism;
-      specialismSelect.appendChild(option);
-    });
-  });
-});
 function setupTradeSpecialismDropdowns() {
   const tradeSelect = document.getElementById("jobTrade");
   const specialismSelect = document.getElementById("jobSpecialism");
