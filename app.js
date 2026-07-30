@@ -2828,7 +2828,65 @@ function guidedEmptyStateHTML({
         ? `<button class="secondary-btn guided-empty-action" type="button" ${resolvedActionAttr}>${escapeHtml(actionLabel)}</button>`
         : ""
     }
-  </div>`;
+    </div>`;
+}
+
+function companyPageHeaderHTML({
+  kicker = "",
+  title = "",
+  subtitle = "",
+  actions = "",
+} = {}) {
+  const ui = window.OnSiteUI;
+  if (ui?.pageHeader) {
+    return ui
+      .pageHeader({
+        kicker,
+        title,
+        subtitle,
+        datePill: formatAttDate(todayDateStr()),
+        actions,
+        square: true,
+      })
+      .replace(
+        'class="os-page-header os-page-header--square"',
+        'class="request-labour-page-head company-page-head os-page-header os-page-header--square"',
+      )
+      .replace(
+        'class="os-kicker"',
+        'class="company-home-kicker os-kicker"',
+      )
+      .replace(
+        'class="os-date-pill"',
+        'class="att-today-badge os-date-pill"',
+      );
+  }
+  return `<header class="request-labour-page-head company-page-head os-page-header os-page-header--square">
+    <div>
+      ${kicker ? `<p class="company-home-kicker os-kicker">${escapeHtml(kicker)}</p>` : ""}
+      ${title ? `<h2>${escapeHtml(title)}</h2>` : ""}
+      ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
+    </div>
+    <span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>
+    ${actions}
+  </header>`;
+}
+
+function companyPageShellHTML({
+  kicker = "",
+  title = "",
+  subtitle = "",
+  body = "",
+  actions = "",
+  className = "",
+  bodyClass = "",
+} = {}) {
+  return `<section class="request-labour-page os-page-content company-saas-page ${escapeHtml(className)}">
+    ${companyPageHeaderHTML({ kicker, title, subtitle, actions })}
+    <div class="request-labour-page-body os-card company-saas-body ${escapeHtml(bodyClass)}">
+      ${body}
+    </div>
+  </section>`;
 }
 
 function summaryMetricCardHTML({
@@ -9933,7 +9991,7 @@ function attendanceProjectCardHTML(job, user) {
 
 function attendanceSelectedProjectHeaderHTML(job) {
   if (!job) return "";
-  return `<header class="request-labour-page-head attendance-project-detail-head">
+  return `<header class="request-labour-page-head company-page-head os-page-header os-page-header--square attendance-project-detail-head">
     <div>
       <p class="company-home-kicker">PROJECT ATTENDANCE</p>
       <h3>${escapeHtml(companyProjectTitle(job))}</h3>
@@ -11227,7 +11285,7 @@ function companyProjectDetailHTML(job, user) {
   return `
     <section class="company-project-detail-page">
       <button class="company-project-back" type="button" data-company-project-close>&larr; Back to Live Projects</button>
-      <div class="company-project-detail-head">
+      <div class="company-project-detail-head os-card">
         <div>
           <div class="company-project-kicker">PROJECT</div>
           <h3>${escapeHtml(companyProjectTitle(job))}</h3>
@@ -11245,9 +11303,9 @@ function companyProjectDetailHTML(job, user) {
           ${editButton}
         </div>
       </div>
-      <div class="company-project-tabs" role="tablist" aria-label="Project detail sections">
+      <div class="company-project-tabs os-tabs" role="tablist" aria-label="Project detail sections">
         ${COMPANY_PROJECT_SECTIONS.map(
-          (section) => `<button class="company-project-tab${activeCompanyProjectSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
+          (section) => `<button class="company-project-tab os-tab${activeCompanyProjectSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
         ).join("")}
       </div>
       ${detailBody}
@@ -11478,7 +11536,7 @@ function companyProjectSectionHTML(job, user, summary) {
     attendance: companyProjectAttendanceHTML(job, summary),
     documents: companyProjectDocumentsHTML(job, summary),
     site: companyProjectSiteInfoHTML(job),
-    invoices: `<div class="company-project-section"><h4>Invoices</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
+    invoices: `<div class="company-project-section os-card"><h4>Invoices</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
     activity: companyProjectActivityHTML(job, summary),
   }[activeCompanyProjectSection] || companyProjectOverviewHTML(job, summary);
 }
@@ -11493,7 +11551,7 @@ function companyProjectOverviewHTML(job, summary) {
   ].filter(Boolean);
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Project Details</h4>
         <div class="company-project-mini-row"><span>Job number</span><strong>${escapeHtml(job.jobNumber || "Not set")}</strong></div>
         <div class="company-project-mini-row"><span>Location</span><strong>${escapeHtml(job.location || "Location TBC")}</strong></div>
@@ -11501,7 +11559,7 @@ function companyProjectOverviewHTML(job, summary) {
         <div class="company-project-mini-row"><span>Start</span><strong>${job.start ? formatDateOnly(job.start) : "TBC"}</strong></div>
         <div class="company-project-mini-row"><span>End</span><strong>${job.noFixedEndDate ? "No fixed end date" : endDate ? formatDateOnly(endDate) : "TBC"}</strong></div>
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Staffing Summary</h4>
         <div class="company-project-mini-row"><span>Required</span><strong>${summary.required}</strong></div>
         <div class="company-project-mini-row"><span>Filled</span><strong>${summary.filled}</strong></div>
@@ -11512,7 +11570,7 @@ function companyProjectOverviewHTML(job, summary) {
           <button class="primary-btn" type="button" data-project-request-more="${job.id}">Request More Labour</button>
         </div>
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Current Issues</h4>
         ${
           issues.length
@@ -11524,7 +11582,7 @@ function companyProjectOverviewHTML(job, summary) {
               })
         }
       </div>
-      <div class="company-project-section company-project-section--wide">
+      <div class="company-project-section os-card company-project-section--wide">
         <h4>Operational Timeline</h4>
         ${projectOperationalTimelineHTML(job, summary)}
       </div>
@@ -11599,7 +11657,7 @@ function companyProjectWorkersHTML(job, summary) {
         actionAttr: `data-company-project-section="requirements"`,
       });
   const approvals = summary.reviewWorkers.length
-    ? `<div class="company-project-section"><h4>Workers Awaiting Approval</h4>${summary.reviewWorkers
+    ? `<div class="company-project-section os-card"><h4>Workers Awaiting Approval</h4>${summary.reviewWorkers
         .map((app) => {
           const worker = applicationWorker(app);
           const rating = worker ? buildWorkerRating(worker.id) : null;
@@ -11620,7 +11678,7 @@ function companyProjectWorkersHTML(job, summary) {
     : "";
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Assigned Workers</h4>
         ${rows}
       </div>
@@ -11719,7 +11777,7 @@ function companyProjectRequirementsHTML(job, summary) {
     .join("");
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Labour Requirements</h4>
         ${requirementRows || guidedEmptyStateHTML({
           kicker: "Requirements",
@@ -11729,7 +11787,7 @@ function companyProjectRequirementsHTML(job, summary) {
           actionAttr: `data-project-request-more="${job.id}"`,
         })}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Pending Offers</h4>
         ${pendingRows}
       </div>
@@ -11748,7 +11806,7 @@ function companyProjectAttendanceHTML(job, summary) {
     .join("");
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Today</h4>
         <div class="company-project-mini-row"><span>Expected today</span><strong>${summary.expectedToday}</strong></div>
         <div class="company-project-mini-row"><span>Signed in</span><strong>${summary.signedInToday}</strong></div>
@@ -11756,7 +11814,7 @@ function companyProjectAttendanceHTML(job, summary) {
         <div class="company-project-mini-row"><span>Late reports</span><strong>${summary.lateReports}</strong></div>
         <div class="company-project-mini-row"><span>No-shows</span><strong>${summary.noShows}</strong></div>
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Project Attendance Records</h4>
         <div class="company-project-mini-row"><span>QR sign-in</span><strong>${summary.signedInToday}/${summary.expectedToday}</strong></div>
         <div class="company-project-mini-row"><span>Manual override</span><strong>Available in Attendance</strong></div>
@@ -11768,7 +11826,7 @@ function companyProjectAttendanceHTML(job, summary) {
           actionTab: "attendance",
         })}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Late Reports</h4>
         ${
           lateRows.length
@@ -11786,11 +11844,11 @@ function companyProjectAttendanceHTML(job, summary) {
 function companyProjectDocumentsHTML(job, summary) {
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Pre-start Documents</h4>
         ${companyPreStartJobPanelHTML(job)}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Worker Acknowledgements</h4>
         <div class="company-project-mini-row"><span>Outstanding acknowledgements</span><strong>${summary.outstandingPreStart}</strong></div>
         ${summary.assignedWorkers.length ? summary.assignedWorkers.map((worker) => {
@@ -11824,7 +11882,7 @@ function companyProjectSiteInfoHTML(job) {
       });
   return `
     <div class="company-project-detail-grid">
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Site Address &amp; Access</h4>
         <div class="company-project-mini-row"><span>Location</span><strong>${escapeHtml(job.location || "Location TBC")}</strong></div>
         <div class="company-project-mini-row"><span>Site address</span><strong>${escapeHtml(job.siteAddress || job.location || "Not added")}</strong></div>
@@ -11836,11 +11894,11 @@ function companyProjectSiteInfoHTML(job) {
         <div class="company-project-mini-row"><span>Additional notes for workers</span><strong>${escapeHtml(job.gateAccess || "Not added")}</strong></div>
         ${job.sitePin ? `<button class="secondary-btn" type="button" data-map-job="${job.id}">Open Site Map</button>` : ""}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Site Photos</h4>
         ${photoRows}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Attendance Responsibility</h4>
         <div class="company-project-mini-row"><span>Attendance responsibility</span><strong>${job.attendanceManager?.name ? `Manager: ${escapeHtml(job.attendanceManager.name)}` : "Company / manual setup"}</strong></div>
       </div>
@@ -11850,7 +11908,7 @@ function companyProjectSiteInfoHTML(job) {
 function companyProjectActivityHTML(job, summary) {
   const rows = groupedProjectActivityHTML(projectActivityList(job));
   return `
-    <div class="company-project-section">
+    <div class="company-project-section os-card">
       <h4>Activity</h4>
       ${rows || guidedEmptyStateHTML({
         kicker: "Activity",
@@ -12299,7 +12357,7 @@ function renderContractorHome(user) {
   }
   const selectedProject = companyJobs.find((job) => job.id === activeCompanyProjectId);
   if (selectedProject) {
-    el.innerHTML = `<section class="company-dashboard-page">${companyProjectDetailHTML(selectedProject, user)}</section>`;
+    el.innerHTML = `<section class="company-dashboard-page os-page-content company-saas-page company-project-detail-shell">${companyProjectDetailHTML(selectedProject, user)}</section>`;
     bindWorkerReleaseButtons(el);
     bindCancelBookingButtons(el);
     bindAgreementOpeners(el);
@@ -12330,17 +12388,13 @@ function renderContractorHome(user) {
     (job) => job.completed || job.completedAt || job.cancelledAt || job.bookingStatus === "cancelled",
   );
 
-  el.innerHTML = `
-    <section class="request-labour-page">
-      <header class="request-labour-page-head company-dashboard-head">
-        <div>
-          <p class="company-home-kicker">DASHBOARD</p>
-          <h2>Dashboard</h2>
-          <p>Monitor your live projects, staffing and attendance.</p>
-        </div>
-        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
-      </header>
-      <div class="request-labour-page-body">
+  el.innerHTML = companyPageShellHTML({
+    kicker: "DASHBOARD",
+    title: "Dashboard",
+    subtitle: "Monitor your live projects, staffing and attendance.",
+    className: "company-dashboard-shell",
+    bodyClass: "company-dashboard-body",
+    body: `
         <div class="jw-form">
           ${companyDashboardFocusHTML(summary, user)}
           ${companyRecentActivityHTML(summary, user)}
@@ -12357,9 +12411,8 @@ function renderContractorHome(user) {
           </section>
           <div class="company-project-grid">${projectCards}</div>
           ${companyPreviousProjectsHTML(previousProjects)}
-        </div>
-      </div>
-    </section>`;
+        </div>`,
+  });
 
   bindLabourRequestWorkflow(el);
   bindWorkerReleaseButtons(el);
@@ -12641,11 +12694,11 @@ function openCompanyWorkerProfileModal(workerId, jobId = "") {
         <div class="settings-card"><span>Documents</span><strong>${docs.length}</strong><small>${escapeHtml(verificationStatusLabel(worker.workerVerificationStatus))}</small></div>
         <div class="settings-card"><span>Availability</span><strong>${escapeHtml(worker.availability || "available")}</strong><small>${worker.nextAvailableDate ? `Next ${formatDateOnly(worker.nextAvailableDate)}` : "No next date set"}</small></div>
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Documents &amp; Certifications</h4>
         ${companyWorkerDocumentsHTML(worker, job)}
       </div>
-      <div class="company-project-section">
+      <div class="company-project-section os-card">
         <h4>Planned Absence</h4>
         ${
           planned.length
@@ -13219,56 +13272,77 @@ function renderContractorAccount(user) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
-  el.innerHTML = `
-    <div class="prof-header">
-      <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
-      <div class="prof-id">
-        <div class="prof-name">${escapeHtml(companyDisplayName)}</div>
-        <div class="prof-trade">Company Account</div>
+  el.innerHTML = companyPageShellHTML({
+    kicker: "COMPANY ACCOUNT",
+    title: "Profile",
+    subtitle: "Company identity, verification, billing contacts and account support details.",
+    className: "company-account-shell",
+    bodyClass: "company-account-body",
+    body: `
+      <section class="company-account-identity os-card">
+        <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
+        <div>
+          <p class="company-home-kicker">ORGANISATION</p>
+          <h3>${escapeHtml(companyDisplayName)}</h3>
+          <p>${escapeHtml(user.name || "Account user")} · ${escapeHtml(companySidebarUserRole(user))}</p>
+        </div>
         <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
+      </section>
+      <div class="company-account-grid">
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Company details</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">Registered company name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Trading name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Company number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Registered address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Account contacts</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">Contact name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Accounts phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Verification &amp; VAT</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">Company verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
+            <div class="prof-field"><div class="prof-field-label">VAT registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
+            <div class="prof-field"><div class="prof-field-label">VAT number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">VAT verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Payment contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Operational activity</div>
+          <div class="prof-stats-grid">
+            <div class="prof-stat"><div class="prof-stat-val">${companyJobs.length}</div><div class="prof-stat-lbl">Requests posted</div></div>
+            <div class="prof-stat"><div class="prof-stat-val">${companyJobs.filter((j) => j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers placed</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Settings &amp; support</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Managed from the Notifications page</div></div>
+            <div class="prof-field"><div class="prof-field-label">Privacy &amp; security</div><div class="prof-field-val">Account controls remain tied to verified company users</div></div>
+            <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Available from OnSite support</div></div>
+            <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Contact OnSite for account and project support</div></div>
+          </div>
+        </section>
       </div>
-    </div>
-    <div class="prof-section">
-      <div class="prof-section-title">Account Details</div>
-      <div class="prof-fields">
-        <div class="prof-field"><div class="prof-field-label">Contact Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Registered Company Name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Trading Name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Registered Address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Account Type</div><div class="prof-field-val">Company</div></div>
-        <div class="prof-field"><div class="prof-field-label">Company Number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">VAT Registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
-        <div class="prof-field"><div class="prof-field-label">VAT Number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Payment Contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Accounts Email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Accounts Phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
-        <div class="prof-field"><div class="prof-field-label">Company Verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
-        <div class="prof-field"><div class="prof-field-label">VAT Verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
-      </div>
-    </div>
-    <div class="prof-section">
-      <div class="prof-section-title">Activity</div>
-      <div class="prof-stats-grid">
-        <div class="prof-stat"><div class="prof-stat-val">${companyJobs.length}</div><div class="prof-stat-lbl">Requests Posted</div></div>
-        <div class="prof-stat"><div class="prof-stat-val">${companyJobs.filter((j) => j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers Placed</div></div>
-      </div>
-    </div>
-    <div class="prof-section">
-      <div class="prof-section-title">Settings &amp; Support</div>
-      <div class="prof-fields">
-        <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Managed from the Notifications page</div></div>
-        <div class="prof-field"><div class="prof-field-label">Privacy &amp; Security</div><div class="prof-field-val">Account controls remain tied to verified company users</div></div>
-        <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Available from OnSite support</div></div>
-        <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Contact OnSite for account and project support</div></div>
-      </div>
-    </div>
-    ${optionalSections}
-    <button class="ch-logout-btn" type="button" id="accLogoutBtn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      Sign Out
-    </button>`;
+      ${optionalSections ? `<div class="company-account-extra">${optionalSections}</div>` : ""}
+      <div class="company-account-actions">
+        <button class="ch-logout-btn secondary-btn" type="button" id="accLogoutBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign Out
+        </button>
+      </div>`,
+  });
 
   bindAgreementOpeners(el);
   bindCompanyDocsForm(el, user);
@@ -13282,22 +13356,17 @@ function renderCompanyNotificationsPage() {
   if (!el) return;
   const user = getSessionUser();
   const groups = groupCompanyNotifications(user);
-  el.innerHTML = `
-    <section class="request-labour-page">
-      <header class="request-labour-page-head company-page-head">
-        <div>
-          <p class="company-home-kicker">NOTIFICATIONS</p>
-          <h2>Notifications</h2>
-          <p>Central activity feed for labour, attendance, project and payment updates.</p>
-        </div>
-        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
-      </header>
-      <div class="request-labour-page-body">
+  el.innerHTML = companyPageShellHTML({
+    kicker: "NOTIFICATIONS",
+    title: "Notifications",
+    subtitle: "Central activity feed for labour, attendance, project and payment updates.",
+    className: "company-notifications-shell",
+    bodyClass: "company-notifications-body",
+    body: `
         <div class="notification-feed">
           ${notificationFeedHTML(groups)}
-        </div>
-      </div>
-    </section>`;
+        </div>`,
+  });
   bindCompanyNotificationActions(el);
   updateCompanyNotificationBadges(user);
 }
@@ -13433,17 +13502,13 @@ function renderCompanyMarketPage() {
   if (!el) return;
   const model = labourMarketModel(activeMarketFilters);
   const rate = marketRateCopy(model.rateStats);
-  el.innerHTML = `
-    <section class="request-labour-page">
-      <header class="request-labour-page-head company-page-head">
-        <div>
-          <p class="company-home-kicker">LABOUR MARKET</p>
-          <h2>OnSite Labour Market</h2>
-          <p>Platform availability, demand and advertised-rate intelligence from OnSite data only.</p>
-        </div>
-        <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
-      </header>
-      <div class="request-labour-page-body">
+  el.innerHTML = companyPageShellHTML({
+    kicker: "LABOUR MARKET",
+    title: "OnSite Labour Market",
+    subtitle: "Platform availability, demand and advertised-rate intelligence from OnSite data only.",
+    className: "company-market-shell",
+    bodyClass: "company-market-body",
+    body: `
         <div class="jw-form">
           <section class="jw-card market-intel-card">
             <div class="company-live-site-head">
@@ -13497,9 +13562,8 @@ function renderCompanyMarketPage() {
             </div>
             ${marketRegionCardsHTML(model)}
           </section>
-        </div>
-      </div>
-    </section>`;
+        </div>`,
+  });
   bindCompanyMarketControls(el);
 }
 
@@ -16363,10 +16427,10 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
   if (!tab) return;
   if (selectedProject) {
     tab.innerHTML = `
-      <section class="request-labour-page attendance-page attendance-project-page">
+      <section class="request-labour-page os-page-content company-saas-page attendance-page attendance-project-page">
         <button class="company-project-back attendance-back-link" type="button" data-attendance-back>&larr; Back to Attendance</button>
         ${attendanceSelectedProjectHeaderHTML(selectedProject)}
-        <div class="request-labour-page-body attendance-page-body">
+        <div class="request-labour-page-body os-card company-saas-body attendance-page-body">
           <div class="jw-form">
             <div id="siteQrPanel"></div>
             <div id="attendanceCards" class="card-list"></div>
@@ -16404,17 +16468,13 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
         actionLabel: allProjects.length ? "" : "Request Labour",
         actionAttr: allProjects.length ? "" : "data-company-request-labour",
       });
-  tab.innerHTML = `
-    <section class="request-labour-page attendance-page">
-      <header class="request-labour-page-head attendance-page-head">
-        <div>
-          <p class="company-home-kicker">ATTENDANCE</p>
-          <h2>Attendance</h2>
-          <p>Confirm daily attendance for each project.</p>
-        </div>
-        <span class="att-today-badge" id="attTodayBadge"></span>
-      </header>
-      <div class="request-labour-page-body attendance-page-body">
+  tab.innerHTML = companyPageShellHTML({
+    kicker: "ATTENDANCE",
+    title: "Attendance",
+    subtitle: "Confirm daily attendance for each project.",
+    className: "attendance-page",
+    bodyClass: "attendance-page-body",
+    body: `
         <div class="jw-form attendance-landing-content">
           <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
             <div class="company-project-search-card-head">
@@ -16428,9 +16488,8 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
           </section>
           ${projectList}
           <div id="attendanceDemoControls"></div>
-        </div>
-      </div>
-    </section>`;
+        </div>`,
+  });
 }
 
 function bindCompanyAttendanceProjectControls(scope) {
