@@ -908,6 +908,8 @@ button.is-loading,
   .content-area:has(#tab-request-labour.active),
   .content-area:has(#tab-dashboard.active .request-labour-page),
   .content-area:has(#tab-dashboard.active .company-dashboard-page),
+  .content-area:has(#tab-jobs.active .request-labour-page),
+  .content-area:has(#tab-jobs.active .company-dashboard-page),
   .content-area:has(#tab-attendance.active .attendance-page),
   .content-area:has(#tab-market.active .request-labour-page),
   .content-area:has(#tab-notifications.active .request-labour-page),
@@ -11258,12 +11260,153 @@ body.modal-open {
   padding-bottom: 0;
 }
 
+.company-dashboard-all-projects {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(var(--space-1) * -0.5);
+}
+
+.company-project-status-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.company-project-status-chip {
+  background: var(--surface);
+  border: 1px solid var(--card-divider);
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  min-height: 34px;
+  padding: 0 12px;
+  transition:
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.company-project-status-chip.active {
+  background: var(--orange-light);
+  border-color: rgba(249, 115, 22, 0.28);
+  color: var(--orange-dark);
+}
+
+.company-projects-body .company-dashboard-filter-card {
+  display: grid;
+  gap: var(--space-section);
+}
+
+.market-workspace {
+  display: grid;
+  gap: var(--space-section);
+}
+
+.market-controls,
+.market-summary-panel,
+.market-section {
+  background: var(--surface);
+  border: 1px solid var(--card-divider);
+  border-radius: var(--card-radius);
+  display: grid;
+  gap: var(--space-section);
+  padding: var(--space-card);
+}
+
+.market-control-head,
+.market-summary-panel {
+  align-items: start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.market-control-head h3,
+.market-summary-copy h3,
+.market-section h3 {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.22;
+  margin: 2px 0 0;
+}
+
+.market-summary-copy p:not(.company-home-kicker),
+.market-section > p {
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: var(--space-1) 0 0;
+}
+
+.market-summary-metrics {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.market-summary-metrics div {
+  border-left: 1px solid var(--card-divider);
+  display: grid;
+  gap: 5px;
+  padding: 0 var(--space-2);
+}
+
+.market-summary-metrics dt {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.market-summary-metrics dd {
+  color: var(--ink);
+  font-size: 1.2rem;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  margin: 0;
+}
+
+.market-insight-grid {
+  display: grid;
+  gap: var(--space-section);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.market-section--wide {
+  overflow: hidden;
+}
+
+.company-profile-body {
+  max-width: 760px;
+}
+
+.company-profile-card {
+  max-width: 720px;
+}
+
 @media (max-width: 980px) {
   .company-live-site-row,
   .company-project-card .company-project-top,
+  .market-control-head,
+  .market-summary-panel,
+  .market-insight-grid,
   .market-overview-grid,
   .market-filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .market-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-summary-metrics div {
+    border-left: 0;
+    border-top: 1px solid var(--card-divider);
+    padding: var(--space-2) 0 0;
   }
 
   .company-live-site-row dl {

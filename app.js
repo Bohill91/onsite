@@ -7691,6 +7691,7 @@ const WORKER_TABS = [
 
 const CONTRACTOR_TABS = [
   { id: "dashboard", icon: "home", label: "Dashboard" },
+  { id: "jobs", icon: "jobs", label: "Projects" },
   { id: "request-labour", icon: "requests", label: "Request Labour" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
   { id: "market", icon: "market", label: "Labour Market" },
@@ -7828,8 +7829,9 @@ function bindSidebarAccountMenu(slot) {
         if (typeof logoutCurrentUser === "function") logoutCurrentUser();
         return;
       }
+      activeCompanyAccountView = action === "settings" ? "settings" : "profile";
       switchTab("account");
-      if (action === "settings") showToast("Settings are available in the company profile");
+      renderContractorAccount(getSessionUser());
     });
   });
 }
@@ -7852,6 +7854,8 @@ function applyRoleView(user) {
     // Update jobs panel header for workers
     const jobsHeader = document.querySelector("#tab-jobs .panel-title");
     const jobsSub = document.querySelector("#tab-jobs .panel-subtitle");
+    const jobsPanelHeader = document.querySelector("#tab-jobs > .panel-header");
+    if (jobsPanelHeader) jobsPanelHeader.style.display = "";
     if (jobsHeader) jobsHeader.textContent = "Available Jobs";
     if (jobsSub) jobsSub.textContent = "Open positions matching your trade";
     render();
@@ -7875,6 +7879,8 @@ function applyRoleView(user) {
     document.getElementById("tab-dashboard").innerHTML = ORIG_DASHBOARD;
     const jobsHeader = document.querySelector("#tab-jobs .panel-title");
     const jobsSub = document.querySelector("#tab-jobs .panel-subtitle");
+    const jobsPanelHeader = document.querySelector("#tab-jobs > .panel-header");
+    if (jobsPanelHeader) jobsPanelHeader.style.display = "";
     if (jobsHeader) jobsHeader.textContent = "Job Requests";
     if (jobsSub) jobsSub.textContent = "Company requests awaiting assignment";
     render();
@@ -9355,7 +9361,9 @@ let activeCompanyProjectSearch = "";
 let activeCompanyProjectSort = "created_desc";
 let activeCompanyProjectHealthFilters = [];
 let activeCompanyProjectRequiresAction = false;
+let activeCompanyProjectStatusFilter = "all";
 let activeCompanyProjectEditId = "";
+let activeCompanyAccountView = "profile";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
 let activeAttendanceProjectFilters = [];
@@ -9406,14 +9414,26 @@ let projectEditMarker = null;
 
 const COMPANY_PROJECT_SECTIONS = [
   { id: "overview", label: "Overview" },
-  { id: "requirements", label: "Labour Requirements" },
-  { id: "workers", label: "Workers" },
+  { id: "labour", label: "Labour" },
+  { id: "workforce", label: "Workforce" },
   { id: "attendance", label: "Attendance" },
-  { id: "documents", label: "Documents" },
-  { id: "site", label: "Site Info" },
-  { id: "invoices", label: "Invoices" },
+  { id: "site", label: "Site" },
+  { id: "commercial", label: "Commercial" },
   { id: "activity", label: "Activity" },
 ];
+
+function normalizeCompanyProjectSection(section = "overview") {
+  const aliases = {
+    requirements: "labour",
+    workers: "workforce",
+    documents: "workforce",
+    invoices: "commercial",
+  };
+  const value = aliases[section] || section || "overview";
+  return COMPANY_PROJECT_SECTIONS.some((item) => item.id === value)
+    ? value
+    : "overview";
+}
 
 function companyAssignedWorkers(job) {
   const workers = [];
@@ -9659,6 +9679,12 @@ function filterCompanyProjects(jobs, user) {
       const summary = companyProjectSummary(job, user);
       const health = calculateProjectHealth(job, summary);
       if (
+        activeCompanyProjectStatusFilter !== "all" &&
+        companyProjectStatusBucket(job) !== activeCompanyProjectStatusFilter
+      ) {
+        return false;
+      }
+      if (
         query &&
         !companyProjectSearchText(job, summary).includes(query)
       ) {
@@ -9676,6 +9702,31 @@ function filterCompanyProjects(jobs, user) {
       return true;
     })
     .sort((a, b) => sortCompanyProjects(a, b, activeCompanyProjectSort));
+}
+
+function companyProjectStatusBucket(job) {
+  if (job?.completed || job?.completedAt || job?.cancelledAt || job?.bookingStatus === "cancelled") {
+    return "completed";
+  }
+  const startDays = projectStartDays(job);
+  if (startDays !== null && startDays >= 0) return "upcoming";
+  return "active";
+}
+
+function companyProjectStatusFilterHTML() {
+  const options = [
+    ["all", "All"],
+    ["active", "Active"],
+    ["upcoming", "Upcoming"],
+    ["completed", "Completed"],
+  ];
+  return `<div class="company-project-status-filter" role="group" aria-label="Project status filter">
+    ${options
+      .map(
+        ([value, label]) => `<button class="company-project-status-chip${activeCompanyProjectStatusFilter === value ? " active" : ""}" type="button" data-company-status-filter="${value}">${label}</button>`,
+      )
+      .join("")}
+  </div>`;
 }
 
 function companyAttendanceProjects(user) {
@@ -11273,6 +11324,7 @@ function companyProjectDetailHTML(job, user) {
   if (activeCompanyProjectEditId === job.id && canEditCompanyProject(job, user)) {
     return companyProjectEditHTML(job, user);
   }
+  const activeSection = normalizeCompanyProjectSection(activeCompanyProjectSection);
   const summary = companyProjectSummary(job, user);
   const detailBody = companyProjectSectionHTML(job, user, summary);
   const endDate = job.estimatedEndDate || job.endDate || "";
@@ -11305,7 +11357,7 @@ function companyProjectDetailHTML(job, user) {
       </div>
       <div class="company-project-tabs os-tabs" role="tablist" aria-label="Project detail sections">
         ${COMPANY_PROJECT_SECTIONS.map(
-          (section) => `<button class="company-project-tab os-tab${activeCompanyProjectSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
+          (section) => `<button class="company-project-tab os-tab${activeSection === section.id ? " active" : ""}" type="button" data-company-project-section="${section.id}">${escapeHtml(section.label)}</button>`,
         ).join("")}
       </div>
       ${detailBody}
@@ -11529,16 +11581,20 @@ function companyProjectEditHTML(job, user) {
 }
 
 function companyProjectSectionHTML(job, user, summary) {
+  const section = normalizeCompanyProjectSection(activeCompanyProjectSection);
   return {
     overview: companyProjectOverviewHTML(job, summary),
-    workers: companyProjectWorkersHTML(job, summary),
-    requirements: companyProjectRequirementsHTML(job, summary),
+    workforce: companyProjectWorkforceHTML(job, summary),
+    labour: companyProjectRequirementsHTML(job, summary),
     attendance: companyProjectAttendanceHTML(job, summary),
-    documents: companyProjectDocumentsHTML(job, summary),
     site: companyProjectSiteInfoHTML(job),
-    invoices: `<div class="company-project-section os-card"><h4>Invoices</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
+    commercial: `<div class="company-project-section os-card"><h4>Invoices &amp; Payments</h4>${projectInvoicePlaceholderHTML(job)}</div>`,
     activity: companyProjectActivityHTML(job, summary),
-  }[activeCompanyProjectSection] || companyProjectOverviewHTML(job, summary);
+  }[section] || companyProjectOverviewHTML(job, summary);
+}
+
+function companyProjectWorkforceHTML(job, summary) {
+  return `${companyProjectWorkersHTML(job, summary)}${companyProjectDocumentsHTML(job, summary)}`;
 }
 
 function companyProjectOverviewHTML(job, summary) {
@@ -12347,43 +12403,13 @@ function renderContractorHome(user) {
 
   if (syncProjectHealthNotifications(user)) saveState();
   const summary = companyDashboardSummary(user);
-  const { companyJobs, activeJobs } = summary;
-  const visibleProjects = filterCompanyProjects(activeJobs, user);
+  const { companyJobs } = summary;
   if (
     activeCompanyProjectId &&
     !companyJobs.some((job) => job.id === activeCompanyProjectId)
   ) {
     activeCompanyProjectId = "";
   }
-  const selectedProject = companyJobs.find((job) => job.id === activeCompanyProjectId);
-  if (selectedProject) {
-    el.innerHTML = `<section class="company-dashboard-page os-page-content company-saas-page company-project-detail-shell">${companyProjectDetailHTML(selectedProject, user)}</section>`;
-    bindWorkerReleaseButtons(el);
-    bindCancelBookingButtons(el);
-    bindAgreementOpeners(el);
-    bindExtensionButtons(el);
-    bindCompanyOfferButtons(el);
-    bindProjectTransferButtons(el);
-    bindShiftChangeButtons(el);
-    bindPreStartDocumentButtons(el);
-    bindMobileDailyJobButtons(el);
-    bindLabourAdjustButtons(el);
-    bindCompanyProjectDashboardButtons(el);
-    return;
-  }
-  const projectCards = visibleProjects.length
-    ? visibleProjects
-        .map((job) => companyProjectCardHTML(job, user))
-        .join("")
-    : activeJobs.length
-      ? `<div class="company-empty-card">
-          <div>
-            <span class="company-project-kicker">No Matches</span>
-            <strong>No projects match that search</strong>
-            <span>Try searching by project name, job number, location or trade.</span>
-          </div>
-        </div>`
-      : companyProjectEmptyStateHTML();
   const previousProjects = companyJobs.filter(
     (job) => job.completed || job.completedAt || job.cancelledAt || job.bookingStatus === "cancelled",
   );
@@ -12397,20 +12423,19 @@ function renderContractorHome(user) {
     body: `
         <div class="jw-form">
           ${companyDashboardFocusHTML(summary, user)}
+          <div class="company-dashboard-all-projects">
+            <button class="secondary-btn" type="button" data-empty-tab="jobs">View all projects &rarr;</button>
+          </div>
           ${companyRecentActivityHTML(summary, user)}
-          <section class="company-dashboard-filter-card jw-card">
-            <div class="company-project-search-card-head">
-              <span>Search projects</span>
-              <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+          ${previousProjects.length ? `<section class="jw-card previous-projects-card compact">
+            <div class="company-live-site-head">
+              <div>
+                <p class="company-home-kicker">PREVIOUS PROJECTS</p>
+                <h3>Repeat a previous labour request</h3>
+              </div>
+              <button class="secondary-btn company-action-btn" type="button" data-empty-tab="jobs">Open Projects</button>
             </div>
-            <div class="company-project-toolbar">
-              ${companyProjectSearchHTML("companyDashboardProjectSearch", { showInlineLabel: false })}
-              ${companyProjectFilterHTML()}
-              ${companyProjectSortHTML()}
-            </div>
-          </section>
-          <div class="company-project-grid">${projectCards}</div>
-          ${companyPreviousProjectsHTML(previousProjects)}
+          </section>` : ""}
         </div>`,
   });
 
@@ -12457,17 +12482,18 @@ function renderCompanyProjectsPage(user) {
   if (!el) return;
   const title = document.querySelector("#tab-jobs .panel-title");
   const subtitle = document.querySelector("#tab-jobs .panel-subtitle");
+  const legacyHeader = document.querySelector("#tab-jobs > .panel-header");
+  if (legacyHeader) legacyHeader.style.display = "none";
   if (title) title.textContent = "Projects";
   if (subtitle) subtitle.textContent = "Project-first view of your labour requests";
   const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
-  const activeJobs = companyJobs.filter((j) => !j.completed);
-  const visibleProjects = filterCompanyProjects(activeJobs, user);
+  const visibleProjects = filterCompanyProjects(companyJobs, user);
   const selectedProject = companyJobs.find(
     (job) => job.id === activeCompanyProjectId,
   );
   el.classList.remove("card-list");
   if (selectedProject) {
-    el.innerHTML = companyProjectDetailHTML(selectedProject, user);
+    el.innerHTML = `<section class="company-dashboard-page os-page-content company-saas-page company-project-detail-shell">${companyProjectDetailHTML(selectedProject, user)}</section>`;
     bindCompanyProjectDashboardButtons(el);
     bindCompanyOfferButtons(el);
     bindWorkerReleaseButtons(el);
@@ -12482,37 +12508,43 @@ function renderCompanyProjectsPage(user) {
     });
     return;
   }
-  el.innerHTML = `
-    <div class="company-project-page-head">
-      <div>
-        <div class="company-home-kicker">Projects</div>
-        <h2>Live Projects</h2>
-        <p>Open a Project to manage labour, attendance, documents, site info and invoices.</p>
-      </div>
-      <button class="ch-request-btn" type="button" data-company-request-labour>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New Labour Request
-      </button>
-    </div>
-    <div class="company-project-toolbar">
-      ${companyProjectSearchHTML("companyProjectsSearch")}
-      <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
-    </div>
-    <div class="company-project-grid">
-      ${
-        visibleProjects.length
-          ? visibleProjects.map((job) => companyProjectCardHTML(job, user)).join("")
-          : activeJobs.length
-            ? `<div class="company-empty-card">
-                <div>
-                  <span class="company-project-kicker">No Matches</span>
-                  <strong>No projects match that search</strong>
-                  <span>Try searching by project name, job number, location or trade.</span>
-                </div>
-              </div>`
-            : companyProjectEmptyStateHTML("Use the New Labour Request button to start building your project workforce.")
-      }
-    </div>`;
+  el.innerHTML = companyPageShellHTML({
+    kicker: "PROJECTS",
+    title: "Projects",
+    subtitle: "Manage active, upcoming and completed projects.",
+    className: "company-projects-shell",
+    bodyClass: "company-projects-body",
+    body: `
+      <div class="jw-form">
+        <section class="company-dashboard-filter-card jw-card">
+          <div class="company-project-search-card-head">
+            <span>Search projects</span>
+            <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+          </div>
+          ${companyProjectStatusFilterHTML()}
+          <div class="company-project-toolbar">
+            ${companyProjectSearchHTML("companyProjectsSearch", { showInlineLabel: false })}
+            ${companyProjectFilterHTML()}
+            ${companyProjectSortHTML()}
+          </div>
+        </section>
+        <div class="company-project-grid">
+          ${
+            visibleProjects.length
+              ? visibleProjects.map((job) => companyProjectCardHTML(job, user)).join("")
+              : companyJobs.length
+                ? `<div class="company-empty-card">
+                    <div>
+                      <span class="company-project-kicker">No Matches</span>
+                      <strong>No projects match your current view</strong>
+                      <span>Adjust search, project status, health filters or sorting.</span>
+                    </div>
+                  </div>`
+                : companyProjectEmptyStateHTML("Use Request Labour to start building your project workforce.")
+          }
+        </div>
+      </div>`,
+  });
   bindLabourRequestWorkflow(el);
   bindCompanyProjectDashboardButtons(el);
   bindCompanyOfferButtons(el);
@@ -12967,6 +12999,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       activeCompanyProjectEditId = "";
       resetProjectEditMap();
       activeCompanyProjectSection = "overview";
+      if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
       render();
       scrollAppToTop();
     });
@@ -12977,6 +13010,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       activeCompanyProjectEditId = "";
       resetProjectEditMap();
       activeCompanyProjectSection = "overview";
+      if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
       render();
       scrollAppToTop();
     });
@@ -12986,8 +13020,9 @@ function bindCompanyProjectDashboardButtons(scope) {
       event.stopPropagation();
       activeCompanyProjectId = btn.dataset.companyProjectOpenSection || "";
       activeCompanyProjectEditId = "";
-      activeCompanyProjectSection = btn.dataset.companySectionTarget || "overview";
+      activeCompanyProjectSection = normalizeCompanyProjectSection(btn.dataset.companySectionTarget || "overview");
       resetProjectEditMap();
+      if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
       render();
       scrollAppToTop();
     });
@@ -13034,7 +13069,7 @@ function bindCompanyProjectDashboardButtons(scope) {
   });
   scope.querySelectorAll("[data-company-project-section]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      activeCompanyProjectSection = btn.dataset.companyProjectSection || "overview";
+      activeCompanyProjectSection = normalizeCompanyProjectSection(btn.dataset.companyProjectSection || "overview");
       render();
       scrollAppToTop();
     });
@@ -13085,6 +13120,12 @@ function bindCompanyProjectSearch(scope) {
       activeCompanyProjectRequiresAction = !!event.target.checked;
       render();
     });
+  scope.querySelectorAll("[data-company-status-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCompanyProjectStatusFilter = btn.dataset.companyStatusFilter || "all";
+      render();
+    });
+  });
 }
 
 // Company panel: agreements awaiting the company's confirmation.
@@ -13272,77 +13313,110 @@ function renderContractorAccount(user) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
-  el.innerHTML = companyPageShellHTML({
-    kicker: "COMPANY ACCOUNT",
-    title: "Profile",
-    subtitle: "Company identity, verification, billing contacts and account support details.",
-    className: "company-account-shell",
-    bodyClass: "company-account-body",
-    body: `
-      <section class="company-account-identity os-card">
-        <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
-        <div>
-          <p class="company-home-kicker">ORGANISATION</p>
-          <h3>${escapeHtml(companyDisplayName)}</h3>
-          <p>${escapeHtml(user.name || "Account user")} · ${escapeHtml(companySidebarUserRole(user))}</p>
-        </div>
-        <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
-      </section>
-      <div class="company-account-grid">
-        <section class="prof-section os-card">
-          <div class="prof-section-title">Company details</div>
-          <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Registered company name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Trading name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Company number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Registered address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
+  if (activeCompanyAccountView !== "settings") {
+    el.innerHTML = companyPageShellHTML({
+      kicker: "MY PROFILE",
+      title: "My Profile",
+      subtitle: "Your account details and company permission role.",
+      className: "company-account-shell company-profile-shell",
+      bodyClass: "company-account-body company-profile-body",
+      body: `
+        <section class="company-account-identity os-card">
+          <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "U")}</div>
+          <div>
+            <p class="company-home-kicker">SIGNED-IN USER</p>
+            <h3>${escapeHtml(user.name || "Account user")}</h3>
+            <p>${escapeHtml(companySidebarUserRole(user))} at ${escapeHtml(companyDisplayName)}</p>
           </div>
         </section>
-        <section class="prof-section os-card">
-          <div class="prof-section-title">Account contacts</div>
+        <section class="prof-section os-card company-profile-card">
+          <div class="prof-section-title">Personal account</div>
           <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Contact name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
             <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
             <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Accounts phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
           </div>
         </section>
-        <section class="prof-section os-card">
-          <div class="prof-section-title">Verification &amp; VAT</div>
+        <section class="prof-section os-card company-profile-card">
+          <div class="prof-section-title">Security</div>
           <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Company verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
-            <div class="prof-field"><div class="prof-field-label">VAT registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
-            <div class="prof-field"><div class="prof-field-label">VAT number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">VAT verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Payment contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Password</div><div class="prof-field-val">Managed through the current account sign-in flow</div></div>
+            <div class="prof-field"><div class="prof-field-label">Sign out</div><div class="prof-field-val">Use the button below to securely leave this device</div></div>
           </div>
         </section>
-        <section class="prof-section os-card">
-          <div class="prof-section-title">Operational activity</div>
-          <div class="prof-stats-grid">
-            <div class="prof-stat"><div class="prof-stat-val">${companyJobs.length}</div><div class="prof-stat-lbl">Requests posted</div></div>
-            <div class="prof-stat"><div class="prof-stat-val">${companyJobs.filter((j) => j.assignedWorkerId).length}</div><div class="prof-stat-lbl">Workers placed</div></div>
+        <div class="company-account-actions">
+          <button class="ch-logout-btn secondary-btn" type="button" id="accLogoutBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign Out
+          </button>
+        </div>`,
+    });
+  } else {
+    el.innerHTML = companyPageShellHTML({
+      kicker: "COMPANY SETTINGS",
+      title: "Company Settings",
+      subtitle: "Organisation details, verification, billing contacts and operational settings.",
+      className: "company-account-shell company-settings-shell",
+      bodyClass: "company-account-body company-settings-body",
+      body: `
+        <section class="company-account-identity os-card">
+          <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
+          <div>
+            <p class="company-home-kicker">ORGANISATION</p>
+            <h3>${escapeHtml(companyDisplayName)}</h3>
+            <p>${companyJobs.length} project${companyJobs.length === 1 ? "" : "s"} on OnSite</p>
           </div>
+          <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
         </section>
-        <section class="prof-section os-card">
-          <div class="prof-section-title">Settings &amp; support</div>
-          <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Notifications</div><div class="prof-field-val">Managed from the Notifications page</div></div>
-            <div class="prof-field"><div class="prof-field-label">Privacy &amp; security</div><div class="prof-field-val">Account controls remain tied to verified company users</div></div>
-            <div class="prof-field"><div class="prof-field-label">Legal / Terms &amp; Conditions</div><div class="prof-field-val">Available from OnSite support</div></div>
-            <div class="prof-field"><div class="prof-field-label">Support</div><div class="prof-field-val">Contact OnSite for account and project support</div></div>
-          </div>
-        </section>
-      </div>
-      ${optionalSections ? `<div class="company-account-extra">${optionalSections}</div>` : ""}
-      <div class="company-account-actions">
-        <button class="ch-logout-btn secondary-btn" type="button" id="accLogoutBtn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign Out
-        </button>
-      </div>`,
-  });
+        <div class="company-account-grid">
+          <section class="prof-section os-card">
+            <div class="prof-section-title">Company details</div>
+            <div class="prof-fields">
+              <div class="prof-field"><div class="prof-field-label">Registered company name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Trading name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Company number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Registered address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
+            </div>
+          </section>
+          <section class="prof-section os-card">
+            <div class="prof-section-title">Company contacts</div>
+            <div class="prof-fields">
+              <div class="prof-field"><div class="prof-field-label">Primary contact</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Company email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Company phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Accounts phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
+            </div>
+          </section>
+          <section class="prof-section os-card">
+            <div class="prof-section-title">Verification &amp; compliance</div>
+            <div class="prof-fields">
+              <div class="prof-field"><div class="prof-field-label">Company verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
+              <div class="prof-field"><div class="prof-field-label">VAT registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
+              <div class="prof-field"><div class="prof-field-label">VAT number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">VAT verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
+            </div>
+          </section>
+          <section class="prof-section os-card">
+            <div class="prof-section-title">Billing &amp; payments</div>
+            <div class="prof-fields">
+              <div class="prof-field"><div class="prof-field-label">Payment contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">VAT treatment</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "VAT registered" : "Not marked VAT registered"}</div></div>
+            </div>
+          </section>
+          <section class="prof-section os-card">
+            <div class="prof-section-title">Users &amp; permissions</div>
+            <div class="prof-fields">
+              <div class="prof-field"><div class="prof-field-label">Current user</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+              <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
+            </div>
+          </section>
+        </div>
+        ${optionalSections ? `<div class="company-account-extra">${optionalSections}</div>` : ""}`,
+    });
+  }
 
   bindAgreementOpeners(el);
   bindCompanyDocsForm(el, user);
@@ -13504,65 +13578,88 @@ function renderCompanyMarketPage() {
   const rate = marketRateCopy(model.rateStats);
   el.innerHTML = companyPageShellHTML({
     kicker: "LABOUR MARKET",
-    title: "OnSite Labour Market",
-    subtitle: "Platform availability, demand and advertised-rate intelligence from OnSite data only.",
+    title: "Labour Market",
+    subtitle: "Live workforce availability, demand and rate intelligence from OnSite.",
     className: "company-market-shell",
     bodyClass: "company-market-body",
     body: `
-        <div class="jw-form">
-          <section class="jw-card market-intel-card">
-            <div class="company-live-site-head">
-              <div>
-                <p class="company-home-kicker">FILTERS</p>
-                <h3>Market view</h3>
-              </div>
-              <span class="market-sample-note">Minimum ${LABOUR_MARKET_MIN_RATE_SAMPLE} rate samples for medians</span>
+      <div class="market-workspace">
+        <section class="market-controls">
+          <div class="market-control-head">
+            <div>
+              <p class="company-home-kicker">ONSITE PLATFORM DATA</p>
+              <h3>Market view</h3>
             </div>
-            <div class="market-filter-grid">
-              ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
-              ${marketFilterSelectHTML("marketSpecialismFilter", "Specialism", model.options.specialisms, activeMarketFilters.specialism)}
-              ${marketFilterSelectHTML("marketLocationFilter", "Location / region", model.options.locations, activeMarketFilters.location)}
-              <label class="field-label market-filter-field">Date from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
-              <label class="field-label market-filter-field">Date to<input id="marketDateTo" type="date" value="${escapeHtml(activeMarketFilters.dateTo)}" /></label>
-              <button class="secondary-btn" type="button" data-market-reset>Reset</button>
-            </div>
-            <p class="market-disclaimer">This is internal OnSite platform intelligence. It is not a claim about the whole UK construction market.</p>
-          </section>
-          <div class="market-overview-grid">
-            <section class="jw-card market-intel-card">
-              <p class="company-home-kicker">RATE INTELLIGENCE</p>
-              <h3>${escapeHtml(rate.title)}</h3>
-              <p>${escapeHtml(rate.body)}</p>
-              <dl class="market-rate-stats">
-                <div><dt>Median advertised day rate</dt><dd>${model.rateStats.enoughData ? formatMoney(model.rateStats.median) : "Hidden"}</dd></div>
-                <div><dt>Typical range</dt><dd>${escapeHtml(rate.range)}</dd></div>
-                <div><dt>Live requirements</dt><dd>${model.requirements.length}</dd></div>
-                <div><dt>Eligible available workers</dt><dd>${model.workers.length}</dd></div>
-              </dl>
-            </section>
-            ${marketDemandSupplyHTML(model)}
+            <span class="market-sample-note">Minimum ${LABOUR_MARKET_MIN_RATE_SAMPLE} rate samples for medians</span>
           </div>
-          <section class="jw-card market-intel-card">
+          <div class="market-filter-grid">
+            ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
+            ${marketFilterSelectHTML("marketSpecialismFilter", "Specialism", model.options.specialisms, activeMarketFilters.specialism)}
+            ${marketFilterSelectHTML("marketLocationFilter", "Location / region", model.options.locations, activeMarketFilters.location)}
+            <label class="field-label market-filter-field">Date from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
+            <label class="field-label market-filter-field">Date to<input id="marketDateTo" type="date" value="${escapeHtml(activeMarketFilters.dateTo)}" /></label>
+            <button class="secondary-btn" type="button" data-market-reset>Reset</button>
+          </div>
+        </section>
+        <section class="market-summary-panel">
+          <div class="market-summary-copy">
+            <p class="company-home-kicker">MARKET POSITION</p>
+            <h3>${escapeHtml(model.indicator.label)}</h3>
+            <p>Based only on OnSite worker profiles and live labour requirements matching the current filters.</p>
+          </div>
+          <dl class="market-summary-metrics">
+            <div><dt>Available workers</dt><dd>${model.workers.length}</dd></div>
+            <div><dt>Live demand</dt><dd>${model.requirements.length}</dd></div>
+            <div><dt>Median rate</dt><dd>${model.rateStats.enoughData ? `${formatMoney(model.rateStats.median)}/day` : "Hidden"}</dd></div>
+            <div><dt>Rate samples</dt><dd>${model.rateStats.sampleCount}</dd></div>
+          </dl>
+        </section>
+        <div class="market-insight-grid">
+          <section class="market-section">
             <div class="company-live-site-head">
               <div>
-                <p class="company-home-kicker">AVAILABILITY OVERVIEW</p>
-                <h3>Available workers by profile</h3>
+                <p class="company-home-kicker">RATES</p>
+                <h3>${escapeHtml(rate.title)}</h3>
               </div>
-              <small>No individual workers shown</small>
             </div>
-            ${marketAvailabilityRowsHTML(model)}
+            <p>${escapeHtml(rate.body)}</p>
+            <dl class="market-rate-stats">
+              <div><dt>Typical range</dt><dd>${escapeHtml(rate.range)}</dd></div>
+              <div><dt>Relevant requirements</dt><dd>${model.requirements.length}</dd></div>
+            </dl>
           </section>
-          <section class="jw-card market-intel-card">
+          <section class="market-section">
             <div class="company-live-site-head">
               <div>
-                <p class="company-home-kicker">REGIONAL AVAILABILITY</p>
-                <h3>Availability heatmap</h3>
+                <p class="company-home-kicker">SUPPLY VS DEMAND</p>
+                <h3>${escapeHtml(model.indicator.label)}</h3>
               </div>
-              <small>Estimated where coordinates are missing</small>
+              <span class="market-signal ${escapeHtml(model.indicator.tone)}">${escapeHtml(model.indicator.label)}</span>
             </div>
-            ${marketRegionCardsHTML(model)}
+            <p>Use this as directional OnSite platform intelligence, not a whole-market claim.</p>
           </section>
-        </div>`,
+        </div>
+        <section class="market-section market-section--wide">
+          <div class="company-live-site-head">
+            <div>
+              <p class="company-home-kicker">AVAILABILITY BY LOCATION</p>
+              <h3>Available workers by profile</h3>
+            </div>
+            <small>No individual workers shown</small>
+          </div>
+          ${marketAvailabilityRowsHTML(model)}
+        </section>
+        <section class="market-section market-section--wide">
+          <div class="company-live-site-head">
+            <div>
+              <p class="company-home-kicker">REGIONAL AVAILABILITY</p>
+              <h3>Availability heatmap</h3>
+            </div>
+            <small>Estimated where coordinates are missing</small>
+          </div>
+          ${marketRegionCardsHTML(model)}
+        </section>
+      </div>`,
   });
   bindCompanyMarketControls(el);
 }
