@@ -10086,6 +10086,7 @@ function companyProjectSummary(job, user) {
         ? "Offers in progress"
         : "Open";
   return {
+    job,
     assignedWorker,
     assignedWorkers,
     labourRequirements,
@@ -10923,7 +10924,7 @@ function overdueAttendanceApprovalCount(summary) {
 }
 
 function mostUnderfilledRequirement(summary) {
-  return uniqueLabourRequirements(summary.labourRequirements)
+  return uniqueLabourRequirements(summary?.labourRequirements || [])
     .map((req) => ({ req, stats: companyRequirementStats(req, summary) }))
     .filter((item) => item.stats.remaining > 0)
     .sort((a, b) => b.stats.remaining - a.stats.remaining)[0] || null;
@@ -10947,22 +10948,31 @@ function pluralizeTradeLabel(trade, count = 2) {
 }
 
 function calculateProjectHealth(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
-  const startDays = projectStartDays(job);
-  const mostUnderfilled = mostUnderfilledRequirement(summary);
-  const leadDays = projectCreatedLeadDays(job);
+  const safeJob = job || summary?.job || {};
+  const safeSummary = {
+    ...summary,
+    job: summary?.job || safeJob,
+    labourRequirements: Array.isArray(summary?.labourRequirements)
+      ? summary.labourRequirements
+      : labourRequirementsForJob(safeJob),
+    openRoles: Math.max(0, Number(summary?.openRoles) || 0),
+  };
+  const startDays = projectStartDays(safeJob);
+  const mostUnderfilled = mostUnderfilledRequirement(safeSummary);
+  const leadDays = projectCreatedLeadDays(safeJob);
   const shortLead = leadDays !== null && leadDays <= 3;
   const openLabel = mostUnderfilled
     ? workerLabel(mostUnderfilled.stats.remaining, mostUnderfilled.req.trade || "worker")
-    : workerLabel(summary.openRoles);
-  const filledBreakdown = uniqueLabourRequirements(summary.labourRequirements)
+    : workerLabel(safeSummary.openRoles);
+  const filledBreakdown = uniqueLabourRequirements(safeSummary.labourRequirements)
     .map((req) => {
-      const stats = companyRequirementStats(req, summary);
+      const stats = companyRequirementStats(req, safeSummary);
       return `${stats.filled}/${stats.required} ${req.trade || "Workers"}`;
     });
   const recommendations = [];
   const req = mostUnderfilled?.req || {};
-  if (summary.openRoles > 0) {
-    const rateBenchmark = labourMarketBenchmarkForRequirement(req, job);
+  if (safeSummary.openRoles > 0) {
+    const rateBenchmark = labourMarketBenchmarkForRequirement(req, safeJob);
     if (rateBenchmark) {
       recommendations.push(
         `Your advertised rate is ${formatMoney(rateBenchmark.gap)} below the median of comparable live OnSite requirements in this area.`,
@@ -10970,15 +10980,15 @@ function calculateProjectHealth(job, summary = companyProjectSummary(job, getSes
     } else {
       recommendations.push("Increase the advertised day rate.");
     }
-    if (!job.accommodationPaid && !req.accommodationPaid) {
+    if (!safeJob.accommodationPaid && !req.accommodationPaid) {
       recommendations.push("Add a working-away allowance.");
     }
-    if (req.grade || job.grade) recommendations.push("Review the required experience level.");
-    if (req.workActivity || job.workActivity) recommendations.push("Review or clarify the work activity.");
+    if (req.grade || safeJob.grade) recommendations.push("Review the required experience level.");
+    if (req.workActivity || safeJob.workActivity) recommendations.push("Review or clarify the work activity.");
   }
   let level = "matching";
   let why = "OnSite is actively matching suitable workers.";
-  if (summary.openRoles === 0) {
+  if (safeSummary.openRoles === 0) {
     level = "filled";
     why = "All labour requirements have been filled.";
   } else if (shortLead || (startDays !== null && startDays <= 3)) {
@@ -11003,7 +11013,7 @@ function calculateProjectHealth(job, summary = companyProjectSummary(job, getSes
     reasons: [why],
     recommendations: level === "atRisk" || level === "urgent" ? recommendations : [],
     filledBreakdown,
-    startDate: job?.start || job?.startDate || "",
+    startDate: safeJob?.start || safeJob?.startDate || "",
     requiresAction: level === "atRisk" || level === "urgent",
   };
 }
