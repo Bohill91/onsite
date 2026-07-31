@@ -9963,6 +9963,16 @@ function attendanceLiveSummaryHTML(workers, job, today = todayDateStr()) {
   </section>`;
 }
 
+function hasAttendanceConfirmationChanges(workers, job, today = todayDateStr()) {
+  if (!workers.length) return false;
+  return workers.some((worker) => {
+    const draft = todayAttendanceMap[worker.id];
+    if (draft?.status) return true;
+    const record = attendanceTodayRecordForWorker(worker.id, job, today);
+    return record?.status === "checkedIn" || record?.status === "reportedIssue" || record?.manualReviewRequired;
+  });
+}
+
 function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
   if (!workers.length) return `<div class="company-inline-empty attendance-inline-empty">
     <strong>No workers assigned yet.</strong>
@@ -10114,19 +10124,24 @@ function companyProjectFilterHTML() {
 }
 
 function companyProjectSortHTML() {
+  const options = [
+    ["created_desc", "Date created — newest"],
+    ["created_asc", "Date created — oldest"],
+    ["name_asc", "Project name — A-Z"],
+    ["start_asc", "Start date — soonest"],
+    ["start_desc", "Start date — latest"],
+  ];
   return `<details class="company-project-filter company-project-sort">
     <summary>Sort By</summary>
     <div class="company-project-filter-menu">
-      <label class="field-label">
-        Sort by
-        <select id="companyProjectSort">
-          <option value="created_desc"${activeCompanyProjectSort === "created_desc" ? " selected" : ""}>Date created — newest</option>
-          <option value="created_asc"${activeCompanyProjectSort === "created_asc" ? " selected" : ""}>Date created — oldest</option>
-          <option value="name_asc"${activeCompanyProjectSort === "name_asc" ? " selected" : ""}>Project name — A-Z</option>
-          <option value="start_asc"${activeCompanyProjectSort === "start_asc" ? " selected" : ""}>Start date — soonest</option>
-          <option value="start_desc"${activeCompanyProjectSort === "start_desc" ? " selected" : ""}>Start date — latest</option>
-        </select>
-      </label>
+      <div class="company-project-filter-group">
+        <span>Sort by</span>
+        ${options
+          .map(
+            ([value, label]) => `<button class="company-project-sort-option${activeCompanyProjectSort === value ? " active" : ""}" type="button" data-company-sort-option="${value}" aria-pressed="${activeCompanyProjectSort === value ? "true" : "false"}">${escapeHtml(label)}</button>`,
+          )
+          .join("")}
+      </div>
     </div>
   </details>`;
 }
@@ -10416,6 +10431,22 @@ function labourMarketBenchmarkForRequirement(req, job) {
   };
 }
 
+function addCalendarDaysISO(value, days) {
+  const base = dateOnlyMs(value);
+  if (base === null) return "";
+  const date = new Date(base + days * 86400000);
+  return date.toISOString().slice(0, 10);
+}
+
+function normaliseMarketFilters(filters = activeMarketFilters) {
+  const dateFrom = filters.dateFrom || "";
+  return {
+    ...filters,
+    dateFrom,
+    dateTo: dateFrom ? addCalendarDaysISO(dateFrom, 30) : "",
+  };
+}
+
 function labourMarketSupplyDemandIndicator(workerCount, requirementCount) {
   if (!requirementCount && workerCount) return { label: "Strong availability", tone: "good" };
   if (requirementCount > workerCount) return { label: "High demand relative to available workers", tone: "warn" };
@@ -10424,6 +10455,7 @@ function labourMarketSupplyDemandIndicator(workerCount, requirementCount) {
 }
 
 function labourMarketModel(filters = activeMarketFilters) {
+  filters = normaliseMarketFilters(filters);
   const workers = availableMarketWorkers(filters);
   const requirements = liveMarketRequirements(filters);
   const rateStats = labourMarketRateStats(filters);
@@ -10487,7 +10519,10 @@ function firstNameForUser(user) {
     user?.displayName ||
     user?.contactName ||
     "";
-  return String(value).trim().split(/\s+/)[0] || "there";
+  const first = String(value).trim().split(/\s+/)[0] || "";
+  if (first.length < 2) return "";
+  if (first.length <= 3 && first === first.toUpperCase()) return "";
+  return first;
 }
 
 function companyDailyBriefingHTML(summary, user) {
@@ -10496,12 +10531,9 @@ function companyDailyBriefingHTML(summary, user) {
     <div class="company-briefing-head">
       <div>
         <p class="company-home-kicker">DAILY BRIEFING</p>
-        <h3>Good ${escapeHtml(briefing.dayPart)}, ${escapeHtml(briefing.firstName)}</h3>
+        <h3>Good ${escapeHtml(briefing.dayPart)}${briefing.firstName ? `, ${escapeHtml(briefing.firstName)}` : ""}</h3>
         <p>Today</p>
       </div>
-      ${briefing.action
-        ? `<button class="secondary-btn company-briefing-action" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>`
-        : ""}
     </div>
     <div class="company-briefing-metrics">
       ${briefing.metrics
@@ -10979,10 +11011,10 @@ function sortCompanyProjects(a, b, sortBy) {
     return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
   }
   if (sortBy === "start_asc") {
-    return projectDateValue(a.start) - projectDateValue(b.start);
+    return projectDateValue(a.start || a.startDate) - projectDateValue(b.start || b.startDate);
   }
   if (sortBy === "start_desc") {
-    return projectDateValue(b.start, 0) - projectDateValue(a.start, 0);
+    return projectDateValue(b.start || b.startDate, 0) - projectDateValue(a.start || a.startDate, 0);
   }
   return projectDateValue(b.createdAt || b.postedAt || b.start, 0) -
     projectDateValue(a.createdAt || a.postedAt || a.start, 0);
@@ -13184,9 +13216,12 @@ function bindCompanyProjectSearch(scope) {
         });
       });
     });
-  scope.querySelector("#companyProjectSort")?.addEventListener("change", (event) => {
-    activeCompanyProjectSort = event.target.value || "created_desc";
-    render();
+  scope.querySelectorAll("[data-company-sort-option]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCompanyProjectSort = btn.dataset.companySortOption || "created_desc";
+      closeAppPopovers();
+      render();
+    });
   });
   scope.querySelectorAll("[data-company-health-filter]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -13575,11 +13610,10 @@ function marketAvailabilityRowsHTML(model) {
     .sort((a, b) => b.count - a.count || a.trade.localeCompare(b.trade))
     .slice(0, 8);
   if (!rows.length) {
-    return guidedEmptyStateHTML({
-      kicker: "Availability",
-      title: "No available workers match these filters",
-      body: "Try widening the trade, location or availability date filters. This view only uses OnSite worker profiles.",
-    });
+    return `<div class="market-inline-empty">
+      <strong>0 workers match the current filters.</strong>
+      <span>Try widening the trade, location or availability filters.</span>
+    </div>`;
   }
   return `<div class="market-table">
     <div class="market-table-head">
@@ -13677,8 +13711,7 @@ function renderCompanyMarketPage() {
             ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
             ${marketFilterSelectHTML("marketSpecialismFilter", "Specialism", model.options.specialisms, activeMarketFilters.specialism)}
             ${marketFilterSelectHTML("marketLocationFilter", "Location / region", model.options.locations, activeMarketFilters.location)}
-            <label class="field-label market-filter-field">Date from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
-            <label class="field-label market-filter-field">Date to<input id="marketDateTo" type="date" value="${escapeHtml(activeMarketFilters.dateTo)}" /></label>
+            <label class="field-label market-filter-field">Availability from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
             <button class="secondary-btn" type="button" data-market-reset>Reset</button>
           </div>
         </section>
@@ -13716,16 +13749,6 @@ function renderCompanyMarketPage() {
           </div>
           ${marketAvailabilityRowsHTML(model)}
         </section>
-        ${model.regions.length ? `<section class="market-section market-section--wide">
-          <div class="company-live-site-head">
-            <div>
-              <p class="company-home-kicker">REGIONAL AVAILABILITY</p>
-              <h3>Regional availability</h3>
-            </div>
-            <small>Estimated where coordinates are missing</small>
-          </div>
-          ${marketRegionCardsHTML(model)}
-        </section>` : ""}
       </div>`,
   });
   bindCompanyMarketControls(el);
@@ -13738,11 +13761,11 @@ function bindCompanyMarketControls(scope) {
       specialism: document.getElementById("marketSpecialismFilter")?.value || "",
       location: document.getElementById("marketLocationFilter")?.value || "",
       dateFrom: document.getElementById("marketDateFrom")?.value || "",
-      dateTo: document.getElementById("marketDateTo")?.value || "",
+      dateTo: "",
     };
     renderCompanyMarketPage();
   };
-  scope.querySelectorAll("#marketTradeFilter, #marketSpecialismFilter, #marketLocationFilter, #marketDateFrom, #marketDateTo")
+  scope.querySelectorAll("#marketTradeFilter, #marketSpecialismFilter, #marketLocationFilter, #marketDateFrom")
     .forEach((control) => control.addEventListener("change", update));
   scope.querySelector("[data-market-reset]")?.addEventListener("click", () => {
     activeMarketFilters = { trade: "", specialism: "", location: "", dateFrom: "", dateTo: "" };
@@ -16844,6 +16867,29 @@ function ensureSiteCode(jobId) {
   return getSiteCode(jobId) || generateSiteCode(jobId);
 }
 
+function projectSignInQrHTML(job, code) {
+  if (!job || !code) return "";
+  const start = code?.startTime || jobExpectedStartTime(job);
+  const startDate = jobStartDateOnly(job) ? formatDateOnly(jobStartDateOnly(job)) : "Not set";
+  const endDate = jobEndDateOnly(job) ? formatDateOnly(jobEndDateOnly(job)) : "No fixed end date";
+  const projectLocation = job?.siteAddress || job?.location || "Location not set";
+  return `<div class="site-signin-qr">
+    <div class="site-signin-qr-code">
+      ${renderQrGlyph(code.token)}
+      <strong>Scan to sign in</strong>
+      <span class="qr-token">${escapeHtml(code.token)}</span>
+    </div>
+    <div class="site-signin-qr-details">
+      <div class="qr-meta-row"><span>Project</span><strong>${escapeHtml(companyProjectTitle(job))}</strong></div>
+      <div class="qr-meta-row"><span>Job number</span><strong>${escapeHtml(job.jobNumber || "Not set")}</strong></div>
+      <div class="qr-meta-row"><span>Site/location</span><strong>${escapeHtml(projectLocation)}</strong></div>
+      <div class="qr-meta-row"><span>Site start time</span><strong>${escapeHtml(start)}</strong></div>
+      <div class="qr-meta-row"><span>Project start</span><strong>${escapeHtml(startDate)}</strong></div>
+      <div class="qr-meta-row"><span>Project end</span><strong>${escapeHtml(endDate)}</strong></div>
+    </div>
+  </div>`;
+}
+
 // Render a deterministic QR-style grid from a token (visual only — simulated scan).
 function renderQrGlyph(token) {
   let h = 0;
@@ -18385,6 +18431,13 @@ function renderAttendance() {
       submitDayAttendance();
     });
 
+  if (submitBtn) {
+    const hasChanges = hasAttendanceConfirmationChanges(rosterWorkers, selectedProject, today);
+    submitBtn.classList.toggle("primary-btn", hasChanges);
+    submitBtn.classList.toggle("secondary-btn", !hasChanges);
+    submitBtn.disabled = rosterWorkers.length === 0;
+  }
+
   // Admin-only attendance review (full audit incl. exception counters)
   renderAdminAttendanceReview();
 
@@ -18403,11 +18456,10 @@ function renderAttendance() {
     .slice(0, 7);
 
   if (!pastDates.length) {
-    histEl.innerHTML = guidedEmptyStateHTML({
-      kicker: "Attendance History",
-      title: "No attendance history yet",
-      body: "Confirmed daily attendance will appear here after the first timesheet is submitted.",
-    });
+    histEl.innerHTML = `<div class="attendance-history-inline-empty">
+      <strong>No attendance history yet.</strong>
+      <span>Records will appear after the first confirmed attendance submission.</span>
+    </div>`;
     return;
   }
   histEl.innerHTML = pastDates
@@ -18514,23 +18566,8 @@ function renderSiteQrPanel() {
         `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`,
     )
     .join("");
-  const start = code?.startTime || jobExpectedStartTime(job);
-  const startDate = jobStartDateOnly(job) ? formatDateOnly(jobStartDateOnly(job)) : "Not set";
-  const endDate = jobEndDateOnly(job) ? formatDateOnly(jobEndDateOnly(job)) : "No fixed end date";
-  const projectLocation = job?.siteAddress || job?.location || "Location not set";
   const codeBlock = `
-    <div class="qr-display">
-      ${renderQrGlyph(code.token)}
-      <div class="qr-meta">
-        <div class="qr-token">${escapeHtml(code.token)}</div>
-        <div class="qr-meta-row"><span>Project</span><strong>${escapeHtml(companyProjectTitle(job))}</strong></div>
-        <div class="qr-meta-row"><span>Job number</span><strong>${escapeHtml(job.jobNumber || "Not set")}</strong></div>
-        <div class="qr-meta-row"><span>Site/location</span><strong>${escapeHtml(projectLocation)}</strong></div>
-        <div class="qr-meta-row"><span>Project start</span><strong>${escapeHtml(startDate)}</strong></div>
-        <div class="qr-meta-row"><span>Project end</span><strong>${escapeHtml(endDate)}</strong></div>
-        <div class="qr-meta-row"><span>Site start time</span><strong>${escapeHtml(start)}</strong></div>
-      </div>
-    </div>
+    ${projectSignInQrHTML(job, code)}
     <div class="qr-actions">
       <button class="qr-gen-btn" id="qrPrintBtn" type="button">Print Sign-In Sheet</button>
       <button class="qr-gen-btn qr-gen-btn--ghost" id="qrGenBtn" type="button">Regenerate QR</button>
