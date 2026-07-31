@@ -2841,7 +2841,7 @@ function companyPageHeaderHTML({
   if (ui?.pageHeader) {
     return ui
       .pageHeader({
-        kicker,
+        kicker: "",
         title,
         subtitle,
         datePill: formatAttDate(todayDateStr()),
@@ -2863,7 +2863,6 @@ function companyPageHeaderHTML({
   }
   return `<header class="request-labour-page-head company-page-head os-page-header os-page-header--square">
     <div>
-      ${kicker ? `<p class="company-home-kicker os-kicker">${escapeHtml(kicker)}</p>` : ""}
       ${title ? `<h2>${escapeHtml(title)}</h2>` : ""}
       ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
     </div>
@@ -7694,7 +7693,7 @@ const CONTRACTOR_TABS = [
   { id: "jobs", icon: "jobs", label: "Projects" },
   { id: "request-labour", icon: "requests", label: "Request Labour" },
   { id: "attendance", icon: "bookings", label: "Attendance" },
-  { id: "market", icon: "market", label: "Labour Market" },
+  { id: "market", icon: "market", label: "Labour Insights" },
   { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
@@ -7829,7 +7828,7 @@ function bindSidebarAccountMenu(slot) {
         if (typeof logoutCurrentUser === "function") logoutCurrentUser();
         return;
       }
-      activeCompanyAccountView = action === "settings" ? "settings" : "profile";
+      activeCompanyAccountView = action === "settings" ? "company" : "profile";
       switchTab("account");
       renderContractorAccount(getSessionUser());
     });
@@ -9426,13 +9425,41 @@ function normalizeCompanyProjectSection(section = "overview") {
   const aliases = {
     requirements: "labour",
     workers: "workforce",
-    documents: "workforce",
+    documents: "site",
     invoices: "commercial",
   };
   const value = aliases[section] || section || "overview";
   return COMPANY_PROJECT_SECTIONS.some((item) => item.id === value)
     ? value
     : "overview";
+}
+
+function normalizeCompanyAccountView(view = "profile") {
+  const aliases = {
+    settings: "company",
+    account: "profile",
+    compliance: "billing",
+  };
+  const value = aliases[view] || view || "profile";
+  return ["profile", "company", "billing", "team"].includes(value)
+    ? value
+    : "profile";
+}
+
+function companyAccountTabsHTML(activeView) {
+  const tabs = [
+    ["profile", "My Profile"],
+    ["company", "Company"],
+    ["billing", "Billing & Compliance"],
+    ["team", "Team"],
+  ];
+  return `<div class="company-account-tabs os-tabs" role="tablist" aria-label="Account sections">
+    ${tabs
+      .map(
+        ([id, label]) => `<button class="company-account-tab os-tab${activeView === id ? " active" : ""}" type="button" data-company-account-view="${id}">${escapeHtml(label)}</button>`,
+      )
+      .join("")}
+  </div>`;
 }
 
 function companyAssignedWorkers(job) {
@@ -9825,11 +9852,10 @@ function projectAttendanceSummary(workers, job, today = todayDateStr()) {
 
 function attendanceProjectBreakdownRowsHTML(workers, job, today = todayDateStr()) {
   if (!workers.length) {
-    return guidedEmptyStateHTML({
-      kicker: "Attendance",
-      title: "No workers assigned yet",
-      body: "Today's attendance breakdown will appear once workers are confirmed for this project.",
-    });
+    return `<div class="company-inline-empty">
+      <strong>No workers assigned yet.</strong>
+      <span>Today's attendance breakdown will appear once workers are confirmed for this project.</span>
+    </div>`;
   }
   return groupedAttendanceWorkers(workers)
     .map((group) => {
@@ -9938,11 +9964,10 @@ function attendanceLiveSummaryHTML(workers, job, today = todayDateStr()) {
 }
 
 function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
-  if (!workers.length) return guidedEmptyStateHTML({
-    kicker: "Attendance Roster",
-    title: "No workers assigned to this project",
-    body: "Confirmed workers will appear here grouped by trade and experience level. Once assigned, they can scan the project QR or be updated manually.",
-  });
+  if (!workers.length) return `<div class="company-inline-empty attendance-inline-empty">
+    <strong>No workers assigned yet.</strong>
+    <span>Confirmed workers will appear here grouped by trade and role / level. Once assigned, they can scan the project QR or be updated manually.</span>
+  </div>`;
   return groupedAttendanceWorkers(workers)
     .map((group) => {
       const summary = projectAttendanceSummary(group.workers, job, today);
@@ -10097,8 +10122,9 @@ function companyProjectSortHTML() {
         <select id="companyProjectSort">
           <option value="created_desc"${activeCompanyProjectSort === "created_desc" ? " selected" : ""}>Date created — newest</option>
           <option value="created_asc"${activeCompanyProjectSort === "created_asc" ? " selected" : ""}>Date created — oldest</option>
+          <option value="name_asc"${activeCompanyProjectSort === "name_asc" ? " selected" : ""}>Project name — A-Z</option>
           <option value="start_asc"${activeCompanyProjectSort === "start_asc" ? " selected" : ""}>Start date — soonest</option>
-          <option value="end_asc"${activeCompanyProjectSort === "end_asc" ? " selected" : ""}>End date — soonest</option>
+          <option value="start_desc"${activeCompanyProjectSort === "start_desc" ? " selected" : ""}>Start date — latest</option>
         </select>
       </label>
     </div>
@@ -10706,9 +10732,9 @@ function activitySectionForType(type) {
       PROJECT_ACTIVITY_TYPES.REPLACEMENT_REQUESTED,
       PROJECT_ACTIVITY_TYPES.REPLACEMENT_ASSIGNED,
     ].includes(type)
-  ) return "workers";
-  if (type === PROJECT_ACTIVITY_TYPES.INVOICE_GENERATED) return "invoices";
-  if (type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED) return "requirements";
+  ) return "workforce";
+  if (type === PROJECT_ACTIVITY_TYPES.INVOICE_GENERATED) return "commercial";
+  if (type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED) return "labour";
   return "overview";
 }
 
@@ -10949,12 +10975,14 @@ function sortCompanyProjects(a, b, sortBy) {
     return projectDateValue(a.createdAt || a.postedAt || a.start, 0) -
       projectDateValue(b.createdAt || b.postedAt || b.start, 0);
   }
+  if (sortBy === "name_asc") {
+    return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
+  }
   if (sortBy === "start_asc") {
     return projectDateValue(a.start) - projectDateValue(b.start);
   }
-  if (sortBy === "end_asc") {
-    return projectDateValue(a.noFixedEndDate ? "" : a.end || a.estimatedEndDate) -
-      projectDateValue(b.noFixedEndDate ? "" : b.end || b.estimatedEndDate);
+  if (sortBy === "start_desc") {
+    return projectDateValue(b.start, 0) - projectDateValue(a.start, 0);
   }
   return projectDateValue(b.createdAt || b.postedAt || b.start, 0) -
     projectDateValue(a.createdAt || a.postedAt || a.start, 0);
@@ -11594,7 +11622,7 @@ function companyProjectSectionHTML(job, user, summary) {
 }
 
 function companyProjectWorkforceHTML(job, summary) {
-  return `${companyProjectWorkersHTML(job, summary)}${companyProjectDocumentsHTML(job, summary)}`;
+  return `${companyProjectWorkersHTML(job, summary)}${companyProjectPreferredWorkersHTML(job)}${companyProjectAgreementsHTML(job)}`;
 }
 
 function companyProjectOverviewHTML(job, summary) {
@@ -11705,13 +11733,11 @@ function projectOperationalTimelineHTML(job, summary) {
 function companyProjectWorkersHTML(job, summary) {
   const rows = summary.assignedWorkers.length
     ? summary.assignedWorkers.map((worker) => companyProjectWorkerRowHTML(worker, job, summary)).join("")
-    : guidedEmptyStateHTML({
-        kicker: "Workers",
-        title: "No workers confirmed yet",
-        body: "Accepted workers will appear here after the offer and company approval flow is complete.",
-        actionLabel: "Review Requirements",
-        actionAttr: `data-company-project-section="requirements"`,
-      });
+    : `<div class="company-inline-empty">
+        <strong>No workers assigned yet.</strong>
+        <span>Accepted workers will appear here after the offer and company approval flow is complete.</span>
+        <button class="secondary-btn" type="button" data-company-project-section="labour">Review Labour</button>
+      </div>`;
   const approvals = summary.reviewWorkers.length
     ? `<div class="company-project-section os-card"><h4>Workers Awaiting Approval</h4>${summary.reviewWorkers
         .map((app) => {
@@ -11740,6 +11766,58 @@ function companyProjectWorkersHTML(job, summary) {
       </div>
       ${approvals}
     </div>`;
+}
+
+function companyProjectPreferredWorkersHTML(job) {
+  const prefs = preferredWorkersForCompany(job.companyId || getSessionUser()?.id || "").filter((pref) => pref.worker);
+  const rows = prefs.length
+    ? prefs
+        .map(
+          (pref) => `<div class="company-project-mini-row">
+            <span>${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</span>
+            <strong>${escapeHtml(pref.worker?.trade || pref.workerTrade || "Preferred")}</strong>
+          </div>`,
+        )
+        .join("")
+    : `<div class="company-inline-empty">
+        <strong>No preferred workers yet.</strong>
+        <span>Mark trusted workers from project worker profiles so they can be requested first later.</span>
+      </div>`;
+  return `<div class="company-project-section os-card">
+    <h4>Preferred Workers</h4>
+    ${rows}
+  </div>`;
+}
+
+function companyProjectAgreementsHTML(job) {
+  const agreements = (state.agreements || []).filter(
+    (agreement) =>
+      agreement.jobId === job.id ||
+      agreement.projectId === job.id ||
+      agreement.terms?.siteName === companyProjectTitle(job),
+  );
+  const rows = agreements.length
+    ? [...agreements]
+        .sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0))
+        .map((agreement) => {
+          const meta = agreementStatusMeta(agreement);
+          return `<button class="agr-hist-row" type="button" data-agr-open="${escapeHtml(agreement.id)}">
+            <div class="agr-hist-main">
+              <div class="agr-hist-title">${escapeHtml(agreement.terms?.trade || job.trade || "Agreement")} · ${escapeHtml(agreement.terms?.workerName || "Assigned worker")}</div>
+              <div class="agr-hist-sub">Generated ${agreement.generatedAt ? formatDate(agreement.generatedAt) : "date not set"} · Agreement with assigned worker</div>
+            </div>
+            <span class="agr-hist-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</span>
+          </button>`;
+        })
+        .join("")
+    : `<div class="company-inline-empty">
+        <strong>No agreements for this project yet.</strong>
+        <span>Agreements with assigned workers will appear here once generated.</span>
+      </div>`;
+  return `<div class="company-project-section os-card">
+    <h4>Agreements</h4>
+    <div class="agr-hist-list">${rows}</div>
+  </div>`;
 }
 
 function companyProjectWorkerRowHTML(worker, job) {
@@ -11957,6 +12035,10 @@ function companyProjectSiteInfoHTML(job) {
       <div class="company-project-section os-card">
         <h4>Attendance Responsibility</h4>
         <div class="company-project-mini-row"><span>Attendance responsibility</span><strong>${job.attendanceManager?.name ? `Manager: ${escapeHtml(job.attendanceManager.name)}` : "Company / manual setup"}</strong></div>
+      </div>
+      <div class="company-project-section os-card company-project-section--wide">
+        <h4>Documents / Pre-start Documents</h4>
+        ${companyPreStartJobPanelHTML(job)}
       </div>
     </div>`;
 }
@@ -13285,141 +13367,129 @@ function renderContractorAccount(user) {
   const vatVerification = verificationStatusLabel(
     user.vatVerificationStatus || "unverified",
   );
-  const optionalAccountSection = (build) => {
-    try {
-      return build() || "";
-    } catch (err) {
-      console.warn("Company profile optional section failed", err);
-      return "";
-    }
-  };
-  const optionalSections = [
-    optionalAccountSection(() => `<div class="prof-section">${companyTrustProfileHTML(user.id)}</div>`),
-    optionalAccountSection(() => companyBillingSection(user)),
-    optionalAccountSection(() => companyPreferredAccountSection(user)),
-    optionalAccountSection(() => companyDocsSection(user)),
-    optionalAccountSection(() =>
-      agreementHistorySection(
-        (state.agreements || []).filter(
-          (a) => a.companyId === user.id || !a.companyId,
-        ),
-      ),
-    ),
-  ].join("");
-
+  const activeView = normalizeCompanyAccountView(activeCompanyAccountView);
+  activeCompanyAccountView = activeView;
   const ini = (companyDisplayName || "C")
     .trim()
     .split(/\s+/)
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
-  if (activeCompanyAccountView !== "settings") {
-    el.innerHTML = companyPageShellHTML({
-      kicker: "MY PROFILE",
-      title: "My Profile",
-      subtitle: "Your account details and company permission role.",
-      className: "company-account-shell company-profile-shell",
-      bodyClass: "company-account-body company-profile-body",
-      body: `
-        <section class="company-account-identity os-card">
-          <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "U")}</div>
-          <div>
-            <p class="company-home-kicker">SIGNED-IN USER</p>
-            <h3>${escapeHtml(user.name || "Account user")}</h3>
-            <p>${escapeHtml(companySidebarUserRole(user))} at ${escapeHtml(companyDisplayName)}</p>
-          </div>
-        </section>
-        <section class="prof-section os-card company-profile-card">
-          <div class="prof-section-title">Personal account</div>
-          <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
-            <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
-          </div>
-        </section>
-        <section class="prof-section os-card company-profile-card">
-          <div class="prof-section-title">Security</div>
-          <div class="prof-fields">
-            <div class="prof-field"><div class="prof-field-label">Password</div><div class="prof-field-val">Managed through the current account sign-in flow</div></div>
-            <div class="prof-field"><div class="prof-field-label">Sign out</div><div class="prof-field-val">Use the button below to securely leave this device</div></div>
-          </div>
-        </section>
-        <div class="company-account-actions">
-          <button class="ch-logout-btn secondary-btn" type="button" id="accLogoutBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Sign Out
-          </button>
-        </div>`,
-    });
-  } else {
-    el.innerHTML = companyPageShellHTML({
-      kicker: "COMPANY SETTINGS",
-      title: "Company Settings",
-      subtitle: "Organisation details, verification, billing contacts and operational settings.",
-      className: "company-account-shell company-settings-shell",
-      bodyClass: "company-account-body company-settings-body",
-      body: `
-        <section class="company-account-identity os-card">
-          <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
-          <div>
-            <p class="company-home-kicker">ORGANISATION</p>
-            <h3>${escapeHtml(companyDisplayName)}</h3>
-            <p>${companyJobs.length} project${companyJobs.length === 1 ? "" : "s"} on OnSite</p>
-          </div>
-          <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
-        </section>
-        <div class="company-account-grid">
-          <section class="prof-section os-card">
-            <div class="prof-section-title">Company details</div>
-            <div class="prof-fields">
-              <div class="prof-field"><div class="prof-field-label">Registered company name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Trading name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Company number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Registered address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
-            </div>
-          </section>
-          <section class="prof-section os-card">
-            <div class="prof-section-title">Company contacts</div>
-            <div class="prof-fields">
-              <div class="prof-field"><div class="prof-field-label">Primary contact</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Company email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Company phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Accounts phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
-            </div>
-          </section>
-          <section class="prof-section os-card">
-            <div class="prof-section-title">Verification &amp; compliance</div>
-            <div class="prof-fields">
-              <div class="prof-field"><div class="prof-field-label">Company verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
-              <div class="prof-field"><div class="prof-field-label">VAT registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
-              <div class="prof-field"><div class="prof-field-label">VAT number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">VAT verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
-            </div>
-          </section>
-          <section class="prof-section os-card">
-            <div class="prof-section-title">Billing &amp; payments</div>
-            <div class="prof-fields">
-              <div class="prof-field"><div class="prof-field-label">Payment contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">VAT treatment</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "VAT registered" : "Not marked VAT registered"}</div></div>
-            </div>
-          </section>
-          <section class="prof-section os-card">
-            <div class="prof-section-title">Users &amp; permissions</div>
-            <div class="prof-fields">
-              <div class="prof-field"><div class="prof-field-label">Current user</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
-              <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
-            </div>
-          </section>
+  const content = {
+    profile: `
+      <section class="company-account-identity os-card">
+        <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "U")}</div>
+        <div>
+          <p class="company-home-kicker">SIGNED-IN USER</p>
+          <h3>${escapeHtml(user.name || "Account user")}</h3>
+          <p>${escapeHtml(companySidebarUserRole(user))} at ${escapeHtml(companyDisplayName)}</p>
         </div>
-        ${optionalSections ? `<div class="company-account-extra">${optionalSections}</div>` : ""}`,
-    });
-  }
+      </section>
+      <section class="prof-section os-card company-profile-card">
+        <div class="prof-section-title">Personal user information</div>
+        <div class="prof-fields">
+          <div class="prof-field"><div class="prof-field-label">Name</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+          <div class="prof-field"><div class="prof-field-label">Email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+          <div class="prof-field"><div class="prof-field-label">Phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
+          <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
+        </div>
+      </section>
+      <section class="prof-section os-card company-profile-card">
+        <div class="prof-section-title">Security</div>
+        <div class="prof-fields">
+          <div class="prof-field"><div class="prof-field-label">Password</div><div class="prof-field-val">Managed through the current account sign-in flow</div></div>
+          <div class="prof-field"><div class="prof-field-label">Sign out</div><div class="prof-field-val">Use the button below to securely leave this device</div></div>
+        </div>
+      </section>
+      <div class="company-account-actions">
+        <button class="ch-logout-btn secondary-btn" type="button" id="accLogoutBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign Out
+        </button>
+      </div>`,
+    company: `
+      <section class="company-account-identity os-card">
+        <div class="prof-avatar ${avatarColor(companyDisplayName || "C")}">${ini}</div>
+        <div>
+          <p class="company-home-kicker">ORGANISATION</p>
+          <h3>${escapeHtml(companyDisplayName)}</h3>
+          <p>${companyJobs.length} project${companyJobs.length === 1 ? "" : "s"} on OnSite</p>
+        </div>
+        <span class="wsc-verify-badge">${escapeHtml(companyVerification)}</span>
+      </section>
+      <div class="company-account-grid">
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Company-level information</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">Registered company name</div><div class="prof-field-val">${escapeHtml(user.registeredCompanyName || user.companyName || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Trading name</div><div class="prof-field-val">${escapeHtml(user.tradingName || user.companyName || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Company number</div><div class="prof-field-val">${escapeHtml(user.companyNumber || user.regNumber || billing.companyNumber || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Registered address</div><div class="prof-field-val">${escapeHtml(user.registeredAddress || user.address || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Primary contact</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Company email</div><div class="prof-field-val">${escapeHtml(user.email || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Company phone</div><div class="prof-field-val">${escapeHtml(user.phone || "—")}</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          ${companyTrustProfileHTML(user.id)}
+        </section>
+      </div>`,
+    billing: `
+      <div class="company-account-grid">
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Billing &amp; compliance</div>
+          <div class="prof-fields">
+            <div class="prof-field"><div class="prof-field-label">VAT registered</div><div class="prof-field-val">${user.vatRegistered || billing.vatRegistered ? "Yes" : "No"}</div></div>
+            <div class="prof-field"><div class="prof-field-label">VAT number</div><div class="prof-field-val">${escapeHtml(user.vatNumber || billing.vatNumber || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Company verification</div><div class="prof-field-val">${escapeHtml(companyVerification)}</div></div>
+            <div class="prof-field"><div class="prof-field-label">VAT verification</div><div class="prof-field-val">${escapeHtml(vatVerification)}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Payment contact</div><div class="prof-field-val">${escapeHtml(user.paymentContact || billing.paymentContact || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Accounts email</div><div class="prof-field-val">${escapeHtml(user.accountsEmail || billing.accountsEmail || "—")}</div></div>
+            <div class="prof-field"><div class="prof-field-label">Accounts phone</div><div class="prof-field-val">${escapeHtml(user.accountsPhone || billing.accountsPhone || user.phone || "—")}</div></div>
+          </div>
+        </section>
+        <section class="prof-section os-card">
+          <div class="prof-section-title">Application settings</div>
+          ${guidedEmptyStateHTML({
+            kicker: "Settings",
+            title: "No app preferences are available yet",
+            body: "Notification, display and default project preferences will appear here when they are supported.",
+            variant: "inline",
+          })}
+        </section>
+      </div>`,
+    team: `
+      <section class="prof-section os-card">
+        <div class="prof-section-title">Team and permissions</div>
+        <div class="prof-fields">
+          <div class="prof-field"><div class="prof-field-label">Current user</div><div class="prof-field-val">${escapeHtml(user.name || "—")}</div></div>
+          <div class="prof-field"><div class="prof-field-label">Permission role</div><div class="prof-field-val">${escapeHtml(companySidebarUserRole(user))}</div></div>
+        </div>
+        <p class="prof-section-hint">Additional company users and permission controls can be added here when team management is enabled.</p>
+      </section>`,
+  }[activeView];
+
+  el.innerHTML = companyPageShellHTML({
+    kicker: "",
+    title: "My Profile",
+    subtitle: "Your account and access details.",
+    className: "company-account-shell company-profile-shell",
+    bodyClass: "company-account-body company-profile-body",
+    body: `
+      ${companyAccountTabsHTML(activeView)}
+      <div class="company-account-tab-panel">
+        ${content}
+      </div>`,
+  });
 
   bindAgreementOpeners(el);
-  bindCompanyDocsForm(el, user);
+  el.querySelectorAll("[data-company-account-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCompanyAccountView = normalizeCompanyAccountView(btn.dataset.companyAccountView);
+      renderContractorAccount(user);
+      scrollAppToTop();
+    });
+  });
   document.getElementById("accLogoutBtn")?.addEventListener("click", () => {
     if (typeof logoutCurrentUser === "function") logoutCurrentUser();
   });
@@ -13433,7 +13503,7 @@ function renderCompanyNotificationsPage() {
   el.innerHTML = companyPageShellHTML({
     kicker: "NOTIFICATIONS",
     title: "Notifications",
-    subtitle: "Central activity feed for labour, attendance, project and payment updates.",
+    subtitle: "Activity and actions requiring your attention.",
     className: "company-notifications-shell",
     bodyClass: "company-notifications-body",
     body: `
@@ -13576,10 +13646,21 @@ function renderCompanyMarketPage() {
   if (!el) return;
   const model = labourMarketModel(activeMarketFilters);
   const rate = marketRateCopy(model.rateStats);
+  const insightCopy =
+    model.indicator.tone === "warn"
+      ? "Demand is currently stronger than worker availability. A higher advertised rate or working-away allowance may improve fill probability."
+      : model.indicator.tone === "good"
+        ? "Worker availability is stronger than competing demand for the selected filters."
+        : "Supply and demand are broadly balanced for the selected filters.";
+  const typicalRate = model.rateStats.enoughData
+    ? `${formatMoney(model.rateStats.min)}–${formatMoney(model.rateStats.max)}/day`
+    : model.rateStats.sampleCount
+      ? "Limited sample"
+      : "No comparable rates";
   el.innerHTML = companyPageShellHTML({
-    kicker: "LABOUR MARKET",
-    title: "Labour Market",
-    subtitle: "Live workforce availability, demand and rate intelligence from OnSite.",
+    kicker: "LABOUR INSIGHTS",
+    title: "Labour Insights",
+    subtitle: "Understand worker availability, demand and rates.",
     className: "company-market-shell",
     bodyClass: "company-market-body",
     body: `
@@ -13587,10 +13668,10 @@ function renderCompanyMarketPage() {
         <section class="market-controls">
           <div class="market-control-head">
             <div>
-              <p class="company-home-kicker">ONSITE PLATFORM DATA</p>
-              <h3>Market view</h3>
+              <p class="company-home-kicker">FILTERS</p>
+              <h3>Find comparable labour supply</h3>
             </div>
-            <span class="market-sample-note">Minimum ${LABOUR_MARKET_MIN_RATE_SAMPLE} rate samples for medians</span>
+            <span class="market-sample-note">OnSite platform data only</span>
           </div>
           <div class="market-filter-grid">
             ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
@@ -13603,62 +13684,48 @@ function renderCompanyMarketPage() {
         </section>
         <section class="market-summary-panel">
           <div class="market-summary-copy">
-            <p class="company-home-kicker">MARKET POSITION</p>
+            <p class="company-home-kicker">MARKET CONDITION</p>
             <h3>${escapeHtml(model.indicator.label)}</h3>
-            <p>Based only on OnSite worker profiles and live labour requirements matching the current filters.</p>
+            <p>Insights use OnSite platform worker profiles and live labour requirements only.</p>
           </div>
           <dl class="market-summary-metrics">
             <div><dt>Available workers</dt><dd>${model.workers.length}</dd></div>
             <div><dt>Live demand</dt><dd>${model.requirements.length}</dd></div>
-            <div><dt>Median rate</dt><dd>${model.rateStats.enoughData ? `${formatMoney(model.rateStats.median)}/day` : "Hidden"}</dd></div>
-            <div><dt>Rate samples</dt><dd>${model.rateStats.sampleCount}</dd></div>
+            <div><dt>Typical / median rate</dt><dd>${model.rateStats.enoughData ? `${formatMoney(model.rateStats.median)}/day` : "Limited"}</dd></div>
+            <div><dt>Typical range</dt><dd>${escapeHtml(typicalRate)}</dd></div>
           </dl>
         </section>
-        <div class="market-insight-grid">
-          <section class="market-section">
-            <div class="company-live-site-head">
-              <div>
-                <p class="company-home-kicker">RATES</p>
-                <h3>${escapeHtml(rate.title)}</h3>
-              </div>
-            </div>
-            <p>${escapeHtml(rate.body)}</p>
-            <dl class="market-rate-stats">
-              <div><dt>Typical range</dt><dd>${escapeHtml(rate.range)}</dd></div>
-              <div><dt>Relevant requirements</dt><dd>${model.requirements.length}</dd></div>
-            </dl>
-          </section>
-          <section class="market-section">
-            <div class="company-live-site-head">
-              <div>
-                <p class="company-home-kicker">SUPPLY VS DEMAND</p>
-                <h3>${escapeHtml(model.indicator.label)}</h3>
-              </div>
-              <span class="market-signal ${escapeHtml(model.indicator.tone)}">${escapeHtml(model.indicator.label)}</span>
-            </div>
-            <p>Use this as directional OnSite platform intelligence, not a whole-market claim.</p>
-          </section>
-        </div>
         <section class="market-section market-section--wide">
           <div class="company-live-site-head">
             <div>
-              <p class="company-home-kicker">AVAILABILITY BY LOCATION</p>
-              <h3>Available workers by profile</h3>
+              <p class="company-home-kicker">ONSITE INSIGHT</p>
+              <h3>${escapeHtml(model.indicator.label)}</h3>
+            </div>
+            <span class="market-signal ${escapeHtml(model.indicator.tone)}">${escapeHtml(model.indicator.label)}</span>
+          </div>
+          <p>${escapeHtml(insightCopy)}</p>
+          ${model.rateStats.sampleCount ? `<p>${escapeHtml(rate.body)}</p>` : ""}
+        </section>
+        <section class="market-section market-section--wide">
+          <div class="company-live-site-head">
+            <div>
+              <p class="company-home-kicker">AVAILABILITY</p>
+              <h3>Matching available workers</h3>
             </div>
             <small>No individual workers shown</small>
           </div>
           ${marketAvailabilityRowsHTML(model)}
         </section>
-        <section class="market-section market-section--wide">
+        ${model.regions.length ? `<section class="market-section market-section--wide">
           <div class="company-live-site-head">
             <div>
               <p class="company-home-kicker">REGIONAL AVAILABILITY</p>
-              <h3>Availability heatmap</h3>
+              <h3>Regional availability</h3>
             </div>
             <small>Estimated where coordinates are missing</small>
           </div>
           ${marketRegionCardsHTML(model)}
-        </section>
+        </section>` : ""}
       </div>`,
   });
   bindCompanyMarketControls(el);
@@ -13684,9 +13751,7 @@ function bindCompanyMarketControls(scope) {
 }
 
 const COMPANY_NOTIFICATION_SECTIONS = [
-  ["action", "Action Required"],
-  ["today", "Today"],
-  ["yesterday", "Yesterday"],
+  ["action", "Needs attention"],
   ["earlier", "Earlier"],
 ];
 
@@ -13699,8 +13764,6 @@ function companyVisibleNotifications(user = getSessionUser()) {
 function groupCompanyNotifications(user) {
   const groups = {
     action: [],
-    today: [],
-    yesterday: [],
     earlier: [],
   };
   companyVisibleNotifications(user).forEach((notification) => {
@@ -13709,8 +13772,7 @@ function groupCompanyNotifications(user) {
       groups.action.push(view);
       return;
     }
-    const bucket = notificationDateBucket(notification.createdAt);
-    groups[bucket].push(view);
+    groups.earlier.push(view);
   });
   return groups;
 }
@@ -13783,22 +13845,22 @@ function notificationAction(notification) {
   const defaults = {
     project_health: notification.healthLevel === "filled"
       ? ["overview", "Review Project"]
-      : ["requirements", "Review Labour Requirement"],
-    worker_offer_accepted: ["workers", "View Worker"],
-    worker_offer_declined: ["workers", "View Workers"],
+      : ["labour", "Review Labour Requirement"],
+    worker_offer_accepted: ["workforce", "View Worker"],
+    worker_offer_declined: ["workforce", "View Workers"],
     worker_late_report: ["attendance", "Open Attendance"],
     worker_signed_in: ["attendance", "Open Attendance"],
     no_show: ["attendance", "Open Attendance"],
     attendance_completed: ["attendance", "Open Attendance"],
-    worker_planned_absence: ["workers", "View Workers"],
-    worker_notice: ["workers", "View Workers"],
-    documents_expiring: ["documents", "View Documents"],
-    invoice_generated: ["invoices", "View Invoice"],
+    worker_planned_absence: ["workforce", "View Workers"],
+    worker_notice: ["workforce", "View Workers"],
+    documents_expiring: ["site", "View Documents"],
+    invoice_generated: ["commercial", "View Invoice"],
     project_created: ["overview", "View Project"],
     qr_downloaded: ["attendance", "Open Attendance"],
-    worker_added: ["workers", "View Worker"],
-    shift_change_accepted: ["workers", "View Workers"],
-    shift_change_declined: ["workers", "View Workers"],
+    worker_added: ["workforce", "View Worker"],
+    shift_change_accepted: ["workforce", "View Workers"],
+    shift_change_declined: ["workforce", "View Workers"],
   };
   const [section, label] = defaults[notification.type] || ["overview", "Open Project"];
   return { section, label };
@@ -13830,7 +13892,7 @@ function notificationCopy(notification, job) {
 function notificationFeedHTML(groups) {
   const html = COMPANY_NOTIFICATION_SECTIONS
     .filter(([key]) => groups[key]?.length)
-    .map(([key, label]) => `<section class="notification-group jw-card">
+    .map(([key, label]) => `<section class="notification-group">
       <div class="notification-group-head">
         <p class="company-home-kicker">${escapeHtml(label)}</p>
       </div>
@@ -13848,6 +13910,7 @@ function notificationFeedHTML(groups) {
 
 function notificationCardHTML(view) {
   const n = view.notification;
+  const job = findJob(n.jobId);
   return `<article class="notification-card ${escapeHtml(view.priority)}${view.unread ? " unread" : ""}" tabindex="0" role="button" data-notification-open="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">
     <span class="notification-priority-dot" aria-hidden="true"></span>
     ${view.unread ? `<span class="notification-unread-dot" aria-label="Unread"></span>` : ""}
@@ -13858,11 +13921,14 @@ function notificationCardHTML(view) {
       </div>
       ${
         view.copy.recommendation
-          ? `<div class="notification-next-action"><span>Recommended action</span><strong>${escapeHtml(view.copy.recommendation)}</strong></div>`
+          ? `<p class="notification-next-action"><strong>Recommended action</strong> ${escapeHtml(view.copy.recommendation)}</p>`
           : ""
       }
-      <button class="primary-btn notification-action-btn" type="button" data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">${escapeHtml(view.action.label)} &rarr;</button>
-      <time>${escapeHtml(view.createdLabel)}</time>
+      <div class="notification-row-footer">
+        <span>${escapeHtml(job ? `${companyProjectTitle(job)}${job.jobNumber ? ` (${job.jobNumber})` : ""}` : "OnSite")}</span>
+        <time>${escapeHtml(view.createdLabel)}</time>
+      </div>
+      <button class="secondary-btn notification-action-btn" type="button" data-notification-action="${escapeHtml(n.id || "")}" data-notification-job="${escapeHtml(n.jobId || "")}" data-notification-section="${escapeHtml(view.action.section)}">${escapeHtml(view.action.label)} &rarr;</button>
     </div>
   </article>`;
 }
@@ -13899,10 +13965,10 @@ function openCompanyNotification(el) {
   if (jobId) {
     activeCompanyProjectId = jobId;
     activeCompanyProjectEditId = "";
-    activeCompanyProjectSection = section || "overview";
+    activeCompanyProjectSection = normalizeCompanyProjectSection(section || "overview");
     resetProjectEditMap();
   }
-  switchTab("dashboard");
+  switchTab(jobId ? "jobs" : "dashboard");
   render();
   scrollAppToTop();
 }
@@ -16523,6 +16589,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
   const tab = document.getElementById("tab-attendance");
   if (!tab) return;
   if (selectedProject) {
+    const selectedWorkers = attendanceProjectWorkers(selectedProject);
     tab.innerHTML = `
       <section class="request-labour-page os-page-content company-saas-page attendance-page attendance-project-page">
         <button class="company-project-back attendance-back-link" type="button" data-attendance-back>&larr; Back to Attendance</button>
@@ -16533,7 +16600,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
             <div id="attendanceCards" class="card-list"></div>
             <div id="adminAttReview"></div>
             <div class="att-submit-wrap">
-              <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
+              <button id="submitAttendanceBtn" class="${selectedWorkers.length ? "primary-btn" : "secondary-btn"} att-submit-btn" type="button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 Confirm Attendance
               </button>
@@ -16568,7 +16635,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
   tab.innerHTML = companyPageShellHTML({
     kicker: "ATTENDANCE",
     title: "Attendance",
-    subtitle: "Confirm daily attendance for each project.",
+    subtitle: "Confirm and manage daily project attendance.",
     className: "attendance-page",
     bodyClass: "attendance-page-body",
     body: `
