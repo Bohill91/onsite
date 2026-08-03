@@ -10535,79 +10535,86 @@ function companyDailyBriefingHTML(summary, user) {
         <p>Today</p>
       </div>
     </div>
-    <div class="company-briefing-metrics">
-      ${briefing.metrics
-        .map(
-          (item) => `<div class="company-briefing-metric ${item.tone}">
-            <strong>${item.value}</strong>
-            <span>${escapeHtml(item.label)}</span>
-          </div>`,
-        )
-        .join("")}
-    </div>
-    ${briefing.action
-      ? `<article class="company-briefing-recommendation ${escapeHtml(briefing.action.tone)}">
-          <span class="company-action-dot" aria-hidden="true"></span>
-          <div>
-            <small>Recommended action</small>
-            <strong>${escapeHtml(briefing.action.title)}</strong>
-            <p>${escapeHtml(briefing.action.body)}</p>
-          </div>
-          <button class="primary-btn" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>
-        </article>`
-      : `<div class="company-briefing-clear">
-          <strong>No immediate actions showing</strong>
-          <span>Attendance, labour demand and upcoming starts are currently in order.</span>
-        </div>`}
-    <div class="company-live-site-status">
-      <div class="company-live-site-head">
-        <span class="company-home-kicker">LIVE SITE STATUS</span>
-        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} active today` : "No active attendance"}</small>
+    <div class="company-briefing-section">
+      <div class="company-briefing-metrics">
+        ${briefing.metrics
+          .map(
+            (item) => `<div class="company-briefing-metric ${item.tone}">
+              <strong>${item.value}</strong>
+              <span>${escapeHtml(item.label)}</span>
+            </div>`,
+          )
+          .join("")}
       </div>
-      <div class="company-live-site-list">
+    </div>
+    <div class="company-briefing-section">
+      <div class="company-live-site-head">
+        <span class="company-home-kicker">ACTION REQUIRED</span>
+        <small>${briefing.action ? "Highest priority" : "Clear"}</small>
+      </div>
+      ${briefing.action
+        ? `<article class="company-briefing-recommendation ${escapeHtml(briefing.action.tone)}">
+            <span class="company-action-dot" aria-hidden="true"></span>
+            <div>
+              <strong>${escapeHtml(briefing.action.title)}</strong>
+              <p>${escapeHtml(briefing.action.body)}</p>
+              ${briefing.action.meta ? `<small>${escapeHtml(briefing.action.meta)}</small>` : ""}
+            </div>
+            <button class="primary-btn" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>
+          </article>`
+        : `<div class="company-briefing-clear">
+            <strong>No immediate actions showing</strong>
+            <span>Attendance, labour demand and upcoming starts are currently in order.</span>
+          </div>`}
+    </div>
+    <div class="company-live-site-status company-briefing-section">
+      <div class="company-live-site-head">
+        <span class="company-home-kicker">LIVE SITES TODAY</span>
+        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
+      </div>
+      <div class="company-live-site-table">
         ${briefing.siteRows.length
-          ? briefing.siteRows.map(companyLiveSiteStatusRowHTML).join("")
-          : `<div class="company-control-empty">
+          ? `<div class="company-live-site-row company-live-site-row-head" aria-hidden="true">
+              <span>Project</span>
+              <span>Expected</span>
+              <span>Signed in</span>
+              <span>Late</span>
+              <span>Unconfirmed</span>
+              <span>Status</span>
+            </div>
+            ${briefing.siteRows.map(companyLiveSiteStatusRowHTML).join("")}`
+          : `<div class="company-dashboard-inline-empty">
               <strong>No attendance expected yet</strong>
               <span>Projects with workers expected today will appear here.</span>
             </div>`}
       </div>
     </div>
-    ${briefing.labourChanges.length
-      ? `<div class="company-labour-forecast">
-          <div class="company-live-site-head">
-            <span class="company-home-kicker">UPCOMING LABOUR CHANGES</span>
-            <small>Next 30 days</small>
-          </div>
-          <div class="company-live-site-list">
-            ${briefing.labourChanges.map(companyLabourForecastRowHTML).join("")}
-          </div>
-        </div>`
-      : ""}
+    <div class="company-briefing-section company-upcoming-briefing">
+      <div class="company-live-site-head">
+        <span class="company-home-kicker">UPCOMING</span>
+        <small>Next 7 days</small>
+      </div>
+      <div class="company-upcoming-list">
+        ${briefing.upcoming.length
+          ? briefing.upcoming.map(companyDashboardUpcomingRowHTML).join("")
+          : `<div class="company-dashboard-inline-empty compact">
+              <strong>No upcoming actions in the next week</strong>
+              <span>Starts, labour changes and pending decisions will appear here when they need attention.</span>
+            </div>`}
+      </div>
+    </div>
   </section>`;
 }
 
 function companyDailyBriefingModel(summary, user) {
+  const scheduledToday = companyScheduledProjectSummariesToday(summary);
+  const workersExpectedToday = scheduledToday.reduce((sum, s) => sum + s.expectedToday, 0);
   const metrics = [
-    { label: "active projects today", value: summary.activeProjectsToday, tone: summary.activeProjectsToday ? "info" : "muted" },
-    { label: "workers expected", value: summary.workersExpected, tone: summary.workersExpected ? "info" : "muted" },
-    { label: "signed in", value: summary.workersSignedIn, tone: summary.workersSignedIn ? "ok" : "muted" },
-    { label: "reporting late", value: summary.workersReportingLate, tone: summary.workersReportingLate ? "warn" : "muted" },
-    { label: "unconfirmed", value: summary.workersUnconfirmed, tone: summary.workersUnconfirmed ? "warn" : "muted" },
-    { label: "open labour requirements", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "ok" },
-    {
-      label: summary.startsTomorrow
-        ? `project${summary.startsTomorrow === 1 ? "" : "s"} start${summary.startsTomorrow === 1 ? "s" : ""} tomorrow`
-        : "starting next 7 days",
-      value: summary.startsTomorrow || summary.upcomingStarts,
-      tone: summary.upcomingStarts ? "info" : "muted",
-    },
-    {
-      label: "labour changes next 30 days",
-      value: summary.upcomingLabourChanges.length,
-      tone: summary.upcomingLabourChanges.length ? "warn" : "muted",
-    },
-  ].filter((item) => item.value > 0 || ["active projects today", "workers expected"].includes(item.label));
+    { label: "Projects scheduled today", value: scheduledToday.length, tone: scheduledToday.length ? "neutral" : "muted" },
+    { label: "Workers expected today", value: workersExpectedToday, tone: workersExpectedToday ? "neutral" : "muted" },
+    { label: "Open labour requirements", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "neutral" },
+    { label: "Starting next 7 days", value: summary.upcomingStarts, tone: summary.upcomingStarts ? "neutral" : "muted" },
+  ];
   const focus = companyDashboardFocusModel(summary, user);
   const primaryAction = briefingRecommendedAction(summary, focus);
   return {
@@ -10615,13 +10622,26 @@ function companyDailyBriefingModel(summary, user) {
     firstName: firstNameForUser(user),
     metrics,
     action: primaryAction,
-    siteRows: summary.summaries
-      .filter((projectSummary) => projectSummary.expectedToday > 0 || projectSummary.startDays < 0)
+    siteRows: scheduledToday
       .sort((a, b) => b.expectedToday - a.expectedToday || projectDateValue(a.job.start) - projectDateValue(b.job.start))
       .slice(0, 5)
       .map(companyLiveSiteStatusModel),
-    labourChanges: summary.upcomingLabourChanges.slice(0, 3),
+    upcoming: companyDashboardUpcomingItems(summary).slice(0, 4),
   };
+}
+
+function companyScheduledProjectSummariesToday(summary) {
+  return (summary?.summaries || []).filter((projectSummary) =>
+    isProjectScheduledToday(projectSummary.job),
+  );
+}
+
+function isProjectScheduledToday(job, date = todayDateStr()) {
+  if (!job || job.completed || job.cancelledAt || job.bookingStatus === "cancelled") return false;
+  if (!isDateWithinProjectDates(job, date)) return false;
+  const workingDays = normalizeWorkingDays(job.workingDays || job.defaultWorkingDays);
+  const dayKey = new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "long" }).toLowerCase();
+  return workingDays.includes(dayKey);
 }
 
 function dashboardGreetingPart() {
@@ -10645,11 +10665,14 @@ function companyLiveSiteStatusModel(projectSummary) {
   const unconfirmed = Math.max(0, projectSummary.expectedToday - projectSummary.signedInToday);
   let stateLabel = "No attendance expected yet";
   let tone = "muted";
-  if (projectSummary.expectedToday > 0 && unconfirmed === 0 && !projectSummary.lateReports && !projectSummary.noShows) {
+  if (!projectSummary.expectedToday) {
+    stateLabel = "No workers scheduled";
+  } else if (projectSummary.expectedToday > 0 && unconfirmed === 0 && !projectSummary.lateReports && !projectSummary.noShows) {
     stateLabel = "All signed in";
     tone = "ok";
   } else if (projectSummary.noShows || unconfirmed || projectSummary.lateReports) {
-    stateLabel = projectSummary.noShows || unconfirmed ? "Requires review" : "Attendance in progress";
+    const attention = projectSummary.noShows + unconfirmed + projectSummary.lateReports;
+    stateLabel = projectSummary.noShows || unconfirmed ? `${attention} require attention` : "Attendance in progress";
     tone = projectSummary.noShows || unconfirmed ? "warn" : "info";
   } else if (projectSummary.expectedToday > 0) {
     stateLabel = "Attendance in progress";
@@ -10668,17 +10691,105 @@ function companyLiveSiteStatusModel(projectSummary) {
 
 function companyLiveSiteStatusRowHTML(item) {
   return `<button class="company-live-site-row" type="button" data-dashboard-attendance-project="${escapeHtml(item.job.id)}">
-    <div>
+    <span class="company-live-site-project">
       <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
       <span>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</span>
-    </div>
-    <dl>
-      <div><dt>Expected</dt><dd>${item.expected}</dd></div>
-      <div><dt>Signed in</dt><dd>${item.signedIn}</dd></div>
-      <div><dt>Late</dt><dd>${item.late}</dd></div>
-      <div><dt>Unconfirmed</dt><dd>${item.unconfirmed}</dd></div>
-    </dl>
+    </span>
+    <span data-label="Expected"><strong>${item.expected}</strong></span>
+    <span data-label="Signed in"><strong>${item.signedIn}</strong></span>
+    <span data-label="Late"><strong>${item.late}</strong></span>
+    <span data-label="Unconfirmed"><strong>${item.unconfirmed}</strong></span>
     <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
+  </button>`;
+}
+
+function companyDashboardUpcomingItems(summary) {
+  const items = [];
+  (summary.summaries || []).forEach((projectSummary) => {
+    const job = projectSummary.job;
+    const days = projectStartDays(job);
+    if (days !== null && days >= 0 && days <= 7) {
+      items.push({
+        key: `start:${job.id}`,
+        tone: projectSummary.openRoles ? "warning" : "info",
+        title: `${companyProjectTitle(job)} starts ${relativeProjectDayLabel(days)}`,
+        body: projectSummary.openRoles
+          ? `${projectSummary.openRoles} labour place${projectSummary.openRoles === 1 ? "" : "s"} still open.`
+          : "Site setup and attendance readiness can be reviewed.",
+        meta: job.jobNumber || job.location || "Project",
+        actionLabel: projectSummary.openRoles ? "Review requirement" : "Check setup",
+        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="${projectSummary.openRoles ? "requirements" : "overview"}"`,
+        sort: days,
+      });
+    }
+    if (projectSummary.pendingOffers.length) {
+      items.push({
+        key: `offers:${job.id}`,
+        tone: "info",
+        title: `${projectSummary.pendingOffers.length} offer${projectSummary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
+        body: `${companyProjectTitle(job)} has open worker offer decisions.`,
+        meta: "Offers",
+        actionLabel: "View workers",
+        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
+        sort: days ?? 99,
+      });
+    }
+    if (projectSummary.reviewWorkers.length) {
+      items.push({
+        key: `review:${job.id}`,
+        tone: "warning",
+        title: `${projectSummary.reviewWorkers.length} worker${projectSummary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
+        body: `${companyProjectTitle(job)} needs a company decision before assignment is confirmed.`,
+        meta: "Worker approval",
+        actionLabel: "Review workers",
+        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
+        sort: days ?? 98,
+      });
+    }
+  });
+  (summary.upcomingLabourChanges || []).slice(0, 4).forEach((item) => {
+    items.push({
+      key: `labour:${item.job.id}:${item.change.id || item.change.startDate}`,
+      tone: Number(item.delta) > 0 ? "warning" : "info",
+      title: labourForecastTitle(item),
+      body: `${formatDateOnly(item.change.startDate)} · ${item.change.previousQuantity} to ${item.change.quantity} required${item.change.phase ? ` · ${item.change.phase}` : ""}`,
+      meta: item.job.jobNumber || item.job.location || "Labour schedule",
+      actionLabel: "Review schedule",
+      actionAttr: `data-company-project-open-section="${escapeHtml(item.job.id)}" data-company-section-target="requirements"`,
+      sort: item.daysUntil ?? 97,
+    });
+  });
+  return items
+    .filter((item, index, arr) => arr.findIndex((candidate) => candidate.key === item.key) === index)
+    .sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99));
+}
+
+function relativeProjectDayLabel(days) {
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days} days`;
+}
+
+function labourForecastTitle(item) {
+  const delta = Number(item.delta) || 0;
+  const amount = Math.abs(delta);
+  const trade = pluralizeTradeLabel(item.req?.trade || "worker", amount || 1);
+  if (delta > 0) return `${companyProjectTitle(item.job)} needs ${amount} additional ${trade}`;
+  if (delta < 0) return `${companyProjectTitle(item.job)} requirement reduces by ${amount} ${trade}`;
+  return `${companyProjectTitle(item.job)} labour schedule changes`;
+}
+
+function companyDashboardUpcomingRowHTML(item) {
+  return `<button class="company-upcoming-row ${escapeHtml(item.tone || "info")}" type="button" ${item.actionAttr}>
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <span class="company-upcoming-main">
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.body || "")}</small>
+    </span>
+    <span class="company-upcoming-meta">
+      <small>${escapeHtml(item.meta || "")}</small>
+      <strong>${escapeHtml(item.actionLabel || "Open")}</strong>
+    </span>
   </button>`;
 }
 
@@ -10849,14 +10960,14 @@ function companyDashboardFocusModel(summary, user) {
     ? {
         title: `${companyProjectTitle(urgentProjects[0].summary.job)} needs attention`,
         body: urgentProjects[0].health.primaryReason || "Review the project health guidance before the start date.",
-        actionLabel: "Review Labour",
+        actionLabel: "Review requirement",
         actionAttr: `data-company-project-open-section="${escapeHtml(urgentProjects[0].summary.job.id)}" data-company-section-target="requirements"`,
       }
     : attendanceIssues[0]
       ? {
           title: `${companyProjectTitle(attendanceIssues[0].summary.job)} has attendance issues`,
           body: `${attendanceIssues[0].total} attendance item${attendanceIssues[0].total === 1 ? "" : "s"} need checking today.`,
-          actionLabel: "Open Attendance",
+          actionLabel: "Resolve attendance",
           actionAttr: `data-dashboard-attendance-project="${escapeHtml(attendanceIssues[0].summary.job.id)}"`,
         }
     : summary.pendingActions
@@ -10907,7 +11018,7 @@ function companyDashboardHealthAction(item) {
     title: `${companyProjectTitle(item.summary.job)} is ${item.health.label}`,
     body: item.health.primaryReason || "Project health needs review.",
     meta: item.summary.job.jobNumber || item.summary.job.location || "Project",
-    actionLabel: "Review Labour",
+    actionLabel: "Review requirement",
     actionAttr: `data-company-project-open-section="${escapeHtml(item.summary.job.id)}" data-company-section-target="requirements"`,
     jobId: item.summary.job.id,
   };
@@ -10923,7 +11034,7 @@ function companyDashboardAttendanceAction(item) {
     title: `${companyProjectTitle(item.summary.job)} attendance needs checking`,
     body: parts.join(" · ") || "Attendance requires review today.",
     meta: "Today",
-    actionLabel: "Open Attendance",
+    actionLabel: "Resolve attendance",
     actionAttr: `data-dashboard-attendance-project="${escapeHtml(item.summary.job.id)}"`,
     jobId: item.summary.job.id,
   };
@@ -10962,7 +11073,7 @@ function companyDashboardShortageAction(item) {
     title: `${stats.remaining} ${pluralizeTradeLabel(req.trade || "worker", stats.remaining)} still required`,
     body: `${companyProjectTitle(item.summary.job)} still has open labour demand.`,
     meta: item.summary.job.start ? `Starts ${formatDateOnly(item.summary.job.start)}` : "Start date TBC",
-    actionLabel: "Review Requirement",
+    actionLabel: "Review requirement",
     actionAttr: `data-company-project-open-section="${escapeHtml(item.summary.job.id)}" data-company-section-target="requirements"`,
     jobId: item.summary.job.id,
   };
@@ -12537,9 +12648,6 @@ function renderContractorHome(user) {
     body: `
         <div class="jw-form">
           ${companyDashboardFocusHTML(summary, user)}
-          <div class="company-dashboard-all-projects">
-            <button class="secondary-btn" type="button" data-empty-tab="jobs">View all projects &rarr;</button>
-          </div>
           ${companyRecentActivityHTML(summary, user)}
           ${previousProjects.length ? `<section class="jw-card previous-projects-card compact">
             <div class="company-live-site-head">
