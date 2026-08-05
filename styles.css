@@ -8912,14 +8912,16 @@ margin-bottom: 12px;
 }
 
 .company-recent-activity-row {
+  -webkit-appearance: none;
+  appearance: none;
   align-items: flex-start;
   background: transparent;
-  border-top: 1px solid var(--card-divider);
+  border: 0;
   cursor: pointer;
   display: grid;
   gap: 12px;
   grid-template-columns: 10px minmax(0, 1fr);
-  padding: 14px 0;
+  padding: 14px 8px 14px 0;
   position: relative;
   text-align: left;
   transition:
@@ -8928,9 +8930,21 @@ margin-bottom: 12px;
     transform var(--motion-fast) ease;
 }
 
+.company-recent-activity-row + .company-recent-activity-row {
+  box-shadow: inset 0 1px 0 rgba(226, 232, 240, 0.64);
+}
+
 .company-recent-activity-row:hover {
-  background: rgba(249, 115, 22, 0.04);
+  background: rgba(249, 115, 22, 0.035);
   transform: translateX(2px);
+}
+
+.company-recent-activity-row:focus-visible {
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(226, 232, 240, 0.64),
+    0 0 0 3px rgba(249, 115, 22, 0.16);
+  outline: none;
 }
 
 .company-upcoming-row {
