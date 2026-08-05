@@ -8428,6 +8428,10 @@ margin-bottom: 12px;
   gap: var(--space-3);
   overflow: hidden;
   position: relative;
+  transition:
+    border-color var(--motion-med) ease,
+    box-shadow var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-ops-summary::after {
@@ -8500,15 +8504,17 @@ margin-bottom: 12px;
   border-radius: 16px;
   display: grid;
   gap: 9px;
+  align-content: space-between;
   min-width: 0;
   min-height: 96px;
   padding: 16px;
   text-align: left;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
   transition:
-    background-color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+    background-color var(--motion-med) ease,
+    border-color var(--motion-med) ease,
+    box-shadow var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-briefing-metric strong {
@@ -8539,7 +8545,7 @@ margin-bottom: 12px;
 .company-briefing-metric.is-clickable:focus-visible {
   background: #fff;
   border-color: rgba(249, 115, 22, 0.28);
-  box-shadow: var(--card-shadow-hover);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.075);
   outline: none;
   transform: translateY(-1px);
 }
@@ -8555,6 +8561,7 @@ margin-bottom: 12px;
   background: var(--surface);
   border-color: var(--card-divider);
   --action-accent: #a1a1aa;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
   display: grid;
   gap: var(--space-3);
   grid-template-columns: auto minmax(0, 1fr);
@@ -8563,8 +8570,9 @@ margin-bottom: 12px;
   position: relative;
   text-align: left;
   transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease;
+    border-color var(--motion-med) ease,
+    box-shadow var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-action-hero::before {
@@ -8580,11 +8588,19 @@ margin-bottom: 12px;
 
 .company-action-hero:hover,
 .company-action-hero:focus-visible {
-  box-shadow: var(--card-shadow-hover);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.075);
+  transform: translateY(-1px);
 }
 
 .company-action-hero .company-action-dot {
   background: var(--action-accent);
+}
+
+.company-action-hero.critical .company-action-dot,
+.company-action-hero.warning .company-action-dot,
+.company-action-hero.success .company-action-dot {
+  animation: dashboard-health-breathe 3.7s ease-in-out infinite;
+  transform-origin: center;
 }
 
 .company-action-hero.critical {
@@ -8650,10 +8666,34 @@ margin-bottom: 12px;
 
 .company-action-hero-cta {
   align-self: end;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.18);
   grid-column: 1 / -1;
   justify-self: start;
   min-height: 38px;
   padding-inline: 14px;
+  transition:
+    background-color var(--motion-med) ease,
+    box-shadow var(--motion-med) ease,
+    transform var(--motion-med) ease;
+}
+
+.company-action-hero-cta:hover,
+.company-action-hero-cta:focus-visible {
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.24);
+  transform: translateY(-1px);
+}
+
+@keyframes dashboard-health-breathe {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
 }
 
 .company-action-hero-clear .company-action-hero-cta {
@@ -8661,6 +8701,7 @@ margin-bottom: 12px;
   background: #fafafa;
   border: 1px solid var(--card-divider);
   border-radius: 999px;
+  box-shadow: none;
   color: var(--ink-2);
   display: inline-flex;
   font-size: 0.8rem;
@@ -8704,9 +8745,10 @@ margin-bottom: 12px;
   padding: 16px;
   text-align: left;
   transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+    background-color var(--motion-med) ease,
+    border-color var(--motion-med) ease,
+    box-shadow var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-live-site-card:hover,
@@ -8774,10 +8816,11 @@ margin-bottom: 12px;
 }
 
 .company-live-site-card-state {
-  border-top: 1px solid rgba(226, 232, 240, 0.7);
+  background: rgba(244, 244, 245, 0.62);
+  border-radius: 14px;
   display: grid;
   gap: 4px;
-  padding-top: 12px;
+  padding: 11px 12px;
 }
 
 .company-live-site-card-state strong {
@@ -8797,6 +8840,7 @@ margin-bottom: 12px;
   color: var(--orange);
   font-size: 0.78rem;
   font-weight: 850;
+  transition: color var(--motion-med) ease;
 }
 
 .company-live-site-row {
@@ -8867,8 +8911,8 @@ margin-bottom: 12px;
 }
 
 .company-live-site-state.info {
-  background: rgba(37, 99, 235, 0.1);
-  color: #2563eb;
+  background: var(--surface-3);
+  color: var(--ink-3);
 }
 
 .company-live-site-state.warn {
@@ -8900,8 +8944,8 @@ margin-bottom: 12px;
   position: relative;
   text-align: left;
   transition:
-    background-color var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+    background-color var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-upcoming-card::before {
@@ -8948,6 +8992,7 @@ margin-bottom: 12px;
   color: var(--ink-2);
   display: block;
   font-size: 0.74rem;
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -8961,6 +9006,7 @@ margin-bottom: 12px;
 }
 
 .company-upcoming-card-action {
+  align-self: center;
   color: var(--orange);
   font-size: 0.78rem;
   font-weight: 850;
@@ -8993,13 +9039,13 @@ margin-bottom: 12px;
   display: grid;
   gap: 12px;
   grid-template-columns: 12px minmax(0, 1fr);
-  padding: 14px 10px 14px 0;
+  padding: 12px 10px 12px 0;
   position: relative;
   text-align: left;
   transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+    background-color var(--motion-med) ease,
+    color var(--motion-med) ease,
+    transform var(--motion-med) ease;
 }
 
 .company-recent-activity-row + .company-recent-activity-row {
@@ -9138,7 +9184,7 @@ margin-bottom: 12px;
   align-self: start;
   background: var(--activity-dot-bg);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-dot-bg) 12%, transparent);
-  margin: 5px 0 0 4px;
+  margin: 4px 0 0 4px;
 }
 
 .project-activity-row.critical .company-action-dot {
@@ -9166,7 +9212,7 @@ margin-bottom: 12px;
   color: var(--ink-2);
   font-size: 0.78rem;
   line-height: 1.35;
-  margin: 4px 0 0;
+  margin: 3px 0 0;
 }
 
 .company-recent-activity-row small,
@@ -9175,7 +9221,7 @@ margin-bottom: 12px;
   display: block;
   font-size: 0.73rem;
   line-height: 1.35;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .company-project-section--wide {
@@ -10119,10 +10165,10 @@ body.modal-open {
 }
 
 .company-project-health-led::after {
-  animation: health-led-pulse 2.4s ease-out infinite;
   background: currentColor;
   border-radius: inherit;
   content: "";
+  display: none;
   inset: 0;
   opacity: 0.28;
   position: absolute;
@@ -10195,8 +10241,8 @@ body.modal-open {
 }
 
 .company-project-health-panel.matching .company-project-health-led {
-  background: var(--orange);
-  color: var(--orange);
+  background: #a1a1aa;
+  color: #a1a1aa;
 }
 
 .company-project-health-panel.atRisk .company-project-health-led {
@@ -10364,6 +10410,10 @@ body.modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .company-action-hero .company-action-dot {
+    animation: none;
+  }
+
   .company-project-health-led::after {
     animation: none;
   }
