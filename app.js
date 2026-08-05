@@ -10933,10 +10933,37 @@ function activitySectionForType(type) {
   return "overview";
 }
 
+function companyRecentActivityTone(item = {}) {
+  if (item.severity === "critical") return "critical";
+  if (item.severity === "warning") return "warning";
+  if (item.severity === "success") return "success";
+  if (
+    item.type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED &&
+    item.metadata?.healthLevel === "urgent"
+  ) return "critical";
+  if (
+    item.type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED &&
+    item.metadata?.healthLevel === "atRisk"
+  ) return "warning";
+  if (
+    [
+      PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED,
+      PROJECT_ACTIVITY_TYPES.ATTENDANCE_CONFIRMED,
+      PROJECT_ACTIVITY_TYPES.WORKER_SIGNED_IN,
+      PROJECT_ACTIVITY_TYPES.WORKER_ACCEPTED_OFFER,
+      PROJECT_ACTIVITY_TYPES.WORKER_ASSIGNED,
+      PROJECT_ACTIVITY_TYPES.REPLACEMENT_ASSIGNED,
+      PROJECT_ACTIVITY_TYPES.PROJECT_COMPLETED,
+    ].includes(item.type)
+  ) return "success";
+  return "neutral";
+}
+
 function companyRecentActivityRowHTML(item) {
   const job = findJob(item.projectId);
   const workerName = projectActivityWorkerName(item.workerId);
-  return `<button class="company-recent-activity-row ${escapeHtml(item.severity || "info")}" type="button" data-company-project-open-section="${escapeHtml(item.projectId)}" data-company-section-target="${escapeHtml(activitySectionForType(item.type))}">
+  const tone = companyRecentActivityTone(item);
+  return `<button class="company-recent-activity-row ${escapeHtml(tone)}" type="button" data-company-project-open-section="${escapeHtml(item.projectId)}" data-company-section-target="${escapeHtml(activitySectionForType(item.type))}">
     <span class="company-action-dot" aria-hidden="true"></span>
     <div>
       <strong>${escapeHtml(item.title || "Project activity")}</strong>
