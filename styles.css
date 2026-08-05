@@ -48,7 +48,7 @@
   --ui-color-neutral-soft: var(--surface-2);
 
   --health-urgent: #dc2626;
-  --health-urgent-hover: #b91c1c;
+  --health-urgent-dark: #b91c1c;
   --health-urgent-soft: #fef2f2;
   --health-urgent-border: #fecaca;
   --health-urgent-ring: rgba(220, 38, 38, 0.22);
@@ -994,7 +994,7 @@ button.is-loading,
 }
 
 @media (hover: hover) {
-  .jw-card:hover,
+  .jw-card:not(.company-dashboard-section-card):hover,
   .form-card:hover,
   .worker-flow-card:hover,
   .site-details-card:hover,
@@ -8676,14 +8676,6 @@ margin-bottom: 12px;
     box-shadow 200ms ease;
 }
 
-@media (hover: hover) {
-  .company-dashboard-body .company-dashboard-section-card:hover {
-    border-color: rgba(249, 115, 22, 0.6);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    transform: none;
-  }
-}
-
 .company-action-hero-clear {
   cursor: default;
 }
@@ -8814,17 +8806,46 @@ margin-bottom: 12px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
-  cursor: pointer;
   display: grid;
   gap: 14px;
   padding: 18px;
+  position: relative;
   text-align: left;
-  transition: color var(--motion-med) ease;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms ease;
 }
 
-.company-live-site-card:focus-visible {
+.company-live-site-card-open {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+  inset: -1px;
+  padding: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.company-live-site-card-open:focus-visible {
+  box-shadow: none;
   outline: 2px solid rgba(249, 115, 22, 0.42);
   outline-offset: 2px;
+}
+
+.company-live-site-card > :not(.company-live-site-card-open):not(.company-live-site-card-action) {
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .company-live-site-card:hover {
+    border-color: rgba(249, 115, 22, 0.65);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
+  }
 }
 
 .company-live-site-card-top {
@@ -8908,11 +8929,35 @@ margin-bottom: 12px;
 }
 
 .company-live-site-card-action {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   color: var(--orange);
+  cursor: pointer;
   font-size: 0.78rem;
   font-weight: 600;
+  justify-self: start;
   margin-top: 3px;
-  transition: color var(--motion-med) ease;
+  padding: 3px 0;
+  position: relative;
+  text-align: left;
+  transition: color 200ms ease, text-decoration-color 200ms ease;
+  z-index: 2;
+}
+
+.company-live-site-card-action:hover {
+  color: var(--orange-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.company-live-site-card-action:focus-visible {
+  border-radius: 4px;
+  box-shadow: none;
+  outline: 2px solid rgba(249, 115, 22, 0.45);
+  outline-offset: 3px;
 }
 
 .company-live-site-row {

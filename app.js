@@ -10757,7 +10757,8 @@ function companyLiveSiteStatusRowHTML(item) {
 }
 
 function companyLiveSiteStatusCardHTML(item) {
-  return `<button class="company-live-site-card ${escapeHtml(item.tone)}" type="button" ${item.action.attrs}>
+  return `<article class="company-live-site-card ${escapeHtml(item.tone)}">
+    <button class="company-live-site-card-open" type="button" data-company-project-open="${escapeHtml(item.job.id)}" aria-label="Open ${escapeHtml(companyProjectTitle(item.job))} project"></button>
     <span class="company-live-site-card-top">
       <span>
         <span class="company-home-kicker">PROJECT</span>
@@ -10776,8 +10777,8 @@ function companyLiveSiteStatusCardHTML(item) {
       <strong>${escapeHtml(item.stateLabel)}</strong>
       <small>${escapeHtml(item.stateCopy)}</small>
     </span>
-    <span class="company-live-site-card-action">${escapeHtml(item.action.label)} &rarr;</span>
-  </button>`;
+    <button class="company-live-site-card-action" type="button" ${item.action.attrs}>${escapeHtml(item.action.label)} &rarr;</button>
+  </article>`;
 }
 
 function companyLiveSiteMetricHTML(label, value, tone = "") {
