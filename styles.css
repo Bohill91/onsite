@@ -47,14 +47,32 @@
   --ui-color-neutral: var(--ink-2);
   --ui-color-neutral-soft: var(--surface-2);
 
-  --status-urgent: #ef4444;
-  --status-urgent-strong: #dc2626;
-  --status-urgent-soft: rgba(239, 68, 68, 0.1);
-  --status-at-risk: #f59e0b;
-  --status-at-risk-strong: #b45309;
-  --status-at-risk-soft: rgba(245, 158, 11, 0.12);
-  --status-healthy: var(--green);
-  --status-neutral: #a1a1aa;
+  --health-urgent: #ef4444;
+  --health-urgent-strong: #dc2626;
+  --health-urgent-soft: rgba(239, 68, 68, 0.1);
+  --health-urgent-hover: rgba(239, 68, 68, 0.055);
+  --health-at-risk: #f59e0b;
+  --health-at-risk-strong: #b45309;
+  --health-at-risk-soft: rgba(245, 158, 11, 0.12);
+  --health-at-risk-hover: rgba(245, 158, 11, 0.06);
+  --health-healthy: #22c55e;
+  --health-healthy-strong: #15803d;
+  --health-healthy-soft: rgba(34, 197, 94, 0.1);
+  --health-healthy-hover: rgba(34, 197, 94, 0.055);
+  --health-neutral: #9ca3af;
+  --health-neutral-strong: #6b7280;
+  --health-neutral-soft: rgba(156, 163, 175, 0.12);
+  --health-neutral-hover: rgba(156, 163, 175, 0.09);
+
+  /* Compatibility aliases for status treatments outside the Dashboard. */
+  --status-urgent: var(--health-urgent);
+  --status-urgent-strong: var(--health-urgent-strong);
+  --status-urgent-soft: var(--health-urgent-soft);
+  --status-at-risk: var(--health-at-risk);
+  --status-at-risk-strong: var(--health-at-risk-strong);
+  --status-at-risk-soft: var(--health-at-risk-soft);
+  --status-healthy: var(--health-healthy);
+  --status-neutral: var(--health-neutral);
 
   --radius: 12px;
   --radius-lg: 16px;
@@ -84,6 +102,7 @@
   --card-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.08);
   --card-hover-border: rgba(249, 115, 22, 0.45);
   --card-hover-shadow: 0 14px 34px rgba(15, 23, 42, 0.075);
+  --dashboard-section-hover-shadow: 0 14px 34px rgba(249, 115, 22, 0.08);
 
   --ui-font-xs: 12px;
   --ui-font-sm: 13px;
@@ -8446,6 +8465,10 @@ margin-bottom: 12px;
     transform var(--motion-med) ease;
 }
 
+.company-dashboard-hero .company-ops-summary {
+  gap: var(--space-3);
+}
+
 .company-ops-summary::after {
   display: none;
 }
@@ -8545,10 +8568,6 @@ margin-bottom: 12px;
   line-height: 1.32;
 }
 
-.company-briefing-metric.warn strong {
-  color: var(--orange);
-}
-
 .company-briefing-metric.is-clickable {
   cursor: pointer;
 }
@@ -8556,10 +8575,14 @@ margin-bottom: 12px;
 .company-briefing-metric.is-clickable:hover,
 .company-briefing-metric.is-clickable:focus-visible {
   background: #fff;
-  border-color: rgba(249, 115, 22, 0.22);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
-  outline: none;
-  transform: translateY(-2px);
+  border-color: rgba(226, 232, 240, 0.72);
+  box-shadow: none;
+  transform: none;
+}
+
+.company-briefing-metric.is-clickable:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.42);
+  outline-offset: 2px;
 }
 
 .company-briefing-metric.neutral strong,
@@ -8573,7 +8596,7 @@ margin-bottom: 12px;
   align-items: stretch;
   background: linear-gradient(180deg, #fffaf6 0%, #fff 100%);
   border-color: var(--card-divider);
-  --health-indicator-color: var(--status-neutral);
+  --health-indicator-color: var(--health-neutral);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
   display: grid;
   gap: var(--space-3);
@@ -8588,11 +8611,15 @@ margin-bottom: 12px;
     transform var(--motion-med) ease;
 }
 
+.company-dashboard-hero .company-action-hero {
+  gap: var(--space-1);
+  padding: 22px;
+}
+
 .company-action-hero::before {
   display: none;
 }
 
-.company-action-hero:hover,
 .company-action-hero:focus-visible {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 }
@@ -8607,23 +8634,36 @@ margin-bottom: 12px;
 }
 
 .company-action-hero.critical {
-  --health-indicator-color: var(--status-urgent);
-  border-color: color-mix(in srgb, var(--status-urgent) 20%, transparent);
+  --health-indicator-color: var(--health-urgent);
+  border-color: color-mix(in srgb, var(--health-urgent) 20%, transparent);
 }
 
 .company-action-hero.warning {
-  --health-indicator-color: var(--status-at-risk);
-  border-color: color-mix(in srgb, var(--status-at-risk) 20%, transparent);
+  --health-indicator-color: var(--health-at-risk);
+  border-color: color-mix(in srgb, var(--health-at-risk) 20%, transparent);
 }
 
 .company-action-hero.success {
-  --health-indicator-color: var(--status-healthy);
-  border-color: rgba(22, 163, 74, 0.18);
+  --health-indicator-color: var(--health-healthy);
+  border-color: color-mix(in srgb, var(--health-healthy) 18%, transparent);
 }
 
 .company-action-hero.info {
-  --health-indicator-color: var(--status-neutral);
+  --health-indicator-color: var(--health-neutral);
   border-color: var(--card-divider);
+}
+
+.company-dashboard-section-card {
+  transition:
+    border-color 200ms var(--motion-ease),
+    box-shadow 200ms var(--motion-ease);
+}
+
+@media (hover: hover) {
+  .company-dashboard-section-card:hover {
+    border-color: var(--card-hover-border);
+    box-shadow: var(--dashboard-section-hover-shadow);
+  }
 }
 
 .company-action-hero-clear {
@@ -8718,10 +8758,11 @@ margin-bottom: 12px;
   font-weight: 750;
 }
 
-.company-recent-activity-head .secondary-btn {
-  color: var(--ink-2);
+.company-recent-activity-head .company-recent-activity-view-all {
   font-size: 0.78rem;
-  font-weight: 750;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 11px;
 }
 
 .company-live-site-cards {
@@ -8739,18 +8780,12 @@ margin-bottom: 12px;
   gap: 14px;
   padding: 18px;
   text-align: left;
-  transition:
-    background-color var(--motion-med) ease,
-    border-color var(--motion-med) ease,
-    box-shadow var(--motion-med) ease,
-    transform var(--motion-med) ease;
+  transition: color var(--motion-med) ease;
 }
 
-.company-live-site-card:hover,
 .company-live-site-card:focus-visible {
-  border-color: rgba(249, 115, 22, 0.22);
-  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.085);
-  transform: translateY(-2px);
+  outline: 2px solid rgba(249, 115, 22, 0.42);
+  outline-offset: 2px;
 }
 
 .company-live-site-card-top {
@@ -8841,11 +8876,6 @@ margin-bottom: 12px;
   transition: color var(--motion-med) ease;
 }
 
-.company-live-site-card:hover .company-live-site-card-action,
-.company-live-site-card:focus-visible .company-live-site-card-action {
-  color: #ea580c;
-}
-
 .company-live-site-row {
   align-items: center;
   background: transparent;
@@ -8929,23 +8959,23 @@ margin-bottom: 12px;
 }
 
 .company-live-site-state.health-urgent {
-  background: var(--status-urgent-soft);
-  color: var(--status-urgent-strong);
+  background: var(--health-urgent-soft);
+  color: var(--health-urgent-strong);
 }
 
 .company-live-site-state.health-at-risk {
-  background: var(--status-at-risk-soft);
-  color: var(--status-at-risk-strong);
+  background: var(--health-at-risk-soft);
+  color: var(--health-at-risk-strong);
 }
 
 .company-live-site-state.health-healthy {
-  background: var(--ui-color-success-soft);
-  color: var(--green-text);
+  background: var(--health-healthy-soft);
+  color: var(--health-healthy-strong);
 }
 
 .company-live-site-state.health-neutral {
-  background: var(--ui-color-neutral-soft);
-  color: var(--ink-3);
+  background: var(--health-neutral-soft);
+  color: var(--health-neutral-strong);
 }
 
 .company-upcoming-panel {
@@ -8961,6 +8991,8 @@ margin-bottom: 12px;
 }
 
 .company-upcoming-card {
+  --health-indicator-color: var(--health-neutral);
+  --health-hover-bg: var(--health-neutral-hover);
   align-items: center;
   background: transparent;
   border: 0;
@@ -8974,7 +9006,7 @@ margin-bottom: 12px;
   text-align: left;
   transition:
     background-color var(--motion-med) ease,
-    transform var(--motion-med) ease;
+    box-shadow var(--motion-med) ease;
 }
 
 .company-upcoming-card::before {
@@ -8993,38 +9025,37 @@ margin-bottom: 12px;
 
 .company-upcoming-card:hover,
 .company-upcoming-card:focus-visible {
-  background: rgba(244, 244, 245, 0.62);
-  transform: translateX(2px);
+  background: var(--health-hover-bg);
+}
+
+.company-upcoming-card:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--health-indicator-color) 18%, transparent);
+  outline: none;
 }
 
 .company-upcoming-marker {
-  background: #a1a1aa;
+  background: var(--health-indicator-color);
   border: 0;
   border-radius: 999px;
-  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
-  height: 10px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--health-indicator-color) 12%, transparent);
+  height: 9px;
   margin: 0;
-  width: 10px;
+  width: 9px;
 }
 
-.company-upcoming-card.warning .company-upcoming-marker {
-  background: #f59e0b;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.16);
+.company-upcoming-card.warning {
+  --health-indicator-color: var(--health-at-risk);
+  --health-hover-bg: var(--health-at-risk-hover);
 }
 
-.company-upcoming-card.info .company-upcoming-marker {
-  background: #a1a1aa;
-  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
+.company-upcoming-card.success {
+  --health-indicator-color: var(--health-healthy);
+  --health-hover-bg: var(--health-healthy-hover);
 }
 
-.company-upcoming-card.success .company-upcoming-marker {
-  background: var(--green);
-  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
-}
-
-.company-upcoming-card.critical .company-upcoming-marker {
-  background: #ef4444;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
+.company-upcoming-card.critical {
+  --health-indicator-color: var(--health-urgent);
+  --health-hover-bg: var(--health-urgent-hover);
 }
 
 .company-upcoming-card-main small,
@@ -9055,11 +9086,6 @@ margin-bottom: 12px;
   transition: color var(--motion-med) ease;
 }
 
-.company-upcoming-card:hover .company-upcoming-card-action,
-.company-upcoming-card:focus-visible .company-upcoming-card-action {
-  color: #ea580c;
-}
-
 .company-recent-activity {
   display: grid;
   gap: var(--space-3);
@@ -9078,8 +9104,8 @@ margin-bottom: 12px;
   background: #fff;
   border: 0;
   border-radius: 12px;
-  --activity-accent: #a1a1aa;
-  --activity-dot-bg: #a1a1aa;
+  --activity-accent: var(--health-neutral);
+  --activity-dot-bg: var(--health-neutral);
   --health-indicator-color: var(--activity-dot-bg);
   --activity-hover-bg: rgba(244, 244, 245, 0.82);
   cursor: pointer;
@@ -9112,27 +9138,27 @@ margin-bottom: 12px;
 }
 
 .company-recent-activity-row.neutral {
-  --activity-accent: #a1a1aa;
-  --activity-dot-bg: #a1a1aa;
-  --activity-hover-bg: rgba(244, 244, 245, 0.52);
+  --activity-accent: var(--health-neutral);
+  --activity-dot-bg: var(--health-neutral);
+  --activity-hover-bg: var(--health-neutral-hover);
 }
 
 .company-recent-activity-row.success {
-  --activity-accent: var(--green);
-  --activity-dot-bg: var(--green);
-  --activity-hover-bg: rgba(240, 253, 244, 0.52);
+  --activity-accent: var(--health-healthy);
+  --activity-dot-bg: var(--health-healthy);
+  --activity-hover-bg: var(--health-healthy-hover);
 }
 
 .company-recent-activity-row.warning {
-  --activity-accent: var(--status-at-risk);
-  --activity-dot-bg: var(--status-at-risk);
-  --activity-hover-bg: rgba(255, 251, 235, 0.6);
+  --activity-accent: var(--health-at-risk);
+  --activity-dot-bg: var(--health-at-risk);
+  --activity-hover-bg: var(--health-at-risk-hover);
 }
 
 .company-recent-activity-row.critical {
-  --activity-accent: var(--status-urgent);
-  --activity-dot-bg: var(--status-urgent);
-  --activity-hover-bg: rgba(239, 68, 68, 0.06);
+  --activity-accent: var(--health-urgent);
+  --activity-dot-bg: var(--health-urgent);
+  --activity-hover-bg: var(--health-urgent-hover);
 }
 
 .company-upcoming-row {
@@ -9235,19 +9261,25 @@ margin-bottom: 12px;
 }
 
 :is(
-  .company-action-hero:not(.company-action-hero-clear),
+  .company-action-hero.warning,
+  .company-action-hero.critical,
   .company-recent-activity-row.warning,
-  .company-recent-activity-row.critical
-) .company-action-dot {
+  .company-recent-activity-row.critical,
+  .company-upcoming-card.warning,
+  .company-upcoming-card.critical
+) :is(.company-action-dot, .company-upcoming-marker) {
   box-shadow: none;
   position: relative;
 }
 
 :is(
-  .company-action-hero:not(.company-action-hero-clear),
+  .company-action-hero.warning,
+  .company-action-hero.critical,
   .company-recent-activity-row.warning,
-  .company-recent-activity-row.critical
-) .company-action-dot::after {
+  .company-recent-activity-row.critical,
+  .company-upcoming-card.warning,
+  .company-upcoming-card.critical
+) :is(.company-action-dot, .company-upcoming-marker)::after {
   animation: dashboard-health-pulse 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   border: 2px solid var(--health-indicator-color);
   border-radius: inherit;
@@ -10503,10 +10535,13 @@ body.modal-open {
 
 @media (prefers-reduced-motion: reduce) {
   :is(
-    .company-action-hero,
+    .company-action-hero.warning,
+    .company-action-hero.critical,
     .company-recent-activity-row.warning,
-    .company-recent-activity-row.critical
-  ) .company-action-dot::after {
+    .company-recent-activity-row.critical,
+    .company-upcoming-card.warning,
+    .company-upcoming-card.critical
+  ) :is(.company-action-dot, .company-upcoming-marker)::after {
     animation: none;
   }
 
@@ -14498,17 +14533,8 @@ button svg,
 }
 
 /* ─── Shared Content Card Interaction ──────────────────── */
-.company-dashboard-hero .company-ops-summary {
-  gap: var(--space-3);
-}
-
-.company-dashboard-hero .company-action-hero {
-  gap: var(--space-1);
-  padding: 22px;
-}
-
+#formJob .jw-card,
 :is(
-  .jw-card:not(.company-recent-activity),
   .form-card,
   .company-project-card,
   .attendance-project-card,
@@ -14538,8 +14564,8 @@ button svg,
 }
 
 @media (hover: hover) {
+  #formJob .jw-card:hover,
   :is(
-    .jw-card:not(.company-recent-activity),
     .form-card,
     .company-project-card,
     .attendance-project-card,

@@ -10529,7 +10529,7 @@ function companyDailyBriefingHTML(summary, user) {
   const briefing = companyDailyBriefingModel(summary, user);
   return `<section class="company-dashboard-command">
     <div class="company-dashboard-hero">
-      <article class="company-ops-summary jw-card">
+      <article class="company-ops-summary company-dashboard-section-card jw-card">
         <div class="company-ops-summary-head">
           <div>
             <p class="company-home-kicker">TODAY'S OPERATIONAL SUMMARY</p>
@@ -10544,7 +10544,7 @@ function companyDailyBriefingHTML(summary, user) {
       </article>
       ${companyDashboardActionHeroHTML(briefing.action)}
     </div>
-    <section class="company-command-section company-live-sites-panel jw-card">
+    <section class="company-command-section company-live-sites-panel company-dashboard-section-card jw-card">
       <div class="company-command-section-head">
         <div>
           <p class="company-home-kicker">LIVE SITES</p>
@@ -10558,7 +10558,7 @@ function companyDailyBriefingHTML(summary, user) {
             <span>When a scheduled project has workers due on site, the live sign-in position will appear here.</span>
           </div>`}
     </section>
-    <section class="company-command-section company-upcoming-panel jw-card">
+    <section class="company-command-section company-upcoming-panel company-dashboard-section-card jw-card">
       <div class="company-command-section-head">
         <div>
           <p class="company-home-kicker">UPCOMING SITES</p>
@@ -10577,7 +10577,7 @@ function companyDailyBriefingHTML(summary, user) {
 
 function companyDashboardActionHeroHTML(action) {
   if (!action) {
-    return `<article class="company-action-hero company-action-hero-clear jw-card">
+    return `<article class="company-action-hero company-action-hero-clear company-dashboard-section-card jw-card">
       <div>
         <p class="company-home-kicker">ACTION REQUIRED</p>
         <h3>No immediate action</h3>
@@ -10586,7 +10586,7 @@ function companyDashboardActionHeroHTML(action) {
       <span class="company-action-hero-cta">Stay ready</span>
     </article>`;
   }
-  return `<article class="company-action-hero ${escapeHtml(action.tone)} jw-card">
+  return `<article class="company-action-hero ${escapeHtml(action.tone)} company-dashboard-section-card jw-card">
     <span class="company-action-dot" aria-hidden="true"></span>
     <span class="company-action-hero-content">
       <span class="company-home-kicker">ACTION REQUIRED</span>
@@ -10787,15 +10787,26 @@ function companyLiveSiteMetricHTML(label, value, tone = "") {
   </span>`;
 }
 
+function companyDashboardHealthTone(health = {}) {
+  if (health.level === "urgent") return "critical";
+  if (health.level === "atRisk") return "warning";
+  if (health.level === "filled") return "success";
+  return "neutral";
+}
+
 function companyDashboardUpcomingItems(summary) {
   const items = [];
+  const summariesByProjectId = new Map(
+    (summary.summaries || []).map((projectSummary) => [projectSummary.job?.id, projectSummary]),
+  );
   (summary.summaries || []).forEach((projectSummary) => {
     const job = projectSummary.job;
     const days = projectStartDays(job);
+    const healthTone = companyDashboardHealthTone(calculateProjectHealth(job, projectSummary));
     if (days !== null && days >= 0 && days <= 7) {
       items.push({
         key: `start:${job.id}`,
-        tone: projectSummary.openRoles ? "warning" : "info",
+        tone: healthTone,
         timing: startTimingLabel(days),
         projectTitle: companyProjectTitle(job),
         jobNumber: job.jobNumber || "",
@@ -10813,7 +10824,7 @@ function companyDashboardUpcomingItems(summary) {
     if (projectSummary.pendingOffers.length) {
       items.push({
         key: `offers:${job.id}`,
-        tone: "info",
+        tone: healthTone,
         timing: "Awaiting response",
         projectTitle: companyProjectTitle(job),
         jobNumber: job.jobNumber || "",
@@ -10829,7 +10840,7 @@ function companyDashboardUpcomingItems(summary) {
     if (projectSummary.reviewWorkers.length) {
       items.push({
         key: `review:${job.id}`,
-        tone: "warning",
+        tone: healthTone,
         timing: "Company decision",
         projectTitle: companyProjectTitle(job),
         jobNumber: job.jobNumber || "",
@@ -10844,9 +10855,10 @@ function companyDashboardUpcomingItems(summary) {
     }
   });
   (summary.upcomingLabourChanges || []).slice(0, 4).forEach((item) => {
+    const projectSummary = summariesByProjectId.get(item.job.id);
     items.push({
       key: `labour:${item.job.id}:${item.change.id || item.change.startDate}`,
-      tone: Number(item.delta) > 0 ? "warning" : "info",
+      tone: companyDashboardHealthTone(calculateProjectHealth(item.job, projectSummary)),
       timing: `Changes ${relativeProjectDayLabel(item.daysUntil ?? 0)}`,
       projectTitle: companyProjectTitle(item.job),
       jobNumber: item.job.jobNumber || "",
@@ -10939,12 +10951,12 @@ function companyDashboardFocusHTML(summary, user) {
 
 function companyRecentActivityHTML(summary, user) {
   const rows = companyRecentActivityItems(user, summary).slice(0, 5);
-  return `<section class="company-recent-activity jw-card">
+  return `<section class="company-recent-activity company-dashboard-section-card jw-card">
     <div class="company-recent-activity-head">
       <div>
         <p class="company-home-kicker">RECENT ACTIVITY</p>
       </div>
-      <button class="secondary-btn company-action-btn" type="button" data-empty-tab="notifications">View All</button>
+      <button class="primary-btn company-action-btn company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity</button>
     </div>
     <div class="company-recent-activity-list">
       ${rows.length
