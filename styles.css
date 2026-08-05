@@ -47,6 +47,15 @@
   --ui-color-neutral: var(--ink-2);
   --ui-color-neutral-soft: var(--surface-2);
 
+  --status-urgent: #ef4444;
+  --status-urgent-strong: #dc2626;
+  --status-urgent-soft: rgba(239, 68, 68, 0.1);
+  --status-at-risk: #f59e0b;
+  --status-at-risk-strong: #b45309;
+  --status-at-risk-soft: rgba(245, 158, 11, 0.12);
+  --status-healthy: var(--green);
+  --status-neutral: #a1a1aa;
+
   --radius: 12px;
   --radius-lg: 16px;
   --radius-md: 12px;
@@ -8564,7 +8573,7 @@ margin-bottom: 12px;
   align-items: stretch;
   background: linear-gradient(180deg, #fffaf6 0%, #fff 100%);
   border-color: var(--card-divider);
-  --action-accent: #a1a1aa;
+  --health-indicator-color: var(--status-neutral);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
   display: grid;
   gap: var(--space-3);
@@ -8589,46 +8598,31 @@ margin-bottom: 12px;
 }
 
 .company-action-hero .company-action-dot {
-  background: #a1a1aa;
-  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
+  background: var(--health-indicator-color);
+  box-shadow: none;
   height: 10px;
   margin-top: 4px;
   position: relative;
   width: 10px;
 }
 
-.company-action-hero:not(.company-action-hero-clear) .company-action-dot {
-  background: #ef4444;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
-}
-
-.company-action-hero:not(.company-action-hero-clear) .company-action-dot::after {
-  animation: dashboard-health-breathe 3.7s ease-in-out infinite;
-  background: rgba(239, 68, 68, 0.18);
-  border-radius: inherit;
-  content: "";
-  inset: -4px;
-  position: absolute;
-  transform-origin: center;
-}
-
 .company-action-hero.critical {
-  --action-accent: #ef4444;
-  border-color: rgba(239, 68, 68, 0.2);
+  --health-indicator-color: var(--status-urgent);
+  border-color: color-mix(in srgb, var(--status-urgent) 20%, transparent);
 }
 
 .company-action-hero.warning {
-  --action-accent: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.2);
+  --health-indicator-color: var(--status-at-risk);
+  border-color: color-mix(in srgb, var(--status-at-risk) 20%, transparent);
 }
 
 .company-action-hero.success {
-  --action-accent: var(--green);
+  --health-indicator-color: var(--status-healthy);
   border-color: rgba(22, 163, 74, 0.18);
 }
 
 .company-action-hero.info {
-  --action-accent: #a1a1aa;
+  --health-indicator-color: var(--status-neutral);
   border-color: var(--card-divider);
 }
 
@@ -8690,19 +8684,6 @@ margin-bottom: 12px;
 .company-action-hero-cta:focus-visible {
   box-shadow: 0 14px 28px rgba(249, 115, 22, 0.24);
   transform: translateY(-1px);
-}
-
-@keyframes dashboard-health-breathe {
-  0%,
-  100% {
-    opacity: 0.2;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.08;
-    transform: scale(1.08);
-  }
 }
 
 .company-action-hero-clear .company-action-hero-cta {
@@ -8948,13 +8929,13 @@ margin-bottom: 12px;
 }
 
 .company-live-site-state.health-urgent {
-  background: var(--ui-color-danger-soft);
-  color: var(--red-text);
+  background: var(--status-urgent-soft);
+  color: var(--status-urgent-strong);
 }
 
 .company-live-site-state.health-at-risk {
-  background: var(--ui-color-warning-soft);
-  color: var(--amber-text);
+  background: var(--status-at-risk-soft);
+  color: var(--status-at-risk-strong);
 }
 
 .company-live-site-state.health-healthy {
@@ -9099,6 +9080,7 @@ margin-bottom: 12px;
   border-radius: 12px;
   --activity-accent: #a1a1aa;
   --activity-dot-bg: #a1a1aa;
+  --health-indicator-color: var(--activity-dot-bg);
   --activity-hover-bg: rgba(244, 244, 245, 0.82);
   cursor: pointer;
   display: grid;
@@ -9142,15 +9124,15 @@ margin-bottom: 12px;
 }
 
 .company-recent-activity-row.warning {
-  --activity-accent: #f59e0b;
-  --activity-dot-bg: #f59e0b;
+  --activity-accent: var(--status-at-risk);
+  --activity-dot-bg: var(--status-at-risk);
   --activity-hover-bg: rgba(255, 251, 235, 0.6);
 }
 
 .company-recent-activity-row.critical {
-  --activity-accent: #ef4444;
-  --activity-dot-bg: #ef4444;
-  --activity-hover-bg: rgba(254, 242, 242, 0.58);
+  --activity-accent: var(--status-urgent);
+  --activity-dot-bg: var(--status-urgent);
+  --activity-hover-bg: rgba(239, 68, 68, 0.06);
 }
 
 .company-upcoming-row {
@@ -9250,6 +9232,44 @@ margin-bottom: 12px;
   background: var(--activity-dot-bg);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-dot-bg) 12%, transparent);
   margin: 4px 0 0 4px;
+}
+
+:is(
+  .company-action-hero:not(.company-action-hero-clear),
+  .company-recent-activity-row.warning,
+  .company-recent-activity-row.critical
+) .company-action-dot {
+  box-shadow: none;
+  position: relative;
+}
+
+:is(
+  .company-action-hero:not(.company-action-hero-clear),
+  .company-recent-activity-row.warning,
+  .company-recent-activity-row.critical
+) .company-action-dot::after {
+  animation: dashboard-health-pulse 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  border: 2px solid var(--health-indicator-color);
+  border-radius: inherit;
+  content: "";
+  inset: -3px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform-origin: center;
+}
+
+@keyframes dashboard-health-pulse {
+  0% {
+    opacity: 0.46;
+    transform: scale(0.82);
+  }
+
+  68%,
+  100% {
+    opacity: 0;
+    transform: scale(2.05);
+  }
 }
 
 .project-activity-row.critical .company-action-dot {
@@ -10482,7 +10502,11 @@ body.modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .company-action-hero .company-action-dot::after {
+  :is(
+    .company-action-hero,
+    .company-recent-activity-row.warning,
+    .company-recent-activity-row.critical
+  ) .company-action-dot::after {
     animation: none;
   }
 
@@ -14476,6 +14500,11 @@ button svg,
 /* ─── Shared Content Card Interaction ──────────────────── */
 .company-dashboard-hero .company-ops-summary {
   gap: var(--space-3);
+}
+
+.company-dashboard-hero .company-action-hero {
+  gap: var(--space-1);
+  padding: 22px;
 }
 
 :is(
