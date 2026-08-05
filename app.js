@@ -10527,83 +10527,84 @@ function firstNameForUser(user) {
 
 function companyDailyBriefingHTML(summary, user) {
   const briefing = companyDailyBriefingModel(summary, user);
-  return `<section class="company-daily-briefing jw-card">
-    <div class="company-briefing-head">
-      <div>
-        <p class="company-home-kicker">DAILY BRIEFING</p>
-        <h3>Good ${escapeHtml(briefing.dayPart)}${briefing.firstName ? `, ${escapeHtml(briefing.firstName)}` : ""}</h3>
-        <p>Today</p>
-      </div>
+  return `<section class="company-dashboard-command">
+    <div class="company-dashboard-hero">
+      <article class="company-ops-summary jw-card">
+        <div class="company-ops-summary-head">
+          <div>
+            <p class="company-home-kicker">TODAY'S OPERATIONAL SUMMARY</p>
+            <h3>${escapeHtml(briefing.summaryTitle)}</h3>
+            <p>${escapeHtml(briefing.summaryCopy)}</p>
+          </div>
+          <span class="company-ops-day">${escapeHtml(formatCurrentDatePill())}</span>
+        </div>
+        <div class="company-briefing-metrics">
+          ${briefing.metrics
+            .map(
+              (item) => `<div class="company-briefing-metric ${item.tone}">
+                <strong>${item.value}</strong>
+                <span>${escapeHtml(item.label)}</span>
+              </div>`,
+            )
+            .join("")}
+        </div>
+      </article>
+      ${companyDashboardActionHeroHTML(briefing.action)}
     </div>
-    <div class="company-briefing-section">
-      <div class="company-briefing-metrics">
-        ${briefing.metrics
-          .map(
-            (item) => `<div class="company-briefing-metric ${item.tone}">
-              <strong>${item.value}</strong>
-              <span>${escapeHtml(item.label)}</span>
-            </div>`,
-          )
-          .join("")}
-      </div>
-    </div>
-    <div class="company-briefing-section">
-      <div class="company-live-site-head">
-        <span class="company-home-kicker">ACTION REQUIRED</span>
-        <small>${briefing.action ? "Highest priority" : "Clear"}</small>
-      </div>
-      ${briefing.action
-        ? `<article class="company-briefing-recommendation ${escapeHtml(briefing.action.tone)}">
-            <span class="company-action-dot" aria-hidden="true"></span>
-            <div>
-              <strong>${escapeHtml(briefing.action.title)}</strong>
-              <p>${escapeHtml(briefing.action.body)}</p>
-              ${briefing.action.meta ? `<small>${escapeHtml(briefing.action.meta)}</small>` : ""}
-            </div>
-            <button class="primary-btn" type="button" ${briefing.action.actionAttr}>${escapeHtml(briefing.action.actionLabel)}</button>
-          </article>`
-        : `<div class="company-briefing-clear">
-            <strong>No immediate actions showing</strong>
-            <span>Attendance, labour demand and upcoming starts are currently in order.</span>
-          </div>`}
-    </div>
-    <div class="company-live-site-status company-briefing-section">
-      <div class="company-live-site-head">
-        <span class="company-home-kicker">LIVE SITES TODAY</span>
+    <section class="company-command-section company-live-sites-panel jw-card">
+      <div class="company-command-section-head">
+        <div>
+          <p class="company-home-kicker">LIVE SITES TODAY</p>
+          <h3>What is happening on site</h3>
+        </div>
         <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
       </div>
-      <div class="company-live-site-table">
-        ${briefing.siteRows.length
-          ? `<div class="company-live-site-row company-live-site-row-head" aria-hidden="true">
-              <span>Project</span>
-              <span>Expected</span>
-              <span>Signed in</span>
-              <span>Late</span>
-              <span>Unconfirmed</span>
-              <span>Status</span>
-            </div>
-            ${briefing.siteRows.map(companyLiveSiteStatusRowHTML).join("")}`
-          : `<div class="company-dashboard-inline-empty">
-              <strong>No attendance expected yet</strong>
-              <span>Projects with workers expected today will appear here.</span>
-            </div>`}
-      </div>
-    </div>
-    <div class="company-briefing-section company-upcoming-briefing">
-      <div class="company-live-site-head">
-        <span class="company-home-kicker">UPCOMING</span>
+      ${briefing.siteRows.length
+        ? `<div class="company-live-site-cards">${briefing.siteRows.map(companyLiveSiteStatusCardHTML).join("")}</div>`
+        : `<div class="company-dashboard-empty-state">
+            <strong>No attendance expected yet</strong>
+            <span>When a scheduled project has workers due on site, the live sign-in position will appear here.</span>
+          </div>`}
+    </section>
+    <section class="company-command-section company-upcoming-panel jw-card">
+      <div class="company-command-section-head">
+        <div>
+          <p class="company-home-kicker">UPCOMING</p>
+          <h3>What is coming up</h3>
+        </div>
         <small>Next 7 days</small>
       </div>
-      <div class="company-upcoming-list">
-        ${briefing.upcoming.length
-          ? briefing.upcoming.map(companyDashboardUpcomingRowHTML).join("")
-          : `<div class="company-dashboard-inline-empty compact">
-              <strong>No upcoming actions in the next week</strong>
-              <span>Starts, labour changes and pending decisions will appear here when they need attention.</span>
-            </div>`}
-      </div>
-    </div>
+      ${briefing.upcoming.length
+        ? `<div class="company-upcoming-timeline">${briefing.upcoming.map(companyDashboardUpcomingCardHTML).join("")}</div>`
+        : `<div class="company-dashboard-empty-state compact">
+            <strong>No upcoming actions in the next week</strong>
+            <span>Starts, labour changes and pending decisions will appear here when they need attention.</span>
+          </div>`}
+    </section>
   </section>`;
+}
+
+function companyDashboardActionHeroHTML(action) {
+  if (!action) {
+    return `<article class="company-action-hero company-action-hero-clear jw-card">
+      <div>
+        <p class="company-home-kicker">ACTION REQUIRED</p>
+        <h3>No immediate action</h3>
+        <p>Attendance, labour demand and upcoming starts are currently in order.</p>
+      </div>
+      <span class="company-action-hero-cta">Stay ready</span>
+    </article>`;
+  }
+  return `<button class="company-action-hero ${escapeHtml(action.tone)} jw-card" type="button" ${action.actionAttr}>
+    <span class="company-action-dot" aria-hidden="true"></span>
+    <span class="company-action-hero-content">
+      <span class="company-home-kicker">ACTION REQUIRED</span>
+      <strong>${escapeHtml(action.title)}</strong>
+      <span>${escapeHtml(action.body)}</span>
+      ${action.meta ? `<small>${escapeHtml(action.meta)}</small>` : ""}
+    </span>
+    <span class="company-action-hero-cta">${escapeHtml(action.actionLabel)} &rarr;</span>
+  </button>`;
 }
 
 function companyDailyBriefingModel(summary, user) {
@@ -10617,9 +10618,22 @@ function companyDailyBriefingModel(summary, user) {
   ];
   const focus = companyDashboardFocusModel(summary, user);
   const primaryAction = briefingRecommendedAction(summary, focus);
+  const open = Number(summary.openRequirements || 0);
+  const scheduledCount = scheduledToday.length;
+  const firstName = firstNameForUser(user);
   return {
     dayPart: dashboardGreetingPart(),
-    firstName: firstNameForUser(user),
+    firstName,
+    summaryTitle: scheduledCount
+      ? `${scheduledCount} project${scheduledCount === 1 ? "" : "s"} scheduled today`
+      : open
+        ? `${open} open labour place${open === 1 ? "" : "s"} to resolve`
+        : `Good ${dashboardGreetingPart()}${firstName ? `, ${firstName}` : ""}`,
+    summaryCopy: workersExpectedToday
+      ? `${workersExpectedToday} worker${workersExpectedToday === 1 ? "" : "s"} expected across today's live sites.`
+      : open
+        ? "Start by reviewing the open labour requirements most likely to affect delivery."
+        : "No live site attendance is currently due today.",
     metrics,
     action: primaryAction,
     siteRows: scheduledToday
@@ -10701,6 +10715,32 @@ function companyLiveSiteStatusRowHTML(item) {
     <span data-label="Unconfirmed"><strong>${item.unconfirmed}</strong></span>
     <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
   </button>`;
+}
+
+function companyLiveSiteStatusCardHTML(item) {
+  return `<button class="company-live-site-card ${escapeHtml(item.tone)}" type="button" data-dashboard-attendance-project="${escapeHtml(item.job.id)}">
+    <span class="company-live-site-card-top">
+      <span>
+        <span class="company-home-kicker">PROJECT</span>
+        <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
+        <small>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</small>
+      </span>
+      <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
+    </span>
+    <span class="company-live-site-card-metrics">
+      ${companyLiveSiteMetricHTML("Expected", item.expected)}
+      ${companyLiveSiteMetricHTML("Signed in", item.signedIn)}
+      ${companyLiveSiteMetricHTML("Late", item.late, item.late ? "warn" : "")}
+      ${companyLiveSiteMetricHTML("Unconfirmed", item.unconfirmed, item.unconfirmed ? "warn" : "")}
+    </span>
+  </button>`;
+}
+
+function companyLiveSiteMetricHTML(label, value, tone = "") {
+  return `<span class="company-live-site-metric ${escapeHtml(tone)}">
+    <strong>${value}</strong>
+    <small>${escapeHtml(label)}</small>
+  </span>`;
 }
 
 function companyDashboardUpcomingItems(summary) {
@@ -10790,6 +10830,18 @@ function companyDashboardUpcomingRowHTML(item) {
       <small>${escapeHtml(item.meta || "")}</small>
       <strong>${escapeHtml(item.actionLabel || "Open")}</strong>
     </span>
+  </button>`;
+}
+
+function companyDashboardUpcomingCardHTML(item) {
+  return `<button class="company-upcoming-card ${escapeHtml(item.tone || "info")}" type="button" ${item.actionAttr}>
+    <span class="company-upcoming-marker" aria-hidden="true"></span>
+    <span class="company-upcoming-card-main">
+      <small>${escapeHtml(item.meta || "Project")}</small>
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(item.body || "")}</span>
+    </span>
+    <span class="company-upcoming-card-action">${escapeHtml(item.actionLabel || "Open")} &rarr;</span>
   </button>`;
 }
 
