@@ -2836,7 +2836,15 @@ function companyPageHeaderHTML({
   title = "",
   subtitle = "",
   actions = "",
+  compact = false,
 } = {}) {
+  if (compact) {
+    return `<header class="company-page-head company-page-head--compact">
+      ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
+      <span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>
+      ${actions}
+    </header>`;
+  }
   const ui = window.OnSiteUI;
   if (ui?.pageHeader) {
     return ui
@@ -2879,9 +2887,10 @@ function companyPageShellHTML({
   actions = "",
   className = "",
   bodyClass = "",
+  compactHeader = false,
 } = {}) {
   return `<section class="request-labour-page os-page-content company-saas-page ${escapeHtml(className)}">
-    ${companyPageHeaderHTML({ kicker, title, subtitle, actions })}
+    ${companyPageHeaderHTML({ kicker, title, subtitle, actions, compact: compactHeader })}
     <div class="request-labour-page-body os-card company-saas-body ${escapeHtml(bodyClass)}">
       ${body}
     </div>
@@ -12799,9 +12808,9 @@ function renderContractorHome(user) {
   el.innerHTML = companyPageShellHTML({
     kicker: "DASHBOARD",
     title: "Dashboard",
-    subtitle: "Monitor your live projects, staffing and attendance.",
     className: "company-dashboard-shell",
     bodyClass: "company-dashboard-body",
+    compactHeader: true,
     body: `
         <div class="jw-form">
           ${companyDashboardFocusHTML(summary, user)}

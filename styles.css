@@ -47,11 +47,10 @@
   --ui-color-neutral: var(--ink-2);
   --ui-color-neutral-soft: var(--surface-2);
 
-  --health-urgent: #dc2626;
-  --health-urgent-dark: #b91c1c;
-  --health-urgent-soft: #fef2f2;
-  --health-urgent-border: #fecaca;
-  --health-urgent-ring: rgba(220, 38, 38, 0.22);
+  --health-urgent: #e00000;
+  --health-urgent-soft: #fff1f1;
+  --health-urgent-border: #ffc7c7;
+  --health-urgent-ring: rgba(224, 0, 0, 0.2);
   --health-at-risk: #d97706;
   --health-at-risk-soft: #fffbeb;
   --health-at-risk-ring: rgba(217, 119, 6, 0.22);
@@ -8443,7 +8442,35 @@ margin-bottom: 12px;
 }
 
 .request-labour-page.company-dashboard-shell {
-  gap: 20px;
+  gap: 24px;
+}
+
+.company-dashboard-shell > .company-page-head.company-page-head--compact {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+  padding: 10px 0 0;
+}
+
+.company-dashboard-shell > .company-page-head--compact h1 {
+  color: var(--ink);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.company-dashboard-shell > .company-page-head--compact .att-today-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .request-labour-page-body.company-dashboard-body {
