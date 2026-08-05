@@ -10956,7 +10956,7 @@ function companyRecentActivityHTML(summary, user) {
       <div>
         <p class="company-home-kicker">RECENT ACTIVITY</p>
       </div>
-      <button class="primary-btn company-action-btn company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity</button>
+      <button class="company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity &rarr;</button>
     </div>
     <div class="company-recent-activity-list">
       ${rows.length

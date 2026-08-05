@@ -47,19 +47,18 @@
   --ui-color-neutral: var(--ink-2);
   --ui-color-neutral-soft: var(--surface-2);
 
-  --health-urgent: #ef4444;
-  --health-urgent-dark: #dc2626;
-  --health-urgent-soft: rgba(239, 68, 68, 0.1);
-  --health-urgent-hover: rgba(239, 68, 68, 0.055);
-  --health-at-risk: #f59e0b;
-  --health-at-risk-soft: rgba(245, 158, 11, 0.12);
-  --health-at-risk-hover: rgba(245, 158, 11, 0.06);
-  --health-healthy: #22c55e;
-  --health-healthy-soft: rgba(34, 197, 94, 0.1);
-  --health-healthy-hover: rgba(34, 197, 94, 0.055);
+  --health-urgent: #dc2626;
+  --health-urgent-hover: #b91c1c;
+  --health-urgent-soft: #fef2f2;
+  --health-urgent-border: #fecaca;
+  --health-urgent-ring: rgba(220, 38, 38, 0.22);
+  --health-at-risk: #d97706;
+  --health-at-risk-soft: #fffbeb;
+  --health-at-risk-ring: rgba(217, 119, 6, 0.22);
+  --health-healthy: #16a34a;
+  --health-healthy-soft: #f0fdf4;
   --health-neutral: #9ca3af;
-  --health-neutral-soft: rgba(156, 163, 175, 0.12);
-  --health-neutral-hover: rgba(156, 163, 175, 0.09);
+  --health-neutral-soft: #f9fafb;
 
   /* Compatibility aliases for status treatments outside the Dashboard. */
   --status-urgent: var(--health-urgent);
@@ -8440,13 +8439,29 @@ margin-bottom: 12px;
 
 .company-dashboard-command {
   display: grid;
-  gap: var(--space-section);
+  gap: 20px;
+}
+
+.request-labour-page.company-dashboard-shell {
+  gap: 20px;
+}
+
+.request-labour-page-body.company-dashboard-body {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.company-saas-body.company-dashboard-body .jw-form {
+  gap: 20px;
 }
 
 .company-dashboard-hero {
   align-items: stretch;
   display: grid;
-  gap: var(--space-section);
+  gap: 20px;
   grid-template-columns: minmax(0, 1.32fr) minmax(300px, 0.68fr);
 }
 
@@ -8466,7 +8481,8 @@ margin-bottom: 12px;
 .company-dashboard-hero .company-ops-summary {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 26px;
+  padding: 26px;
 }
 
 .company-ops-summary::after {
@@ -8487,7 +8503,7 @@ margin-bottom: 12px;
 .company-recent-activity-head h3 {
   color: var(--ink);
   font-size: 1.3rem;
-  font-weight: 850;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin-top: 3px;
@@ -8496,9 +8512,9 @@ margin-bottom: 12px;
 .company-ops-summary-head p:not(.company-home-kicker) {
   color: var(--ink-2);
   font-size: 0.88rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.35;
-  margin-top: var(--space-2);
+  margin-top: 14px;
 }
 
 .company-ops-day {
@@ -8538,14 +8554,14 @@ margin-bottom: 12px;
   -webkit-appearance: none;
   appearance: none;
   background: #fafafa;
-  border: 1px solid rgba(226, 232, 240, 0.58);
-  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
   display: grid;
   align-content: center;
   gap: 10px;
   justify-items: start;
   min-width: 0;
-  min-height: 118px;
+  min-height: 116px;
   padding: 16px;
   text-align: left;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
@@ -8558,8 +8574,8 @@ margin-bottom: 12px;
 
 .company-briefing-metric strong {
   color: var(--ink);
-  font-size: clamp(2.375rem, 3vw, 2.625rem);
-  font-weight: 850;
+  font-size: 2.625rem;
+  font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1;
 }
@@ -8567,9 +8583,9 @@ margin-bottom: 12px;
 .company-briefing-metric span {
   align-self: auto;
   color: var(--ink-3);
-  font-size: 0.76rem;
-  font-weight: 750;
-  line-height: 1.32;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .company-briefing-metric.is-clickable {
@@ -8590,7 +8606,7 @@ margin-bottom: 12px;
 .company-action-hero {
   align-self: stretch;
   align-items: stretch;
-  background: linear-gradient(180deg, #fffaf6 0%, #fff 100%);
+  background: #fff;
   border-color: var(--card-divider);
   --health-indicator-color: var(--health-neutral);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
@@ -8632,17 +8648,16 @@ margin-bottom: 12px;
 
 .company-action-hero.critical {
   --health-indicator-color: var(--health-urgent);
-  border-color: color-mix(in srgb, var(--health-urgent) 20%, transparent);
+  --health-indicator-ring: var(--health-urgent-ring);
 }
 
 .company-action-hero.warning {
   --health-indicator-color: var(--health-at-risk);
-  border-color: color-mix(in srgb, var(--health-at-risk) 20%, transparent);
+  --health-indicator-ring: var(--health-at-risk-ring);
 }
 
 .company-action-hero.success {
   --health-indicator-color: var(--health-healthy);
-  border-color: color-mix(in srgb, var(--health-healthy) 18%, transparent);
 }
 
 .company-action-hero.info {
@@ -8650,16 +8665,22 @@ margin-bottom: 12px;
   border-color: var(--card-divider);
 }
 
-.company-dashboard-section-card {
+.company-dashboard-body .company-dashboard-section-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  padding: 26px;
   transition:
-    border-color 200ms var(--motion-ease),
-    box-shadow 200ms var(--motion-ease);
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 @media (hover: hover) {
-  .company-dashboard-section-card:hover {
-    border-color: var(--orange);
-    box-shadow: var(--dashboard-section-hover-shadow);
+  .company-dashboard-body .company-dashboard-section-card:hover {
+    border-color: rgba(249, 115, 22, 0.6);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    transform: none;
   }
 }
 
@@ -8681,7 +8702,7 @@ margin-bottom: 12px;
   color: var(--ink);
   display: block;
   font-size: 1.2rem;
-  font-weight: 850;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.18;
   margin-top: 5px;
@@ -8692,6 +8713,7 @@ margin-bottom: 12px;
   color: var(--ink-2);
   display: block;
   font-size: 0.86rem;
+  font-weight: 400;
   line-height: 1.45;
   margin-top: 8px;
 }
@@ -8700,7 +8722,7 @@ margin-bottom: 12px;
   color: var(--ink-3);
   display: block;
   font-size: 0.74rem;
-  font-weight: 800;
+  font-weight: 500;
   margin-top: 12px;
 }
 
@@ -8752,14 +8774,34 @@ margin-bottom: 12px;
 .company-command-section-head small {
   color: var(--ink-3);
   font-size: 0.78rem;
-  font-weight: 750;
+  font-weight: 500;
 }
 
 .company-recent-activity-head .company-recent-activity-view-all {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--orange);
+  cursor: pointer;
+  display: inline-flex;
   font-size: 0.78rem;
-  font-weight: 800;
-  min-height: 34px;
-  padding: 7px 11px;
+  font-weight: 600;
+  min-height: 28px;
+  padding: 3px 0;
+  transition: color 200ms ease, text-decoration-color 200ms ease;
+}
+
+.company-recent-activity-head .company-recent-activity-view-all:hover {
+  color: var(--orange-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.company-recent-activity-head .company-recent-activity-view-all:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(249, 115, 22, 0.45);
+  outline-offset: 3px;
 }
 
 .company-live-site-cards {
@@ -8770,8 +8812,8 @@ margin-bottom: 12px;
 
 .company-live-site-card {
   background: #fff;
-  border: 1px solid var(--card-divider);
-  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
   cursor: pointer;
   display: grid;
   gap: 14px;
@@ -8796,7 +8838,7 @@ margin-bottom: 12px;
   color: var(--ink);
   display: block;
   font-size: 1.02rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.2;
   margin-top: 4px;
 }
@@ -8805,7 +8847,7 @@ margin-bottom: 12px;
   color: var(--ink-3);
   display: block;
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.3;
   margin-top: 4px;
 }
@@ -8828,14 +8870,14 @@ margin-bottom: 12px;
 .company-live-site-metric strong {
   color: var(--ink);
   font-size: 1.05rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1;
 }
 
 .company-live-site-metric small {
   color: var(--ink-2);
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -8855,7 +8897,7 @@ margin-bottom: 12px;
 .company-live-site-card-state strong {
   color: var(--ink);
   font-size: 0.86rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.25;
 }
 
@@ -8868,7 +8910,7 @@ margin-bottom: 12px;
 .company-live-site-card-action {
   color: var(--orange);
   font-size: 0.78rem;
-  font-weight: 850;
+  font-weight: 600;
   margin-top: 3px;
   transition: color var(--motion-med) ease;
 }
@@ -8926,6 +8968,7 @@ margin-bottom: 12px;
 
 .company-live-site-state {
   align-items: center;
+  border: 1px solid transparent;
   border-radius: 999px;
   display: inline-flex;
   font-size: 0.72rem;
@@ -8957,6 +9000,7 @@ margin-bottom: 12px;
 
 .company-live-site-state.health-urgent {
   background: var(--health-urgent-soft);
+  border: 1px solid var(--health-urgent-border);
   color: var(--health-urgent);
 }
 
@@ -8989,7 +9033,7 @@ margin-bottom: 12px;
 
 .company-upcoming-card {
   --health-indicator-color: var(--health-neutral);
-  --health-hover-bg: var(--health-neutral-hover);
+  --health-hover-bg: var(--health-neutral-soft);
   align-items: center;
   background: transparent;
   border: 0;
@@ -9042,17 +9086,17 @@ margin-bottom: 12px;
 
 .company-upcoming-card.warning {
   --health-indicator-color: var(--health-at-risk);
-  --health-hover-bg: var(--health-at-risk-hover);
+  --health-hover-bg: var(--health-at-risk-soft);
 }
 
 .company-upcoming-card.success {
   --health-indicator-color: var(--health-healthy);
-  --health-hover-bg: var(--health-healthy-hover);
+  --health-hover-bg: var(--health-healthy-soft);
 }
 
 .company-upcoming-card.critical {
   --health-indicator-color: var(--health-urgent);
-  --health-hover-bg: var(--health-urgent-hover);
+  --health-hover-bg: var(--health-urgent-soft);
 }
 
 .company-upcoming-card-main small,
@@ -9060,7 +9104,7 @@ margin-bottom: 12px;
   color: var(--ink-3);
   display: block;
   font-size: 0.74rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -9068,7 +9112,7 @@ margin-bottom: 12px;
   color: var(--ink);
   display: block;
   font-size: 0.92rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.25;
   margin: 3px 0;
 }
@@ -9077,7 +9121,7 @@ margin-bottom: 12px;
   align-self: center;
   color: var(--orange);
   font-size: 0.78rem;
-  font-weight: 850;
+  font-weight: 600;
   padding-top: 3px;
   white-space: nowrap;
   transition: color var(--motion-med) ease;
@@ -9114,8 +9158,7 @@ margin-bottom: 12px;
   text-align: left;
   transition:
     background-color var(--motion-med) ease,
-    color var(--motion-med) ease,
-    transform var(--motion-med) ease;
+    color var(--motion-med) ease;
 }
 
 .company-recent-activity-row + .company-recent-activity-row {
@@ -9124,7 +9167,6 @@ margin-bottom: 12px;
 
 .company-recent-activity-row:hover {
   background: var(--activity-hover-bg);
-  transform: translateX(2px);
 }
 
 .company-recent-activity-row:focus-visible {
@@ -9137,25 +9179,25 @@ margin-bottom: 12px;
 .company-recent-activity-row.neutral {
   --activity-accent: var(--health-neutral);
   --activity-dot-bg: var(--health-neutral);
-  --activity-hover-bg: var(--health-neutral-hover);
+  --activity-hover-bg: var(--health-neutral-soft);
 }
 
 .company-recent-activity-row.success {
   --activity-accent: var(--health-healthy);
   --activity-dot-bg: var(--health-healthy);
-  --activity-hover-bg: var(--health-healthy-hover);
+  --activity-hover-bg: var(--health-healthy-soft);
 }
 
 .company-recent-activity-row.warning {
   --activity-accent: var(--health-at-risk);
   --activity-dot-bg: var(--health-at-risk);
-  --activity-hover-bg: var(--health-at-risk-hover);
+  --activity-hover-bg: var(--health-at-risk-soft);
 }
 
 .company-recent-activity-row.critical {
   --activity-accent: var(--health-urgent);
   --activity-dot-bg: var(--health-urgent);
-  --activity-hover-bg: var(--health-urgent-hover);
+  --activity-hover-bg: var(--health-urgent-soft);
 }
 
 .company-upcoming-row {
@@ -9257,28 +9299,14 @@ margin-bottom: 12px;
   margin: 4px 0 0 4px;
 }
 
-:is(
-  .company-action-hero.warning,
-  .company-action-hero.critical,
-  .company-recent-activity-row.warning,
-  .company-recent-activity-row.critical,
-  .company-upcoming-card.warning,
-  .company-upcoming-card.critical
-) :is(.company-action-dot, .company-upcoming-marker) {
+.company-action-hero:is(.warning, .critical) .company-action-dot {
   box-shadow: none;
   position: relative;
 }
 
-:is(
-  .company-action-hero.warning,
-  .company-action-hero.critical,
-  .company-recent-activity-row.warning,
-  .company-recent-activity-row.critical,
-  .company-upcoming-card.warning,
-  .company-upcoming-card.critical
-) :is(.company-action-dot, .company-upcoming-marker)::after {
+.company-action-hero:is(.warning, .critical) .company-action-dot::after {
   animation: dashboard-health-pulse 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-  border: 2px solid var(--health-indicator-color);
+  border: 2px solid var(--health-indicator-ring, currentColor);
   border-radius: inherit;
   content: "";
   inset: -3px;
@@ -9290,14 +9318,14 @@ margin-bottom: 12px;
 
 @keyframes dashboard-health-pulse {
   0% {
-    opacity: 0.46;
-    transform: scale(0.82);
+    opacity: 0.4;
+    transform: scale(1);
   }
 
   68%,
   100% {
     opacity: 0;
-    transform: scale(2.05);
+    transform: scale(2.3);
   }
 }
 
@@ -9317,7 +9345,7 @@ margin-bottom: 12px;
 .project-activity-row strong {
   color: var(--ink);
   font-size: 0.86rem;
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.25;
 }
 
@@ -9325,6 +9353,7 @@ margin-bottom: 12px;
 .project-activity-row p {
   color: var(--ink-2);
   font-size: 0.78rem;
+  font-weight: 400;
   line-height: 1.35;
   margin: 3px 0 0;
 }
@@ -9334,6 +9363,7 @@ margin-bottom: 12px;
   color: #94a3b8;
   display: block;
   font-size: 0.73rem;
+  font-weight: 400;
   line-height: 1.35;
   margin-top: 3px;
 }
@@ -9865,6 +9895,13 @@ body.modal-open {
   box-shadow: none;
 }
 
+@media (hover: hover) {
+  .company-dashboard-body .jw-card:not(.company-dashboard-section-card):hover {
+    box-shadow: none;
+    transform: none;
+  }
+}
+
 .company-saas-body .jw-form {
   gap: var(--space-section);
 }
@@ -9876,6 +9913,15 @@ body.modal-open {
 @media (max-width: 980px) {
   .company-dashboard-hero {
     grid-template-columns: 1fr;
+  }
+
+  .company-dashboard-body .company-dashboard-section-card,
+  .company-dashboard-hero .company-ops-summary {
+    padding: 16px;
+  }
+
+  .company-dashboard-hero .company-ops-summary {
+    gap: 20px;
   }
 }
 
@@ -9930,6 +9976,10 @@ body.modal-open {
   .company-briefing-metric {
     min-height: 108px;
     padding: 12px;
+  }
+
+  .company-briefing-metric strong {
+    font-size: 2.125rem;
   }
 
   .company-briefing-recommendation,
@@ -10250,7 +10300,7 @@ body.modal-open {
 
 .company-project-health.critical {
   background: var(--health-urgent-soft);
-  border-color: transparent;
+  border-color: var(--health-urgent-border);
   color: var(--health-urgent);
 }
 
@@ -10532,14 +10582,7 @@ body.modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(
-    .company-action-hero.warning,
-    .company-action-hero.critical,
-    .company-recent-activity-row.warning,
-    .company-recent-activity-row.critical,
-    .company-upcoming-card.warning,
-    .company-upcoming-card.critical
-  ) :is(.company-action-dot, .company-upcoming-marker)::after {
+  .company-action-hero:is(.warning, .critical) .company-action-dot::after {
     animation: none;
   }
 
@@ -13891,6 +13934,10 @@ button[aria-disabled="true"],
   letter-spacing: 0;
   line-height: 1.2;
   text-transform: uppercase;
+}
+
+.company-dashboard-body .company-home-kicker {
+  font-weight: 700;
 }
 
 .primary-btn,
