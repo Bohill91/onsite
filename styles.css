@@ -8589,9 +8589,7 @@ margin-bottom: 12px;
   background: var(--action-accent);
 }
 
-.company-action-hero.critical .company-action-dot,
-.company-action-hero.warning .company-action-dot,
-.company-action-hero.success .company-action-dot {
+.company-action-hero.critical .company-action-dot {
   animation: dashboard-health-breathe 3.7s ease-in-out infinite;
   transform-origin: center;
 }
@@ -8715,9 +8713,14 @@ margin-bottom: 12px;
   justify-content: space-between;
 }
 
-.company-command-section-head small,
-.company-recent-activity-head .secondary-btn {
+.company-command-section-head small {
   color: var(--ink-3);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.company-recent-activity-head .secondary-btn {
+  color: var(--ink-2);
   font-size: 0.78rem;
   font-weight: 750;
 }
@@ -8924,6 +8927,32 @@ margin-bottom: 12px;
 .company-live-site-state.muted {
   background: var(--surface-3);
   color: var(--ink-3);
+}
+
+.company-live-site-state.health-urgent {
+  background: var(--ui-color-danger-soft);
+  color: var(--red-text);
+}
+
+.company-live-site-state.health-at-risk {
+  background: var(--ui-color-warning-soft);
+  color: var(--amber-text);
+}
+
+.company-live-site-state.health-healthy {
+  background: var(--ui-color-success-soft);
+  color: var(--green-text);
+}
+
+.company-live-site-state.health-neutral {
+  background: var(--ui-color-neutral-soft);
+  color: var(--ink-3);
+}
+
+.company-upcoming-panel {
+  align-self: start;
+  gap: var(--space-2);
+  min-height: 0;
 }
 
 .company-upcoming-timeline {

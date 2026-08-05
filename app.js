@@ -10536,7 +10536,6 @@ function companyDailyBriefingHTML(summary, user) {
             <h3>${escapeHtml(briefing.summaryTitle)}</h3>
             <p>${escapeHtml(briefing.summaryCopy)}</p>
           </div>
-          <span class="company-ops-day">${escapeHtml(formatCurrentDatePill())}</span>
         </div>
         <div class="company-briefing-metrics">
           ${briefing.metrics
@@ -10707,9 +10706,34 @@ function companyLiveSiteStatusModel(projectSummary) {
     tone = "info";
   }
   const health = calculateProjectHealth(projectSummary.job, projectSummary);
+  const hasAttendance =
+    projectSummary.expectedToday > 0 ||
+    (Array.isArray(projectSummary.todayRecords) && projectSummary.todayRecords.length > 0);
+  const action = hasAttendance
+    ? {
+        label: "Open Attendance",
+        attrs: `data-dashboard-attendance-project="${escapeHtml(projectSummary.job.id)}"`,
+      }
+    : projectSummary.openRoles > 0
+      ? {
+          label: "Review requirement",
+          attrs: `data-company-project-open-section="${escapeHtml(projectSummary.job.id)}" data-company-section-target="requirements"`,
+        }
+      : {
+          label: "View project",
+          attrs: `data-company-project-open="${escapeHtml(projectSummary.job.id)}"`,
+        };
   return {
     job: projectSummary.job,
     health,
+    healthTone:
+      health.level === "urgent"
+        ? "urgent"
+        : health.level === "atRisk"
+          ? "at-risk"
+          : health.level === "filled"
+            ? "healthy"
+            : "neutral",
     expected: projectSummary.expectedToday,
     signedIn: projectSummary.signedInToday,
     late: projectSummary.lateReports,
@@ -10717,6 +10741,7 @@ function companyLiveSiteStatusModel(projectSummary) {
     stateLabel,
     stateCopy,
     tone,
+    action,
   };
 }
 
@@ -10735,14 +10760,14 @@ function companyLiveSiteStatusRowHTML(item) {
 }
 
 function companyLiveSiteStatusCardHTML(item) {
-  return `<button class="company-live-site-card ${escapeHtml(item.tone)}" type="button" data-dashboard-attendance-project="${escapeHtml(item.job.id)}">
+  return `<button class="company-live-site-card ${escapeHtml(item.tone)}" type="button" ${item.action.attrs}>
     <span class="company-live-site-card-top">
       <span>
         <span class="company-home-kicker">PROJECT</span>
         <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
         <small>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</small>
       </span>
-      <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.health?.label || item.stateLabel)}</span>
+      <span class="company-live-site-state health-${escapeHtml(item.healthTone)}">${escapeHtml(item.health?.label || item.stateLabel)}</span>
     </span>
     <span class="company-live-site-card-metrics">
       ${companyLiveSiteMetricHTML("Expected", item.expected)}
@@ -10754,7 +10779,7 @@ function companyLiveSiteStatusCardHTML(item) {
       <strong>${escapeHtml(item.stateLabel)}</strong>
       <small>${escapeHtml(item.stateCopy)}</small>
     </span>
-    <span class="company-live-site-card-action">Open Attendance &rarr;</span>
+    <span class="company-live-site-card-action">${escapeHtml(item.action.label)} &rarr;</span>
   </button>`;
 }
 
