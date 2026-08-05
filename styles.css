@@ -48,28 +48,25 @@
   --ui-color-neutral-soft: var(--surface-2);
 
   --health-urgent: #ef4444;
-  --health-urgent-strong: #dc2626;
+  --health-urgent-dark: #dc2626;
   --health-urgent-soft: rgba(239, 68, 68, 0.1);
   --health-urgent-hover: rgba(239, 68, 68, 0.055);
   --health-at-risk: #f59e0b;
-  --health-at-risk-strong: #b45309;
   --health-at-risk-soft: rgba(245, 158, 11, 0.12);
   --health-at-risk-hover: rgba(245, 158, 11, 0.06);
   --health-healthy: #22c55e;
-  --health-healthy-strong: #15803d;
   --health-healthy-soft: rgba(34, 197, 94, 0.1);
   --health-healthy-hover: rgba(34, 197, 94, 0.055);
   --health-neutral: #9ca3af;
-  --health-neutral-strong: #6b7280;
   --health-neutral-soft: rgba(156, 163, 175, 0.12);
   --health-neutral-hover: rgba(156, 163, 175, 0.09);
 
   /* Compatibility aliases for status treatments outside the Dashboard. */
   --status-urgent: var(--health-urgent);
-  --status-urgent-strong: var(--health-urgent-strong);
+  --status-urgent-strong: var(--health-urgent);
   --status-urgent-soft: var(--health-urgent-soft);
   --status-at-risk: var(--health-at-risk);
-  --status-at-risk-strong: var(--health-at-risk-strong);
+  --status-at-risk-strong: var(--health-at-risk);
   --status-at-risk-soft: var(--health-at-risk-soft);
   --status-healthy: var(--health-healthy);
   --status-neutral: var(--health-neutral);
@@ -8447,15 +8444,16 @@ margin-bottom: 12px;
 }
 
 .company-dashboard-hero {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   gap: var(--space-section);
   grid-template-columns: minmax(0, 1.32fr) minmax(300px, 0.68fr);
 }
 
 .company-ops-summary {
-  align-self: start;
-  display: grid;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   overflow: hidden;
   position: relative;
@@ -8466,6 +8464,8 @@ margin-bottom: 12px;
 }
 
 .company-dashboard-hero .company-ops-summary {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
 }
 
@@ -8524,8 +8524,11 @@ margin-bottom: 12px;
 }
 
 .company-briefing-metrics {
+  align-items: stretch;
   display: grid;
+  flex: 1 1 auto;
   gap: var(--space-2);
+  grid-auto-rows: 1fr;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   position: relative;
   z-index: 1;
@@ -8538,10 +8541,11 @@ margin-bottom: 12px;
   border: 1px solid rgba(226, 232, 240, 0.58);
   border-radius: 16px;
   display: grid;
-  gap: 9px;
-  align-content: space-between;
+  align-content: center;
+  gap: 10px;
+  justify-items: start;
   min-width: 0;
-  min-height: 96px;
+  min-height: 118px;
   padding: 16px;
   text-align: left;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
@@ -8554,14 +8558,14 @@ margin-bottom: 12px;
 
 .company-briefing-metric strong {
   color: var(--ink);
-  font-size: clamp(1.52rem, 2.4vw, 2rem);
+  font-size: clamp(2.375rem, 3vw, 2.625rem);
   font-weight: 850;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 
 .company-briefing-metric span {
-  align-self: end;
+  align-self: auto;
   color: var(--ink-3);
   font-size: 0.76rem;
   font-weight: 750;
@@ -8570,14 +8574,6 @@ margin-bottom: 12px;
 
 .company-briefing-metric.is-clickable {
   cursor: pointer;
-}
-
-.company-briefing-metric.is-clickable:hover,
-.company-briefing-metric.is-clickable:focus-visible {
-  background: #fff;
-  border-color: rgba(226, 232, 240, 0.72);
-  box-shadow: none;
-  transform: none;
 }
 
 .company-briefing-metric.is-clickable:focus-visible {
@@ -8592,7 +8588,7 @@ margin-bottom: 12px;
 }
 
 .company-action-hero {
-  align-self: start;
+  align-self: stretch;
   align-items: stretch;
   background: linear-gradient(180deg, #fffaf6 0%, #fff 100%);
   border-color: var(--card-divider);
@@ -8612,6 +8608,7 @@ margin-bottom: 12px;
 }
 
 .company-dashboard-hero .company-action-hero {
+  align-self: stretch;
   gap: var(--space-1);
   padding: 22px;
 }
@@ -8661,7 +8658,7 @@ margin-bottom: 12px;
 
 @media (hover: hover) {
   .company-dashboard-section-card:hover {
-    border-color: var(--card-hover-border);
+    border-color: var(--orange);
     box-shadow: var(--dashboard-section-hover-shadow);
   }
 }
@@ -8960,22 +8957,22 @@ margin-bottom: 12px;
 
 .company-live-site-state.health-urgent {
   background: var(--health-urgent-soft);
-  color: var(--health-urgent-strong);
+  color: var(--health-urgent);
 }
 
 .company-live-site-state.health-at-risk {
   background: var(--health-at-risk-soft);
-  color: var(--health-at-risk-strong);
+  color: var(--health-at-risk);
 }
 
 .company-live-site-state.health-healthy {
   background: var(--health-healthy-soft);
-  color: var(--health-healthy-strong);
+  color: var(--health-healthy);
 }
 
 .company-live-site-state.health-neutral {
   background: var(--health-neutral-soft);
-  color: var(--health-neutral-strong);
+  color: var(--health-neutral);
 }
 
 .company-upcoming-panel {
@@ -9305,15 +9302,15 @@ margin-bottom: 12px;
 }
 
 .project-activity-row.critical .company-action-dot {
-  background: #ef4444;
+  background: var(--health-urgent);
 }
 
 .project-activity-row.warning .company-action-dot {
-  background: #f59e0b;
+  background: var(--health-at-risk);
 }
 
 .project-activity-row.success .company-action-dot {
-  background: var(--green);
+  background: var(--health-healthy);
 }
 
 .company-recent-activity-row strong,
@@ -9494,11 +9491,11 @@ margin-bottom: 12px;
 }
 
 .company-action-item.critical .company-action-dot {
-  background: #ef4444;
+  background: var(--health-urgent);
 }
 
 .company-action-item.warning .company-action-dot {
-  background: #f59e0b;
+  background: var(--health-at-risk);
 }
 
 .company-action-item.info .company-action-dot {
@@ -9860,7 +9857,7 @@ body.modal-open {
   padding: var(--space-card);
 }
 
-.company-saas-body .jw-card,
+.company-saas-body .jw-card:not(.company-dashboard-section-card),
 .company-saas-body .form-card,
 .company-saas-body .company-dashboard-filter-card,
 .company-saas-body .attendance-project-search-card {
@@ -9931,6 +9928,7 @@ body.modal-open {
   }
 
   .company-briefing-metric {
+    min-height: 108px;
     padding: 12px;
   }
 
@@ -10233,27 +10231,27 @@ body.modal-open {
 }
 
 .company-project-health.healthy {
-  background: rgba(22, 163, 74, 0.1);
+  background: var(--health-healthy-soft);
   border-color: transparent;
-  color: var(--green-text);
+  color: var(--health-healthy);
 }
 
 .company-project-health.needsAttention {
-  background: rgba(244, 244, 245, 0.92);
+  background: var(--health-neutral-soft);
   border-color: transparent;
-  color: var(--ink-3);
+  color: var(--health-neutral);
 }
 
 .company-project-health.atRisk {
-  background: rgba(245, 158, 11, 0.12);
+  background: var(--health-at-risk-soft);
   border-color: transparent;
-  color: #92400e;
+  color: var(--health-at-risk);
 }
 
 .company-project-health.critical {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--health-urgent-soft);
   border-color: transparent;
-  color: #b42318;
+  color: var(--health-urgent);
 }
 
 .company-project-health-panel {
@@ -10360,23 +10358,23 @@ body.modal-open {
 }
 
 .company-project-health-panel.filled .company-project-health-led {
-  background: #16c75f;
-  color: #16c75f;
+  background: var(--health-healthy);
+  color: var(--health-healthy);
 }
 
 .company-project-health-panel.matching .company-project-health-led {
-  background: #a1a1aa;
-  color: #a1a1aa;
+  background: var(--health-neutral);
+  color: var(--health-neutral);
 }
 
 .company-project-health-panel.atRisk .company-project-health-led {
-  background: #facc15;
-  color: #facc15;
+  background: var(--health-at-risk);
+  color: var(--health-at-risk);
 }
 
 .company-project-health-panel.urgent .company-project-health-led {
-  background: #ef4444;
-  color: #ef4444;
+  background: var(--health-urgent);
+  color: var(--health-urgent);
 }
 
 .notification-feed,
@@ -10425,9 +10423,9 @@ body.modal-open {
   width: 11px;
 }
 
-.notification-card.critical .notification-priority-dot { background: #ef4444; }
-.notification-card.warning .notification-priority-dot { background: #f97316; }
-.notification-card.success .notification-priority-dot { background: #16a34a; }
+.notification-card.critical .notification-priority-dot { background: var(--health-urgent); }
+.notification-card.warning .notification-priority-dot { background: var(--health-at-risk); }
+.notification-card.success .notification-priority-dot { background: var(--health-healthy); }
 .notification-card.info .notification-priority-dot { background: #2563eb; }
 
 .notification-card-body {
@@ -10731,7 +10729,7 @@ body.modal-open {
 }
 
 .company-project-metrics span.urgent strong {
-  color: #b42318;
+  color: var(--health-urgent);
 }
 
 .company-project-attendance {
@@ -10779,7 +10777,7 @@ body.modal-open {
   background: transparent;
   border: 0;
   border-radius: 0;
-  color: #b42318;
+  color: var(--health-urgent);
   font-size: 0.72rem;
   font-weight: 800;
   padding: 0;
@@ -13416,9 +13414,9 @@ button svg,
   box-shadow: var(--card-shadow-hover);
 }
 
-.notification-card.critical { --notification-accent: #ef4444; }
-.notification-card.warning { --notification-accent: #f97316; }
-.notification-card.success { --notification-accent: #16a34a; }
+.notification-card.critical { --notification-accent: var(--health-urgent); }
+.notification-card.warning { --notification-accent: var(--health-at-risk); }
+.notification-card.success { --notification-accent: var(--health-healthy); }
 .notification-card.info { --notification-accent: #2563eb; }
 
 .notification-priority-dot {
