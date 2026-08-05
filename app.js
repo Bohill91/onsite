@@ -10540,12 +10540,7 @@ function companyDailyBriefingHTML(summary, user) {
         </div>
         <div class="company-briefing-metrics">
           ${briefing.metrics
-            .map(
-              (item) => `<div class="company-briefing-metric ${item.tone}">
-                <strong>${item.value}</strong>
-                <span>${escapeHtml(item.label)}</span>
-              </div>`,
-            )
+            .map(companyDashboardMetricHTML)
             .join("")}
         </div>
       </article>
@@ -10595,7 +10590,7 @@ function companyDashboardActionHeroHTML(action) {
       <span class="company-action-hero-cta">Stay ready</span>
     </article>`;
   }
-  return `<button class="company-action-hero ${escapeHtml(action.tone)} jw-card" type="button" ${action.actionAttr}>
+  return `<article class="company-action-hero ${escapeHtml(action.tone)} jw-card">
     <span class="company-action-dot" aria-hidden="true"></span>
     <span class="company-action-hero-content">
       <span class="company-home-kicker">ACTION REQUIRED</span>
@@ -10603,8 +10598,17 @@ function companyDashboardActionHeroHTML(action) {
       <span>${escapeHtml(action.body)}</span>
       ${action.meta ? `<small>${escapeHtml(action.meta)}</small>` : ""}
     </span>
-    <span class="company-action-hero-cta">${escapeHtml(action.actionLabel)} &rarr;</span>
-  </button>`;
+    <button class="primary-btn company-action-hero-cta" type="button" ${action.actionAttr}>${escapeHtml(action.actionLabel)} &rarr;</button>
+  </article>`;
+}
+
+function companyDashboardMetricHTML(item) {
+  const attrs = item.actionAttr || "";
+  const tag = attrs ? "button" : "div";
+  return `<${tag} class="company-briefing-metric ${item.tone}${attrs ? " is-clickable" : ""}" ${attrs} ${tag === "button" ? 'type="button"' : ""}>
+    <strong>${item.value}</strong>
+    <span>${escapeHtml(item.label)}</span>
+  </${tag}>`;
 }
 
 function companyDailyBriefingModel(summary, user) {
@@ -10612,7 +10616,12 @@ function companyDailyBriefingModel(summary, user) {
   const workersExpectedToday = scheduledToday.reduce((sum, s) => sum + s.expectedToday, 0);
   const metrics = [
     { label: "Projects scheduled today", value: scheduledToday.length, tone: scheduledToday.length ? "neutral" : "muted" },
-    { label: "Workers expected today", value: workersExpectedToday, tone: workersExpectedToday ? "neutral" : "muted" },
+    {
+      label: "Workers expected today",
+      value: workersExpectedToday,
+      tone: workersExpectedToday ? "neutral" : "muted",
+      actionAttr: workersExpectedToday ? `data-empty-tab="attendance"` : "",
+    },
     { label: "Open labour requirements", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "neutral" },
     { label: "Starting next 7 days", value: summary.upcomingStarts, tone: summary.upcomingStarts ? "neutral" : "muted" },
   ];
@@ -10678,27 +10687,35 @@ function briefingRecommendedAction(summary, focus) {
 function companyLiveSiteStatusModel(projectSummary) {
   const unconfirmed = Math.max(0, projectSummary.expectedToday - projectSummary.signedInToday);
   let stateLabel = "No attendance expected yet";
+  let stateCopy = "";
   let tone = "muted";
   if (!projectSummary.expectedToday) {
-    stateLabel = "No workers scheduled";
+    stateLabel = "No workers scheduled today";
+    stateCopy = "Attendance will appear here once workers are confirmed.";
   } else if (projectSummary.expectedToday > 0 && unconfirmed === 0 && !projectSummary.lateReports && !projectSummary.noShows) {
     stateLabel = "All signed in";
+    stateCopy = "Everyone expected today has signed in.";
     tone = "ok";
   } else if (projectSummary.noShows || unconfirmed || projectSummary.lateReports) {
     const attention = projectSummary.noShows + unconfirmed + projectSummary.lateReports;
     stateLabel = projectSummary.noShows || unconfirmed ? `${attention} require attention` : "Attendance in progress";
+    stateCopy = "Review attendance and late reports for this site.";
     tone = projectSummary.noShows || unconfirmed ? "warn" : "info";
   } else if (projectSummary.expectedToday > 0) {
     stateLabel = "Attendance in progress";
+    stateCopy = "Workers are due to sign in today.";
     tone = "info";
   }
+  const health = calculateProjectHealth(projectSummary.job, projectSummary);
   return {
     job: projectSummary.job,
+    health,
     expected: projectSummary.expectedToday,
     signedIn: projectSummary.signedInToday,
     late: projectSummary.lateReports,
     unconfirmed,
     stateLabel,
+    stateCopy,
     tone,
   };
 }
@@ -10725,7 +10742,7 @@ function companyLiveSiteStatusCardHTML(item) {
         <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
         <small>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</small>
       </span>
-      <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
+      <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.health?.label || item.stateLabel)}</span>
     </span>
     <span class="company-live-site-card-metrics">
       ${companyLiveSiteMetricHTML("Expected", item.expected)}
@@ -10733,6 +10750,11 @@ function companyLiveSiteStatusCardHTML(item) {
       ${companyLiveSiteMetricHTML("Late", item.late, item.late ? "warn" : "")}
       ${companyLiveSiteMetricHTML("Unconfirmed", item.unconfirmed, item.unconfirmed ? "warn" : "")}
     </span>
+    <span class="company-live-site-card-state">
+      <strong>${escapeHtml(item.stateLabel)}</strong>
+      <small>${escapeHtml(item.stateCopy)}</small>
+    </span>
+    <span class="company-live-site-card-action">Open Attendance &rarr;</span>
   </button>`;
 }
 
@@ -10752,6 +10774,10 @@ function companyDashboardUpcomingItems(summary) {
       items.push({
         key: `start:${job.id}`,
         tone: projectSummary.openRoles ? "warning" : "info",
+        timing: startTimingLabel(days),
+        projectTitle: companyProjectTitle(job),
+        jobNumber: job.jobNumber || "",
+        openCount: projectSummary.openRoles,
         title: `${companyProjectTitle(job)} starts ${relativeProjectDayLabel(days)}`,
         body: projectSummary.openRoles
           ? `${projectSummary.openRoles} labour place${projectSummary.openRoles === 1 ? "" : "s"} still open.`
@@ -10766,6 +10792,10 @@ function companyDashboardUpcomingItems(summary) {
       items.push({
         key: `offers:${job.id}`,
         tone: "info",
+        timing: "Awaiting response",
+        projectTitle: companyProjectTitle(job),
+        jobNumber: job.jobNumber || "",
+        openCount: projectSummary.openRoles,
         title: `${projectSummary.pendingOffers.length} offer${projectSummary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
         body: `${companyProjectTitle(job)} has open worker offer decisions.`,
         meta: "Offers",
@@ -10778,6 +10808,10 @@ function companyDashboardUpcomingItems(summary) {
       items.push({
         key: `review:${job.id}`,
         tone: "warning",
+        timing: "Company decision",
+        projectTitle: companyProjectTitle(job),
+        jobNumber: job.jobNumber || "",
+        openCount: projectSummary.openRoles,
         title: `${projectSummary.reviewWorkers.length} worker${projectSummary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
         body: `${companyProjectTitle(job)} needs a company decision before assignment is confirmed.`,
         meta: "Worker approval",
@@ -10791,6 +10825,10 @@ function companyDashboardUpcomingItems(summary) {
     items.push({
       key: `labour:${item.job.id}:${item.change.id || item.change.startDate}`,
       tone: Number(item.delta) > 0 ? "warning" : "info",
+      timing: `Changes ${relativeProjectDayLabel(item.daysUntil ?? 0)}`,
+      projectTitle: companyProjectTitle(item.job),
+      jobNumber: item.job.jobNumber || "",
+      openCount: Number(item.change.quantity) || 0,
       title: labourForecastTitle(item),
       body: `${formatDateOnly(item.change.startDate)} · ${item.change.previousQuantity} to ${item.change.quantity} required${item.change.phase ? ` · ${item.change.phase}` : ""}`,
       meta: item.job.jobNumber || item.job.location || "Labour schedule",
@@ -10808,6 +10846,12 @@ function relativeProjectDayLabel(days) {
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";
   return `in ${days} days`;
+}
+
+function startTimingLabel(days) {
+  if (days === 0) return "Starts today";
+  if (days === 1) return "Starts tomorrow";
+  return `Starts in ${days} days`;
 }
 
 function labourForecastTitle(item) {
@@ -10837,9 +10881,9 @@ function companyDashboardUpcomingCardHTML(item) {
   return `<button class="company-upcoming-card ${escapeHtml(item.tone || "info")}" type="button" ${item.actionAttr}>
     <span class="company-upcoming-marker" aria-hidden="true"></span>
     <span class="company-upcoming-card-main">
-      <small>${escapeHtml(item.meta || "Project")}</small>
-      <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(item.body || "")}</span>
+      <small>${escapeHtml(item.timing || item.meta || "Upcoming")}</small>
+      <strong>${escapeHtml(item.projectTitle || item.title)}</strong>
+      <span>${escapeHtml(item.jobNumber || item.meta || "Project")}${item.openCount ? ` · ${item.openCount} labour place${item.openCount === 1 ? "" : "s"} open` : ""}</span>
     </span>
     <span class="company-upcoming-card-action">${escapeHtml(item.actionLabel || "Open")} &rarr;</span>
   </button>`;
