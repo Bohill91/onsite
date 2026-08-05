@@ -10533,7 +10533,6 @@ function companyDailyBriefingHTML(summary, user) {
         <div class="company-ops-summary-head">
           <div>
             <p class="company-home-kicker">TODAY'S OPERATIONAL SUMMARY</p>
-            <h3>${escapeHtml(briefing.summaryTitle)}</h3>
             <p>${escapeHtml(briefing.summaryCopy)}</p>
           </div>
         </div>
@@ -10549,7 +10548,6 @@ function companyDailyBriefingHTML(summary, user) {
       <div class="company-command-section-head">
         <div>
           <p class="company-home-kicker">LIVE SITES TODAY</p>
-          <h3>What is happening on site</h3>
         </div>
         <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
       </div>
@@ -10564,7 +10562,6 @@ function companyDailyBriefingHTML(summary, user) {
       <div class="company-command-section-head">
         <div>
           <p class="company-home-kicker">UPCOMING</p>
-          <h3>What is coming up</h3>
         </div>
         <small>Next 7 days</small>
       </div>
@@ -10946,7 +10943,6 @@ function companyRecentActivityHTML(summary, user) {
     <div class="company-recent-activity-head">
       <div>
         <p class="company-home-kicker">RECENT ACTIVITY</p>
-        <h3>Latest project updates</h3>
       </div>
       <button class="secondary-btn company-action-btn" type="button" data-empty-tab="notifications">View All</button>
     </div>
