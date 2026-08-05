@@ -73,6 +73,8 @@
   --card-divider: rgba(212, 212, 216, 0.62);
   --card-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
   --card-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.08);
+  --card-hover-border: rgba(249, 115, 22, 0.45);
+  --card-hover-shadow: 0 14px 34px rgba(15, 23, 42, 0.075);
 
   --ui-font-xs: 12px;
   --ui-font-sm: 13px;
@@ -8417,13 +8419,14 @@ margin-bottom: 12px;
 }
 
 .company-dashboard-hero {
-  align-items: stretch;
+  align-items: start;
   display: grid;
   gap: var(--space-section);
   grid-template-columns: minmax(0, 1.32fr) minmax(300px, 0.68fr);
 }
 
 .company-ops-summary {
+  align-self: start;
   display: grid;
   gap: var(--space-3);
   overflow: hidden;
@@ -8463,7 +8466,7 @@ margin-bottom: 12px;
   font-size: 0.88rem;
   font-weight: 650;
   line-height: 1.35;
-  margin-top: 7px;
+  margin-top: var(--space-2);
 }
 
 .company-ops-day {
@@ -8534,7 +8537,7 @@ margin-bottom: 12px;
 }
 
 .company-briefing-metric.warn strong {
-  color: #b45309;
+  color: var(--orange);
 }
 
 .company-briefing-metric.is-clickable {
@@ -8557,6 +8560,7 @@ margin-bottom: 12px;
 }
 
 .company-action-hero {
+  align-self: start;
   align-items: stretch;
   background: linear-gradient(180deg, #fffaf6 0%, #fff 100%);
   border-color: var(--card-divider);
@@ -8565,7 +8569,7 @@ margin-bottom: 12px;
   display: grid;
   gap: var(--space-3);
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 100%;
+  min-height: 0;
   padding: 22px;
   position: relative;
   text-align: left;
@@ -8582,15 +8586,29 @@ margin-bottom: 12px;
 .company-action-hero:hover,
 .company-action-hero:focus-visible {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
-  transform: translateY(-2px);
 }
 
 .company-action-hero .company-action-dot {
-  background: var(--action-accent);
+  background: #a1a1aa;
+  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
+  height: 10px;
+  margin-top: 4px;
+  position: relative;
+  width: 10px;
 }
 
-.company-action-hero.critical .company-action-dot {
+.company-action-hero:not(.company-action-hero-clear) .company-action-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
+}
+
+.company-action-hero:not(.company-action-hero-clear) .company-action-dot::after {
   animation: dashboard-health-breathe 3.7s ease-in-out infinite;
+  background: rgba(239, 68, 68, 0.18);
+  border-radius: inherit;
+  content: "";
+  inset: -4px;
+  position: absolute;
   transform-origin: center;
 }
 
@@ -8677,13 +8695,13 @@ margin-bottom: 12px;
 @keyframes dashboard-health-breathe {
   0%,
   100% {
-    opacity: 0.82;
+    opacity: 0.2;
     transform: scale(1);
   }
 
   50% {
-    opacity: 1;
-    transform: scale(1.06);
+    opacity: 0.08;
+    transform: scale(1.08);
   }
 }
 
@@ -9000,21 +9018,32 @@ margin-bottom: 12px;
 
 .company-upcoming-marker {
   background: #a1a1aa;
-  border: 4px solid rgba(161, 161, 170, 0.14);
+  border: 0;
   border-radius: 999px;
-  height: 14px;
-  margin-top: 4px;
-  width: 14px;
+  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
+  height: 10px;
+  margin: 0;
+  width: 10px;
 }
 
 .company-upcoming-card.warning .company-upcoming-marker {
   background: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.16);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.16);
 }
 
 .company-upcoming-card.info .company-upcoming-marker {
   background: #a1a1aa;
-  border-color: rgba(161, 161, 170, 0.14);
+  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.14);
+}
+
+.company-upcoming-card.success .company-upcoming-marker {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
+}
+
+.company-upcoming-card.critical .company-upcoming-marker {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
 }
 
 .company-upcoming-card-main small,
@@ -10453,7 +10482,7 @@ body.modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .company-action-hero .company-action-dot {
+  .company-action-hero .company-action-dot::after {
     animation: none;
   }
 
@@ -14441,5 +14470,77 @@ button svg,
 
   .notification-action-btn {
     justify-self: stretch;
+  }
+}
+
+/* ─── Shared Content Card Interaction ──────────────────── */
+.company-dashboard-hero .company-ops-summary {
+  gap: var(--space-3);
+}
+
+:is(
+  .jw-card:not(.company-recent-activity),
+  .form-card,
+  .company-project-card,
+  .attendance-project-card,
+  .notification-card,
+  .prof-section,
+  .settings-card,
+  .company-project-section,
+  .attendance-card,
+  .qr-panel,
+  .attendance-live-overview,
+  .attendance-history-card,
+  .site-details-card,
+  .market-controls,
+  .market-summary-panel,
+  .market-section,
+  .market-region-card,
+  .company-account-identity
+) {
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition:
+    background-color 200ms var(--motion-ease),
+    border-color 200ms var(--motion-ease),
+    box-shadow 200ms var(--motion-ease),
+    outline-color 200ms var(--motion-ease),
+    transform 200ms var(--motion-ease);
+}
+
+@media (hover: hover) {
+  :is(
+    .jw-card:not(.company-recent-activity),
+    .form-card,
+    .company-project-card,
+    .attendance-project-card,
+    .notification-card,
+    .prof-section,
+    .settings-card,
+    .company-project-section,
+    .attendance-card,
+    .qr-panel,
+    .attendance-live-overview,
+    .attendance-history-card,
+    .site-details-card,
+    .market-controls,
+    .market-summary-panel,
+    .market-section,
+    .market-region-card,
+    .company-account-identity
+  ):hover {
+    border-color: var(--card-hover-border);
+    box-shadow: var(--card-hover-shadow);
+    outline-color: var(--card-hover-border);
+    transform: none;
+  }
+
+  :is(
+    .company-project-card[role="button"],
+    .attendance-project-card[role="button"],
+    .notification-card
+  ):hover {
+    cursor: pointer;
+    transform: translateY(-1px);
   }
 }

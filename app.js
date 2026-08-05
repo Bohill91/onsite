@@ -10547,7 +10547,7 @@ function companyDailyBriefingHTML(summary, user) {
     <section class="company-command-section company-live-sites-panel jw-card">
       <div class="company-command-section-head">
         <div>
-          <p class="company-home-kicker">LIVE SITES TODAY</p>
+          <p class="company-home-kicker">LIVE SITES</p>
         </div>
         <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
       </div>
@@ -10561,7 +10561,7 @@ function companyDailyBriefingHTML(summary, user) {
     <section class="company-command-section company-upcoming-panel jw-card">
       <div class="company-command-section-head">
         <div>
-          <p class="company-home-kicker">UPCOMING</p>
+          <p class="company-home-kicker">UPCOMING SITES</p>
         </div>
         <small>Next 7 days</small>
       </div>
