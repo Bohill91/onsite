@@ -8630,7 +8630,11 @@ margin-bottom: 12px;
 }
 
 .company-briefing-metric.is-clickable {
+  border-color: var(--card-divider);
   cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 .company-briefing-metric-chevron {
@@ -8648,6 +8652,7 @@ margin-bottom: 12px;
   .company-briefing-metric.is-clickable:hover {
     border-color: #f97316;
     box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08);
+    transform: none;
   }
 }
 
@@ -8658,8 +8663,14 @@ margin-bottom: 12px;
 
 .company-briefing-metric.is-clickable:focus-visible {
   border-color: #f97316;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   outline: 2px solid rgba(249, 115, 22, 0.65);
   outline-offset: 2px;
+  transform: none;
+}
+
+.company-briefing-metric.is-clickable:active {
+  transform: none;
 }
 
 .company-briefing-metric.neutral strong,
