@@ -128,6 +128,144 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Branded Application Launch ───────────────────────── */
+html.app-booting,
+html.app-booting body {
+  background: var(--bg);
+  min-height: 100%;
+  overflow: hidden;
+}
+
+html.app-booting body > :not(#app-launch-screen):not(script) {
+  visibility: hidden;
+}
+
+#main-app[aria-hidden="true"] {
+  visibility: hidden;
+}
+
+.app-launch-screen {
+  align-items: center;
+  background: var(--bg);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  opacity: 1;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  position: fixed;
+  transition: opacity 220ms ease;
+  z-index: 20000;
+}
+
+.app-launch-screen[hidden] {
+  display: none;
+}
+
+.app-launch-screen.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-launch-group {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.app-launch-logo {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  width: clamp(140px, 13vw, 164px);
+}
+
+.app-launch-progress {
+  margin-top: 24px;
+  width: clamp(180px, 16vw, 200px);
+}
+
+.app-launch-track {
+  background: #dedee2;
+  border-radius: var(--radius-pill);
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.app-launch-progress-segment {
+  animation: app-launch-progress 1.4s ease-in-out infinite;
+  background: var(--orange);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transform: translateX(-110%);
+  width: 38%;
+}
+
+@keyframes app-launch-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(285%); }
+}
+
+.app-launch-visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.app-launch-error {
+  align-items: center;
+  display: none;
+  gap: 16px;
+  justify-items: center;
+  margin-top: 24px;
+  text-align: center;
+}
+
+.app-launch-error p {
+  color: var(--ink);
+  font-size: var(--ui-font-md);
+  font-weight: var(--ui-weight-semibold);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.app-launch-retry {
+  min-width: 104px;
+}
+
+.app-launch-screen.is-error .app-launch-progress {
+  display: none;
+}
+
+.app-launch-screen.is-error .app-launch-error {
+  display: grid;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-launch-screen {
+    transition-duration: 0.01ms;
+  }
+
+  .app-launch-progress-segment {
+    animation: none;
+    opacity: 0.85;
+    transform: none;
+  }
+}
+
 /* ─── Shared UI Foundation (Phase 1) ─────────────────────
    New pages should use these os-* primitives. Existing selectors such as
    .request-labour-page, .company-dashboard-page, .company-dashboard-head,

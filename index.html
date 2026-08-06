@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="app-booting">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,10 +13,26 @@
   </head>
   <body>
 
+    <div id="app-launch-screen" class="app-launch-screen" role="status" aria-live="polite" aria-atomic="true">
+      <div class="app-launch-group">
+        <img src="/logo.png" alt="OnSite" class="app-launch-logo" />
+        <div class="app-launch-progress" data-launch-progress>
+          <span class="app-launch-visually-hidden">Loading OnSite</span>
+          <span class="app-launch-track" aria-hidden="true">
+            <span class="app-launch-progress-segment"></span>
+          </span>
+        </div>
+        <div class="app-launch-error" data-launch-error aria-hidden="true">
+          <p>We couldn't load OnSite.</p>
+          <button class="primary-btn app-launch-retry" type="button" data-launch-retry>Try again</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ══════════════════════════════════════════════════════
          AUTH OVERLAY
     ══════════════════════════════════════════════════════ -->
-    <div id="auth-overlay" class="auth-overlay" style="display:none">
+    <div id="auth-overlay" class="auth-overlay" style="display:none" aria-hidden="true" inert>
 
       <!-- ── Welcome Screen ─────────────────────────────── -->
       <div class="auth-screen" id="screen-welcome">
@@ -542,7 +558,7 @@
     <!-- ══════════════════════════════════════════════════════
          MAIN APP
     ══════════════════════════════════════════════════════ -->
-    <div class="app-root os-app-shell" id="main-app">
+    <div class="app-root os-app-shell" id="main-app" aria-hidden="true" inert>
 
       <!-- Tab Navigation -->
       <nav class="tab-nav">
@@ -579,11 +595,7 @@
 
         <!-- DASHBOARD TAB -->
         <div class="tab-panel active" id="tab-dashboard">
-          <div class="stats-row" id="statsRow">
-            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
-            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
-            <div class="skeleton-card skeleton-card--stat" aria-hidden="true"><span class="skeleton-line compact"></span><span class="skeleton-line wide"></span></div>
-          </div>
+          <div class="stats-row" id="statsRow"></div>
           <div id="extensionReminders"></div>
           <div id="agreementsOverview"></div>
           <div class="panel-header">
@@ -592,10 +604,7 @@
               <p class="panel-subtitle">Best available workers ranked by reliability score</p>
             </div>
           </div>
-          <div id="matchResults" class="card-list">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="matchResults" class="card-list"></div>
 
           <div class="panel-header" style="margin-top:28px;">
             <div>
@@ -603,9 +612,7 @@
               <p class="panel-subtitle">Recent assignments, score updates &amp; new additions</p>
             </div>
           </div>
-          <div id="activityFeed" class="activity-feed">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
-          </div>
+          <div id="activityFeed" class="activity-feed"></div>
 
           <div class="panel-header" style="margin-top:28px;">
             <div>
@@ -613,9 +620,7 @@
               <p class="panel-subtitle">Bookings cancelled by companies &amp; any payment owed to workers</p>
             </div>
           </div>
-          <div id="cancelledBookingsList" class="card-list">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
-          </div>
+          <div id="cancelledBookingsList" class="card-list"></div>
         </div>
 
         <!-- WORKERS TAB -->
@@ -639,10 +644,7 @@
             </div>
           </div>
           <div id="workersEmpty" class="empty-state" style="display:none">No workers match your search. Try another name, trade or qualification.</div>
-          <div id="workersList" class="card-list">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="workersList" class="card-list"></div>
         </div>
 
         <!-- ATTENDANCE TAB -->
@@ -656,10 +658,7 @@
           </div>
           <div id="attendanceDemoControls"></div>
           <div id="siteQrPanel"></div>
-          <div id="attendanceCards" class="card-list">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="attendanceCards" class="card-list"></div>
           <div id="adminAttReview"></div>
           <div class="att-submit-wrap">
             <button id="submitAttendanceBtn" class="primary-btn wide att-submit-btn" type="button">
@@ -673,9 +672,7 @@
               <p class="panel-subtitle" id="attHistorySub">Past attendance records by day</p>
             </div>
           </div>
-          <div id="attendanceHistory">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span></div>
-          </div>
+          <div id="attendanceHistory"></div>
 
         </div>
 
@@ -687,9 +684,7 @@
               <p class="panel-subtitle">Company requests awaiting assignment</p>
             </div>
           </div>
-          <div id="jobsList" class="card-list">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="jobsList" class="card-list"></div>
         </div>
 
         <!-- OFFERS TAB (Worker) -->
@@ -700,9 +695,7 @@
               <p class="panel-subtitle">Active job offers, decisions and offer history</p>
             </div>
           </div>
-          <div id="offersContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="offersContent"></div>
         </div>
 
         <!-- CALENDAR TAB (Worker) -->
@@ -713,9 +706,7 @@
               <p class="panel-subtitle">Availability, Planned Absence and upcoming commitments</p>
             </div>
           </div>
-          <div id="calendarContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="calendarContent"></div>
         </div>
 
         <!-- PAYMENTS TAB (Admin) -->
@@ -726,9 +717,7 @@
               <p class="panel-subtitle">Invoices, worker payouts, company terms &amp; restrictions</p>
             </div>
           </div>
-          <div id="paymentsContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="paymentsContent"></div>
         </div>
 
         <!-- ADD TAB -->
@@ -1163,30 +1152,22 @@
 
         <!-- PROFILE TAB (Worker) -->
         <div class="tab-panel" id="tab-profile">
-          <div id="profileContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="profileContent"></div>
         </div>
 
         <!-- ACCOUNT TAB (Company) -->
         <div class="tab-panel" id="tab-account">
-          <div id="accountContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="accountContent"></div>
         </div>
 
         <!-- NOTIFICATIONS TAB (Company) -->
         <div class="tab-panel" id="tab-notifications">
-          <div id="notificationsContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="notificationsContent"></div>
         </div>
 
         <!-- LABOUR MARKET TAB (Company) -->
         <div class="tab-panel" id="tab-market">
-          <div id="marketContent">
-            <div class="skeleton-card" aria-hidden="true"><span class="skeleton-line wide"></span><span class="skeleton-line"></span><span class="skeleton-line short"></span></div>
-          </div>
+          <div id="marketContent"></div>
         </div>
 
       </main>
@@ -1648,6 +1629,7 @@
       <div id="aiChatPanel" class="ai-chat-panel"></div>
     </div>
 
+    <script src="boot.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="ui.js"></script>
     <script src="app.js"></script>

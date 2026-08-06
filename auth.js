@@ -69,12 +69,27 @@ function clearCurrentUser() {
 
 // ─── Overlay & Screen Control ──────────────────────────────
 const authOverlay = document.getElementById('auth-overlay');
+const mainApp = document.getElementById('main-app');
+
+function setMainAppAvailable(isAvailable) {
+  if (!mainApp) return;
+  if (isAvailable) {
+    mainApp.removeAttribute('inert');
+    mainApp.removeAttribute('aria-hidden');
+    return;
+  }
+  mainApp.setAttribute('inert', '');
+  mainApp.setAttribute('aria-hidden', 'true');
+}
 
 function showAuthOverlay() {
+  setMainAppAvailable(false);
   authOverlay.style.display = 'flex';
+  authOverlay.setAttribute('aria-hidden', 'false');
 }
 function hideAuthOverlay() {
   authOverlay.style.display = 'none';
+  authOverlay.setAttribute('aria-hidden', 'true');
 }
 
 function showScreen(id) {
@@ -91,6 +106,7 @@ function updateTopbarUser(user) {
   const userSection = document.getElementById('topbar-user');
   const resetBtn    = document.getElementById('resetDemoBtn');
   if (!user) return;
+  setMainAppAvailable(true);
 
   const ini = user.name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
   const initialsEl = document.getElementById('topbar-user-initials');
@@ -515,41 +531,46 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
 
 // ─── Init ──────────────────────────────────────────────────
 (function init() {
-  // Populate cert checkboxes
-  const certContainer = document.getElementById('certCheckboxes');
-  certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
-    return '<label class="cert-checkbox">' +
-      '<input type="checkbox" value="' + c + '" />' +
-      '<span class="cert-name">' + c + '</span>' +
-      '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
-      '</label>';
-  }).join('');
+  try {
+    // Populate cert checkboxes
+    const certContainer = document.getElementById('certCheckboxes');
+    certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
+      return '<label class="cert-checkbox">' +
+        '<input type="checkbox" value="' + c + '" />' +
+        '<span class="cert-name">' + c + '</span>' +
+        '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
+        '</label>';
+    }).join('');
 
-  // Populate initial grades
-  populateGrades(document.getElementById('regTrade').value);
+    // Populate initial grades
+    populateGrades(document.getElementById('regTrade').value);
 
-  document.getElementById('useCurrentLocationBtn')?.addEventListener('click', async function() {
-    const btn = this;
-    const input = document.getElementById('regLocation');
-    if (!input || typeof getGPS !== 'function') return;
-    setAuthButtonLoading(btn, true, 'Locating');
-    try {
-      const gps = await getGPS();
-      input.value = gps.lat.toFixed(5) + ', ' + gps.lng.toFixed(5);
-    } catch (_) {
-      input.placeholder = 'Location unavailable — enter town or postcode';
-    } finally {
-      setAuthButtonLoading(btn, false);
+    document.getElementById('useCurrentLocationBtn')?.addEventListener('click', async function() {
+      const btn = this;
+      const input = document.getElementById('regLocation');
+      if (!input || typeof getGPS !== 'function') return;
+      setAuthButtonLoading(btn, true, 'Locating');
+      try {
+        const gps = await getGPS();
+        input.value = gps.lat.toFixed(5) + ', ' + gps.lng.toFixed(5);
+      } catch (_) {
+        input.placeholder = 'Location unavailable — enter town or postcode';
+      } finally {
+        setAuthButtonLoading(btn, false);
+      }
+    });
+
+    // Check the existing session before revealing either the app or auth shell.
+    const user = getCurrentUser();
+    if (user) {
+      hideAuthOverlay();
+      updateTopbarUser(user);
+    } else {
+      showAuthOverlay();
+      showScreen('welcome');
     }
-  });
-
-  // Check existing session
-  const user = getCurrentUser();
-  if (user) {
-    hideAuthOverlay();
-    updateTopbarUser(user);
-  } else {
-    showAuthOverlay();
-    showScreen('welcome');
+    window.OnSiteLaunch?.ready();
+  } catch (error) {
+    window.OnSiteLaunch?.fail(error);
   }
 })();
