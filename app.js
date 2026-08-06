@@ -9381,13 +9381,16 @@ let activeCompanyProjectRequiresAction = false;
 let activeCompanyProjectOpenLabourOnly = false;
 let activeCompanyProjectAssignmentFilters = [];
 let activeCompanyProjectTradeFilters = [];
-let activeCompanyProjectLocationFilters = [];
+let activeCompanyProjectLocationFilter = "";
+let pendingCompanyProjectLocationFilter = null;
 let activeCompanyProjectStartFrom = "";
 let activeCompanyProjectStartTo = "";
 let activeCompanyProjectStatusFilter = "all";
 let activeCompanyProjectOperationalFilter = "";
 let activeCompanyProjectEditId = "";
 let companyProjectSearchTimer = null;
+let companyProjectTradeSearchTimer = null;
+let companyProjectLocationInputTimer = null;
 let activeCompanyAccountView = "profile";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
@@ -9455,7 +9458,8 @@ function applyCompanyKpiDrilldownState(kind) {
     activeCompanyProjectOpenLabourOnly = false;
     activeCompanyProjectAssignmentFilters = [];
     activeCompanyProjectTradeFilters = [];
-    activeCompanyProjectLocationFilters = [];
+    activeCompanyProjectLocationFilter = "";
+    pendingCompanyProjectLocationFilter = null;
     activeCompanyProjectStartFrom = "";
     activeCompanyProjectStartTo = "";
     activeCompanyProjectStatusFilter = "all";
@@ -9872,9 +9876,16 @@ function filterCompanyProjects(jobs, user) {
       );
       const requirementTrades = uniqueLabourRequirements(
         summary.labourRequirements || [],
-      ).map((req) => String(req.trade || "").trim().toLowerCase());
-      const location = String(job.location || job.siteAddress || "")
-        .trim()
+      ).map((req) => canonicalTrade(req.trade));
+      const locationSearchText = [
+        job.location,
+        job.siteAddress,
+        job.postcode,
+        job.sitePostcode,
+        job.postalCode,
+      ]
+        .filter(Boolean)
+        .join(" ")
         .toLowerCase();
       const startMs = dateOnlyMs(job.start || job.startDate || "");
       if (
@@ -9916,15 +9927,15 @@ function filterCompanyProjects(jobs, user) {
       if (
         activeCompanyProjectTradeFilters.length &&
         !activeCompanyProjectTradeFilters.some((trade) =>
-          requirementTrades.includes(trade.toLowerCase()),
+          requirementTrades.includes(canonicalTrade(trade)),
         )
       ) {
         return false;
       }
       if (
-        activeCompanyProjectLocationFilters.length &&
-        !activeCompanyProjectLocationFilters.some(
-          (item) => item.toLowerCase() === location,
+        activeCompanyProjectLocationFilter &&
+        !locationSearchText.includes(
+          activeCompanyProjectLocationFilter.trim().toLowerCase(),
         )
       ) {
         return false;
@@ -10041,7 +10052,7 @@ function companyProjectHasDirectoryFilters() {
     activeCompanyProjectHealthFilters.length ||
     activeCompanyProjectAssignmentFilters.length ||
     activeCompanyProjectTradeFilters.length ||
-    activeCompanyProjectLocationFilters.length ||
+    activeCompanyProjectLocationFilter ||
     activeCompanyProjectOpenLabourOnly ||
     activeCompanyProjectStartFrom ||
     activeCompanyProjectStartTo
@@ -10055,7 +10066,8 @@ function clearCompanyProjectDirectoryFilters() {
   activeCompanyProjectOpenLabourOnly = false;
   activeCompanyProjectAssignmentFilters = [];
   activeCompanyProjectTradeFilters = [];
-  activeCompanyProjectLocationFilters = [];
+  activeCompanyProjectLocationFilter = "";
+  pendingCompanyProjectLocationFilter = null;
   activeCompanyProjectStartFrom = "";
   activeCompanyProjectStartTo = "";
 }
@@ -10449,37 +10461,21 @@ function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
   </label>`;
 }
 
-function companyProjectFilterOptions(jobs = []) {
-  const uniqueValues = (values) =>
-    Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
-      a.localeCompare(b),
-    );
+function companyProjectFilterOptions() {
   return {
-    assignments: uniqueValues(
-      jobs.map((job) => normalizeAssignmentType(job.assignmentType || job.jobType)),
-    ),
-    trades: uniqueValues(
-      jobs.flatMap((job) =>
-        uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) =>
-          String(req.trade || "").trim(),
-        ),
-      ),
-    ),
-    locations: uniqueValues(
-      jobs.map((job) => String(job.location || job.siteAddress || "").trim()),
-    ),
+    assignments: Object.entries(ASSIGNMENT_TYPES),
+    trades: Object.keys(TRADE_SPECIALISMS),
   };
 }
 
 function companyProjectAppliedFilterCount() {
   return (
-    activeCompanyProjectHealthFilters.length +
-    activeCompanyProjectAssignmentFilters.length +
-    activeCompanyProjectTradeFilters.length +
-    activeCompanyProjectLocationFilters.length +
+    (activeCompanyProjectHealthFilters.length ? 1 : 0) +
+    (activeCompanyProjectAssignmentFilters.length ? 1 : 0) +
+    (activeCompanyProjectTradeFilters.length ? 1 : 0) +
+    (activeCompanyProjectLocationFilter ? 1 : 0) +
     (activeCompanyProjectOpenLabourOnly ? 1 : 0) +
-    (activeCompanyProjectStartFrom ? 1 : 0) +
-    (activeCompanyProjectStartTo ? 1 : 0)
+    (activeCompanyProjectStartFrom || activeCompanyProjectStartTo ? 1 : 0)
   );
 }
 
@@ -10495,8 +10491,8 @@ function companyProjectFilterCheckboxHTML({
   </label>`;
 }
 
-function companyProjectFilterHTML(jobs = []) {
-  const options = companyProjectFilterOptions(jobs);
+function companyProjectFilterHTML() {
+  const options = companyProjectFilterOptions();
   const appliedCount = companyProjectAppliedFilterCount();
   const healthOptions = [
     ["urgent", "Urgent"],
@@ -10527,20 +10523,27 @@ function companyProjectFilterHTML(jobs = []) {
         <div class="company-project-filter-options">
           ${options.assignments
           .map(
-            (value) => companyProjectFilterCheckboxHTML({
+            ([value, label]) => companyProjectFilterCheckboxHTML({
               value,
-              label: ASSIGNMENT_TYPES[value] || value,
+              label,
               attribute: "data-company-assignment-filter",
               selected: activeCompanyProjectAssignmentFilters.includes(value),
             }),
           )
-          .join("") || `<span class="company-project-filter-empty">No assignment types available</span>`}
+          .join("")}
         </div>
       </div>
       <div class="company-project-filter-columns">
         <div class="company-project-filter-group">
-          <span>Trade</span>
-          <div class="company-project-filter-options company-project-filter-options--scroll">
+          <div class="company-project-filter-group-heading">
+            <span>Trade</span>
+            <small data-company-trade-selection-summary>${activeCompanyProjectTradeFilters.length ? `${activeCompanyProjectTradeFilters.length} selected` : "All trades"}</small>
+          </div>
+          <label class="company-project-filter-search">
+            <span class="sr-only">Search trades</span>
+            <input type="search" placeholder="Search trades" autocomplete="off" data-company-trade-search />
+          </label>
+          <div class="company-project-filter-options company-project-filter-options--scroll company-project-trade-options" data-company-trade-options>
             ${options.trades
               .map((value) => companyProjectFilterCheckboxHTML({
                 value,
@@ -10548,21 +10551,16 @@ function companyProjectFilterHTML(jobs = []) {
                 attribute: "data-company-trade-filter",
                 selected: activeCompanyProjectTradeFilters.includes(value),
               }))
-              .join("") || `<span class="company-project-filter-empty">No trades available</span>`}
+              .join("")}
           </div>
+          <span class="company-project-filter-empty" data-company-trade-empty hidden>No trades match that search.</span>
         </div>
         <div class="company-project-filter-group">
           <span>Location</span>
-          <div class="company-project-filter-options company-project-filter-options--scroll">
-            ${options.locations
-              .map((value) => companyProjectFilterCheckboxHTML({
-                value,
-                label: value,
-                attribute: "data-company-location-filter",
-                selected: activeCompanyProjectLocationFilters.includes(value),
-              }))
-              .join("") || `<span class="company-project-filter-empty">No locations available</span>`}
-          </div>
+          <label class="company-project-filter-search">
+            <span class="sr-only">Location</span>
+            <input type="search" value="${escapeHtml(pendingCompanyProjectLocationFilter !== null ? pendingCompanyProjectLocationFilter : activeCompanyProjectLocationFilter)}" placeholder="Town, city or postcode" autocomplete="postal-code" data-company-location-filter aria-label="Location" />
+          </label>
         </div>
       </div>
       ${companyProjectFilterCheckboxHTML({
@@ -13654,7 +13652,7 @@ function renderCompanyProjectsPage(user) {
           ${companyOperationalFilterBarHTML(activeCompanyProjectOperationalFilter, "data-company-operational-clear")}
           <div class="company-project-toolbar company-project-directory-toolbar">
             ${companyProjectSearchHTML("companyProjectsSearch", { showInlineLabel: false })}
-            ${companyProjectFilterHTML(companyJobs)}
+            ${companyProjectFilterHTML()}
             ${companyProjectSortHTML()}
             <button class="primary-btn company-project-request-btn" type="button" data-company-request-labour>${onsiteIcon("plus", 16)}<span>Request labour</span></button>
           </div>
@@ -14288,6 +14286,45 @@ function bindCompanyProjectSearch(scope) {
   scope.querySelectorAll("[data-company-operational-clear]").forEach((btn) => {
     btn.addEventListener("click", () => clearCompanyKpiDrilldown("jobs"));
   });
+  const tradeSearch = scope.querySelector("[data-company-trade-search]");
+  const tradeOptions = Array.from(
+    scope.querySelectorAll("[data-company-trade-filter]"),
+  );
+  const tradeSelectionSummary = scope.querySelector(
+    "[data-company-trade-selection-summary]",
+  );
+  const updateTradeSelectionSummary = () => {
+    if (!tradeSelectionSummary) return;
+    const selectedCount = tradeOptions.filter((option) => option.checked).length;
+    tradeSelectionSummary.textContent = selectedCount
+      ? `${selectedCount} selected`
+      : "All trades";
+  };
+  tradeOptions.forEach((option) =>
+    option.addEventListener("change", updateTradeSelectionSummary),
+  );
+  tradeSearch?.addEventListener("input", () => {
+    window.clearTimeout(companyProjectTradeSearchTimer);
+    companyProjectTradeSearchTimer = window.setTimeout(() => {
+      const query = tradeSearch.value.trim().toLowerCase();
+      let visibleCount = 0;
+      tradeOptions.forEach((option) => {
+        const row = option.closest("label");
+        const visible = !query || option.value.toLowerCase().includes(query);
+        if (row) row.hidden = !visible;
+        if (visible) visibleCount += 1;
+      });
+      const empty = scope.querySelector("[data-company-trade-empty]");
+      if (empty) empty.hidden = visibleCount > 0;
+    }, 120);
+  });
+  const locationFilter = scope.querySelector("[data-company-location-filter]");
+  locationFilter?.addEventListener("input", () => {
+    window.clearTimeout(companyProjectLocationInputTimer);
+    companyProjectLocationInputTimer = window.setTimeout(() => {
+      pendingCompanyProjectLocationFilter = locationFilter.value;
+    }, 140);
+  });
   scope.querySelector("[data-company-filter-apply]")?.addEventListener("click", () => {
     const selectedValues = (attribute) =>
       Array.from(scope.querySelectorAll(`[${attribute}]:checked`)).map(
@@ -14298,9 +14335,10 @@ function bindCompanyProjectSearch(scope) {
       "data-company-assignment-filter",
     );
     activeCompanyProjectTradeFilters = selectedValues("data-company-trade-filter");
-    activeCompanyProjectLocationFilters = selectedValues(
-      "data-company-location-filter",
-    );
+    window.clearTimeout(companyProjectLocationInputTimer);
+    activeCompanyProjectLocationFilter =
+      scope.querySelector("[data-company-location-filter]")?.value.trim() || "";
+    pendingCompanyProjectLocationFilter = null;
     activeCompanyProjectOpenLabourOnly = !!scope.querySelector(
       "[data-company-open-labour-filter]",
     )?.checked;
@@ -14312,6 +14350,8 @@ function bindCompanyProjectSearch(scope) {
     render();
   });
   scope.querySelector("[data-company-filter-clear]")?.addEventListener("click", () => {
+    window.clearTimeout(companyProjectTradeSearchTimer);
+    window.clearTimeout(companyProjectLocationInputTimer);
     clearCompanyProjectDirectoryFilters();
     closeAppPopovers();
     render();

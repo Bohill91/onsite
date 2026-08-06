@@ -583,11 +583,60 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   overflow-y: auto;
 }
 
+.company-project-trade-options {
+  grid-template-columns: 1fr;
+}
+
 .company-project-filter-columns,
 .company-project-filter-date-range {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.company-project-filter-columns {
+  align-items: start;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+
+.company-project-filter-group-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.company-project-filter-group-heading > small {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.company-project-filter-search {
+  display: block;
+}
+
+.company-project-filter-search input {
+  background: var(--surface-2);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  font: inherit;
+  min-height: 38px;
+  min-width: 0;
+  padding: 7px 9px;
+  width: 100%;
+}
+
+.company-project-filter-search input::placeholder {
+  color: var(--ink-4);
+}
+
+.company-project-filter-search input:focus-visible {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
+  outline: none;
 }
 
 .company-project-filter-check {
