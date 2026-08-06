@@ -465,7 +465,9 @@ function bindGlobalDropdownBehaviour() {
       target.blur();
     }
     const details = target.closest("details[open]");
-    if (details) closeAppPopovers();
+    if (details && !details.hasAttribute("data-keep-open-on-change")) {
+      closeAppPopovers();
+    }
   });
 
   document.addEventListener("click", (event) => {
@@ -9373,12 +9375,19 @@ function agreementHistorySection(agreements) {
 let activeCompanyProjectId = "";
 let activeCompanyProjectSection = "overview";
 let activeCompanyProjectSearch = "";
-let activeCompanyProjectSort = "created_desc";
+let activeCompanyProjectSort = "health_priority";
 let activeCompanyProjectHealthFilters = [];
 let activeCompanyProjectRequiresAction = false;
+let activeCompanyProjectOpenLabourOnly = false;
+let activeCompanyProjectAssignmentFilters = [];
+let activeCompanyProjectTradeFilters = [];
+let activeCompanyProjectLocationFilters = [];
+let activeCompanyProjectStartFrom = "";
+let activeCompanyProjectStartTo = "";
 let activeCompanyProjectStatusFilter = "all";
 let activeCompanyProjectOperationalFilter = "";
 let activeCompanyProjectEditId = "";
+let companyProjectSearchTimer = null;
 let activeCompanyAccountView = "profile";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
@@ -9443,6 +9452,12 @@ function applyCompanyKpiDrilldownState(kind) {
     activeCompanyProjectSearch = "";
     activeCompanyProjectHealthFilters = [];
     activeCompanyProjectRequiresAction = false;
+    activeCompanyProjectOpenLabourOnly = false;
+    activeCompanyProjectAssignmentFilters = [];
+    activeCompanyProjectTradeFilters = [];
+    activeCompanyProjectLocationFilters = [];
+    activeCompanyProjectStartFrom = "";
+    activeCompanyProjectStartTo = "";
     activeCompanyProjectStatusFilter = "all";
     activeCompanyProjectOperationalFilter = kind;
   } else {
@@ -9852,6 +9867,16 @@ function filterCompanyProjects(jobs, user) {
     .filter((job) => {
       const summary = companyProjectSummary(job, user);
       const health = calculateProjectHealth(job, summary);
+      const assignmentType = normalizeAssignmentType(
+        job.assignmentType || job.jobType,
+      );
+      const requirementTrades = uniqueLabourRequirements(
+        summary.labourRequirements || [],
+      ).map((req) => String(req.trade || "").trim().toLowerCase());
+      const location = String(job.location || job.siteAddress || "")
+        .trim()
+        .toLowerCase();
+      const startMs = dateOnlyMs(job.start || job.startDate || "");
       if (
         activeCompanyProjectStatusFilter !== "all" &&
         companyProjectStatusBucket(job) !== activeCompanyProjectStatusFilter
@@ -9882,9 +9907,45 @@ function filterCompanyProjects(jobs, user) {
       if (activeCompanyProjectRequiresAction && !health.requiresAction) {
         return false;
       }
+      if (
+        activeCompanyProjectAssignmentFilters.length &&
+        !activeCompanyProjectAssignmentFilters.includes(assignmentType)
+      ) {
+        return false;
+      }
+      if (
+        activeCompanyProjectTradeFilters.length &&
+        !activeCompanyProjectTradeFilters.some((trade) =>
+          requirementTrades.includes(trade.toLowerCase()),
+        )
+      ) {
+        return false;
+      }
+      if (
+        activeCompanyProjectLocationFilters.length &&
+        !activeCompanyProjectLocationFilters.some(
+          (item) => item.toLowerCase() === location,
+        )
+      ) {
+        return false;
+      }
+      if (
+        activeCompanyProjectOpenLabourOnly &&
+        companyProjectOpenLabourRequirementCount(summary) === 0
+      ) {
+        return false;
+      }
+      if (activeCompanyProjectStartFrom) {
+        const fromMs = dateOnlyMs(activeCompanyProjectStartFrom);
+        if (startMs === null || (fromMs !== null && startMs < fromMs)) return false;
+      }
+      if (activeCompanyProjectStartTo) {
+        const toMs = dateOnlyMs(activeCompanyProjectStartTo);
+        if (startMs === null || (toMs !== null && startMs > toMs)) return false;
+      }
       return true;
     })
-    .sort((a, b) => sortCompanyProjects(a, b, activeCompanyProjectSort));
+    .sort((a, b) => sortCompanyProjects(a, b, activeCompanyProjectSort, user));
 }
 
 function companyProjectStatusBucket(job) {
@@ -9892,11 +9953,26 @@ function companyProjectStatusBucket(job) {
     return "completed";
   }
   const startDays = projectStartDays(job);
-  if (startDays !== null && startDays >= 0) return "upcoming";
+  const endDays = projectEndDays(job);
+  if (!job?.noFixedEndDate && endDays !== null && endDays < 0) return "completed";
+  if (startDays !== null && startDays > 0) return "upcoming";
   return "active";
 }
 
-function companyProjectStatusFilterHTML() {
+function companyProjectStatusCounts(jobs = []) {
+  return jobs.reduce(
+    (counts, job) => {
+      const bucket = companyProjectStatusBucket(job);
+      counts.all += 1;
+      counts[bucket] += 1;
+      return counts;
+    },
+    { all: 0, active: 0, upcoming: 0, completed: 0 },
+  );
+}
+
+function companyProjectStatusFilterHTML(jobs = []) {
+  const counts = companyProjectStatusCounts(jobs);
   const options = [
     ["all", "All"],
     ["active", "Active"],
@@ -9906,7 +9982,12 @@ function companyProjectStatusFilterHTML() {
   return `<div class="company-project-status-filter" role="group" aria-label="Project status filter">
     ${options
       .map(
-        ([value, label]) => `<button class="company-project-status-chip${activeCompanyProjectStatusFilter === value ? " active" : ""}" type="button" data-company-status-filter="${value}">${label}</button>`,
+        ([value, label]) => {
+          const count = counts[value] || 0;
+          return `<button class="company-project-status-chip${activeCompanyProjectStatusFilter === value ? " active" : ""}" type="button" data-company-status-filter="${value}" aria-pressed="${activeCompanyProjectStatusFilter === value ? "true" : "false"}">
+            <span>${label}</span>${count ? `<small>${count}</small>` : ""}
+          </button>`;
+        },
       )
       .join("")}
   </div>`;
@@ -9925,13 +10006,8 @@ function companyOperationalFilterBarHTML(filter, clearAttribute) {
 }
 
 function companyProjectResultCountLabel(visibleProjects, user) {
-  if (activeCompanyProjectOperationalFilter === "open_labour_requirements") {
-    const openPlaces = companyOpenLabourRequirementCount(
-      visibleProjects.map((job) => companyProjectSummary(job, user)),
-    );
-    return `${openPlaces} open labour place${openPlaces === 1 ? "" : "s"} across ${visibleProjects.length} project${visibleProjects.length === 1 ? "" : "s"}`;
-  }
-  return `${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}`;
+  const count = visibleProjects.length;
+  return `${count} project${count === 1 ? "" : "s"}`;
 }
 
 function companyProjectFilteredEmptyStateHTML() {
@@ -9956,6 +10032,46 @@ function companyProjectFilteredEmptyStateHTML() {
     body: content.body,
     actionLabel: "Clear filter",
     actionAttr: "data-company-operational-clear",
+  });
+}
+
+function companyProjectHasDirectoryFilters() {
+  return !!(
+    activeCompanyProjectStatusFilter !== "all" ||
+    activeCompanyProjectHealthFilters.length ||
+    activeCompanyProjectAssignmentFilters.length ||
+    activeCompanyProjectTradeFilters.length ||
+    activeCompanyProjectLocationFilters.length ||
+    activeCompanyProjectOpenLabourOnly ||
+    activeCompanyProjectStartFrom ||
+    activeCompanyProjectStartTo
+  );
+}
+
+function clearCompanyProjectDirectoryFilters() {
+  activeCompanyProjectStatusFilter = "all";
+  activeCompanyProjectHealthFilters = [];
+  activeCompanyProjectRequiresAction = false;
+  activeCompanyProjectOpenLabourOnly = false;
+  activeCompanyProjectAssignmentFilters = [];
+  activeCompanyProjectTradeFilters = [];
+  activeCompanyProjectLocationFilters = [];
+  activeCompanyProjectStartFrom = "";
+  activeCompanyProjectStartTo = "";
+}
+
+function companyProjectNoResultsHTML() {
+  const filtered = companyProjectHasDirectoryFilters();
+  return guidedEmptyStateHTML({
+    kicker: "No Matches",
+    title: "No projects match these filters.",
+    body: filtered
+      ? "Clear the selected filters to see more projects. Your search term will be kept."
+      : "Try a different project name, job number, location, trade or specialism.",
+    actionLabel: filtered ? "Clear filters" : "Clear search",
+    actionAttr: filtered
+      ? "data-company-project-clear-filters"
+      : "data-company-project-clear-search",
   });
 }
 
@@ -10329,63 +10445,159 @@ function attendanceSelectedProjectHeaderHTML(job) {
 function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
   return `<label class="company-project-search" for="${id}">
     ${showInlineLabel ? "<span>Search projects</span>" : ""}
-    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" aria-label="Search projects" />
+    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by project name, job number, location or trade" autocomplete="off" aria-label="Search projects" />
   </label>`;
 }
 
-function companyProjectFilterHTML() {
-  const operationalOptions = [
-    ["", "All projects"],
-    ["scheduled_today", "Scheduled today"],
-    ["open_labour_requirements", "Open labour requirements"],
-    ["starting_next_7_days", "Starting next 7 days"],
-  ];
+function companyProjectFilterOptions(jobs = []) {
+  const uniqueValues = (values) =>
+    Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b),
+    );
+  return {
+    assignments: uniqueValues(
+      jobs.map((job) => normalizeAssignmentType(job.assignmentType || job.jobType)),
+    ),
+    trades: uniqueValues(
+      jobs.flatMap((job) =>
+        uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) =>
+          String(req.trade || "").trim(),
+        ),
+      ),
+    ),
+    locations: uniqueValues(
+      jobs.map((job) => String(job.location || job.siteAddress || "").trim()),
+    ),
+  };
+}
+
+function companyProjectAppliedFilterCount() {
+  return (
+    activeCompanyProjectHealthFilters.length +
+    activeCompanyProjectAssignmentFilters.length +
+    activeCompanyProjectTradeFilters.length +
+    activeCompanyProjectLocationFilters.length +
+    (activeCompanyProjectOpenLabourOnly ? 1 : 0) +
+    (activeCompanyProjectStartFrom ? 1 : 0) +
+    (activeCompanyProjectStartTo ? 1 : 0)
+  );
+}
+
+function companyProjectFilterCheckboxHTML({
+  value,
+  label,
+  attribute,
+  selected = false,
+}) {
+  return `<label class="checkbox-row compact company-project-filter-check">
+    <input type="checkbox" value="${escapeHtml(value)}" ${attribute}${selected ? " checked" : ""} />
+    <span>${escapeHtml(label)}</span>
+  </label>`;
+}
+
+function companyProjectFilterHTML(jobs = []) {
+  const options = companyProjectFilterOptions(jobs);
+  const appliedCount = companyProjectAppliedFilterCount();
   const healthOptions = [
-    ["matching", "Matching"],
-    ["filled", "Filled"],
-    ["atRisk", "At risk"],
     ["urgent", "Urgent"],
+    ["atRisk", "At Risk"],
+    ["filled", "Healthy"],
+    ["matching", "Neutral"],
   ];
-  return `<details class="company-project-filter">
-    <summary>Filter</summary>
-    <div class="company-project-filter-menu">
-      <div class="company-project-filter-group">
-        <span>Operational view</span>
-        ${operationalOptions
-          .map(
-            ([value, label]) => `<button class="company-project-sort-option${activeCompanyProjectOperationalFilter === value ? " active" : ""}" type="button" data-company-operational-filter="${value}" aria-pressed="${activeCompanyProjectOperationalFilter === value ? "true" : "false"}">${escapeHtml(label)}</button>`,
-          )
-          .join("")}
-      </div>
+  return `<details class="company-project-filter company-project-directory-filter" data-keep-open-on-change>
+    <summary>Filter${appliedCount ? ` <span class="company-project-filter-count">${appliedCount}</span>` : ""}</summary>
+    <div class="company-project-filter-menu company-project-directory-filter-menu">
       <div class="company-project-filter-group">
         <span>Project health</span>
-        ${healthOptions
+        <div class="company-project-filter-options">
+          ${healthOptions
           .map(
-            ([value, label]) => `<label class="checkbox-row compact">
-              <input type="checkbox" value="${value}" data-company-health-filter${activeCompanyProjectHealthFilters.includes(value) ? " checked" : ""} />
-              <span>${label}</span>
-            </label>`,
+            ([value, label]) => companyProjectFilterCheckboxHTML({
+              value,
+              label,
+              attribute: "data-company-health-filter",
+              selected: activeCompanyProjectHealthFilters.includes(value),
+            }),
           )
           .join("")}
+        </div>
       </div>
-      <label class="checkbox-row compact">
-        <input id="companyProjectRequiresAction" type="checkbox"${activeCompanyProjectRequiresAction ? " checked" : ""} />
-        <span>Requires action</span>
-      </label>
+      <div class="company-project-filter-group">
+        <span>Assignment type</span>
+        <div class="company-project-filter-options">
+          ${options.assignments
+          .map(
+            (value) => companyProjectFilterCheckboxHTML({
+              value,
+              label: ASSIGNMENT_TYPES[value] || value,
+              attribute: "data-company-assignment-filter",
+              selected: activeCompanyProjectAssignmentFilters.includes(value),
+            }),
+          )
+          .join("") || `<span class="company-project-filter-empty">No assignment types available</span>`}
+        </div>
+      </div>
+      <div class="company-project-filter-columns">
+        <div class="company-project-filter-group">
+          <span>Trade</span>
+          <div class="company-project-filter-options company-project-filter-options--scroll">
+            ${options.trades
+              .map((value) => companyProjectFilterCheckboxHTML({
+                value,
+                label: value,
+                attribute: "data-company-trade-filter",
+                selected: activeCompanyProjectTradeFilters.includes(value),
+              }))
+              .join("") || `<span class="company-project-filter-empty">No trades available</span>`}
+          </div>
+        </div>
+        <div class="company-project-filter-group">
+          <span>Location</span>
+          <div class="company-project-filter-options company-project-filter-options--scroll">
+            ${options.locations
+              .map((value) => companyProjectFilterCheckboxHTML({
+                value,
+                label: value,
+                attribute: "data-company-location-filter",
+                selected: activeCompanyProjectLocationFilters.includes(value),
+              }))
+              .join("") || `<span class="company-project-filter-empty">No locations available</span>`}
+          </div>
+        </div>
+      </div>
+      ${companyProjectFilterCheckboxHTML({
+        value: "open",
+        label: "Has open labour requirements",
+        attribute: "data-company-open-labour-filter",
+        selected: activeCompanyProjectOpenLabourOnly,
+      })}
+      <div class="company-project-filter-group">
+        <span>Project start date</span>
+        <div class="company-project-filter-date-range">
+          <label>From<input type="date" value="${escapeHtml(activeCompanyProjectStartFrom)}" data-company-start-from /></label>
+          <label>To<input type="date" value="${escapeHtml(activeCompanyProjectStartTo)}" data-company-start-to /></label>
+        </div>
+      </div>
+      <div class="company-project-filter-actions">
+        <button class="secondary-btn" type="button" data-company-filter-clear>Clear all</button>
+        <button class="primary-btn" type="button" data-company-filter-apply>Apply filters</button>
+      </div>
     </div>
   </details>`;
 }
 
 function companyProjectSortHTML() {
   const options = [
-    ["created_desc", "Date created — newest"],
-    ["created_asc", "Date created — oldest"],
-    ["name_asc", "Project name — A-Z"],
+    ["health_priority", "Health priority"],
     ["start_asc", "Start date — soonest"],
     ["start_desc", "Start date — latest"],
+    ["name_asc", "Project name — A–Z"],
+    ["open_desc", "Open positions — highest"],
+    ["updated_desc", "Recently updated"],
   ];
+  const selectedLabel = options.find(([value]) => value === activeCompanyProjectSort)?.[1] || "Health priority";
   return `<details class="company-project-filter company-project-sort">
-    <summary>Sort By</summary>
+    <summary aria-label="Sort projects, currently ${escapeHtml(selectedLabel)}">Sort <span class="company-project-sort-current">${escapeHtml(selectedLabel)}</span></summary>
     <div class="company-project-filter-menu">
       <div class="company-project-filter-group">
         <span>Sort by</span>
@@ -10402,9 +10614,9 @@ function companyProjectSortHTML() {
 function companyProjectEmptyStateHTML(message = "Create your first labour request and it will appear here as a Live Project.") {
   return guidedEmptyStateHTML({
     kicker: "No Projects",
-    title: "No live projects yet",
+    title: "No projects yet",
     body: message,
-    actionLabel: "New Labour Request",
+    actionLabel: "Request labour",
     actionAttr: "data-company-request-labour",
   });
 }
@@ -11601,22 +11813,46 @@ function projectDateValue(value, fallback = Number.MAX_SAFE_INTEGER) {
   return Number.isFinite(time) ? time : fallback;
 }
 
-function sortCompanyProjects(a, b, sortBy) {
-  if (sortBy === "created_asc") {
-    return projectDateValue(a.createdAt || a.postedAt || a.start, 0) -
+function sortCompanyProjects(a, b, sortBy, user = getSessionUser() || {}) {
+  const stableCompare = () =>
+    companyProjectTitle(a).localeCompare(companyProjectTitle(b)) ||
+    String(a.id || "").localeCompare(String(b.id || ""));
+  let result = 0;
+  if (sortBy === "health_priority") {
+    const priority = { urgent: 0, atRisk: 1, matching: 2, filled: 3 };
+    const aHealth = calculateProjectHealth(a, companyProjectSummary(a, user));
+    const bHealth = calculateProjectHealth(b, companyProjectSummary(b, user));
+    result = (priority[aHealth.level] ?? 4) - (priority[bHealth.level] ?? 4);
+  } else if (sortBy === "name_asc") {
+    result = companyProjectTitle(a).localeCompare(companyProjectTitle(b));
+  } else if (sortBy === "start_asc") {
+    result =
+      projectDateValue(a.start || a.startDate) -
+      projectDateValue(b.start || b.startDate);
+  } else if (sortBy === "start_desc") {
+    result =
+      projectDateValue(b.start || b.startDate, 0) -
+      projectDateValue(a.start || a.startDate, 0);
+  } else if (sortBy === "open_desc") {
+    result =
+      companyProjectSummary(b, user).openRoles -
+      companyProjectSummary(a, user).openRoles;
+  } else if (sortBy === "created_asc") {
+    result =
+      projectDateValue(a.createdAt || a.postedAt || a.start, 0) -
       projectDateValue(b.createdAt || b.postedAt || b.start, 0);
+  } else {
+    result =
+      projectDateValue(
+        b.updatedAt || b.lastUpdatedAt || b.createdAt || b.postedAt || b.start,
+        0,
+      ) -
+      projectDateValue(
+        a.updatedAt || a.lastUpdatedAt || a.createdAt || a.postedAt || a.start,
+        0,
+      );
   }
-  if (sortBy === "name_asc") {
-    return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
-  }
-  if (sortBy === "start_asc") {
-    return projectDateValue(a.start || a.startDate) - projectDateValue(b.start || b.startDate);
-  }
-  if (sortBy === "start_desc") {
-    return projectDateValue(b.start || b.startDate, 0) - projectDateValue(a.start || a.startDate, 0);
-  }
-  return projectDateValue(b.createdAt || b.postedAt || b.start, 0) -
-    projectDateValue(a.createdAt || a.postedAt || a.start, 0);
+  return result || stableCompare();
 }
 
 function projectStartDays(job) {
@@ -11787,7 +12023,7 @@ function projectCardAttendanceHTML(job, summary) {
   </div>`;
 }
 
-function projectHealthGuidanceHTML(health) {
+function projectHealthGuidanceHTML(health, { pulse = false } = {}) {
   const recommendations = Array.isArray(health.recommendations)
     ? health.recommendations
     : [];
@@ -11801,8 +12037,8 @@ function projectHealthGuidanceHTML(health) {
           ${health.startDate ? `<p>Workers are due to arrive on ${escapeHtml(formatDateOnly(health.startDate))}.</p>` : ""}
         </div>`
       : "";
-  return `<details class="company-project-health-panel ${escapeHtml(health.level)}" data-project-health-popover>
-    <summary class="company-project-health-line">
+  return `<details class="company-project-health-panel ${escapeHtml(health.level)}${pulse ? " is-pulsing" : ""}" data-project-health-popover>
+    <summary class="company-project-health-line" aria-label="${escapeHtml(health.label)} project health. Open details">
       <span class="company-project-health-led" aria-hidden="true"></span>
       <span class="company-project-health-label">${escapeHtml(health.label)}</span>
       <span class="company-project-health-info" aria-label="Project Health information">ⓘ</span>
@@ -11828,6 +12064,115 @@ function projectHealthGuidanceHTML(health) {
       }
     </div>
   </details>`;
+}
+
+function companyProjectDirectoryHealth(health) {
+  if (health.level === "filled") return { ...health, label: "Healthy" };
+  if (health.level === "matching") return { ...health, label: "Neutral" };
+  return health;
+}
+
+function companyProjectDirectoryPulseId(projects = [], user = {}) {
+  const priority = { urgent: 0, atRisk: 1 };
+  return projects
+    .map((job) => ({
+      id: job.id,
+      health: calculateProjectHealth(job, companyProjectSummary(job, user)),
+    }))
+    .filter((item) =>
+      Object.prototype.hasOwnProperty.call(priority, item.health.level),
+    )
+    .sort(
+      (a, b) =>
+        priority[a.health.level] - priority[b.health.level] ||
+        String(a.id).localeCompare(String(b.id)),
+    )[0]?.id || "";
+}
+
+function companyProjectDirectoryLabourTotals(summary) {
+  const requirements = uniqueLabourRequirements(summary.labourRequirements || []);
+  let unallocatedFilledWorkers = Math.max(0, Number(summary.filled) || 0);
+  const stats = requirements.map((req) => {
+    const rawStats = companyRequirementStats(req, summary);
+    const required = Math.max(1, Number(req.quantity) || 1);
+    const filled = Math.min(required, rawStats.filled, unallocatedFilledWorkers);
+    unallocatedFilledWorkers = Math.max(0, unallocatedFilledWorkers - filled);
+    return {
+      req,
+      stats: {
+        ...rawStats,
+        required,
+        filled,
+        remaining: Math.max(0, required - filled),
+      },
+    };
+  });
+  return {
+    requirements,
+    stats,
+    required: stats.reduce((sum, item) => sum + item.stats.required, 0),
+    filled: stats.reduce((sum, item) => sum + item.stats.filled, 0),
+    open: stats.reduce((sum, item) => sum + item.stats.remaining, 0),
+  };
+}
+
+function companyProjectDirectoryDateLabel(job) {
+  const start = job.start || job.startDate || "";
+  const end = job.end || job.estimatedEndDate || job.endDate || "";
+  const startLabel = start ? formatDateOnly(start) : "Start TBC";
+  if (job.noFixedEndDate) return `${startLabel} – No fixed end date`;
+  return end ? `${startLabel} – ${formatDateOnly(end)}` : `${startLabel} – End TBC`;
+}
+
+function companyProjectDirectoryTimingLabel(job, stage) {
+  if (stage === "upcoming") return countdownCopyFromDate(job.start || job.startDate || "");
+  if (stage === "completed") {
+    const completedDate = job.completedAt || job.end || job.estimatedEndDate || job.endDate;
+    return completedDate ? `Completed ${formatDateOnly(completedDate)}` : "Completed";
+  }
+  return isProjectScheduledToday(job) ? "Scheduled today" : "In progress";
+}
+
+function companyProjectDirectoryContextHTML(job, summary, stage, totals) {
+  if (stage === "active" && isProjectScheduledToday(job)) {
+    const notSignedIn = Math.max(0, summary.expectedToday - summary.signedInToday);
+    return `<section class="company-project-directory-context" aria-label="Today's attendance">
+      <span class="company-project-directory-section-title">Today&apos;s attendance</span>
+      <div class="company-project-directory-attendance">
+        <span><small>Expected</small><strong>${summary.expectedToday}</strong></span>
+        <span><small>Signed in</small><strong>${summary.signedInToday}</strong></span>
+        <span class="${summary.lateReports ? "is-warning" : ""}"><small>Late / informed</small><strong>${summary.lateReports}</strong></span>
+        <span class="${notSignedIn ? "is-warning" : ""}"><small>Not signed in</small><strong>${notSignedIn}</strong></span>
+      </div>
+    </section>`;
+  }
+  if (stage === "upcoming") {
+    return `<section class="company-project-directory-context" aria-label="Project readiness">
+      <span class="company-project-directory-section-title">Project readiness</span>
+      <div class="company-project-directory-readiness">
+        <strong>${escapeHtml(countdownCopyFromDate(job.start || job.startDate || ""))}</strong>
+        <span>${totals.filled} of ${totals.required} position${totals.required === 1 ? "" : "s"} filled · ${totals.open} open</span>
+      </div>
+    </section>`;
+  }
+  if (stage === "completed") {
+    const completedDate = job.completedAt || job.end || job.estimatedEndDate || job.endDate;
+    const attendanceCount = summary.projectAttendanceRecords.length;
+    return `<section class="company-project-directory-context" aria-label="Completed project summary">
+      <span class="company-project-directory-section-title">Project summary</span>
+      <div class="company-project-directory-readiness">
+        <strong>${completedDate ? `Completed ${escapeHtml(formatDateOnly(completedDate))}` : "Completed"}</strong>
+        <span>${totals.filled} of ${totals.required} positions filled${attendanceCount ? ` · ${attendanceCount} attendance record${attendanceCount === 1 ? "" : "s"}` : ""}</span>
+      </div>
+    </section>`;
+  }
+  return `<section class="company-project-directory-context" aria-label="Today's attendance">
+    <span class="company-project-directory-section-title">Today&apos;s attendance</span>
+    <div class="company-project-directory-readiness">
+      <strong>No attendance scheduled today</strong>
+      <span>${totals.filled} of ${totals.required} positions filled · ${totals.open} open</span>
+    </div>
+  </section>`;
 }
 
 function projectHealthNotificationTitle(job, health) {
@@ -11902,51 +12247,60 @@ function syncProjectHealthNotifications(user) {
   return changed;
 }
 
-function companyProjectCardHTML(job, user) {
+function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
   const summary = companyProjectSummary(job, user);
-  const health = calculateProjectHealth(job, summary);
+  const health = companyProjectDirectoryHealth(calculateProjectHealth(job, summary));
   const title = companyProjectTitle(job);
-  const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
-    .map((req) => {
-      const stats = companyRequirementStats(req, summary);
-      return `<div class="company-project-req-line">
+  const stage = companyProjectStatusBucket(job);
+  const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
+  const totals = companyProjectDirectoryLabourTotals(summary);
+  const requirementRows = totals.stats
+    .slice(0, 2)
+    .map(({ req, stats }) => {
+      return `<div class="company-project-directory-requirement">
         <div>
           <strong>${escapeHtml(req.trade || "Labour")}</strong>
-          <span>${escapeHtml(projectRequirementExperienceLabel(req, job))}</span>
+          <span>${escapeHtml(req.specialism || projectRequirementExperienceLabel(req, job))}</span>
         </div>
-        <dl>
-          <div><dt>Filled / required</dt><dd>${stats.filled}/${stats.required}</dd></div>
-          <div><dt>Remaining</dt><dd>${stats.remaining}</dd></div>
-        </dl>
+        <strong>${stats.filled} / ${stats.required}</strong>
+        <strong class="${stats.remaining ? "is-open" : ""}">${stats.remaining}</strong>
       </div>`;
     })
     .join("");
+  const extraRequirements = Math.max(0, totals.stats.length - 2);
   const selected = activeCompanyProjectId === job.id;
   return `
-    <article class="company-project-card jw-card${selected ? " selected" : ""}" tabindex="0" role="button" data-company-project-open="${job.id}">
+    <article class="company-project-directory-card${selected ? " selected" : ""}" tabindex="0" role="link" aria-label="Open ${escapeHtml(title)} project" data-company-project-card="${escapeHtml(job.id)}">
       <div class="company-project-top">
         <div>
           <div class="company-project-kicker">PROJECT</div>
           <div class="company-project-title">${escapeHtml(title)}</div>
           <div class="company-project-meta">${escapeHtml(job.jobNumber || "Not set")} · ${escapeHtml(job.location || "Location TBC")}</div>
         </div>
-        ${projectHealthGuidanceHTML(health)}
+        <div class="company-project-directory-indicators">
+          <span class="company-project-stage company-project-stage--${stage}">${stageLabel}</span>
+          ${projectHealthGuidanceHTML(health, { pulse: pulseHealth })}
+        </div>
       </div>
-      <div class="company-project-facts">
-        <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
-        <span><strong>Start date</strong> ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
-        <span><strong>End date</strong> ${job.noFixedEndDate ? "No fixed end date" : job.end || job.estimatedEndDate ? formatDateOnly(job.end || job.estimatedEndDate) : "TBC"}</span>
-      </div>
-      <div class="company-project-requirements">
-        <span class="company-project-requirements-label">Labour Requirements</span>
-        <div class="company-project-req-list">${requirementRows || `<div class="company-project-req-line"><div><strong>${escapeHtml(job.trade || "Labour")}</strong><span>${escapeHtml(projectRequirementExperienceLabel({ trade: job.trade, grade: job.grade }, job))}</span></div><dl><div><dt>Filled / required</dt><dd>${summary.filled}/${summary.required || 1}</dd></div><div><dt>Remaining</dt><dd>${summary.openRoles}</dd></div></dl></div>`}</div>
-      </div>
-      <div class="company-project-attendance">
-        <span class="company-project-requirements-label">Today's Attendance</span>
-        ${projectCardAttendanceHTML(job, summary)}
-      </div>
-      <div class="company-project-action-row">
-        <div class="primary-btn company-project-open">View Project</div>
+      <dl class="company-project-directory-summary">
+        <div><dt>Assignment type</dt><dd>${escapeHtml(assignmentTypeLabel(job))}</dd></div>
+        <div><dt>Project dates</dt><dd>${escapeHtml(companyProjectDirectoryDateLabel(job))}</dd></div>
+        <div><dt>Labour</dt><dd>${totals.filled} of ${totals.required} filled · ${totals.open} open</dd></div>
+        <div><dt>Timing</dt><dd>${escapeHtml(companyProjectDirectoryTimingLabel(job, stage))}</dd></div>
+      </dl>
+      <section class="company-project-directory-requirements" aria-label="Labour requirements">
+        <div class="company-project-directory-requirements-head">
+          <span>Labour requirement</span><span>Filled</span><span>Open</span>
+        </div>
+        <div class="company-project-directory-requirements-list">
+          ${requirementRows || `<div class="company-project-directory-requirement-empty">No labour requirements have been added.</div>`}
+        </div>
+        ${extraRequirements ? `<span class="company-project-directory-more">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</span>` : ""}
+      </section>
+      ${companyProjectDirectoryContextHTML(job, summary, stage, totals)}
+      <div class="company-project-directory-actions">
+        ${health.level === "urgent" && totals.open > 0 ? `<button class="company-project-inline-action" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements">Review requirement &rarr;</button>` : ""}
+        <button class="company-project-inline-action" type="button" data-company-project-open="${escapeHtml(job.id)}">Open project &rarr;</button>
       </div>
     </article>`;
 }
@@ -13198,6 +13552,7 @@ function renderCompanyProjectsPage(user) {
   if (subtitle) subtitle.textContent = "Project-first view of your labour requests";
   const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
   const visibleProjects = filterCompanyProjects(companyJobs, user);
+  const pulseHealthProjectId = companyProjectDirectoryPulseId(visibleProjects, user);
   const selectedProject = companyJobs.find(
     (job) => job.id === activeCompanyProjectId,
   );
@@ -13219,40 +13574,39 @@ function renderCompanyProjectsPage(user) {
     return;
   }
   el.innerHTML = companyPageShellHTML({
-    kicker: "PROJECTS",
     title: "Projects",
-    subtitle: "Manage active, upcoming and completed projects.",
-    className: "company-projects-shell",
-    bodyClass: "company-projects-body",
+    compactHeader: true,
+    className: "company-dashboard-shell company-projects-shell",
+    bodyClass: "company-dashboard-body company-projects-body",
     body: `
-      <div class="jw-form">
-        <section class="company-dashboard-filter-card jw-card">
-          <div class="company-project-search-card-head">
-            <span>Search projects</span>
-            <div class="company-project-count">${escapeHtml(companyProjectResultCountLabel(visibleProjects, user))}</div>
+      <div class="company-project-directory">
+        <section class="company-project-directory-controls" aria-label="Project controls">
+          <div class="company-project-directory-controls-top">
+            ${companyProjectStatusFilterHTML(companyJobs)}
+            <div class="company-project-count" aria-live="polite">${escapeHtml(companyProjectResultCountLabel(visibleProjects, user))}</div>
           </div>
-          ${companyProjectStatusFilterHTML()}
           ${companyOperationalFilterBarHTML(activeCompanyProjectOperationalFilter, "data-company-operational-clear")}
-          <div class="company-project-toolbar">
+          <div class="company-project-toolbar company-project-directory-toolbar">
             ${companyProjectSearchHTML("companyProjectsSearch", { showInlineLabel: false })}
-            ${companyProjectFilterHTML()}
+            ${companyProjectFilterHTML(companyJobs)}
             ${companyProjectSortHTML()}
+            <button class="primary-btn company-project-request-btn" type="button" data-company-request-labour>${onsiteIcon("plus", 16)}<span>Request labour</span></button>
           </div>
         </section>
-        <div class="company-project-grid">
+        <div class="company-project-grid company-project-directory-list">
           ${
             visibleProjects.length
-              ? visibleProjects.map((job) => companyProjectCardHTML(job, user)).join("")
+              ? visibleProjects
+                  .map((job) =>
+                    companyProjectCardHTML(job, user, {
+                      pulseHealth: job.id === pulseHealthProjectId,
+                    }),
+                  )
+                  .join("")
               : activeCompanyProjectOperationalFilter
                 ? companyProjectFilteredEmptyStateHTML()
                 : companyJobs.length
-                  ? `<div class="company-empty-card">
-                    <div>
-                      <span class="company-project-kicker">No Matches</span>
-                      <strong>No projects match your current view</strong>
-                      <span>Adjust search, project status, health filters or sorting.</span>
-                    </div>
-                  </div>`
+                  ? companyProjectNoResultsHTML()
                   : companyProjectEmptyStateHTML("Use Request Labour to start building your project workforce.")
           }
         </div>
@@ -13702,6 +14056,15 @@ function bindMobileDailyJobButtons(scope) {
 }
 
 function bindCompanyProjectDashboardButtons(scope) {
+  const openCompanyProject = (jobId) => {
+    activeCompanyProjectId = jobId || "";
+    activeCompanyProjectEditId = "";
+    resetProjectEditMap();
+    activeCompanyProjectSection = "overview";
+    if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
+    render();
+    scrollAppToTop();
+  };
   scope.querySelectorAll("[data-dashboard-kpi]").forEach((btn) => {
     btn.addEventListener("click", () => {
       navigateToCompanyKpiDrilldown(btn.dataset.dashboardKpi || "");
@@ -13709,28 +14072,38 @@ function bindCompanyProjectDashboardButtons(scope) {
   });
   scope.querySelectorAll("[data-project-health-popover]").forEach((el) => {
     el.addEventListener("click", (event) => event.stopPropagation());
-    el.addEventListener("keydown", (event) => event.stopPropagation());
+    el.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") event.stopPropagation();
+    });
   });
-  scope.querySelectorAll("[data-company-project-open]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
-      activeCompanyProjectEditId = "";
-      resetProjectEditMap();
-      activeCompanyProjectSection = "overview";
-      if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
-      render();
-      scrollAppToTop();
+  scope
+    .querySelectorAll("[data-company-project-open], [data-company-project-card]")
+    .forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      if (
+        btn.hasAttribute("data-company-project-card") &&
+        event.target.closest("button, a, input, select, textarea, summary, details")
+      ) {
+        return;
+      }
+      event.stopPropagation();
+      openCompanyProject(
+        btn.dataset.companyProjectOpen || btn.dataset.companyProjectCard || "",
+      );
     });
     btn.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
+      if (
+        btn.hasAttribute("data-company-project-card") &&
+        event.target !== btn
+      ) {
+        return;
+      }
       event.preventDefault();
-      activeCompanyProjectId = btn.dataset.companyProjectOpen || "";
-      activeCompanyProjectEditId = "";
-      resetProjectEditMap();
-      activeCompanyProjectSection = "overview";
-      if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
-      render();
-      scrollAppToTop();
+      event.stopPropagation();
+      openCompanyProject(
+        btn.dataset.companyProjectOpen || btn.dataset.companyProjectCard || "",
+      );
     });
   });
   scope.querySelectorAll("[data-company-project-open-section]").forEach((btn) => {
@@ -13810,19 +14183,27 @@ function bindCompanyProjectSearch(scope) {
       input.addEventListener("input", () => {
         const inputId = input.id;
         const cursor = input.selectionStart || input.value.length;
-        activeCompanyProjectSearch = input.value || "";
-        render();
-        requestAnimationFrame(() => {
-          const nextInput = document.getElementById(inputId);
-          if (!nextInput) return;
-          nextInput.focus();
-          nextInput.setSelectionRange(cursor, cursor);
-        });
+        const applySearch = () => {
+          activeCompanyProjectSearch = input.value || "";
+          render();
+          requestAnimationFrame(() => {
+            const nextInput = document.getElementById(inputId);
+            if (!nextInput) return;
+            nextInput.focus();
+            nextInput.setSelectionRange(cursor, cursor);
+          });
+        };
+        if (inputId !== "companyProjectsSearch") {
+          applySearch();
+          return;
+        }
+        window.clearTimeout(companyProjectSearchTimer);
+        companyProjectSearchTimer = window.setTimeout(applySearch, 140);
       });
     });
   scope.querySelectorAll("[data-company-sort-option]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      activeCompanyProjectSort = btn.dataset.companySortOption || "created_desc";
+      activeCompanyProjectSort = btn.dataset.companySortOption || "health_priority";
       closeAppPopovers();
       render();
     });
@@ -13841,19 +14222,49 @@ function bindCompanyProjectSearch(scope) {
   scope.querySelectorAll("[data-company-operational-clear]").forEach((btn) => {
     btn.addEventListener("click", () => clearCompanyKpiDrilldown("jobs"));
   });
-  scope.querySelectorAll("[data-company-health-filter]").forEach((input) => {
-    input.addEventListener("change", () => {
-      activeCompanyProjectHealthFilters = Array.from(
-        scope.querySelectorAll("[data-company-health-filter]:checked"),
-      ).map((item) => item.value);
-      render();
-    });
+  scope.querySelector("[data-company-filter-apply]")?.addEventListener("click", () => {
+    const selectedValues = (attribute) =>
+      Array.from(scope.querySelectorAll(`[${attribute}]:checked`)).map(
+        (item) => item.value,
+      );
+    activeCompanyProjectHealthFilters = selectedValues("data-company-health-filter");
+    activeCompanyProjectAssignmentFilters = selectedValues(
+      "data-company-assignment-filter",
+    );
+    activeCompanyProjectTradeFilters = selectedValues("data-company-trade-filter");
+    activeCompanyProjectLocationFilters = selectedValues(
+      "data-company-location-filter",
+    );
+    activeCompanyProjectOpenLabourOnly = !!scope.querySelector(
+      "[data-company-open-labour-filter]",
+    )?.checked;
+    activeCompanyProjectStartFrom =
+      scope.querySelector("[data-company-start-from]")?.value || "";
+    activeCompanyProjectStartTo =
+      scope.querySelector("[data-company-start-to]")?.value || "";
+    closeAppPopovers();
+    render();
+  });
+  scope.querySelector("[data-company-filter-clear]")?.addEventListener("click", () => {
+    clearCompanyProjectDirectoryFilters();
+    closeAppPopovers();
+    render();
   });
   scope
-    .querySelector("#companyProjectRequiresAction")
-    ?.addEventListener("change", (event) => {
-      activeCompanyProjectRequiresAction = !!event.target.checked;
-      render();
+    .querySelectorAll("[data-company-project-clear-filters]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        clearCompanyProjectDirectoryFilters();
+        render();
+      });
+    });
+  scope
+    .querySelectorAll("[data-company-project-clear-search]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeCompanyProjectSearch = "";
+        render();
+      });
     });
   scope.querySelectorAll("[data-company-status-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
