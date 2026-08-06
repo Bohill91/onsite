@@ -10597,7 +10597,7 @@ function companyProjectSortHTML() {
   ];
   const selectedLabel = options.find(([value]) => value === activeCompanyProjectSort)?.[1] || "Health priority";
   return `<details class="company-project-filter company-project-sort">
-    <summary aria-label="Sort projects, currently ${escapeHtml(selectedLabel)}">Sort <span class="company-project-sort-current">${escapeHtml(selectedLabel)}</span></summary>
+    <summary aria-label="Sort projects, currently ${escapeHtml(selectedLabel)}">Sort: <span class="company-project-sort-current">${escapeHtml(selectedLabel)}</span></summary>
     <div class="company-project-filter-menu">
       <div class="company-project-filter-group">
         <span>Sort by</span>
@@ -12107,13 +12107,67 @@ function companyProjectDirectoryLabourTotals(summary) {
       },
     };
   });
+  const displayStats = Array.from(
+    stats.reduce((groups, item) => {
+      const req = item.req || {};
+      const key = JSON.stringify({
+        trade: req.trade || "",
+        specialism: req.specialism || "",
+        grade: req.grade || "",
+        workActivity: req.workActivity || "",
+        requiredQualifications: req.requiredQualifications || "",
+        labourSchedule: normalizeLabourSchedule(req.labourSchedule),
+        budgetMax: Number(req.budgetMax || 0),
+        workerReceivesFullAdvertisedRate:
+          req.workerReceivesFullAdvertisedRate !== false,
+        overtimeAvailable: !!req.overtimeAvailable,
+        overtimeRates: req.overtimeRates || {},
+        accommodationPaid: !!req.accommodationPaid,
+        accommodationAllowancePerNight: Number(
+          req.accommodationAllowancePerNight || 0,
+        ),
+        workingDays: normalizeWorkingDays(req.workingDays),
+        shiftStartTime: req.shiftStartTime || "",
+        shiftFinishTime: req.shiftFinishTime || "",
+      });
+      const existing = groups.get(key);
+      if (existing) {
+        existing.requirementIds.push(req.id);
+        existing.stats.required += item.stats.required;
+        existing.stats.filled += item.stats.filled;
+        existing.stats.remaining += item.stats.remaining;
+      } else {
+        groups.set(key, {
+          ...item,
+          requirementIds: [req.id],
+          stats: { ...item.stats },
+        });
+      }
+      return groups;
+    }, new Map()).values(),
+  );
   return {
     requirements,
     stats,
+    displayStats,
     required: stats.reduce((sum, item) => sum + item.stats.required, 0),
     filled: stats.reduce((sum, item) => sum + item.stats.filled, 0),
     open: stats.reduce((sum, item) => sum + item.stats.remaining, 0),
   };
+}
+
+function companyProjectDirectoryRequirementDetail(req, job) {
+  const parts = [];
+  const addPart = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    if (parts.some((part) => part.toLowerCase() === text.toLowerCase())) return;
+    parts.push(text);
+  };
+  addPart(req?.grade || job?.grade);
+  addPart(req?.specialism || job?.specialism);
+  addPart(req?.workActivity || job?.workActivity);
+  return parts.slice(0, 2).join(" · ") || "Requirement details not set";
 }
 
 function companyProjectDirectoryDateLabel(job) {
@@ -12139,10 +12193,13 @@ function companyProjectDirectoryContextHTML(job, summary, stage, totals) {
     return `<section class="company-project-directory-context" aria-label="Today's attendance">
       <span class="company-project-directory-section-title">Today&apos;s attendance</span>
       <div class="company-project-directory-attendance">
-        <span><small>Expected</small><strong>${summary.expectedToday}</strong></span>
-        <span><small>Signed in</small><strong>${summary.signedInToday}</strong></span>
-        <span class="${summary.lateReports ? "is-warning" : ""}"><small>Late / informed</small><strong>${summary.lateReports}</strong></span>
-        <span class="${notSignedIn ? "is-warning" : ""}"><small>Not signed in</small><strong>${notSignedIn}</strong></span>
+        <span><small>Expected</small> <strong>${summary.expectedToday}</strong></span>
+        <i aria-hidden="true">·</i>
+        <span><small>Signed in</small> <strong>${summary.signedInToday}</strong></span>
+        <i aria-hidden="true">·</i>
+        <span class="${summary.lateReports ? "is-warning" : ""}"><small>Late / informed</small> <strong>${summary.lateReports}</strong></span>
+        <i aria-hidden="true">·</i>
+        <span class="${notSignedIn ? "is-warning" : ""}"><small>Not signed in</small> <strong>${notSignedIn}</strong></span>
       </div>
     </section>`;
   }
@@ -12151,6 +12208,7 @@ function companyProjectDirectoryContextHTML(job, summary, stage, totals) {
       <span class="company-project-directory-section-title">Project readiness</span>
       <div class="company-project-directory-readiness">
         <strong>${escapeHtml(countdownCopyFromDate(job.start || job.startDate || ""))}</strong>
+        <i aria-hidden="true">·</i>
         <span>${totals.filled} of ${totals.required} position${totals.required === 1 ? "" : "s"} filled · ${totals.open} open</span>
       </div>
     </section>`;
@@ -12162,6 +12220,7 @@ function companyProjectDirectoryContextHTML(job, summary, stage, totals) {
       <span class="company-project-directory-section-title">Project summary</span>
       <div class="company-project-directory-readiness">
         <strong>${completedDate ? `Completed ${escapeHtml(formatDateOnly(completedDate))}` : "Completed"}</strong>
+        <i aria-hidden="true">·</i>
         <span>${totals.filled} of ${totals.required} positions filled${attendanceCount ? ` · ${attendanceCount} attendance record${attendanceCount === 1 ? "" : "s"}` : ""}</span>
       </div>
     </section>`;
@@ -12170,6 +12229,7 @@ function companyProjectDirectoryContextHTML(job, summary, stage, totals) {
     <span class="company-project-directory-section-title">Today&apos;s attendance</span>
     <div class="company-project-directory-readiness">
       <strong>No attendance scheduled today</strong>
+      <i aria-hidden="true">·</i>
       <span>${totals.filled} of ${totals.required} positions filled · ${totals.open} open</span>
     </div>
   </section>`;
@@ -12254,20 +12314,26 @@ function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
   const stage = companyProjectStatusBucket(job);
   const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
   const totals = companyProjectDirectoryLabourTotals(summary);
-  const requirementRows = totals.stats
+  const requirementRows = totals.displayStats
     .slice(0, 2)
     .map(({ req, stats }) => {
       return `<div class="company-project-directory-requirement">
         <div>
           <strong>${escapeHtml(req.trade || "Labour")}</strong>
-          <span>${escapeHtml(req.specialism || projectRequirementExperienceLabel(req, job))}</span>
+          <span>${escapeHtml(companyProjectDirectoryRequirementDetail(req, job))}</span>
         </div>
         <strong>${stats.filled} / ${stats.required}</strong>
         <strong class="${stats.remaining ? "is-open" : ""}">${stats.remaining}</strong>
       </div>`;
     })
     .join("");
-  const extraRequirements = Math.max(0, totals.stats.length - 2);
+  const extraRequirements = Math.max(0, totals.displayStats.length - 2);
+  const openRequirements = totals.stats.filter((item) => item.stats.remaining > 0);
+  const reviewLabel =
+    openRequirements.length > 1
+      ? `Review requirements (${openRequirements.length})`
+      : "Review requirement";
+  const firstOpenRequirementId = openRequirements[0]?.req?.id || "";
   const selected = activeCompanyProjectId === job.id;
   return `
     <article class="company-project-directory-card${selected ? " selected" : ""}" tabindex="0" role="link" aria-label="Open ${escapeHtml(title)} project" data-company-project-card="${escapeHtml(job.id)}">
@@ -12290,16 +12356,16 @@ function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
       </dl>
       <section class="company-project-directory-requirements" aria-label="Labour requirements">
         <div class="company-project-directory-requirements-head">
-          <span>Labour requirement</span><span>Filled</span><span>Open</span>
+          <span>Labour requirements</span><span>Filled</span><span>Open</span>
         </div>
         <div class="company-project-directory-requirements-list">
           ${requirementRows || `<div class="company-project-directory-requirement-empty">No labour requirements have been added.</div>`}
         </div>
-        ${extraRequirements ? `<span class="company-project-directory-more">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</span>` : ""}
+        ${extraRequirements ? `<button class="company-project-directory-more" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</button>` : ""}
       </section>
       ${companyProjectDirectoryContextHTML(job, summary, stage, totals)}
       <div class="company-project-directory-actions">
-        ${health.level === "urgent" && totals.open > 0 ? `<button class="company-project-inline-action" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements">Review requirement &rarr;</button>` : ""}
+        ${totals.open > 0 ? `<button class="company-project-inline-action" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements"${firstOpenRequirementId ? ` data-company-requirement-id="${escapeHtml(firstOpenRequirementId)}"` : ""}>${escapeHtml(reviewLabel)} &rarr;</button>` : ""}
         <button class="company-project-inline-action" type="button" data-company-project-open="${escapeHtml(job.id)}">Open project &rarr;</button>
       </div>
     </article>`;

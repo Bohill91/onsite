@@ -551,7 +551,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 
 .company-project-sort-current {
   color: var(--ink-3);
-  display: block;
+  display: inline;
   font-size: 0.7rem;
   font-weight: 700;
   max-width: 118px;
@@ -643,7 +643,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 }
 
 .company-project-directory-list {
-  gap: 18px;
+  gap: 16px;
   margin: 0;
 }
 
@@ -654,11 +654,11 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   box-shadow: var(--card-shadow);
   cursor: pointer;
   display: grid;
-  gap: 18px;
+  gap: 0;
   min-width: 0;
   outline: 2px solid transparent;
   outline-offset: 2px;
-  padding: 23px 24px;
+  padding: 20px 22px;
   transition:
     border-color 200ms var(--motion-ease),
     box-shadow 200ms var(--motion-ease),
@@ -679,7 +679,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 .company-project-directory-card .company-project-top {
   align-items: flex-start;
   display: grid;
-  gap: 20px;
+  gap: 16px;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
@@ -746,12 +746,13 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   gap: 0;
   grid-template-columns: 0.9fr 1.4fr 1fr 0.8fr;
   margin: 0;
-  padding-top: 16px;
+  margin-top: 16px;
+  padding-top: 11px;
 }
 
 .company-project-directory-summary > div {
   display: grid;
-  gap: 5px;
+  gap: 2px;
   min-width: 0;
   padding: 0 16px;
 }
@@ -785,15 +786,18 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   font-weight: 700;
   line-height: 1.4;
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .company-project-directory-requirements,
 .company-project-directory-context {
   border-top: 1px solid var(--card-divider);
   display: grid;
-  gap: 10px;
-  padding-top: 16px;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 10px;
 }
 
 .company-project-directory-requirements-head,
@@ -815,19 +819,19 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 
 .company-project-directory-requirement {
   border-top: 1px solid var(--card-divider);
-  padding: 10px 0;
+  padding: 5px 0;
 }
 
 .company-project-directory-requirement > div {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
 .company-project-directory-requirement strong {
   color: var(--ink);
   font-size: 0.82rem;
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
 .company-project-directory-requirement > strong {
@@ -843,26 +847,49 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 .company-project-directory-more {
   color: var(--ink-3);
   font-size: 0.75rem;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 
 .company-project-directory-requirement-empty {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .company-project-directory-more {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  color: var(--orange-dark);
+  cursor: pointer;
+  display: inline-flex;
   font-weight: 750;
+  justify-self: start;
+  margin: 0;
+  padding: 1px 2px;
+  text-align: left;
+}
+
+.company-project-directory-more:hover {
+  color: var(--orange);
+}
+
+.company-project-directory-more:focus-visible {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
+  outline: 2px solid rgba(249, 115, 22, 0.65);
+  outline-offset: 2px;
 }
 
 .company-project-directory-attendance {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 9px;
 }
 
 .company-project-directory-attendance > span {
-  display: grid;
-  gap: 3px;
+  align-items: baseline;
+  display: inline-flex;
+  gap: 4px;
 }
 
 .company-project-directory-attendance small {
@@ -873,7 +900,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 
 .company-project-directory-attendance strong {
   color: var(--ink);
-  font-size: 0.98rem;
+  font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -881,11 +908,17 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   color: var(--health-at-risk);
 }
 
+.company-project-directory-attendance > i,
+.company-project-directory-readiness > i {
+  color: var(--ink-4);
+  font-style: normal;
+}
+
 .company-project-directory-readiness {
   align-items: baseline;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 4px 8px;
 }
 
 .company-project-directory-readiness strong {
@@ -904,7 +937,8 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   display: flex;
   gap: 16px;
   justify-content: flex-end;
-  padding-top: 14px;
+  margin-top: 14px;
+  padding-top: 6px;
 }
 
 .company-project-inline-action {
@@ -915,8 +949,8 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 700;
-  min-height: 32px;
-  padding: 6px 4px;
+  min-height: 24px;
+  padding: 2px 4px;
 }
 
 .company-project-inline-action:hover {
@@ -942,6 +976,12 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   .company-project-directory-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 16px;
+  }
+
+  .company-project-directory-summary dd {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .company-project-directory-summary > div,
@@ -1001,10 +1041,6 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
     min-width: 0;
   }
 
-  .company-project-sort-current {
-    display: none;
-  }
-
   .company-project-directory-filter-menu {
     min-width: min(100%, calc(100vw - 48px));
   }
@@ -1039,20 +1075,14 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
     padding-top: 12px;
   }
 
-  .company-project-directory-attendance {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .company-project-directory-actions {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
   }
 
   .company-project-inline-action {
-    justify-content: flex-start;
     text-align: left;
-    width: 100%;
   }
 }
 
