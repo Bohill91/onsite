@@ -14,6 +14,7 @@ const ICON_PATHS = {
   briefcase: `<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/>`,
   calendar: `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
   check: `<polyline points="20 6 9 17 4 12"/>`,
+  chevronRight: `<polyline points="9 18 15 12 9 6"/>`,
   circleSlash: `<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>`,
   clock: `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,
   edit: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
@@ -7607,6 +7608,7 @@ function switchTab(tab, { scroll = true } = {}) {
 function bindTabEvents() {
   document.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      clearCompanyKpiDrilldownForNavigation(btn.dataset.tab || "");
       if (btn.dataset.tab === "request-labour") {
         openLabourRequestPage();
         return;
@@ -7633,6 +7635,7 @@ document.addEventListener("click", (event) => {
   if (!btn) return;
   const tab = btn.dataset.emptyTab;
   if (!tab) return;
+  clearCompanyKpiDrilldownForNavigation(tab);
   if (tab === "request-labour") {
     openLabourRequestPage();
     return;
@@ -7642,6 +7645,7 @@ document.addEventListener("click", (event) => {
 });
 
 window.addEventListener("hashchange", () => {
+  if (syncCompanyKpiDrilldownFromHash()) return;
   if (window.location.hash.startsWith("#attendance/project/")) {
     syncAttendanceProjectFromHash();
     switchTab("attendance");
@@ -7654,6 +7658,7 @@ window.addEventListener("hashchange", () => {
 });
 
 window.addEventListener("popstate", () => {
+  if (syncCompanyKpiDrilldownFromHash()) return;
   if (window.location.hash.startsWith("#attendance/project/")) {
     syncAttendanceProjectFromHash();
     switchTab("attendance");
@@ -7880,7 +7885,9 @@ function applyRoleView(user) {
     if (addTitle) addTitle.textContent = "Labour Request";
     if (addSub) addSub.textContent = "Post a new labour requirement";
     render();
-    switchTab("dashboard");
+    if (!syncCompanyKpiDrilldownFromHash({ scroll: false })) {
+      switchTab("dashboard");
+    }
   } else {
     // Admin / demo — restore original nav and dashboard
     restoreNav();
@@ -9370,12 +9377,14 @@ let activeCompanyProjectSort = "created_desc";
 let activeCompanyProjectHealthFilters = [];
 let activeCompanyProjectRequiresAction = false;
 let activeCompanyProjectStatusFilter = "all";
+let activeCompanyProjectOperationalFilter = "";
 let activeCompanyProjectEditId = "";
 let activeCompanyAccountView = "profile";
 let activeAttendanceProjectId = "";
 let activeAttendanceProjectSearch = "";
 let activeAttendanceProjectFilters = [];
 let activeAttendanceProjectSort = "attendance_required";
+let activeAttendanceOperationalFilter = "";
 let activeMarketFilters = {
   trade: "",
   specialism: "",
@@ -9383,6 +9392,123 @@ let activeMarketFilters = {
   dateFrom: "",
   dateTo: "",
 };
+
+const COMPANY_KPI_DRILLDOWNS = {
+  scheduled_today: {
+    tab: "jobs",
+    hash: "#projects/scheduled-today",
+    label: "Scheduled today",
+  },
+  workers_expected_today: {
+    tab: "attendance",
+    hash: "#attendance/expected-today",
+    label: "Expected today",
+  },
+  open_labour_requirements: {
+    tab: "jobs",
+    hash: "#projects/open-labour-requirements",
+    label: "Open labour requirements",
+  },
+  starting_next_7_days: {
+    tab: "jobs",
+    hash: "#projects/starting-next-7-days",
+    label: "Starting next 7 days",
+  },
+};
+
+function companyKpiDrilldownFromHash(hash = window.location.hash) {
+  return (
+    Object.entries(COMPANY_KPI_DRILLDOWNS).find(([, config]) => config.hash === hash)?.[0] ||
+    ""
+  );
+}
+
+function companyKpiDrilldownIsActive() {
+  return !!(
+    activeCompanyProjectOperationalFilter || activeAttendanceOperationalFilter
+  );
+}
+
+function clearCompanyKpiDrilldownState() {
+  activeCompanyProjectOperationalFilter = "";
+  activeAttendanceOperationalFilter = "";
+}
+
+function applyCompanyKpiDrilldownState(kind) {
+  const config = COMPANY_KPI_DRILLDOWNS[kind];
+  if (!config) return null;
+  clearCompanyKpiDrilldownState();
+  if (config.tab === "jobs") {
+    activeCompanyProjectId = "";
+    activeCompanyProjectSearch = "";
+    activeCompanyProjectHealthFilters = [];
+    activeCompanyProjectRequiresAction = false;
+    activeCompanyProjectStatusFilter = "all";
+    activeCompanyProjectOperationalFilter = kind;
+  } else {
+    activeAttendanceProjectId = "";
+    activeAttendanceProjectSearch = "";
+    activeAttendanceProjectFilters = [];
+    activeAttendanceProjectSort = "attendance_required";
+    activeAttendanceOperationalFilter = kind;
+  }
+  return config;
+}
+
+function navigateToCompanyKpiDrilldown(kind, { replace = false } = {}) {
+  const config = applyCompanyKpiDrilldownState(kind);
+  if (!config) return;
+  const method = replace ? "replaceState" : "pushState";
+  history[method]({ companyKpiDrilldown: kind }, "", config.hash);
+  render();
+  switchTab(config.tab, { scroll: false });
+  scrollAppToTop();
+}
+
+function syncCompanyKpiDrilldownFromHash({ scroll = true } = {}) {
+  const kind = companyKpiDrilldownFromHash();
+  if (kind) {
+    const config = applyCompanyKpiDrilldownState(kind);
+    render();
+    switchTab(config.tab, { scroll: false });
+    if (scroll) scrollAppToTop();
+    return true;
+  }
+  if (!companyKpiDrilldownIsActive()) return false;
+  clearCompanyKpiDrilldownState();
+  render();
+  switchTab("dashboard", { scroll: false });
+  if (scroll) scrollAppToTop();
+  return true;
+}
+
+function clearCompanyKpiDrilldown(page) {
+  clearCompanyKpiDrilldownState();
+  history.pushState(
+    { companyTab: page },
+    "",
+    `${window.location.pathname}${window.location.search}`,
+  );
+  render();
+  switchTab(page, { scroll: false });
+  scrollAppToTop();
+}
+
+function clearCompanyKpiDrilldownForNavigation(nextTab) {
+  const projectFilterLeaving =
+    activeCompanyProjectOperationalFilter && nextTab !== "jobs";
+  const attendanceFilterLeaving =
+    activeAttendanceOperationalFilter && nextTab !== "attendance";
+  if (!projectFilterLeaving && !attendanceFilterLeaving) return;
+  clearCompanyKpiDrilldownState();
+  if (companyKpiDrilldownFromHash()) {
+    history.replaceState(
+      { companyTab: nextTab },
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+  }
+}
 
 function attendanceProjectHash(jobId) {
   return `#attendance/project/${encodeURIComponent(jobId)}`;
@@ -9708,6 +9834,18 @@ function companyProjectSearchText(job, summary = companyProjectSummary(job, getS
     .toLowerCase();
 }
 
+function companyProjectMatchesOperationalFilter(job, projectSummary, filter) {
+  if (!filter) return true;
+  if (filter === "scheduled_today") return isProjectScheduledToday(job);
+  if (filter === "open_labour_requirements") {
+    return companyProjectOpenLabourRequirementCount(projectSummary) > 0;
+  }
+  if (filter === "starting_next_7_days") {
+    return isProjectStartingWithinNextDays(job, 7);
+  }
+  return true;
+}
+
 function filterCompanyProjects(jobs, user) {
   const query = activeCompanyProjectSearch.trim().toLowerCase();
   return jobs
@@ -9717,6 +9855,15 @@ function filterCompanyProjects(jobs, user) {
       if (
         activeCompanyProjectStatusFilter !== "all" &&
         companyProjectStatusBucket(job) !== activeCompanyProjectStatusFilter
+      ) {
+        return false;
+      }
+      if (
+        !companyProjectMatchesOperationalFilter(
+          job,
+          summary,
+          activeCompanyProjectOperationalFilter,
+        )
       ) {
         return false;
       }
@@ -9765,6 +9912,53 @@ function companyProjectStatusFilterHTML() {
   </div>`;
 }
 
+function companyOperationalFilterBarHTML(filter, clearAttribute) {
+  const config = COMPANY_KPI_DRILLDOWNS[filter];
+  if (!config) return "";
+  return `<div class="company-operational-filter" role="status">
+    <span>Filtered by <strong>${escapeHtml(config.label)}</strong></span>
+    <button type="button" ${clearAttribute} aria-label="Clear ${escapeHtml(config.label)} filter">
+      ${onsiteIcon("x", 14)}
+      <span>Clear filter</span>
+    </button>
+  </div>`;
+}
+
+function companyProjectResultCountLabel(visibleProjects, user) {
+  if (activeCompanyProjectOperationalFilter === "open_labour_requirements") {
+    const openPlaces = companyOpenLabourRequirementCount(
+      visibleProjects.map((job) => companyProjectSummary(job, user)),
+    );
+    return `${openPlaces} open labour place${openPlaces === 1 ? "" : "s"} across ${visibleProjects.length} project${visibleProjects.length === 1 ? "" : "s"}`;
+  }
+  return `${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}`;
+}
+
+function companyProjectFilteredEmptyStateHTML() {
+  const content = {
+    scheduled_today: {
+      title: "No projects scheduled today",
+      body: "No active project is operating on today's working-day schedule.",
+    },
+    open_labour_requirements: {
+      title: "No open labour requirements",
+      body: "All current labour places are filled. Clear the filter to view every project.",
+    },
+    starting_next_7_days: {
+      title: "No projects starting in the next 7 days",
+      body: "No project starts after today and within the next seven calendar days.",
+    },
+  }[activeCompanyProjectOperationalFilter];
+  if (!content) return "";
+  return guidedEmptyStateHTML({
+    kicker: "Filtered View",
+    title: content.title,
+    body: content.body,
+    actionLabel: "Clear filter",
+    actionAttr: "data-company-operational-clear",
+  });
+}
+
 function companyAttendanceProjects(user) {
   if (!user?.id) return state.jobs.filter((j) => !j.completed);
   return state.jobs.filter((j) => companyOwnsJob(j, user.id) && !j.completed);
@@ -9796,6 +9990,15 @@ function filterAttendanceProjects(projects) {
   return projects
     .filter((job) => {
       if (query && !attendanceProjectSearchText(job).includes(query)) return false;
+      if (
+        activeAttendanceOperationalFilter === "workers_expected_today" &&
+        companyExpectedWorkersToday({
+          job,
+          expectedToday: attendanceProjectWorkers(job).length,
+        }) === 0
+      ) {
+        return false;
+      }
       if (!activeAttendanceProjectFilters.length) return true;
       const state = attendanceProjectState(job);
       return activeAttendanceProjectFilters.some((filter) => !!state[filter]);
@@ -10008,6 +10211,33 @@ function attendanceProjectSearchHTML() {
   </label>`;
 }
 
+function attendanceProjectResultCountLabel(projects) {
+  if (activeAttendanceOperationalFilter === "workers_expected_today") {
+    const workers = projects.reduce(
+      (sum, job) =>
+        sum +
+        companyExpectedWorkersToday({
+          job,
+          expectedToday: attendanceProjectWorkers(job).length,
+        }),
+      0,
+    );
+    return `${workers} worker${workers === 1 ? "" : "s"} expected today`;
+  }
+  return `${projects.length} result${projects.length === 1 ? "" : "s"}`;
+}
+
+function attendanceFilteredEmptyStateHTML() {
+  if (activeAttendanceOperationalFilter !== "workers_expected_today") return "";
+  return guidedEmptyStateHTML({
+    kicker: "Filtered View",
+    title: "No workers expected today",
+    body: "No assigned workers are scheduled to attend today. Clear the filter to view every attendance project.",
+    actionLabel: "Clear filter",
+    actionAttr: "data-attendance-operational-clear",
+  });
+}
+
 function attendanceProjectToolbarControlsHTML() {
   const filters = [
     ["attendance_required", "Attendance required"],
@@ -10104,6 +10334,12 @@ function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
 }
 
 function companyProjectFilterHTML() {
+  const operationalOptions = [
+    ["", "All projects"],
+    ["scheduled_today", "Scheduled today"],
+    ["open_labour_requirements", "Open labour requirements"],
+    ["starting_next_7_days", "Starting next 7 days"],
+  ];
   const healthOptions = [
     ["matching", "Matching"],
     ["filled", "Filled"],
@@ -10113,6 +10349,14 @@ function companyProjectFilterHTML() {
   return `<details class="company-project-filter">
     <summary>Filter</summary>
     <div class="company-project-filter-menu">
+      <div class="company-project-filter-group">
+        <span>Operational view</span>
+        ${operationalOptions
+          .map(
+            ([value, label]) => `<button class="company-project-sort-option${activeCompanyProjectOperationalFilter === value ? " active" : ""}" type="button" data-company-operational-filter="${value}" aria-pressed="${activeCompanyProjectOperationalFilter === value ? "true" : "false"}">${escapeHtml(label)}</button>`,
+          )
+          .join("")}
+      </div>
       <div class="company-project-filter-group">
         <span>Project health</span>
         ${healthOptions
@@ -10253,6 +10497,8 @@ function companyDashboardSummary(user) {
   const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
   const activeJobs = companyJobs.filter((j) => !j.completed);
   const summaries = activeJobs.map((job) => companyProjectSummary(job, user));
+  const openRequirements = companyOpenLabourRequirementCount(summaries);
+  const upcomingStarts = companyProjectSummariesStartingNextDays({ summaries }).length;
   return {
     companyJobs,
     activeJobs,
@@ -10267,8 +10513,8 @@ function companyDashboardSummary(user) {
       0,
     ),
     attendanceConfirmed: summaries.reduce((sum, s) => sum + s.confirmedToday, 0),
-    openRequirements: summaries.reduce((sum, s) => sum + s.openRoles, 0),
-    upcomingStarts: summaries.filter((s) => s.startDays !== null && s.startDays >= 0 && s.startDays <= 7).length,
+    openRequirements,
+    upcomingStarts,
     startsTomorrow: summaries.filter((s) => s.startDays === 1).length,
     pendingActions: summaries.reduce(
       (sum, s) => sum + s.pendingOffers.length + s.reviewWorkers.length,
@@ -10610,25 +10856,48 @@ function companyDashboardActionHeroHTML(action) {
 function companyDashboardMetricHTML(item) {
   const attrs = item.actionAttr || "";
   const tag = attrs ? "button" : "div";
-  return `<${tag} class="company-briefing-metric ${item.tone}${attrs ? " is-clickable" : ""}" ${attrs} ${tag === "button" ? 'type="button"' : ""}>
+  const accessibleLabel = item.accessibleLabel
+    ? `aria-label="${escapeHtml(item.accessibleLabel)}"`
+    : "";
+  return `<${tag} class="company-briefing-metric ${item.tone}${attrs ? " is-clickable" : ""}" ${attrs} ${accessibleLabel} ${tag === "button" ? 'type="button"' : ""}>
     <strong>${item.value}</strong>
     <span>${escapeHtml(item.label)}</span>
+    ${attrs ? `<span class="company-briefing-metric-chevron">${onsiteIcon("chevronRight", 16)}</span>` : ""}
   </${tag}>`;
 }
 
 function companyDailyBriefingModel(summary, user) {
-  const scheduledToday = companyScheduledProjectSummariesToday(summary);
-  const workersExpectedToday = scheduledToday.reduce((sum, s) => sum + s.expectedToday, 0);
+  const kpis = companyDashboardKpiData(summary);
+  const { scheduledToday, workersExpectedToday } = kpis;
   const metrics = [
-    { label: "Projects scheduled today", value: scheduledToday.length, tone: scheduledToday.length ? "neutral" : "muted" },
+    {
+      label: "Projects scheduled today",
+      value: kpis.projectsScheduledToday,
+      tone: kpis.projectsScheduledToday ? "neutral" : "muted",
+      actionAttr: 'data-dashboard-kpi="scheduled_today"',
+      accessibleLabel: `${kpis.projectsScheduledToday} projects scheduled today — open filtered Projects`,
+    },
     {
       label: "Workers expected today",
       value: workersExpectedToday,
       tone: workersExpectedToday ? "neutral" : "muted",
-      actionAttr: workersExpectedToday ? `data-empty-tab="attendance"` : "",
+      actionAttr: 'data-dashboard-kpi="workers_expected_today"',
+      accessibleLabel: `${workersExpectedToday} workers expected today — open filtered Attendance`,
     },
-    { label: "Open labour requirements", value: summary.openRequirements, tone: summary.openRequirements ? "warn" : "neutral" },
-    { label: "Starting next 7 days", value: summary.upcomingStarts, tone: summary.upcomingStarts ? "neutral" : "muted" },
+    {
+      label: "Open labour requirements",
+      value: kpis.openLabourRequirements,
+      tone: kpis.openLabourRequirements ? "warn" : "neutral",
+      actionAttr: 'data-dashboard-kpi="open_labour_requirements"',
+      accessibleLabel: `${kpis.openLabourRequirements} open labour requirements — open filtered Projects`,
+    },
+    {
+      label: "Starting next 7 days",
+      value: kpis.startingNext7Days,
+      tone: kpis.startingNext7Days ? "neutral" : "muted",
+      actionAttr: 'data-dashboard-kpi="starting_next_7_days"',
+      accessibleLabel: `${kpis.startingNext7Days} projects starting in the next 7 days — open filtered Projects`,
+    },
   ];
   const focus = companyDashboardFocusModel(summary, user);
   const primaryAction = briefingRecommendedAction(summary, focus);
@@ -10670,6 +10939,59 @@ function isProjectScheduledToday(job, date = todayDateStr()) {
   const workingDays = normalizeWorkingDays(job.workingDays || job.defaultWorkingDays);
   const dayKey = new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "long" }).toLowerCase();
   return workingDays.includes(dayKey);
+}
+
+function companyProjectOpenLabourRequirementCount(projectSummary) {
+  return Math.max(0, Number(projectSummary?.openRoles || 0));
+}
+
+function companyOpenLabourRequirementCount(projectSummaries = []) {
+  return projectSummaries.reduce(
+    (sum, projectSummary) =>
+      sum + companyProjectOpenLabourRequirementCount(projectSummary),
+    0,
+  );
+}
+
+function companyExpectedWorkersToday(projectSummary, date = todayDateStr()) {
+  if (!isProjectScheduledToday(projectSummary?.job, date)) return 0;
+  return Math.max(0, Number(projectSummary?.expectedToday || 0));
+}
+
+function isProjectStartingWithinNextDays(job, days = 7, date = todayDateStr()) {
+  if (!job || job.completed || job.cancelledAt || job.bookingStatus === "cancelled") {
+    return false;
+  }
+  const todayMs = dateOnlyMs(date);
+  const startMs = dateOnlyMs(job.start || job.startDate || "");
+  if (todayMs === null || startMs === null) return false;
+  const daysUntilStart = Math.round((startMs - todayMs) / 86400000);
+  return daysUntilStart > 0 && daysUntilStart <= days;
+}
+
+function companyProjectSummariesStartingNextDays(summary, days = 7) {
+  return (summary?.summaries || []).filter((projectSummary) =>
+    isProjectStartingWithinNextDays(projectSummary.job, days),
+  );
+}
+
+function companyDashboardKpiData(summary) {
+  const scheduledToday = companyScheduledProjectSummariesToday(summary);
+  const startingNext7Days = companyProjectSummariesStartingNextDays(summary, 7);
+  return {
+    scheduledToday,
+    projectsScheduledToday: scheduledToday.length,
+    workersExpectedToday: scheduledToday.reduce(
+      (sum, projectSummary) =>
+        sum + companyExpectedWorkersToday(projectSummary),
+      0,
+    ),
+    openLabourRequirements: companyOpenLabourRequirementCount(
+      summary?.summaries || [],
+    ),
+    startingNext7Days: startingNext7Days.length,
+    startingNext7DaysProjects: startingNext7Days,
+  };
 }
 
 function dashboardGreetingPart() {
@@ -12907,9 +13229,10 @@ function renderCompanyProjectsPage(user) {
         <section class="company-dashboard-filter-card jw-card">
           <div class="company-project-search-card-head">
             <span>Search projects</span>
-            <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+            <div class="company-project-count">${escapeHtml(companyProjectResultCountLabel(visibleProjects, user))}</div>
           </div>
           ${companyProjectStatusFilterHTML()}
+          ${companyOperationalFilterBarHTML(activeCompanyProjectOperationalFilter, "data-company-operational-clear")}
           <div class="company-project-toolbar">
             ${companyProjectSearchHTML("companyProjectsSearch", { showInlineLabel: false })}
             ${companyProjectFilterHTML()}
@@ -12920,15 +13243,17 @@ function renderCompanyProjectsPage(user) {
           ${
             visibleProjects.length
               ? visibleProjects.map((job) => companyProjectCardHTML(job, user)).join("")
-              : companyJobs.length
-                ? `<div class="company-empty-card">
+              : activeCompanyProjectOperationalFilter
+                ? companyProjectFilteredEmptyStateHTML()
+                : companyJobs.length
+                  ? `<div class="company-empty-card">
                     <div>
                       <span class="company-project-kicker">No Matches</span>
                       <strong>No projects match your current view</strong>
                       <span>Adjust search, project status, health filters or sorting.</span>
                     </div>
                   </div>`
-                : companyProjectEmptyStateHTML("Use Request Labour to start building your project workforce.")
+                  : companyProjectEmptyStateHTML("Use Request Labour to start building your project workforce.")
           }
         </div>
       </div>`,
@@ -13377,6 +13702,11 @@ function bindMobileDailyJobButtons(scope) {
 }
 
 function bindCompanyProjectDashboardButtons(scope) {
+  scope.querySelectorAll("[data-dashboard-kpi]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navigateToCompanyKpiDrilldown(btn.dataset.dashboardKpi || "");
+    });
+  });
   scope.querySelectorAll("[data-project-health-popover]").forEach((el) => {
     el.addEventListener("click", (event) => event.stopPropagation());
     el.addEventListener("keydown", (event) => event.stopPropagation());
@@ -13496,6 +13826,20 @@ function bindCompanyProjectSearch(scope) {
       closeAppPopovers();
       render();
     });
+  });
+  scope.querySelectorAll("[data-company-operational-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const filter = btn.dataset.companyOperationalFilter || "";
+      closeAppPopovers();
+      if (filter) {
+        navigateToCompanyKpiDrilldown(filter, { replace: true });
+      } else {
+        clearCompanyKpiDrilldown("jobs");
+      }
+    });
+  });
+  scope.querySelectorAll("[data-company-operational-clear]").forEach((btn) => {
+    btn.addEventListener("click", () => clearCompanyKpiDrilldown("jobs"));
   });
   scope.querySelectorAll("[data-company-health-filter]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -16920,7 +17264,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
     ? `<div class="company-project-grid attendance-project-list">
         ${visibleProjects.map((job) => attendanceProjectCardHTML(job, user)).join("")}
       </div>`
-    : guidedEmptyStateHTML({
+    : attendanceFilteredEmptyStateHTML() || guidedEmptyStateHTML({
         kicker: allProjects.length ? "No Matches" : "Attendance",
         title: allProjects.length ? "No projects match your filters" : "No projects ready for attendance",
         body: allProjects.length
@@ -16940,8 +17284,9 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
           <section class="company-dashboard-filter-card jw-card attendance-project-search-card">
             <div class="company-project-search-card-head">
               <span>Search projects</span>
-              <div class="company-project-count">${visibleProjects.length} result${visibleProjects.length === 1 ? "" : "s"}</div>
+              <div class="company-project-count">${escapeHtml(attendanceProjectResultCountLabel(visibleProjects))}</div>
             </div>
+            ${companyOperationalFilterBarHTML(activeAttendanceOperationalFilter, "data-attendance-operational-clear")}
             <div class="company-project-toolbar attendance-project-toolbar">
               ${attendanceProjectSearchHTML()}
               ${attendanceProjectToolbarControlsHTML()}
@@ -16974,6 +17319,13 @@ function bindCompanyAttendanceProjectControls(scope) {
       renderAttendance();
     });
   });
+  scope
+    .querySelectorAll("[data-attendance-operational-clear]")
+    .forEach((btn) => {
+      btn.addEventListener("click", () =>
+        clearCompanyKpiDrilldown("attendance"),
+      );
+    });
   scope.querySelector("#attendanceProjectSort")?.addEventListener("change", (event) => {
     activeAttendanceProjectSort = event.target.value || "attendance_required";
     renderAttendance();

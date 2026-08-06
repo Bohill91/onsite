@@ -8603,6 +8603,7 @@ margin-bottom: 12px;
   min-width: 0;
   min-height: 116px;
   padding: 16px;
+  position: relative;
   text-align: left;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
   transition:
@@ -8632,8 +8633,32 @@ margin-bottom: 12px;
   cursor: pointer;
 }
 
+.company-briefing-metric-chevron {
+  color: var(--orange);
+  display: inline-flex;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  transition: opacity 200ms ease;
+}
+
+@media (hover: hover) {
+  .company-briefing-metric.is-clickable:hover {
+    border-color: #f97316;
+    box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08);
+  }
+}
+
+.company-briefing-metric.is-clickable:hover .company-briefing-metric-chevron,
+.company-briefing-metric.is-clickable:focus-visible .company-briefing-metric-chevron {
+  opacity: 1;
+}
+
 .company-briefing-metric.is-clickable:focus-visible {
-  outline: 2px solid rgba(249, 115, 22, 0.42);
+  border-color: #f97316;
+  outline: 2px solid rgba(249, 115, 22, 0.65);
   outline-offset: 2px;
 }
 
@@ -12090,6 +12115,49 @@ body.modal-open {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+}
+
+.company-operational-filter {
+  align-items: center;
+  background: rgba(249, 115, 22, 0.07);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  display: flex;
+  font-size: var(--ui-font-sm);
+  gap: var(--space-2);
+  justify-content: space-between;
+  padding: 9px 10px;
+}
+
+.company-operational-filter strong {
+  color: var(--orange-dark);
+  font-weight: var(--ui-weight-semibold);
+}
+
+.company-operational-filter button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--orange-dark);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  gap: 5px;
+  padding: 3px 4px;
+}
+
+.company-operational-filter button:hover {
+  color: var(--orange);
+}
+
+@media (max-width: 640px) {
+  .company-operational-filter {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .company-project-status-chip {
