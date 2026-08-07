@@ -12326,15 +12326,10 @@ function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
     })
     .join("");
   const extraRequirements = Math.max(0, totals.displayStats.length - 2);
-  const openRequirements = totals.stats.filter((item) => item.stats.remaining > 0);
-  const reviewLabel =
-    openRequirements.length > 1
-      ? `Review requirements (${openRequirements.length})`
-      : "Review requirement";
-  const firstOpenRequirementId = openRequirements[0]?.req?.id || "";
   const selected = activeCompanyProjectId === job.id;
+  const openLabourLabel = `${totals.open} open labour position${totals.open === 1 ? "" : "s"}`;
   return `
-    <article class="company-project-directory-card${selected ? " selected" : ""}" tabindex="0" role="link" aria-label="Open ${escapeHtml(title)} project" data-company-project-card="${escapeHtml(job.id)}">
+    <article class="company-project-directory-card${selected ? " selected" : ""}" tabindex="0" role="link" aria-label="${escapeHtml(`${title}. ${stageLabel}. ${health.label}. ${openLabourLabel}.`)}" data-company-project-card="${escapeHtml(job.id)}">
       <div class="company-project-top">
         <div>
           <div class="company-project-kicker">PROJECT</div>
@@ -12359,13 +12354,9 @@ function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
         <div class="company-project-directory-requirements-list">
           ${requirementRows || `<div class="company-project-directory-requirement-empty">No labour requirements have been added.</div>`}
         </div>
-        ${extraRequirements ? `<button class="company-project-directory-more" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</button>` : ""}
+        ${extraRequirements ? `<span class="company-project-directory-more">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</span>` : ""}
       </section>
       ${companyProjectDirectoryContextHTML(job, summary, stage, totals)}
-      <div class="company-project-directory-actions">
-        ${totals.open > 0 ? `<button class="company-project-inline-action" type="button" data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="requirements"${firstOpenRequirementId ? ` data-company-requirement-id="${escapeHtml(firstOpenRequirementId)}"` : ""}>${escapeHtml(reviewLabel)} &rarr;</button>` : ""}
-        <button class="company-project-inline-action" type="button" data-company-project-open="${escapeHtml(job.id)}">Open project &rarr;</button>
-      </div>
     </article>`;
 }
 

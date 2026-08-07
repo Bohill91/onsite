@@ -904,28 +904,10 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 }
 
 .company-project-directory-more {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-xs);
-  color: var(--orange-dark);
-  cursor: pointer;
-  display: inline-flex;
+  display: inline-block;
   font-weight: 750;
   justify-self: start;
-  margin: 0;
-  padding: 1px 2px;
-  text-align: left;
-}
-
-.company-project-directory-more:hover {
-  color: var(--orange);
-}
-
-.company-project-directory-more:focus-visible {
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
-  outline: 2px solid rgba(249, 115, 22, 0.65);
-  outline-offset: 2px;
+  padding-top: 3px;
 }
 
 .company-project-directory-attendance {
@@ -978,16 +960,6 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 .company-project-directory-readiness span {
   color: var(--ink-3);
   font-size: 0.78rem;
-}
-
-.company-project-directory-actions {
-  align-items: center;
-  border-top: 1px solid var(--card-divider);
-  display: flex;
-  gap: 16px;
-  justify-content: flex-end;
-  margin-top: 14px;
-  padding-top: 6px;
 }
 
 .company-project-inline-action {
@@ -1122,12 +1094,6 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   .company-project-directory-summary > div + div {
     border-top: 1px solid var(--card-divider);
     padding-top: 12px;
-  }
-
-  .company-project-directory-actions {
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px 12px;
   }
 
   .company-project-inline-action {
