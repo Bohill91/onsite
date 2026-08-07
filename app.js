@@ -12696,7 +12696,10 @@ function companyProjectOverviewHTML(job, summary) {
     <div class="company-project-overview">
       <div class="company-project-overview-primary">
         <section class="company-project-overview-card company-project-overview-staffing">
-          <p class="company-project-overview-kicker">Staffing &amp; Labour</p>
+          <div class="company-project-overview-staffing-head">
+            <p class="company-project-overview-kicker">Staffing &amp; Labour</p>
+            ${canRequestLabour ? `<button class="company-project-inline-action company-project-overview-add-labour" type="button" data-project-request-more="${job.id}">Add labour requirement &rarr;</button>` : ""}
+          </div>
           <div class="company-project-overview-metrics" aria-label="Staffing summary">
             <div><span>Required</span><strong>${totals.required}</strong></div>
             <div><span>Filled</span><strong>${totals.filled}</strong></div>
@@ -12706,10 +12709,6 @@ function companyProjectOverviewHTML(job, summary) {
           </div>
           <div class="company-project-overview-requirements">
             ${requirementPreview || `<p class="company-project-overview-empty">No labour requirements are recorded for this project.</p>`}
-          </div>
-          <div class="company-project-overview-actions">
-            ${totals.displayStats.length > 3 ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">View all labour requirements &rarr;</button>` : totals.open > 0 && issues[0]?.target !== "labour" ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">Review requirement &rarr;</button>` : ""}
-            ${canRequestLabour ? `<button class="company-project-inline-action company-project-overview-add-labour" type="button" data-project-request-more="${job.id}">Add labour requirement &rarr;</button>` : ""}
           </div>
         </section>
         ${companyProjectOverviewActionHTML(health, issues)}
