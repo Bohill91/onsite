@@ -12357,6 +12357,7 @@ function companyProjectCardHTML(job, user, { pulseHealth = false } = {}) {
         ${extraRequirements ? `<span class="company-project-directory-more">+${extraRequirements} more requirement${extraRequirements === 1 ? "" : "s"}</span>` : ""}
       </section>
       ${companyProjectDirectoryContextHTML(job, summary, stage, totals)}
+      <span class="company-project-directory-affordance" aria-hidden="true">View project <i>&rarr;</i></span>
     </article>`;
 }
 

@@ -962,6 +962,33 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   font-size: 0.78rem;
 }
 
+.company-project-directory-affordance {
+  align-items: center;
+  color: var(--orange);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 4px;
+  justify-self: end;
+  line-height: 1.3;
+  margin-top: 14px;
+}
+
+.company-project-directory-affordance i {
+  font-style: normal;
+  transition: transform 200ms var(--motion-ease);
+}
+
+.company-project-directory-card:hover .company-project-directory-affordance,
+.company-project-directory-card:focus-visible .company-project-directory-affordance {
+  color: var(--orange-dark);
+}
+
+.company-project-directory-card:hover .company-project-directory-affordance i,
+.company-project-directory-card:focus-visible .company-project-directory-affordance i {
+  transform: translateX(2px);
+}
+
 .company-project-inline-action {
   background: transparent;
   border: 0;
