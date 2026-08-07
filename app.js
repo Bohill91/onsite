@@ -12708,8 +12708,8 @@ function companyProjectOverviewHTML(job, summary) {
             ${requirementPreview || `<p class="company-project-overview-empty">No labour requirements are recorded for this project.</p>`}
           </div>
           <div class="company-project-overview-actions">
-            ${totals.displayStats.length > 3 ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">View all labour requirements &rarr;</button>` : totals.open > 0 && issues[0]?.target !== "labour" ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">Review requirement &rarr;</button>` : `<span></span>`}
-            ${canRequestLabour ? `<button class="primary-btn" type="button" data-project-request-more="${job.id}">Request more labour</button>` : ""}
+            ${totals.displayStats.length > 3 ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">View all labour requirements &rarr;</button>` : totals.open > 0 && issues[0]?.target !== "labour" ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">Review requirement &rarr;</button>` : ""}
+            ${canRequestLabour ? `<button class="company-project-inline-action company-project-overview-add-labour" type="button" data-project-request-more="${job.id}">Add labour requirement &rarr;</button>` : ""}
           </div>
         </section>
         ${companyProjectOverviewActionHTML(health, issues)}
@@ -12846,8 +12846,10 @@ function companyProjectOverviewActionHTML(health, issues) {
       <span>Recommended action</span>
       <p>${escapeHtml(issue.recommendation)}</p>
     </div>
-    ${issues.length > 1 ? `<button class="company-project-overview-more" type="button" data-company-project-section="${escapeHtml(issue.target)}">+${issues.length - 1} more issue${issues.length === 2 ? "" : "s"} &rarr;</button>` : ""}
-    <button class="company-project-inline-action" type="button" data-company-project-section="${escapeHtml(issue.target)}">${escapeHtml(issue.action)} &rarr;</button>
+    <div class="company-project-overview-health-actions">
+      ${issues.length > 1 ? `<button class="company-project-overview-more" type="button" data-company-project-section="${escapeHtml(issue.target)}">+${issues.length - 1} more issue${issues.length === 2 ? "" : "s"} &rarr;</button>` : ""}
+      <button class="primary-btn company-project-overview-primary-action" type="button" data-company-project-section="${escapeHtml(issue.target)}">${escapeHtml(issue.action)} &rarr;</button>
+    </div>
   </aside>`;
 }
 
@@ -12909,7 +12911,7 @@ function companyProjectOverviewReadinessHTML(job, summary, health, totals) {
         detail: totals.open ? `${totals.open} position${totals.open === 1 ? "" : "s"} still open` : "All positions filled",
         tone: labourTone,
         target: "labour",
-        action: "Review labour",
+        action: "View labour",
       })}
       ${companyProjectOverviewStageItemHTML({
         label: "Site",

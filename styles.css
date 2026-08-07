@@ -15722,7 +15722,7 @@ button svg,
 }
 
 .company-project-overview-primary {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   gap: var(--space-section);
   min-width: 0;
@@ -15730,6 +15730,12 @@ button svg,
 
 .company-project-overview-primary {
   grid-template-columns: minmax(0, 1.86fr) minmax(286px, 1fr);
+}
+
+.company-project-overview-primary > .company-project-overview-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .company-project-overview-card {
@@ -15760,11 +15766,13 @@ button svg,
 }
 
 .company-project-overview-metrics > div {
+  align-content: start;
   background: var(--surface-2);
   border: 1px solid var(--card-divider);
   border-radius: var(--radius-sm);
   display: grid;
   gap: 6px;
+  grid-template-rows: minmax(1.82em, auto) auto;
   min-width: 0;
   padding: 12px;
 }
@@ -15835,7 +15843,13 @@ button svg,
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: space-between;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.company-project-overview-actions > :first-child:not(.company-project-overview-add-labour) {
+  margin-right: auto;
 }
 
 .company-project-detail-page .company-project-inline-action {
@@ -15875,6 +15889,24 @@ button svg,
 
 .company-project-overview-health.is-clear {
   gap: 10px;
+}
+
+.company-project-overview-health-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.company-project-overview-health-actions .company-project-overview-more {
+  margin-right: auto;
+}
+
+.company-project-overview-primary-action {
+  flex: 0 0 auto;
 }
 
 .company-project-overview-health-title {
@@ -15999,6 +16031,13 @@ button svg,
   text-align: left;
 }
 
+.company-project-overview-stage-item {
+  border-color: var(--card-divider);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .company-project-overview-stage-item.is-interactive,
 .company-project-overview-operation-metric {
   cursor: pointer;
@@ -16073,7 +16112,8 @@ button svg,
   font-size: 0.75rem;
   font-weight: 800;
   line-height: 1.3;
-  margin-top: 3px;
+  margin-top: auto;
+  padding-top: 3px;
 }
 
 .company-project-overview-operation-grid {
@@ -16132,6 +16172,10 @@ button svg,
     grid-template-columns: 1fr;
   }
 
+  .company-project-overview-primary > .company-project-overview-card {
+    height: auto;
+  }
+
   .company-project-detail-heading-main h1 {
     font-size: 1.875rem;
   }
@@ -16184,11 +16228,24 @@ button svg,
     flex-direction: column;
   }
 
-  .company-project-overview-actions > span:empty {
-    display: none;
+  .company-project-overview-actions > :first-child:not(.company-project-overview-add-labour) {
+    margin-right: 0;
   }
 
-  .company-project-overview-actions .primary-btn {
+  .company-project-overview-add-labour {
+    align-self: flex-start;
+  }
+
+  .company-project-overview-health-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .company-project-overview-health-actions .company-project-overview-more {
+    margin-right: 0;
+  }
+
+  .company-project-overview-primary-action {
     width: 100%;
   }
 
