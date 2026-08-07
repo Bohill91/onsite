@@ -12716,16 +12716,13 @@ function companyProjectOverviewHTML(job, summary) {
             ${requirementPreview || `<p class="company-project-overview-empty">No labour requirements are recorded for this project.</p>`}
           </div>
           <div class="company-project-overview-actions">
-            ${totals.displayStats.length > 3 ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">View all labour requirements &rarr;</button>` : `<span></span>`}
+            ${totals.displayStats.length > 3 ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">View all labour requirements &rarr;</button>` : totals.open > 0 && issues[0]?.target !== "labour" ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">Review requirement &rarr;</button>` : `<span></span>`}
             ${canRequestLabour ? `<button class="primary-btn" type="button" data-project-request-more="${job.id}">Request more labour</button>` : ""}
           </div>
         </section>
         ${companyProjectOverviewActionHTML(health, issues)}
       </div>
-      <section class="company-project-overview-card company-project-overview-timeline">
-        <p class="company-project-overview-kicker">Operational Timeline</p>
-        ${projectOperationalTimelineHTML(job, summary)}
-      </section>
+      ${companyProjectOverviewStageHTML(job, summary, stage, health, totals)}
     </div>`;
 }
 
@@ -12782,6 +12779,32 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
       target: "attendance",
     });
   }
+  if (
+    companyProjectStatusBucket(job) === "active" &&
+    isProjectScheduledToday(job) &&
+    hasAttendanceConfirmationChanges(attendanceProjectWorkers(job), job)
+  ) {
+    addIssue({
+      priority: 1,
+      tone: "atRisk",
+      title: "Today’s attendance needs confirmation",
+      description: "One or more attendance records have not completed the company approval step.",
+      recommendation: "Review and confirm today’s attendance.",
+      action: "Open attendance",
+      target: "attendance",
+    });
+  }
+  if (summary.reviewWorkers.length > 0) {
+    addIssue({
+      priority: 2,
+      tone: "neutral",
+      title: `${summary.reviewWorkers.length} worker approval${summary.reviewWorkers.length === 1 ? "" : "s"} outstanding`,
+      description: "Accepted workers are waiting for company review before assignment.",
+      recommendation: "Review the worker details and confirm or decline the placement.",
+      action: "Review workforce",
+      target: "workforce",
+    });
+  }
   if (summary.outstandingPreStart > 0) {
     addIssue({
       priority: 2,
@@ -12831,89 +12854,179 @@ function companyProjectOverviewActionHTML(health, issues) {
       <span>Recommended action</span>
       <p>${escapeHtml(issue.recommendation)}</p>
     </div>
-    ${issues.length > 1 ? `<small>+${issues.length - 1} more issue${issues.length === 2 ? "" : "s"}</small>` : ""}
+    ${issues.length > 1 ? `<button class="company-project-overview-more" type="button" data-company-project-section="${escapeHtml(issue.target)}">+${issues.length - 1} more issue${issues.length === 2 ? "" : "s"} &rarr;</button>` : ""}
     <button class="company-project-inline-action" type="button" data-company-project-section="${escapeHtml(issue.target)}">${escapeHtml(issue.action)} &rarr;</button>
   </aside>`;
 }
 
-function projectOperationalTimelineHTML(job, summary) {
-  const activities = projectActivityList(job);
-  const stage = companyProjectStatusBucket(job);
-  const today = todayDateStr();
-  const startDate = job.start || job.startDate || "";
-  const endDate = job.noFixedEndDate ? "" : job.estimatedEndDate || job.endDate || job.end || "";
-  const events = [];
-  const addEvent = (label, state, date = "", detail = "") => {
-    if (!date && !detail) return;
-    events.push({ label, state, date, detail });
-  };
-  const activityDate = (types) => activities.find((activity) => types.includes(activity.type))?.timestamp || "";
-  const createdDate = job.createdAt || activityDate([PROJECT_ACTIVITY_TYPES.PROJECT_CREATED]);
-  const postedDate = job.postedAt || activityDate([PROJECT_ACTIVITY_TYPES.LABOUR_REQUEST_POSTED]);
-  const matchingDate = activityDate([PROJECT_ACTIVITY_TYPES.MATCHING_STARTED]);
-  const filledDate = activityDate([
-    PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED,
-  ]) || activities.find((activity) =>
-    activity.type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED &&
-    activity.metadata?.healthLevel === "filled"
-  )?.timestamp || "";
-  const completedDate =
-    job.completedAt || activityDate([PROJECT_ACTIVITY_TYPES.PROJECT_COMPLETED]);
-  const setupDate = postedDate || createdDate;
-  const setupLabel = postedDate ? "Labour request posted" : "Project created";
+function companyProjectOverviewStageItemHTML({
+  label,
+  title,
+  detail,
+  tone = "neutral",
+  target = "",
+  action = "",
+}) {
+  const content = `
+    <span class="company-project-overview-stage-status">
+      <i class="is-${escapeHtml(tone)}" aria-hidden="true"></i>
+      <span>${escapeHtml(label)}</span>
+    </span>
+    <strong>${escapeHtml(title)}</strong>
+    ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    ${action ? `<span class="company-project-overview-stage-action">${escapeHtml(action)} &rarr;</span>` : ""}`;
+  if (!target) {
+    return `<div class="company-project-overview-stage-item is-${escapeHtml(tone)}">${content}</div>`;
+  }
+  return `<button class="company-project-overview-stage-item is-interactive is-${escapeHtml(tone)}" type="button" data-company-project-section="${escapeHtml(target)}" aria-label="${escapeHtml(action || `Open ${label}`)}">${content}</button>`;
+}
 
+function companyProjectOverviewReadinessHTML(job, summary, health, totals) {
+  const startDays = projectStartDays(job);
+  const closeToStart = startDays !== null && startDays <= 7;
+  const labourTone = totals.open === 0
+    ? "healthy"
+    : health.level === "urgent"
+      ? "urgent"
+      : health.level === "atRisk"
+        ? "warning"
+        : "neutral";
+  const hasAddress = !!String(job.siteAddress || "").trim();
+  const hasEntrancePin = job.sitePin?.lat != null && job.sitePin?.lng != null;
+  const siteReady = hasAddress && hasEntrancePin;
+  const siteMissing = [!hasAddress ? "site address" : "", !hasEntrancePin ? "entrance pin" : ""]
+    .filter(Boolean)
+    .join(" and ");
+  const manager = job.attendanceManager || {};
+  const hasAttendanceOwner = !!String(manager.name || manager.email || manager.phone || "").trim();
+  const hasProjectQr = !!getSiteCode(job.id);
+  const attendanceReady = hasAttendanceOwner && hasProjectQr;
+  const confirmedWorkers = summary.assignedWorkers.length;
+  const approvalCount = summary.reviewWorkers.length;
+  const workforceTone = approvalCount > 0
+    ? "warning"
+    : confirmedWorkers > 0
+      ? "healthy"
+      : "neutral";
+  return `<section class="company-project-overview-card company-project-overview-stage" aria-labelledby="project-readiness-title">
+    <h2 id="project-readiness-title" class="company-project-overview-kicker">Project Readiness</h2>
+    <div class="company-project-overview-stage-grid">
+      ${companyProjectOverviewStageItemHTML({
+        label: "Labour",
+        title: `${totals.filled} of ${totals.required} filled`,
+        detail: totals.open ? `${totals.open} position${totals.open === 1 ? "" : "s"} still open` : "All positions filled",
+        tone: labourTone,
+        target: "labour",
+        action: "Review labour",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Site",
+        title: siteReady ? "Access details added" : "Site setup incomplete",
+        detail: siteReady ? "Site address and entrance pin are ready" : `${siteMissing || "Access details"} not configured`,
+        tone: siteReady ? "healthy" : closeToStart ? "warning" : "neutral",
+        target: "site",
+        action: "View site",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Attendance setup",
+        title: attendanceReady ? "Sign-in setup ready" : "Setup requires review",
+        detail: `${hasAttendanceOwner ? "Responsibility assigned" : "Responsibility not assigned"} · ${hasProjectQr ? "Site QR ready" : "Site QR not prepared"}`,
+        tone: attendanceReady ? "healthy" : closeToStart ? "warning" : "neutral",
+        target: "attendance",
+        action: "Open attendance",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Workforce",
+        title: `${confirmedWorkers} worker${confirmedWorkers === 1 ? "" : "s"} confirmed`,
+        detail: approvalCount ? `${approvalCount} approval${approvalCount === 1 ? "" : "s"} pending` : "No approvals pending",
+        tone: workforceTone,
+        target: "workforce",
+        action: "View workforce",
+      })}
+    </div>
+  </section>`;
+}
+
+function companyProjectOverviewOperationHTML(job, summary, totals) {
+  const scheduledToday = isProjectScheduledToday(job);
+  const attendance = scheduledToday
+    ? projectAttendanceSummary(attendanceProjectWorkers(job), job)
+    : { expected: 0, signedIn: 0, reportingLate: 0, unconfirmed: 0 };
+  const metrics = [
+    ["Expected", attendance.expected, "attendance"],
+    ["Signed in", attendance.signedIn, "attendance"],
+    ["Late / informed", attendance.reportingLate, "attendance"],
+    ["Not signed in", attendance.unconfirmed, "attendance"],
+  ];
+  if (totals.open > 0) metrics.push(["Open labour", totals.open, "labour"]);
+  return `<section class="company-project-overview-card company-project-overview-stage company-project-overview-operation" aria-labelledby="project-operation-title">
+    <div class="company-project-overview-stage-head">
+      <h2 id="project-operation-title" class="company-project-overview-kicker">Today&apos;s Operation</h2>
+      ${scheduledToday ? "" : `<span>Today is not a scheduled working day.</span>`}
+    </div>
+    <div class="company-project-overview-operation-grid" style="--operation-columns:${metrics.length}">
+      ${metrics.map(([label, value, target]) => `<button class="company-project-overview-operation-metric" type="button" data-company-project-section="${target}" aria-label="${escapeHtml(`${label}: ${value}. Open ${target}.`)}"><span>${escapeHtml(label)}</span><strong>${value}</strong></button>`).join("")}
+    </div>
+  </section>`;
+}
+
+function companyProjectOverviewCloseoutHTML(job, summary) {
+  const records = attendanceProjectRecords(job);
+  const outstandingAttendance = records.filter((record) => {
+    const status = record.commercial?.approvalStatus || record.approvalStatus || (record.supervisorConfirmed ? "manager_reviewed" : "draft");
+    return !["company_confirmed", "invoice_ready"].includes(status);
+  }).length;
+  const invoices = (state.invoices || []).filter((invoice) =>
+    invoice.projectId === job.id ||
+    (invoice.lines || []).some((line) => line.jobId === job.id || line.projectId === job.id),
+  );
+  const pendingInvoices = invoices.filter((invoice) => invoiceEffectiveStatus(invoice) !== "paid").length;
+  const completedDate = job.completedAt || job.end || job.estimatedEndDate || job.endDate || "";
+  return `<section class="company-project-overview-card company-project-overview-stage" aria-labelledby="project-closeout-title">
+    <h2 id="project-closeout-title" class="company-project-overview-kicker">Project Closeout</h2>
+    <div class="company-project-overview-stage-grid">
+      ${companyProjectOverviewStageItemHTML({
+        label: "Workforce",
+        title: `${summary.assignedWorkers.length} worker${summary.assignedWorkers.length === 1 ? "" : "s"} assigned`,
+        detail: "Final project workforce",
+        tone: "neutral",
+        target: "workforce",
+        action: "View workforce",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Attendance",
+        title: records.length ? outstandingAttendance ? `${outstandingAttendance} record${outstandingAttendance === 1 ? "" : "s"} awaiting approval` : "Attendance confirmed" : "No attendance records",
+        detail: records.length ? `${records.length} project record${records.length === 1 ? "" : "s"}` : "No attendance was recorded",
+        tone: outstandingAttendance ? "warning" : records.length ? "healthy" : "neutral",
+        target: "attendance",
+        action: "View attendance",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Commercial",
+        title: invoices.length ? `${pendingInvoices} invoice${pendingInvoices === 1 ? "" : "s"} pending` : "No invoice records",
+        detail: invoices.length ? `${invoices.length} invoice record${invoices.length === 1 ? "" : "s"}` : "No commercial records available",
+        tone: pendingInvoices ? "warning" : invoices.length ? "healthy" : "neutral",
+        target: "commercial",
+        action: "View commercial",
+      })}
+      ${companyProjectOverviewStageItemHTML({
+        label: "Completed",
+        title: completedDate ? formatDateOnly(completedDate) : "Completion date not recorded",
+        detail: "Project closed",
+        tone: completedDate ? "healthy" : "neutral",
+      })}
+    </div>
+  </section>`;
+}
+
+function companyProjectOverviewStageHTML(job, summary, stage, health, totals) {
   if (stage === "upcoming") {
-    addEvent(setupLabel, "complete", setupDate);
-    if (summary.openRoles > 0 && matchingDate) {
-      addEvent("Matching in progress", "current", "", "In progress");
-    } else if (summary.openRoles === 0) {
-      addEvent(
-        "Labour filled",
-        filledDate ? "complete" : "current",
-        filledDate,
-        filledDate ? "" : "All positions filled",
-      );
-      if (filledDate) addEvent("Today", "current", today);
-    } else {
-      addEvent("Today", "current", today);
-    }
-    addEvent("Project start", "future", startDate);
-  } else if (stage === "active") {
-    if (startDate) addEvent("Project started", "complete", startDate);
-    else addEvent(setupLabel, "complete", setupDate);
-
-    if (summary.openRoles > 0 && matchingDate) {
-      addEvent("Matching in progress", "current", "", "In progress");
-    } else if (job.noFixedEndDate) {
-      addEvent("Ongoing placement", "current", "", "No fixed end date");
-    } else {
-      addEvent("Today", "current", today);
-    }
-
-    addEvent("Estimated project end", "future", endDate);
-  } else {
-    addEvent(setupLabel, "complete", setupDate);
-    addEvent("Project started", "complete", startDate);
-    addEvent("Labour filled", "complete", filledDate);
-    if (completedDate) {
-      addEvent("Project completed", "complete", completedDate);
-    } else {
-      addEvent("Project end", "complete", endDate);
-    }
+    return companyProjectOverviewReadinessHTML(job, summary, health, totals);
   }
-
-  if (!events.length) {
-    return `<p class="company-project-overview-empty">No dated project milestones are available yet.</p>`;
+  if (stage === "completed") {
+    return companyProjectOverviewCloseoutHTML(job, summary);
   }
-  return `<ol class="project-operational-timeline" style="--timeline-columns:${events.length}" aria-label="Project progress">
-    ${events.map((event) => `<li class="${escapeHtml(event.state)}">
-      <span class="project-timeline-dot" aria-hidden="true"></span>
-      <div>
-        <strong>${escapeHtml(event.label)}</strong>
-        <small>${escapeHtml(event.detail || formatDateOnly(event.date))}</small>
-      </div>
-    </li>`).join("")}
-  </ol>`;
+  return companyProjectOverviewOperationHTML(job, summary, totals);
 }
 
 function companyProjectWorkersHTML(job, summary) {
