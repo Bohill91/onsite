@@ -15795,8 +15795,7 @@ button svg,
   min-width: 0;
 }
 
-.company-project-overview-primary,
-.company-project-overview-secondary {
+.company-project-overview-primary {
   align-items: start;
   display: grid;
   gap: var(--space-section);
@@ -15805,10 +15804,6 @@ button svg,
 
 .company-project-overview-primary {
   grid-template-columns: minmax(0, 1.86fr) minmax(286px, 1fr);
-}
-
-.company-project-overview-secondary {
-  grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.22fr);
 }
 
 .company-project-overview-card {
@@ -16023,51 +16018,32 @@ button svg,
   text-transform: uppercase;
 }
 
-.company-project-overview-details dl {
-  display: grid;
-  margin: 0;
-}
-
-.company-project-overview-details dl > div {
-  align-items: baseline;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(104px, 0.7fr) minmax(0, 1fr);
-  padding: 10px 0;
-}
-
-.company-project-overview-details dl > div + div {
-  border-top: 1px solid var(--card-divider);
-}
-
-.company-project-overview-details dt {
-  color: var(--ink-3);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.company-project-overview-details dd {
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 750;
-  line-height: 1.35;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
 .company-project-overview-timeline {
   overflow: hidden;
 }
 
 .company-project-overview-timeline .project-operational-timeline {
+  align-items: start;
   grid-template-columns: repeat(var(--timeline-columns), minmax(104px, 1fr));
-  overflow-x: auto;
-  padding-top: 6px;
+  overflow: visible;
+  padding-top: 8px;
 }
 
 .company-project-overview-timeline .project-operational-timeline li {
-  border-top-color: var(--card-divider);
-  padding: 14px 12px 4px 0;
+  border: 0;
+  display: block;
+  padding: 18px 16px 0 0;
+  position: relative;
+}
+
+.company-project-overview-timeline .project-operational-timeline li:not(:last-child)::after {
+  background: var(--card-divider);
+  content: "";
+  height: 1px;
+  left: 5px;
+  position: absolute;
+  right: -5px;
+  top: 5px;
 }
 
 .company-project-overview-timeline .project-timeline-dot {
@@ -16075,12 +16051,17 @@ button svg,
   border: 2px solid var(--card-divider);
   box-shadow: 0 0 0 4px var(--surface);
   height: 10px;
+  left: 0;
+  margin: 0;
+  position: absolute;
+  top: 0;
   width: 10px;
+  z-index: 1;
 }
 
 .company-project-overview-timeline li.complete .project-timeline-dot {
-  background: var(--ink-3);
-  border-color: var(--ink-3);
+  background: var(--health-healthy);
+  border-color: var(--health-healthy);
 }
 
 .company-project-overview-timeline li.current .project-timeline-dot {
@@ -16127,8 +16108,7 @@ button svg,
 }
 
 @media (max-width: 900px) {
-  .company-project-overview-primary,
-  .company-project-overview-secondary {
+  .company-project-overview-primary {
     grid-template-columns: 1fr;
   }
 
@@ -16192,24 +16172,28 @@ button svg,
     width: 100%;
   }
 
-  .company-project-overview-details dl > div {
-    gap: 4px;
-    grid-template-columns: 1fr;
-  }
-
   .company-project-overview-timeline .project-operational-timeline {
     grid-template-columns: 1fr;
     overflow: visible;
+    padding-top: 4px;
   }
 
   .company-project-overview-timeline .project-operational-timeline li {
-    border-left: 1px solid var(--card-divider);
-    border-top: 0;
-    padding: 0 0 var(--space-2) 14px;
+    padding: 0 0 var(--space-2) 20px;
+  }
+
+  .company-project-overview-timeline .project-operational-timeline li:not(:last-child)::after {
+    bottom: -2px;
+    height: auto;
+    left: 4px;
+    right: auto;
+    top: 6px;
+    width: 1px;
   }
 
   .company-project-overview-timeline .project-timeline-dot {
-    margin: 1px 0 0 -20px;
+    left: 0;
+    top: 2px;
   }
 }
 

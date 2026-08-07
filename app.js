@@ -12690,7 +12690,6 @@ function companyProjectOverviewHTML(job, summary) {
   const stage = companyProjectStatusBucket(job);
   const health = companyProjectDirectoryHealth(calculateProjectHealth(job, summary));
   const totals = companyProjectDirectoryLabourTotals(summary);
-  const endDate = job.estimatedEndDate || job.endDate || "";
   const issues = companyProjectOverviewIssues(job, summary, health, totals);
   const requirementPreview = totals.displayStats.slice(0, 3).map(({ req, stats }) => `
     <div class="company-project-overview-requirement">
@@ -12723,22 +12722,10 @@ function companyProjectOverviewHTML(job, summary) {
         </section>
         ${companyProjectOverviewActionHTML(health, issues)}
       </div>
-      <div class="company-project-overview-secondary">
-        <section class="company-project-overview-card company-project-overview-details">
-          <p class="company-project-overview-kicker">Project Details</p>
-          <dl>
-            <div><dt>Job number</dt><dd>${escapeHtml(job.jobNumber || "Not set")}</dd></div>
-            <div><dt>Location</dt><dd>${escapeHtml(job.location || "Location TBC")}</dd></div>
-            <div><dt>Assignment type</dt><dd>${escapeHtml(assignmentTypeLabel(job))}</dd></div>
-            <div><dt>Start date</dt><dd>${job.start || job.startDate ? formatDateOnly(job.start || job.startDate) : "TBC"}</dd></div>
-            <div><dt>Estimated end</dt><dd>${job.noFixedEndDate ? "No fixed end date" : endDate || job.end ? formatDateOnly(endDate || job.end) : "TBC"}</dd></div>
-          </dl>
-        </section>
-        <section class="company-project-overview-card company-project-overview-timeline">
-          <p class="company-project-overview-kicker">Operational Timeline</p>
-          ${projectOperationalTimelineHTML(job, summary)}
-        </section>
-      </div>
+      <section class="company-project-overview-card company-project-overview-timeline">
+        <p class="company-project-overview-kicker">Operational Timeline</p>
+        ${projectOperationalTimelineHTML(job, summary)}
+      </section>
     </div>`;
 }
 
@@ -12851,13 +12838,14 @@ function companyProjectOverviewActionHTML(health, issues) {
 
 function projectOperationalTimelineHTML(job, summary) {
   const activities = projectActivityList(job);
+  const stage = companyProjectStatusBucket(job);
   const today = todayDateStr();
   const startDate = job.start || job.startDate || "";
   const endDate = job.noFixedEndDate ? "" : job.estimatedEndDate || job.endDate || job.end || "";
   const events = [];
-  const addEvent = (label, date, state, note = "") => {
-    if (!date && !note) return;
-    events.push({ label, date, state, note });
+  const addEvent = (label, state, date = "", detail = "") => {
+    if (!date && !detail) return;
+    events.push({ label, state, date, detail });
   };
   const activityDate = (types) => activities.find((activity) => types.includes(activity.type))?.timestamp || "";
   const createdDate = job.createdAt || activityDate([PROJECT_ACTIVITY_TYPES.PROJECT_CREATED]);
@@ -12869,32 +12857,60 @@ function projectOperationalTimelineHTML(job, summary) {
     activity.type === PROJECT_ACTIVITY_TYPES.PROJECT_HEALTH_CHANGED &&
     activity.metadata?.healthLevel === "filled"
   )?.timestamp || "";
-  addEvent("Project created", createdDate, "complete");
-  addEvent("Labour request posted", postedDate, "complete");
-  if (matchingDate) {
-    const matchingIsCurrent = summary.openRoles > 0 && startDate && dateOnlyMs(startDate) > dateOnlyMs(today);
-    addEvent("Matching started", matchingDate, matchingIsCurrent ? "current" : "complete", matchingIsCurrent ? "In progress" : "");
+  const completedDate =
+    job.completedAt || activityDate([PROJECT_ACTIVITY_TYPES.PROJECT_COMPLETED]);
+  const setupDate = postedDate || createdDate;
+  const setupLabel = postedDate ? "Labour request posted" : "Project created";
+
+  if (stage === "upcoming") {
+    addEvent(setupLabel, "complete", setupDate);
+    if (summary.openRoles > 0 && matchingDate) {
+      addEvent("Matching in progress", "current", "", "In progress");
+    } else if (summary.openRoles === 0) {
+      addEvent(
+        "Labour filled",
+        filledDate ? "complete" : "current",
+        filledDate,
+        filledDate ? "" : "All positions filled",
+      );
+      if (filledDate) addEvent("Today", "current", today);
+    } else {
+      addEvent("Today", "current", today);
+    }
+    addEvent("Project start", "future", startDate);
+  } else if (stage === "active") {
+    if (startDate) addEvent("Project started", "complete", startDate);
+    else addEvent(setupLabel, "complete", setupDate);
+
+    if (summary.openRoles > 0 && matchingDate) {
+      addEvent("Matching in progress", "current", "", "In progress");
+    } else if (job.noFixedEndDate) {
+      addEvent("Ongoing placement", "current", "", "No fixed end date");
+    } else {
+      addEvent("Today", "current", today);
+    }
+
+    addEvent("Estimated project end", "future", endDate);
+  } else {
+    addEvent(setupLabel, "complete", setupDate);
+    addEvent("Project started", "complete", startDate);
+    addEvent("Labour filled", "complete", filledDate);
+    if (completedDate) {
+      addEvent("Project completed", "complete", completedDate);
+    } else {
+      addEvent("Project end", "complete", endDate);
+    }
   }
-  if (filledDate) addEvent("Labour filled", filledDate, "complete");
-  if (startDate) {
-    addEvent("Project start", startDate, dateOnlyMs(startDate) > dateOnlyMs(today) ? "future" : "complete");
-  }
-  if (startDate && dateOnlyMs(startDate) <= dateOnlyMs(today) && (!endDate || dateOnlyMs(endDate) >= dateOnlyMs(today))) {
-    addEvent("Today", today, "current", "Current state");
-  }
-  if (endDate) {
-    addEvent("Estimated project end", endDate, dateOnlyMs(endDate) < dateOnlyMs(today) ? "complete" : "future");
-  }
-  if (job.completedAt) addEvent("Project completed", job.completedAt, "complete");
+
   if (!events.length) {
     return `<p class="company-project-overview-empty">No dated project milestones are available yet.</p>`;
   }
-  return `<ol class="project-operational-timeline" style="--timeline-columns:${events.length}">
+  return `<ol class="project-operational-timeline" style="--timeline-columns:${events.length}" aria-label="Project progress">
     ${events.map((event) => `<li class="${escapeHtml(event.state)}">
       <span class="project-timeline-dot" aria-hidden="true"></span>
       <div>
         <strong>${escapeHtml(event.label)}</strong>
-        <small>${escapeHtml(event.note || formatDateOnly(event.date))}</small>
+        <small>${escapeHtml(event.detail || formatDateOnly(event.date))}</small>
       </div>
     </li>`).join("")}
   </ol>`;
