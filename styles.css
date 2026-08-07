@@ -15798,12 +15798,20 @@ button svg,
   padding-top: 4px;
 }
 
+.company-project-overview-staffing .company-project-overview-requirements {
+  padding-top: 8px;
+}
+
 .company-project-overview-requirement {
   align-items: center;
   display: grid;
   gap: var(--space-2);
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 12px 0;
+}
+
+.company-project-overview-staffing .company-project-overview-requirement {
+  padding-block: 14px;
 }
 
 .company-project-overview-requirement + .company-project-overview-requirement {
@@ -16114,6 +16122,13 @@ button svg,
   line-height: 1.3;
   margin-top: auto;
   padding-top: 3px;
+  pointer-events: none;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.company-project-overview-stage-item.is-interactive:hover .company-project-overview-stage-action,
+.company-project-overview-stage-item.is-interactive:focus-visible .company-project-overview-stage-action {
+  color: var(--orange);
 }
 
 .company-project-overview-operation-grid {

@@ -12861,6 +12861,7 @@ function companyProjectOverviewStageItemHTML({
   target = "",
   action = "",
 }) {
+  const accessibleName = `${action || `Open ${label}`} — ${title}`;
   const content = `
     <span class="company-project-overview-stage-status">
       <i class="is-${escapeHtml(tone)}" aria-hidden="true"></i>
@@ -12868,11 +12869,11 @@ function companyProjectOverviewStageItemHTML({
     </span>
     <strong>${escapeHtml(title)}</strong>
     ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
-    ${action ? `<span class="company-project-overview-stage-action">${escapeHtml(action)} &rarr;</span>` : ""}`;
+    ${action ? `<span class="company-project-overview-stage-action" aria-hidden="true">${escapeHtml(action)} &rarr;</span>` : ""}`;
   if (!target) {
     return `<div class="company-project-overview-stage-item is-${escapeHtml(tone)}">${content}</div>`;
   }
-  return `<button class="company-project-overview-stage-item is-interactive is-${escapeHtml(tone)}" type="button" data-company-project-section="${escapeHtml(target)}" aria-label="${escapeHtml(action || `Open ${label}`)}">${content}</button>`;
+  return `<button class="company-project-overview-stage-item is-interactive is-${escapeHtml(tone)}" type="button" data-company-project-section="${escapeHtml(target)}" aria-label="${escapeHtml(accessibleName)}">${content}</button>`;
 }
 
 function companyProjectOverviewReadinessHTML(job, summary, health, totals) {
