@@ -17550,25 +17550,28 @@ button svg,
 
 .company-project-site-details {
   display: grid;
-  gap: 0 36px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
 }
 
-.company-project-site-details > div {
+.company-project-site-detail-row {
   border-top: 1px solid var(--card-divider);
   display: grid;
-  gap: 5px;
-  min-width: 0;
+  gap: 36px;
+  margin: 0;
   padding: 13px 0;
 }
 
-.company-project-site-details > div:nth-child(-n + 2) {
+.company-project-site-detail-row:first-child {
   border-top: 0;
 }
 
-.company-project-site-details > div.is-wide {
-  grid-column: 1 / -1;
+.company-project-site-detail-row.is-paired {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.company-project-site-detail-row > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 
 .company-project-site-details dt {
@@ -17616,8 +17619,9 @@ button svg,
   align-items: center;
   border-bottom: 1px solid var(--card-divider);
   display: grid;
-  gap: 12px 20px;
-  grid-template-columns: minmax(140px, 1fr) auto auto;
+  gap: 12px 24px;
+  grid-template-columns: minmax(120px, max-content) max-content max-content;
+  justify-content: start;
   min-width: 0;
   padding: 0 0 14px;
 }
@@ -18221,17 +18225,15 @@ button svg,
     justify-content: flex-start;
   }
 
-  .company-project-site-details {
+  .company-project-site-detail-row.is-paired {
+    gap: 0;
     grid-template-columns: 1fr;
   }
 
-  .company-project-site-details > div,
-  .company-project-site-details > div.is-wide {
-    grid-column: 1;
-  }
-
-  .company-project-site-details > div:nth-child(2) {
+  .company-project-site-detail-row.is-paired > div + div {
     border-top: 1px solid var(--card-divider);
+    margin-top: 13px;
+    padding-top: 13px;
   }
 
   .company-project-attendance-setup-head {

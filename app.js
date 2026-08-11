@@ -13721,14 +13721,22 @@ function companyProjectSiteInfoHTML(job) {
           <div><p class="company-project-workspace-kicker">Site Access &amp; Arrival</p><h2>Worker arrival information</h2><span>Practical information workers need before travelling to site.</span></div>
           ${editSiteAction}
         </header>
-        <dl class="company-project-site-details">
-          <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
-          <div><dt>Site contact</dt><dd>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</dd></div>
-          <div class="is-wide"><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
-          <div><dt>Parking</dt><dd>${escapeHtml(job.parking || "Not added")}</dd></div>
-          <div><dt>PPE requirements</dt><dd>${escapeHtml(job.ppe || "Not added")}</dd></div>
-          <div class="is-wide"><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
-        </dl>
+        <div class="company-project-site-details">
+          <dl class="company-project-site-detail-row is-paired">
+            <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
+            <div><dt>Site contact</dt><dd>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</dd></div>
+          </dl>
+          <dl class="company-project-site-detail-row">
+            <div><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
+          </dl>
+          <dl class="company-project-site-detail-row is-paired">
+            <div><dt>Parking</dt><dd>${escapeHtml(job.parking || "Not added")}</dd></div>
+            <div><dt>PPE requirements</dt><dd>${escapeHtml(job.ppe || "Not added")}</dd></div>
+          </dl>
+          <dl class="company-project-site-detail-row">
+            <div><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
+          </dl>
+        </div>
         <section class="company-project-arrival-references" aria-labelledby="company-project-arrival-references-${job.id}">
           <header class="company-project-arrival-references-head">
             <div><p class="company-project-workspace-kicker">Arrival References</p><h3 id="company-project-arrival-references-${job.id}">Entrance and site photos</h3></div>
