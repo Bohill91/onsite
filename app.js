@@ -9571,6 +9571,7 @@ const COMPANY_PROJECT_SECTIONS = [
   { id: "workforce", label: "Workforce" },
   { id: "attendance", label: "Attendance" },
   { id: "site", label: "Site" },
+  { id: "documents", label: "Documents" },
   { id: "commercial", label: "Commercial" },
   { id: "activity", label: "Activity" },
 ];
@@ -9579,7 +9580,6 @@ function normalizeCompanyProjectSection(section = "overview") {
   const aliases = {
     requirements: "labour",
     workers: "workforce",
-    documents: "site",
     invoices: "commercial",
   };
   const value = aliases[section] || section || "overview";
@@ -12668,6 +12668,7 @@ function companyProjectSectionHTML(job, user, summary) {
     labour: companyProjectRequirementsHTML(job, summary),
     attendance: companyProjectAttendanceHTML(job, summary),
     site: companyProjectSiteInfoHTML(job),
+    documents: companyProjectDocumentsHTML(job, summary),
     commercial: companyProjectCommercialHTML(job),
     activity: companyProjectActivityHTML(job, summary),
   }[section] || companyProjectOverviewHTML(job, summary);
@@ -13621,25 +13622,46 @@ function companyProjectAttendanceHTML(job, summary) {
 }
 
 function companyProjectDocumentsHTML(job, summary) {
-  return `
-    <div class="company-project-detail-grid">
-      <div class="company-project-section os-card">
-        <h4>Pre-start Documents</h4>
-        ${companyPreStartJobPanelHTML(job)}
+  const documents = preStartDocumentsForJob(job);
+  const requiredDocuments = documents.filter((doc) => doc.required);
+  const documentRows = documents.length
+    ? `<div class="company-project-document-table-head" aria-hidden="true"><span>Document</span><span>Type</span><span>Requirement</span><span>Added</span><span>Action</span></div>
+      <div class="company-project-document-list">${documents.map((doc) => `<div class="company-project-document-row">
+        <div class="company-project-document-name"><strong>${escapeHtml(doc.documentName)}</strong></div>
+        <span class="company-project-document-value" data-label="Type">${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}</span>
+        <span class="company-project-document-requirement" data-label="Requirement">${doc.required ? "Required" : "Optional"}</span>
+        <time class="company-project-document-value" data-label="Added" datetime="${escapeHtml(doc.uploadedAt || "")}">${doc.uploadedAt ? escapeHtml(formatDateOnly(doc.uploadedAt)) : "Not recorded"}</time>
+        <button class="doc-del-btn company-project-document-remove" type="button" data-prestart-remove="${doc.documentId}" data-prestart-job="${job.id}" aria-label="Remove ${escapeHtml(doc.documentName)}">Remove</button>
+      </div>`).join("")}</div>`
+    : `<div class="company-project-document-empty"><strong>No pre-start documents attached.</strong><span>Add the documents workers need before attending this site.</span></div>`;
+  const acknowledgements = requiredDocuments.length
+    ? `<section class="company-project-workspace-card company-project-document-acknowledgements">
+        <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Worker Acknowledgements</p><h2>Pre-start completion</h2><span>Required project-document acknowledgements for workers assigned to this project.</span></div></header>
+        ${summary.assignedWorkers.length ? `<div class="company-project-document-ack-list">${summary.assignedWorkers.map((worker) => {
+          const requirement = preStartRequirementSummary(job, worker.id);
+          const acknowledged = requirement.required.length - requirement.outstanding.length;
+          return `<div class="company-project-document-ack-row"><div><strong>${escapeHtml(worker.name)}</strong><span>${acknowledged} of ${requirement.required.length} required document${requirement.required.length === 1 ? "" : "s"} acknowledged</span></div><span class="prestart-status ${requirement.outstanding.length ? "outstanding" : "complete"}">${requirement.outstanding.length ? `${requirement.outstanding.length} outstanding` : "Complete"}</span></div>`;
+        }).join("")}</div>` : `<div class="company-project-document-empty is-compact"><strong>No assigned workers yet.</strong><span>Acknowledgement status will appear after workers are confirmed for this project.</span></div>`}
+      </section>`
+    : "";
+  return `<div class="company-project-workspace company-project-documents-workspace">
+    <section class="company-project-workspace-card company-project-documents-card">
+      <header class="company-project-workspace-head"><div><p class="company-project-workspace-kicker">Project Documents</p><h2>Pre-start documents</h2><span>Project-specific induction, RAMS, site rules and access information.</span></div></header>
+      <div class="company-project-documents-manager" data-prestart-manage="${job.id}">
+        ${documentRows}
+        <div class="company-project-documents-add">
+          <div><strong>Add document record</strong><span>Record the document type, label and whether it is required before site.</span></div>
+          <div class="prestart-add-form">
+            <select class="prestart-type" data-prestart-type="${job.id}" aria-label="Document type">${preStartDocumentTypeOptions()}</select>
+            <input class="prestart-name" data-prestart-name="${job.id}" type="text" placeholder="Document name or upload label" aria-label="Document name or upload label" />
+            <label class="checkbox-row prestart-required"><input type="checkbox" data-prestart-required="${job.id}" checked /><span>Required</span></label>
+            <button class="primary-btn" type="button" data-prestart-add="${job.id}">Add</button>
+          </div>
+        </div>
       </div>
-      <div class="company-project-section os-card">
-        <h4>Worker Acknowledgements</h4>
-        <div class="company-project-mini-row"><span>Outstanding acknowledgements</span><strong>${summary.outstandingPreStart}</strong></div>
-        ${summary.assignedWorkers.length ? summary.assignedWorkers.map((worker) => {
-          const req = preStartRequirementSummary(job, worker.id);
-          return `<div class="company-project-mini-row"><span>${escapeHtml(worker.name)}</span><strong>${req.outstanding.length ? `${req.outstanding.length} outstanding` : "Complete"}</strong></div>`;
-        }).join("") : guidedEmptyStateHTML({
-          kicker: "Acknowledgements",
-          title: "No assigned workers yet",
-          body: "Worker acknowledgement status will appear here after workers are confirmed for this project.",
-        })}
-      </div>
-    </div>`;
+    </section>
+    ${acknowledgements}
+  </div>`;
 }
 
 function companyProjectSiteInfoHTML(job) {
@@ -13691,10 +13713,6 @@ function companyProjectSiteInfoHTML(job) {
           </section>
         </div>
       </div>
-      <section class="company-project-workspace-card company-project-site-documents">
-        <header class="company-project-workspace-head"><div><p class="company-project-workspace-kicker">Site Documents</p><h2>Pre-start documents</h2><span>Project-specific induction, RAMS, site rules and access information.</span></div></header>
-        ${companyPreStartJobPanelHTML(job)}
-      </section>
     </div>`;
 }
 
