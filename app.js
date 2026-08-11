@@ -7625,6 +7625,10 @@ function bindTabEvents() {
         activeAttendanceProjectId = "";
         history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
       }
+      if (btn.dataset.tab === "jobs") {
+        navigateToCompanyProjectsDirectory();
+        return;
+      }
       switchTab(btn.dataset.tab);
       if (btn.dataset.tab === "dashboard") render();
     });
@@ -14894,6 +14898,16 @@ function bindMobileDailyJobButtons(scope) {
   });
 }
 
+function navigateToCompanyProjectsDirectory({ scroll = true } = {}) {
+  activeCompanyProjectId = "";
+  activeCompanyProjectEditId = "";
+  activeCompanyProjectSection = "overview";
+  resetProjectEditMap();
+  if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
+  render();
+  if (scroll) scrollAppToTop();
+}
+
 function bindCompanyProjectDashboardButtons(scope) {
   const openCompanyProject = (jobId) => {
     activeCompanyProjectId = jobId || "";
@@ -14968,11 +14982,7 @@ function bindCompanyProjectDashboardButtons(scope) {
   });
   scope.querySelectorAll("[data-company-project-close]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      activeCompanyProjectId = "";
-      activeCompanyProjectEditId = "";
-      resetProjectEditMap();
-      render();
-      scrollAppToTop();
+      navigateToCompanyProjectsDirectory();
     });
   });
   scope.querySelectorAll("[data-company-project-retry]").forEach((btn) => {
