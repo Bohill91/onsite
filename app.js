@@ -13550,6 +13550,23 @@ function companyProjectLateReportsHTML(records) {
   </div>`;
 }
 
+function companyProjectAttendanceSetupHTML(job) {
+  const attendanceManagerName = String(job.attendanceManager?.name || "").trim();
+  const responsibility = attendanceManagerName ? "Assigned attendance manager" : "Company-managed";
+  const method = getSiteCode(job.id) ? "Site QR" : "Manual attendance";
+  return `<div class="company-project-attendance-setup">
+    <div class="company-project-attendance-setup-head">
+      <div><p class="company-project-workspace-kicker">Attendance Setup</p><h3>Site responsibility</h3></div>
+      <button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit attendance setup &rarr;</button>
+    </div>
+    <dl class="company-project-site-management">
+      <div><dt>Attendance manager</dt><dd>${escapeHtml(attendanceManagerName || "Not assigned")}</dd></div>
+      <div><dt>Responsibility</dt><dd>${escapeHtml(responsibility)}</dd></div>
+      <div><dt>Method</dt><dd>${method}</dd></div>
+    </dl>
+  </div>`;
+}
+
 function companyProjectSignInHTML(job, stage) {
   const code = ensureSiteCode(job.id);
   if (!code) {
@@ -13561,6 +13578,7 @@ function companyProjectSignInHTML(job, stage) {
     </header>
     ${projectSignInQrHTML(job, code, { showToken: false })}
     ${stage !== "completed" ? `<div class="company-project-signin-actions"><button class="secondary-btn" type="button" data-project-qr-print="${job.id}">Print sign-in sheet</button><button class="secondary-btn" type="button" data-project-qr-regenerate="${job.id}">Regenerate QR</button></div>` : `<p class="company-project-workspace-quiet-state">This project has completed. The QR is retained for the project record.</p>`}
+    ${companyProjectAttendanceSetupHTML(job)}
   </section>`;
 }
 
@@ -13664,7 +13682,7 @@ function companyProjectDocumentsHTML(job, summary) {
   </div>`;
 }
 
-function companyProjectSiteInfoHTML(job) {
+function projectSitePhotoEntries(job) {
   const photoMeta = job.sitePhotoMeta || {};
   const photoLabels = {
     entrance: "Site entrance",
@@ -13672,48 +13690,64 @@ function companyProjectSiteInfoHTML(job) {
     gate: "Parking",
     other: "Additional site photo",
   };
-  const photos = Object.entries(job.sitePhotos || {})
+  return Object.entries(job.sitePhotos || {})
     .filter(([, src]) => !!src)
     .map(([key, src]) => ({
       key,
       src,
       label: photoMeta[key]?.label || photoLabels[key] || "Site photo",
     }));
+}
+
+function companyProjectSiteInfoHTML(job) {
+  const photos = projectSitePhotoEntries(job);
+  const previewPhotos = photos.slice(0, 2);
+  const additionalPhotoCount = Math.max(photos.length - previewPhotos.length, 0);
   const hasEntrancePin = job.sitePin?.lat != null && job.sitePin?.lng != null;
   const editSiteAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit site details &rarr;</button>`;
-  const editAttendanceAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit attendance setup &rarr;</button>`;
-  const attendanceManagerName = String(job.attendanceManager?.name || "").trim();
-  const qrReady = !!getSiteCode(job.id);
+  const photoPreview = photos.length
+    ? `<div class="company-project-photo-preview">
+        <div class="company-project-photo-grid">${previewPhotos.map((photo, index) => {
+          const remainingLabel = index === previewPhotos.length - 1 && additionalPhotoCount
+            ? ` and ${additionalPhotoCount} more photo${additionalPhotoCount === 1 ? "" : "s"}`
+            : "";
+          return `<button type="button" data-project-photo-gallery="${job.id}" data-lightbox-index="${index}" aria-label="View ${escapeHtml(photo.label)}${remainingLabel}">
+            <div class="company-project-photo-media"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" />${index === previewPhotos.length - 1 && additionalPhotoCount ? `<span class="company-project-photo-more">+${additionalPhotoCount} more</span>` : ""}</div>
+            <span><strong>${escapeHtml(photo.label)}</strong></span>
+          </button>`;
+        }).join("")}</div>
+        ${photos.length > 2 ? `<button class="company-project-inline-action company-project-photo-view-all" type="button" data-project-photo-gallery="${job.id}" data-lightbox-index="0">View all ${photos.length} photos &rarr;</button>` : ""}
+      </div>`
+    : `<div class="company-project-reference-empty"><strong>No site photos added.</strong><span>Add entrance, welfare or parking photos to help workers recognise the site.</span></div>`;
   return `
     <div class="company-project-workspace company-project-site-workspace">
-      <div class="company-project-site-grid">
-        <section class="company-project-workspace-card company-project-site-access">
-          <header class="company-project-workspace-head">
-            <div><p class="company-project-workspace-kicker">Site Access &amp; Arrival</p><h2>Worker arrival information</h2><span>Practical information workers need before travelling to site.</span></div>
-            ${editSiteAction}
+      <section class="company-project-workspace-card company-project-site-access">
+        <header class="company-project-workspace-head">
+          <div><p class="company-project-workspace-kicker">Site Access &amp; Arrival</p><h2>Worker arrival information</h2><span>Practical information workers need before travelling to site.</span></div>
+          ${editSiteAction}
+        </header>
+        <dl class="company-project-site-details">
+          <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
+          <div><dt>Site contact</dt><dd>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</dd></div>
+          <div><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
+          <div><dt>Parking</dt><dd>${escapeHtml(job.parking || "Not added")}</dd></div>
+          <div><dt>PPE requirements</dt><dd>${escapeHtml(job.ppe || "Not added")}</dd></div>
+          <div><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
+        </dl>
+        <section class="company-project-arrival-references" aria-labelledby="company-project-arrival-references-${job.id}">
+          <header class="company-project-arrival-references-head">
+            <div><p class="company-project-workspace-kicker">Arrival References</p><h3 id="company-project-arrival-references-${job.id}">Entrance and site photos</h3></div>
           </header>
-          <dl class="company-project-site-details">
-            <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
-            <div><dt>Entrance pin</dt><dd>${hasEntrancePin ? "Pinned" : "Not added"}${hasEntrancePin ? `<button class="company-project-inline-action" type="button" data-map-job="${job.id}">View entrance pin &rarr;</button>` : ""}</dd></div>
-            <div><dt>Site contact</dt><dd>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</dd></div>
-            <div><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
-            <div><dt>Parking</dt><dd>${escapeHtml(job.parking || "Not added")}</dd></div>
-            <div><dt>PPE requirements</dt><dd>${escapeHtml(job.ppe || "Not added")}</dd></div>
-            <div><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
-          </dl>
+          <div class="company-project-arrival-references-body">
+            <div class="company-project-entrance-reference">
+              <span>Entrance pin</span>
+              <strong>${hasEntrancePin ? "Pinned" : "Not added"}</strong>
+              ${hasEntrancePin ? `<button class="company-project-inline-action" type="button" data-map-job="${job.id}">View entrance pin &rarr;</button>` : ""}
+            </div>
+            ${photoPreview}
+          </div>
         </section>
-        <div class="company-project-site-side">
-          <section class="company-project-workspace-card">
-            <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Site Photos</p><h2>Arrival references</h2></div></header>
-            ${photos.length ? `<div class="company-project-photo-grid">${photos.map((photo) => `<button type="button" data-lightbox-src="${escapeHtml(photo.src)}" data-lightbox-label="${escapeHtml(photo.label)}"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" /><span><strong>${escapeHtml(photo.label)}</strong></span></button>`).join("")}</div>` : `<div class="company-project-workspace-empty is-compact"><strong>No site photos added.</strong><span>Add entrance, access or parking photos to help workers arrive at the correct location.</span>${editSiteAction}</div>`}
-          </section>
-          <section class="company-project-workspace-card">
-            <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Attendance Responsibility</p><h2>Site management</h2></div></header>
-            <dl class="company-project-site-management"><div><dt>Attendance manager</dt><dd>${escapeHtml(attendanceManagerName || "Not assigned")}</dd></div>${attendanceManagerName ? "" : "<div><dt>Responsibility</dt><dd>Company-managed</dd></div>"}<div><dt>Method</dt><dd>${qrReady ? "Site QR" : "Manual attendance"}</dd></div></dl>
-            ${editAttendanceAction}
-          </section>
-        </div>
-      </div>
+      </section>
     </div>`;
 }
 
@@ -17933,27 +17967,62 @@ document
 
 // ─── Photo Lightbox ────────────────────────────────────────
 let lightboxEl = null;
+let lightboxGallery = [];
+let lightboxGalleryIndex = 0;
 
-function openPhotoLightbox(src, label) {
+function renderPhotoLightbox() {
+  if (!lightboxEl || !lightboxGallery.length) return;
+  const photo = lightboxGallery[lightboxGalleryIndex];
+  const previousButton = lightboxEl.querySelector(".photo-lb-previous");
+  const nextButton = lightboxEl.querySelector(".photo-lb-next");
+  const count = lightboxEl.querySelector(".photo-lb-count");
+  lightboxEl.querySelector(".photo-lb-img").src = photo.src;
+  lightboxEl.querySelector(".photo-lb-img").alt = photo.label;
+  lightboxEl.querySelector(".photo-lb-label").textContent = photo.label;
+  previousButton.hidden = lightboxGallery.length < 2;
+  nextButton.hidden = lightboxGallery.length < 2;
+  previousButton.disabled = lightboxGalleryIndex === 0;
+  nextButton.disabled = lightboxGalleryIndex === lightboxGallery.length - 1;
+  count.hidden = lightboxGallery.length < 2;
+  count.textContent = `${lightboxGalleryIndex + 1} of ${lightboxGallery.length}`;
+}
+
+function stepPhotoLightbox(direction) {
+  const nextIndex = Math.max(0, Math.min(lightboxGallery.length - 1, lightboxGalleryIndex + direction));
+  if (nextIndex === lightboxGalleryIndex) return;
+  lightboxGalleryIndex = nextIndex;
+  renderPhotoLightbox();
+}
+
+function openPhotoLightbox(src, label, gallery = [], index = 0) {
   if (!lightboxEl) {
     lightboxEl = document.createElement("div");
     lightboxEl.className = "photo-lightbox";
+    lightboxEl.setAttribute("role", "dialog");
+    lightboxEl.setAttribute("aria-modal", "true");
+    lightboxEl.setAttribute("aria-label", "Site photo viewer");
     lightboxEl.innerHTML = `
       <button class="photo-lb-close" type="button" aria-label="Close">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <img class="photo-lb-img" alt="" />
-      <span class="photo-lb-label"></span>`;
+      <div class="photo-lb-frame">
+        <button class="photo-lb-nav photo-lb-previous" type="button" aria-label="Previous photo">&lsaquo;</button>
+        <img class="photo-lb-img" alt="" />
+        <button class="photo-lb-nav photo-lb-next" type="button" aria-label="Next photo">&rsaquo;</button>
+      </div>
+      <div class="photo-lb-meta"><span class="photo-lb-label"></span><span class="photo-lb-count"></span></div>`;
     lightboxEl.addEventListener("click", (e) => {
-      if (e.target === lightboxEl || e.target.closest(".photo-lb-close"))
-        closePhotoLightbox();
+      if (e.target === lightboxEl || e.target.closest(".photo-lb-close")) closePhotoLightbox();
+      if (e.target.closest(".photo-lb-previous")) stepPhotoLightbox(-1);
+      if (e.target.closest(".photo-lb-next")) stepPhotoLightbox(1);
     });
     document.body.appendChild(lightboxEl);
   }
-  lightboxEl.querySelector(".photo-lb-img").src = src;
-  lightboxEl.querySelector(".photo-lb-img").alt = label;
-  lightboxEl.querySelector(".photo-lb-label").textContent = label;
+  lightboxGallery = Array.isArray(gallery) && gallery.length ? gallery : [{ src, label }];
+  lightboxGalleryIndex = Math.max(0, Math.min(lightboxGallery.length - 1, Number(index) || 0));
+  renderPhotoLightbox();
   lightboxEl.classList.add("open");
+  lightboxEl.querySelector(".photo-lb-close")?.focus();
 }
 
 function closePhotoLightbox() {
@@ -17961,9 +18030,24 @@ function closePhotoLightbox() {
 }
 
 document.addEventListener("click", (e) => {
+  const galleryItem = e.target.closest("[data-project-photo-gallery]");
+  if (galleryItem) {
+    const job = findJob(galleryItem.dataset.projectPhotoGallery);
+    const photos = job ? projectSitePhotoEntries(job) : [];
+    const index = Number(galleryItem.dataset.lightboxIndex) || 0;
+    if (photos.length) openPhotoLightbox(photos[index]?.src, photos[index]?.label, photos, index);
+    return;
+  }
   const item = e.target.closest("[data-lightbox-src]");
   if (item)
     openPhotoLightbox(item.dataset.lightboxSrc, item.dataset.lightboxLabel);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!lightboxEl?.classList.contains("open")) return;
+  if (e.key === "Escape") closePhotoLightbox();
+  if (e.key === "ArrowLeft") stepPhotoLightbox(-1);
+  if (e.key === "ArrowRight") stepPhotoLightbox(1);
 });
 
 function siteInfoRow(iconPath, label, value) {
