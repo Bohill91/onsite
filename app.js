@@ -13572,6 +13572,12 @@ function companyProjectAttendanceHTML(job, summary) {
   const qrCard = companyProjectSignInHTML(job, stage);
   const confirmationRequired = scheduledToday && hasAttendanceConfirmationChanges(workers, job);
   const isPastExpectedStart = scheduledToday && isPastCutoff(siteStartMs(jobExpectedStartTime(job)));
+  const attendanceDate = formatDateOnly(todayDateStr());
+  const expectedStart = companyProjectAttendanceTime(jobExpectedStartTime(job));
+  const attendanceContext = [
+    attendanceDate,
+    expectedStart !== "—" ? `expected start ${expectedStart}` : "",
+  ].filter(Boolean).join(" · ");
   const todayRecords = Array.isArray(summary?.todayRecords)
     ? summary.todayRecords
     : records.filter((record) => record.date === todayDateStr());
@@ -13590,8 +13596,8 @@ function companyProjectAttendanceHTML(job, summary) {
       ${confirmationRequired ? `<div class="company-project-attendance-action"><div><strong>Attendance requires confirmation.</strong><span>Review today’s records before they move into the commercial workflow.</span></div><button class="primary-btn" type="button" data-dashboard-attendance-project="${job.id}">Confirm attendance</button></div>` : ""}
       <div class="company-project-attendance-roster-head"><p>Today&apos;s workers</p><span>${workers.length} expected</span></div>
       ${companyProjectAttendanceWorkersHTML(job, workers)}`
-    : `<header class="company-project-workspace-head is-compact">
-        <div><p class="company-project-workspace-kicker">Today&apos;s Attendance</p><h2>${workers.length ? "No workers are scheduled today." : "No workers expected today."}</h2><span>${workers.length ? "This project has assigned workers, but today is not one of its scheduled working days." : "No workers are currently assigned to this project."}</span></div>
+    : `<header class="company-project-workspace-head is-compact company-project-attendance-empty-head">
+        <div><p class="company-project-workspace-kicker">Today&apos;s Attendance</p>${attendanceContext ? `<span class="company-project-attendance-empty-context">${escapeHtml(attendanceContext)}</span>` : ""}<h2>${workers.length ? "No workers are scheduled today." : "No workers expected today."}</h2><span class="company-project-attendance-empty-copy">${workers.length ? "This project has assigned workers, but today is not one of its scheduled working days." : "No workers are currently assigned to this project."}</span></div>
       </header>
       ${workers.length ? "" : `<button class="company-project-inline-action company-project-attendance-empty-action" type="button" data-company-project-section="workforce">Review workforce &rarr;</button>`}`;
   const historySection = records.length
@@ -13607,7 +13613,7 @@ function companyProjectAttendanceHTML(job, summary) {
       </section>`
     : "";
   return `<div class="company-project-workspace company-project-attendance-workspace">
-    <section class="company-project-workspace-card company-project-attendance-live">${todayContent}</section>
+    <section class="company-project-workspace-card company-project-attendance-live${scheduledToday && workers.length ? "" : " is-empty"}">${todayContent}</section>
     ${qrCard}
     ${historySection}
     ${lateReportsSection}

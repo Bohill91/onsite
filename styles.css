@@ -17180,8 +17180,29 @@ button svg,
   margin: 2px 0;
 }
 
+.company-project-attendance-live.is-empty {
+  gap: 0;
+  padding-block: 20px;
+}
+
+.company-project-attendance-empty-head > div {
+  gap: 0;
+}
+
+.company-project-attendance-empty-context {
+  margin-top: 4px;
+}
+
+.company-project-attendance-empty-context + h2 {
+  margin-top: 10px;
+}
+
+.company-project-attendance-empty-copy {
+  margin-top: 3px;
+}
+
 .company-project-attendance-empty-action {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .company-project-attendance-roster-head {
