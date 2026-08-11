@@ -13678,10 +13678,11 @@ function companyProjectSiteInfoHTML(job) {
       key,
       src,
       label: photoMeta[key]?.label || photoLabels[key] || "Site photo",
-      fileName: photoMeta[key]?.fileName || "Photo added",
     }));
   const hasEntrancePin = job.sitePin?.lat != null && job.sitePin?.lng != null;
-  const editAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit project &rarr;</button>`;
+  const editSiteAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit site details &rarr;</button>`;
+  const editAttendanceAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit attendance setup &rarr;</button>`;
+  const attendanceManagerName = String(job.attendanceManager?.name || "").trim();
   const qrReady = !!getSiteCode(job.id);
   return `
     <div class="company-project-workspace company-project-site-workspace">
@@ -13689,7 +13690,7 @@ function companyProjectSiteInfoHTML(job) {
         <section class="company-project-workspace-card company-project-site-access">
           <header class="company-project-workspace-head">
             <div><p class="company-project-workspace-kicker">Site Access &amp; Arrival</p><h2>Worker arrival information</h2><span>Practical information workers need before travelling to site.</span></div>
-            ${editAction}
+            ${editSiteAction}
           </header>
           <dl class="company-project-site-details">
             <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
@@ -13704,12 +13705,12 @@ function companyProjectSiteInfoHTML(job) {
         <div class="company-project-site-side">
           <section class="company-project-workspace-card">
             <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Site Photos</p><h2>Arrival references</h2></div></header>
-            ${photos.length ? `<div class="company-project-photo-grid">${photos.map((photo) => `<button type="button" data-lightbox-src="${escapeHtml(photo.src)}" data-lightbox-label="${escapeHtml(photo.label)}"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" /><span><strong>${escapeHtml(photo.label)}</strong><small>${escapeHtml(photo.fileName)}</small></span></button>`).join("")}</div>` : `<div class="company-project-workspace-empty is-compact"><strong>No site photos added.</strong><span>Add entrance, access or parking photos to help workers arrive at the correct location.</span>${editAction}</div>`}
+            ${photos.length ? `<div class="company-project-photo-grid">${photos.map((photo) => `<button type="button" data-lightbox-src="${escapeHtml(photo.src)}" data-lightbox-label="${escapeHtml(photo.label)}"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" /><span><strong>${escapeHtml(photo.label)}</strong></span></button>`).join("")}</div>` : `<div class="company-project-workspace-empty is-compact"><strong>No site photos added.</strong><span>Add entrance, access or parking photos to help workers arrive at the correct location.</span>${editSiteAction}</div>`}
           </section>
           <section class="company-project-workspace-card">
             <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Attendance Responsibility</p><h2>Site management</h2></div></header>
-            <dl class="company-project-site-management"><div><dt>Attendance manager</dt><dd>${escapeHtml(job.attendanceManager?.name || "Company / manual setup")}</dd></div><div><dt>Method</dt><dd>${qrReady ? "Site QR" : "Company / manual setup"}</dd></div></dl>
-            ${editAction}
+            <dl class="company-project-site-management"><div><dt>Attendance manager</dt><dd>${escapeHtml(attendanceManagerName || "Not assigned")}</dd></div>${attendanceManagerName ? "" : "<div><dt>Responsibility</dt><dd>Company-managed</dd></div>"}<div><dt>Method</dt><dd>${qrReady ? "Site QR" : "Manual attendance"}</dd></div></dl>
+            ${editAttendanceAction}
           </section>
         </div>
       </div>
