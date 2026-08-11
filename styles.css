@@ -17762,59 +17762,119 @@ button svg,
 }
 
 /* Project documents */
-.company-project-documents-manager {
-  display: grid;
-  gap: var(--space-2);
+.company-project-documents-card {
+  gap: 20px;
 }
 
-.company-project-document-table-head,
-.company-project-document-row {
-  align-items: center;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(140px, 0.9fr) 106px 112px 72px;
+.company-project-requirements-head .primary-btn {
+  flex: 0 0 auto;
 }
 
-.company-project-document-table-head {
+.company-project-requirement-views {
   border-bottom: 1px solid var(--card-divider);
+  display: flex;
+  gap: 24px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.company-project-requirement-views button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--ink-3);
-  font-size: 0.68rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.78rem;
   font-weight: 750;
-  padding: 0 0 8px;
+  margin-bottom: -1px;
+  padding: 4px 1px 10px;
+  transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+}
+
+.company-project-requirement-views button:hover {
+  color: var(--ink);
+}
+
+.company-project-requirement-views button:focus-visible {
+  border-color: var(--orange);
+  color: var(--ink);
+  outline: 2px solid rgba(249, 115, 22, 0.2);
+  outline-offset: 2px;
+}
+
+.company-project-requirement-views button.active {
+  border-bottom-color: var(--orange);
+  color: var(--ink);
+}
+
+.company-project-requirements-view,
+.company-project-requirement-group,
+.company-project-requirement-records {
+  display: grid;
+  min-width: 0;
+}
+
+.company-project-requirement-group + .company-project-requirement-group {
+  border-top: 1px solid var(--card-divider);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.company-project-requirement-group > h3 {
+  color: var(--ink-3);
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 0 0 6px;
   text-transform: uppercase;
 }
 
-.company-project-document-list {
-  display: grid;
-}
-
-.company-project-document-row {
+.company-project-requirement-record {
+  align-items: center;
   border-bottom: 1px solid var(--card-divider);
+  display: grid;
+  gap: 14px 20px;
+  grid-template-columns: minmax(210px, 1.35fr) 104px minmax(210px, 1fr) auto;
   min-width: 0;
-  padding: 12px 0;
+  padding: 14px 0;
 }
 
-.company-project-document-name,
-.company-project-document-name strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.company-project-requirement-record:last-child {
+  border-bottom: 0;
 }
 
-.company-project-document-name strong {
+.company-project-requirement-identity,
+.company-project-requirement-record-meta,
+.company-project-requirement-record-status {
+  min-width: 0;
+}
+
+.company-project-requirement-identity {
+  display: grid;
+  gap: 3px;
+}
+
+.company-project-requirement-identity strong {
   color: var(--ink);
-  display: block;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
-.company-project-document-value {
-  color: var(--ink-2);
-  font-size: 0.76rem;
+.company-project-requirement-identity span,
+.company-project-requirement-record-meta span {
+  color: var(--ink-3);
+  font-size: 0.74rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-.company-project-document-requirement {
+.company-project-requirement-type {
   background: var(--surface-3);
   border-radius: 999px;
   color: var(--ink-2);
@@ -17825,79 +17885,241 @@ button svg,
   white-space: nowrap;
 }
 
-.company-project-document-remove {
-  font-size: 0.72rem;
-  justify-self: end;
-  min-height: 32px;
-  padding: 6px 8px;
-}
-
-.company-project-document-empty {
-  display: grid;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.company-project-document-empty strong {
-  color: var(--ink);
-  font-size: 0.84rem;
-}
-
-.company-project-document-empty span,
-.company-project-documents-add > div > span,
-.company-project-document-ack-row > div > span {
-  color: var(--ink-3);
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
-.company-project-document-empty.is-compact {
-  padding: 2px 0;
-}
-
-.company-project-documents-add {
-  border-top: 1px solid var(--card-divider);
-  display: grid;
-  gap: 10px;
-  padding-top: 14px;
-}
-
-.company-project-documents-add > div:first-child {
+.company-project-requirement-record-meta {
   display: grid;
   gap: 3px;
 }
 
-.company-project-documents-add > div > strong {
-  color: var(--ink);
-  font-size: 0.8rem;
-}
-
-.company-project-document-ack-list {
+.company-project-requirement-record-status {
+  align-items: flex-end;
   display: grid;
+  gap: 7px;
+  justify-items: end;
 }
 
-.company-project-document-ack-row {
+.company-project-requirement-state {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 780;
+  justify-self: start;
+  line-height: 1.3;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.company-project-requirement-state.is-neutral {
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+
+.company-project-requirement-state.is-complete {
+  background: rgba(22, 163, 74, 0.09);
+  color: var(--green-text);
+}
+
+.company-project-requirement-state.is-outstanding,
+.company-project-requirement-state.is-on-arrival {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--amber-text);
+}
+
+.company-project-requirements-empty {
+  align-items: start;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 14px 0 2px;
+}
+
+.company-project-requirements-empty.is-compact {
+  padding-top: 6px;
+}
+
+.company-project-requirements-empty strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.company-project-requirements-empty span {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  max-width: 620px;
+}
+
+.company-project-requirements-empty .primary-btn {
+  margin-top: 8px;
+}
+
+.company-project-worker-completion-list,
+.company-project-completion-records {
+  display: grid;
+  min-width: 0;
+}
+
+.company-project-worker-completion-head,
+.company-project-worker-completion-row {
   align-items: center;
-  border-top: 1px solid var(--card-divider);
-  display: flex;
+  display: grid;
   gap: 16px;
-  justify-content: space-between;
-  padding: 12px 0;
+  grid-template-columns: minmax(210px, 1.3fr) minmax(120px, 0.75fr) minmax(140px, 0.8fr) 120px;
 }
 
-.company-project-document-ack-row:first-child {
-  border-top: 0;
+.company-project-worker-completion-head,
+.company-project-completion-records-head {
+  border-bottom: 1px solid var(--card-divider);
+  color: var(--ink-3);
+  font-size: 0.67rem;
+  font-weight: 750;
+  padding: 0 0 8px;
+  text-transform: uppercase;
 }
 
-.company-project-document-ack-row > div {
+.company-project-worker-completion-row {
+  border-bottom: 1px solid var(--card-divider);
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  min-width: 0;
+  padding: 13px 0;
+}
+
+.company-project-worker-completion-row:last-child,
+.company-project-completion-record:last-child {
+  border-bottom: 0;
+}
+
+.company-project-worker-completion-person,
+.company-project-completion-record > div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.company-project-document-ack-row > div > strong {
+.company-project-worker-completion-person strong,
+.company-project-completion-record strong {
   color: var(--ink);
   font-size: 0.8rem;
+}
+
+.company-project-worker-completion-person span,
+.company-project-completion-record span,
+.company-project-completion-record time {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+.company-project-completion-records-head,
+.company-project-completion-record {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(170px, 1fr) minmax(200px, 1.25fr) minmax(150px, 0.9fr) 150px;
+}
+
+.company-project-completion-record {
+  border-bottom: 1px solid var(--card-divider);
+  min-width: 0;
+  padding: 13px 0;
+}
+
+.project-requirement-modal {
+  padding: 20px;
+}
+
+.project-requirement-sheet {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(90vh, 820px);
+  max-width: 760px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.project-requirement-sheet-head {
+  align-items: start;
+  border-bottom: 1px solid var(--card-divider);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 20px 24px;
+}
+
+.project-requirement-sheet-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.project-requirement-sheet-head h2 {
+  color: var(--ink);
+  font-size: 1.08rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.project-requirement-sheet-head span {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.project-requirement-sheet-body {
+  overflow-y: auto;
+  padding: 4px 24px;
+}
+
+.project-requirement-form-section {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 12px;
+  padding: 18px 0;
+}
+
+.project-requirement-form-section:first-child {
+  border-top: 0;
+}
+
+.project-requirement-form-heading > span {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.project-requirement-form-grid {
+  align-items: start;
+  display: grid;
+  gap: 14px 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-requirement-form-span {
+  grid-column: 1 / -1;
+}
+
+.project-requirement-recompletion {
+  align-self: end;
+  min-height: 44px;
+}
+
+.project-requirement-sheet-actions {
+  align-items: center;
+  border-top: 1px solid var(--card-divider);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+
+.project-requirement-sheet-actions > div {
+  display: flex;
+  gap: 10px;
 }
 
 /* Commercial */
@@ -18060,31 +18282,32 @@ button svg,
     grid-template-columns: 1fr;
   }
 
-  .company-project-document-table-head {
+  .company-project-requirement-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .company-project-requirement-record-meta {
+    grid-column: 1;
+  }
+
+  .company-project-requirement-record-status {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .company-project-worker-completion-head,
+  .company-project-completion-records-head {
     display: none;
   }
 
-  .company-project-document-row {
-    gap: 8px 16px;
+  .company-project-worker-completion-row,
+  .company-project-completion-record {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .company-project-document-name {
+  .company-project-worker-completion-person,
+  .company-project-completion-record > div:first-child {
     grid-column: 1 / -1;
-  }
-
-  .company-project-document-value::before {
-    color: var(--ink-3);
-    content: attr(data-label);
-    display: block;
-    font-size: 0.65rem;
-    font-weight: 700;
-    margin-bottom: 2px;
-    text-transform: uppercase;
-  }
-
-  .company-project-document-remove {
-    justify-self: end;
   }
 
   .company-project-requirement-side .company-project-inline-action {
@@ -18241,10 +18464,16 @@ button svg,
     flex-direction: column;
   }
 
-  .company-project-document-ack-row {
+  .company-project-requirements-head {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
+  }
+
+  .project-requirement-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-requirement-form-span {
+    grid-column: 1;
   }
 }
 
@@ -18257,15 +18486,60 @@ button svg,
     grid-column: 1 / -1;
   }
 
-  .company-project-document-row {
+  .company-project-requirement-record,
+  .company-project-worker-completion-row,
+  .company-project-completion-record {
+    align-items: start;
     grid-template-columns: 1fr;
   }
 
-  .company-project-document-row > * {
+  .company-project-requirement-record > *,
+  .company-project-worker-completion-row > *,
+  .company-project-completion-record > * {
     grid-column: 1;
+    grid-row: auto;
   }
 
-  .company-project-document-remove {
+  .company-project-requirement-record-status {
+    align-items: start;
+    justify-items: start;
+  }
+
+  .company-project-requirement-views {
+    gap: 18px;
+  }
+
+  .project-requirement-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .project-requirement-sheet {
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-right: 0;
+    max-height: 94vh;
+  }
+
+  .project-requirement-sheet-head,
+  .project-requirement-sheet-body,
+  .project-requirement-sheet-actions {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .project-requirement-sheet-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .project-requirement-sheet-actions > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-requirement-sheet-actions > .danger {
     justify-self: start;
   }
 

@@ -4244,6 +4244,70 @@ const PRE_START_DOCUMENT_TYPES = [
   { value: "other", label: "Other project documents" },
 ];
 
+const PROJECT_REQUIREMENT_TYPES = [
+  { value: "document", label: "Document" },
+  { value: "video_induction", label: "Video" },
+  { value: "form_signature", label: "Form" },
+  { value: "onsite_induction", label: "On-site induction" },
+];
+
+const PROJECT_REQUIREMENT_TIMINGS = [
+  { value: "before_first_shift", label: "Before first shift" },
+  { value: "on_arrival", label: "On arrival" },
+  { value: "optional_reference", label: "Optional / reference" },
+];
+
+const PROJECT_REQUIREMENT_ACTIONS = {
+  document: [
+    { value: "view_only", label: "View only" },
+    { value: "read_acknowledge", label: "Read & acknowledge" },
+    { value: "read_sign", label: "Read & sign" },
+  ],
+  video_induction: [
+    { value: "watch", label: "Watch" },
+    { value: "watch_acknowledge", label: "Watch & acknowledge" },
+    { value: "watch_comprehension", label: "Watch + comprehension check" },
+  ],
+  form_signature: [{ value: "complete_sign", label: "Complete & sign" }],
+  onsite_induction: [{ value: "supervisor_signoff", label: "Supervisor sign-off" }],
+};
+
+function projectRequirementTypeLabel(type) {
+  return (
+    PROJECT_REQUIREMENT_TYPES.find((item) => item.value === type)?.label ||
+    "Document"
+  );
+}
+
+function projectRequirementTimingLabel(timing) {
+  return (
+    PROJECT_REQUIREMENT_TIMINGS.find((item) => item.value === timing)?.label ||
+    "Before first shift"
+  );
+}
+
+function projectRequirementActionLabel(action) {
+  return (
+    Object.values(PROJECT_REQUIREMENT_ACTIONS)
+      .flat()
+      .find((item) => item.value === action)?.label || "Read & acknowledge"
+  );
+}
+
+function projectRequirementDefaultAction(type) {
+  return PROJECT_REQUIREMENT_ACTIONS[type]?.[0]?.value || "read_acknowledge";
+}
+
+function normalizeProjectRequirementAudience(audience) {
+  if (audience?.type === "labour_requirement" && audience.labourRequirementId) {
+    return {
+      type: "labour_requirement",
+      labourRequirementId: String(audience.labourRequirementId),
+    };
+  }
+  return { type: "all_project_workers", labourRequirementId: "" };
+}
+
 function normalizePreStartDocument(doc) {
   const documentName = String(
     doc?.documentName || doc?.name || doc?.title || "",
@@ -4254,12 +4318,99 @@ function normalizePreStartDocument(doc) {
   )
     ? doc.documentType
     : "other";
+  const requirementType = PROJECT_REQUIREMENT_TYPES.some(
+    (type) => type.value === doc?.requirementType,
+  )
+    ? doc.requirementType
+    : "document";
+  const legacyTiming = doc?.required === false
+    ? "optional_reference"
+    : "before_first_shift";
+  const timing = PROJECT_REQUIREMENT_TIMINGS.some(
+    (item) => item.value === doc?.timing,
+  )
+    ? doc.timing
+    : legacyTiming;
+  const validActions = PROJECT_REQUIREMENT_ACTIONS[requirementType] || [];
+  const legacyAction = timing === "optional_reference"
+    ? "view_only"
+    : "read_acknowledge";
+  const completionAction = validActions.some(
+    (item) => item.value === doc?.completionAction,
+  )
+    ? doc.completionAction
+    : validActions.some((item) => item.value === legacyAction)
+      ? legacyAction
+      : projectRequirementDefaultAction(requirementType);
+  const version = String(doc?.version || doc?.revision || "1").trim() || "1";
+  const comprehensionCheck = {
+    enabled:
+      requirementType === "video_induction" &&
+      (completionAction === "watch_comprehension" ||
+        !!doc?.comprehensionCheck?.enabled),
+    passThreshold: Math.min(
+      100,
+      Math.max(1, Number(doc?.comprehensionCheck?.passThreshold) || 80),
+    ),
+    questions: Array.isArray(doc?.comprehensionCheck?.questions)
+      ? doc.comprehensionCheck.questions
+      : [],
+  };
   return {
     documentId: doc?.documentId || doc?.id || createId(),
     documentType,
     documentName,
     uploadedAt: doc?.uploadedAt || new Date().toISOString(),
-    required: doc?.required == null ? true : !!doc.required,
+    createdAt: doc?.createdAt || doc?.uploadedAt || new Date().toISOString(),
+    updatedAt: doc?.updatedAt || doc?.uploadedAt || new Date().toISOString(),
+    archivedAt: doc?.archivedAt || "",
+    requirementType,
+    description: String(doc?.description || doc?.instructions || "").trim(),
+    sourceReference: String(doc?.sourceReference || "").trim(),
+    completionAction,
+    timing,
+    audience: normalizeProjectRequirementAudience(doc?.audience),
+    version,
+    requireRecompletionOnUpdate: !!doc?.requireRecompletionOnUpdate,
+    comprehensionCheck,
+    versionHistory: Array.isArray(doc?.versionHistory)
+      ? doc.versionHistory.filter((entry) => entry && typeof entry === "object")
+      : [],
+    // Legacy worker flows use `required` for pre-start blocking. On-arrival
+    // requirements remain mandatory in their own timing state, not pre-start.
+    required: timing === "before_first_shift",
+  };
+}
+
+function normalizeProjectRequirementCompletion(record) {
+  const requirementId = String(
+    record?.requirementId || record?.documentId || "",
+  ).trim();
+  const projectId = String(record?.projectId || record?.jobId || "").trim();
+  const workerId = String(record?.workerId || "").trim();
+  if (!requirementId || !projectId || !workerId) return null;
+  const completedAt = record?.completedAt || record?.acknowledgedAt || "";
+  return {
+    id: record?.id || createId(),
+    companyId: record?.companyId || "",
+    projectId,
+    workerId,
+    assignmentId: record?.assignmentId || "",
+    requirementId,
+    requirementVersion: String(record?.requirementVersion || "1"),
+    status: record?.status || "completed",
+    startedAt: record?.startedAt || "",
+    completedAt,
+    completionMethod: record?.completionMethod || "read_acknowledge",
+    acknowledgedAt: record?.acknowledgedAt || "",
+    signatureReference: record?.signatureReference || "",
+    quizResult:
+      record?.quizResult && typeof record.quizResult === "object"
+        ? record.quizResult
+        : null,
+    supervisorUserId: record?.supervisorUserId || "",
+    completedArtifactReference: record?.completedArtifactReference || "",
+    source: record?.source || "project_requirement",
   };
 }
 
@@ -4417,6 +4568,8 @@ function migrateState(s) {
   if (!Array.isArray(s.shiftChangeOffers)) s.shiftChangeOffers = [];
   if (!Array.isArray(s.preStartAcknowledgements))
     s.preStartAcknowledgements = [];
+  if (!Array.isArray(s.projectRequirementCompletions))
+    s.projectRequirementCompletions = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
   (s.preferredWorkers || []).forEach((pref) => {
@@ -4451,12 +4604,18 @@ function migrateState(s) {
     .slice(0, 500);
   s.preStartAcknowledgements = (s.preStartAcknowledgements || [])
     .map((ack) => ({
+      id: ack.id || createId(),
       workerId: ack.workerId || "",
       projectId: ack.projectId || ack.jobId || "",
       documentId: ack.documentId || "",
+      requirementVersion: String(ack.requirementVersion || "1"),
+      completionMethod: ack.completionMethod || "read_acknowledge",
       acknowledgedAt: ack.acknowledgedAt || new Date().toISOString(),
     }))
     .filter((ack) => ack.workerId && ack.projectId && ack.documentId);
+  s.projectRequirementCompletions = (s.projectRequirementCompletions || [])
+    .map(normalizeProjectRequirementCompletion)
+    .filter(Boolean);
   (s.replacementTasks || []).forEach((task) => {
     if (!task.taskType) task.taskType = "replacement_needed";
     if (task.replacementNeeded == null) task.replacementNeeded = true;
@@ -4838,38 +4997,77 @@ function preStartDocumentTypeLabel(type) {
   );
 }
 
-function preStartDocumentsForJob(job) {
+function preStartDocumentsForJob(job, { includeArchived = false } = {}) {
   return (Array.isArray(job?.preStartDocuments) ? job.preStartDocuments : [])
     .map(normalizePreStartDocument)
     .filter(Boolean)
-    .sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
+    .filter((document) => includeArchived || !document.archivedAt)
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
 }
 
 function addPreStartDocument(jobId, doc) {
+  return upsertProjectRequirement(jobId, doc);
+}
+
+function upsertProjectRequirement(jobId, input) {
   const job = findJob(jobId);
-  const record = normalizePreStartDocument(doc);
+  const existingDocuments = preStartDocumentsForJob(job, {
+    includeArchived: true,
+  });
+  const existing = existingDocuments.find(
+    (document) => document.documentId === input?.documentId,
+  );
+  const record = normalizePreStartDocument({
+    ...existing,
+    ...input,
+    documentId: input?.documentId || existing?.documentId,
+    createdAt: existing?.createdAt || input?.createdAt,
+    uploadedAt: existing?.uploadedAt || input?.uploadedAt,
+    updatedAt: new Date().toISOString(),
+    archivedAt: "",
+  });
   if (!job || !record)
-    return { ok: false, reason: "Add a document name" };
-  job.preStartDocuments = preStartDocumentsForJob(job);
+    return { ok: false, reason: "Add a requirement title" };
+  if (existing && existing.version !== record.version) {
+    const previousVersion = {
+      version: existing.version,
+      title: existing.documentName,
+      requirementType: existing.requirementType,
+      completionAction: existing.completionAction,
+      timing: existing.timing,
+      supersededAt: record.updatedAt,
+    };
+    record.versionHistory = [...(existing.versionHistory || []), previousVersion]
+      .filter(
+        (entry, index, history) =>
+          history.findIndex(
+            (item) =>
+              item.version === entry.version &&
+              item.supersededAt === entry.supersededAt,
+          ) === index,
+      );
+  }
+  job.preStartDocuments = existingDocuments;
   const idx = job.preStartDocuments.findIndex(
     (d) => d.documentId === record.documentId,
   );
   if (idx === -1) job.preStartDocuments.unshift(record);
   else job.preStartDocuments[idx] = record;
   saveState();
-  return { ok: true, document: record };
+  return { ok: true, document: record, updated: !!existing };
 }
 
 function removePreStartDocument(jobId, documentId) {
   const job = findJob(jobId);
   if (!job || !documentId)
-    return { ok: false, reason: "Document not found" };
-  job.preStartDocuments = preStartDocumentsForJob(job).filter(
-    (doc) => doc.documentId !== documentId,
-  );
-  state.preStartAcknowledgements = (state.preStartAcknowledgements || []).filter(
-    (ack) => !(ack.projectId === jobId && ack.documentId === documentId),
-  );
+    return { ok: false, reason: "Requirement not found" };
+  const documents = preStartDocumentsForJob(job, { includeArchived: true });
+  const document = documents.find((item) => item.documentId === documentId);
+  if (!document) return { ok: false, reason: "Requirement not found" };
+  document.archivedAt = new Date().toISOString();
+  document.updatedAt = document.archivedAt;
+  job.preStartDocuments = documents;
+  // Completion records remain available for audit after a requirement is removed.
   saveState();
   return { ok: true };
 }
@@ -4893,34 +5091,149 @@ function acknowledgePreStartDocument(workerId, projectId, documentId) {
   );
   if (!workerId || !job || !document)
     return { ok: false, reason: "Document not found" };
+  if (document.completionAction !== "read_acknowledge") {
+    return {
+      ok: false,
+      reason: `${projectRequirementActionLabel(document.completionAction)} must be completed in its dedicated workflow`,
+    };
+  }
   if (!Array.isArray(state.preStartAcknowledgements))
     state.preStartAcknowledgements = [];
   const existing = state.preStartAcknowledgements.find(
     (ack) =>
       ack.workerId === workerId &&
       ack.projectId === projectId &&
-      ack.documentId === documentId,
+      ack.documentId === documentId &&
+      (!document.requireRecompletionOnUpdate ||
+        String(ack.requirementVersion || "1") === document.version),
   );
   if (existing) return { ok: true, acknowledgement: existing, duplicate: true };
+  const acknowledgedAt = new Date().toISOString();
   const acknowledgement = {
+    id: createId(),
     workerId,
     projectId,
     documentId,
-    acknowledgedAt: new Date().toISOString(),
+    requirementVersion: document.version,
+    completionMethod: document.completionAction,
+    acknowledgedAt,
   };
   state.preStartAcknowledgements.unshift(acknowledgement);
+  recordProjectRequirementCompletion({
+    projectId,
+    workerId,
+    requirementId: documentId,
+    requirementVersion: document.version,
+    status: "completed",
+    completedAt: acknowledgedAt,
+    acknowledgedAt,
+    completionMethod: document.completionAction,
+    source: "worker_acknowledgement",
+  });
   saveState();
   return { ok: true, acknowledgement };
+}
+
+function projectRequirementCompletionsForJob(jobId) {
+  const explicit = (state.projectRequirementCompletions || [])
+    .map(normalizeProjectRequirementCompletion)
+    .filter((record) => record && record.projectId === jobId);
+  const legacy = preStartAcknowledgementsForJob(jobId)
+    .map((ack) =>
+      normalizeProjectRequirementCompletion({
+        id: ack.id || `legacy-${ack.projectId}-${ack.workerId}-${ack.documentId}`,
+        projectId: ack.projectId,
+        workerId: ack.workerId,
+        requirementId: ack.documentId,
+        requirementVersion: ack.requirementVersion || "1",
+        status: "completed",
+        completedAt: ack.acknowledgedAt,
+        acknowledgedAt: ack.acknowledgedAt,
+        completionMethod: ack.completionMethod || "read_acknowledge",
+        source: "legacy_acknowledgement",
+      }),
+    )
+    .filter(Boolean);
+  return [...explicit, ...legacy]
+    .filter(
+      (record, index, records) =>
+        records.findIndex(
+          (item) =>
+            item.projectId === record.projectId &&
+            item.workerId === record.workerId &&
+            item.requirementId === record.requirementId &&
+            item.requirementVersion === record.requirementVersion &&
+            item.status === record.status,
+        ) === index,
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.completedAt || 0).getTime() -
+        new Date(a.completedAt || 0).getTime(),
+    );
+}
+
+function recordProjectRequirementCompletion(input) {
+  const record = normalizeProjectRequirementCompletion(input);
+  if (!record) return null;
+  if (!Array.isArray(state.projectRequirementCompletions)) {
+    state.projectRequirementCompletions = [];
+  }
+  const duplicate = state.projectRequirementCompletions.some(
+    (item) =>
+      item.projectId === record.projectId &&
+      item.workerId === record.workerId &&
+      item.requirementId === record.requirementId &&
+      String(item.requirementVersion || "1") === record.requirementVersion &&
+      item.status === record.status,
+  );
+  if (!duplicate) state.projectRequirementCompletions.unshift(record);
+  return duplicate ? null : record;
+}
+
+function workerCompletedProjectRequirement(job, workerId, requirement) {
+  const completions = projectRequirementCompletionsForJob(job?.id).filter(
+    (record) =>
+      record.workerId === workerId &&
+      record.requirementId === requirement.documentId &&
+      record.status === "completed",
+  );
+  if (!requirement.requireRecompletionOnUpdate) return completions.length > 0;
+  return completions.some(
+    (record) => record.requirementVersion === requirement.version,
+  );
 }
 
 function preStartRequirementSummary(job, workerId) {
   const documents = preStartDocumentsForJob(job);
   const acknowledgements = preStartAcknowledgementsForWorker(workerId, job?.id);
-  const acknowledgedIds = new Set(acknowledgements.map((ack) => ack.documentId));
-  const required = documents.filter((doc) => doc.required);
-  const outstanding = required.filter((doc) => !acknowledgedIds.has(doc.documentId));
-  const completed = documents.filter((doc) => acknowledgedIds.has(doc.documentId));
-  return { documents, acknowledgements, required, outstanding, completed };
+  const required = documents.filter(
+    (document) => document.timing === "before_first_shift",
+  );
+  const onArrival = documents.filter(
+    (document) => document.timing === "on_arrival",
+  );
+  const completed = workerId
+    ? documents.filter((document) =>
+        workerCompletedProjectRequirement(job, workerId, document),
+      )
+    : [];
+  const completedIds = new Set(completed.map((document) => document.documentId));
+  const outstanding = required.filter(
+    (document) => !completedIds.has(document.documentId),
+  );
+  const onArrivalOutstanding = onArrival.filter(
+    (document) => !completedIds.has(document.documentId),
+  );
+  return {
+    documents,
+    acknowledgements,
+    required,
+    onArrival,
+    outstanding,
+    onArrivalOutstanding,
+    completed,
+  };
 }
 
 function hasOutstandingPreStartRequirements(workerId, jobId) {
@@ -5121,25 +5434,27 @@ function workerPreStartPanelHTML(job, workerId) {
     (doc) => !summary.completed.some((done) => done.documentId === doc.documentId),
   );
   const docRow = (doc) => {
-    const ack = summary.acknowledgements.find(
+    const completed = summary.completed.some(
       (item) => item.documentId === doc.documentId,
     );
+    const canAcknowledge = doc.completionAction === "read_acknowledge";
     return `
-      <div class="prestart-doc-row ${ack ? "complete" : doc.required ? "outstanding" : ""}">
+      <div class="prestart-doc-row ${completed ? "complete" : doc.required ? "outstanding" : ""}">
         <div class="prestart-doc-main">
           <div class="prestart-doc-title">${escapeHtml(doc.documentName)}</div>
           <div class="prestart-doc-meta">
-            ${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}
-            ${doc.required ? " · required" : " · optional"}
-            ${ack ? ` · acknowledged ${formatDate(ack.acknowledgedAt)}` : ""}
+            ${escapeHtml(projectRequirementTypeLabel(doc.requirementType))}
+            · ${escapeHtml(projectRequirementTimingLabel(doc.timing))}
           </div>
         </div>
         <div class="prestart-doc-actions">
-          <button class="secondary-btn" type="button" data-prestart-view="${doc.documentId}">View</button>
+          <button class="secondary-btn" type="button" data-prestart-view="${doc.documentId}">View details</button>
           ${
-            ack
-              ? `<span class="prestart-status complete">Acknowledged</span>`
-              : `<button class="primary-btn" type="button" data-prestart-ack="${doc.documentId}" data-prestart-job="${job.id}">Acknowledge</button>`
+            completed
+              ? `<span class="prestart-status complete">Complete</span>`
+              : canAcknowledge
+                ? `<button class="primary-btn" type="button" data-prestart-ack="${doc.documentId}" data-prestart-job="${job.id}">Acknowledge</button>`
+                : `<span class="prestart-status">${escapeHtml(projectRequirementActionLabel(doc.completionAction))}</span>`
           }
         </div>
       </div>`;
@@ -5255,6 +5570,32 @@ function companyPreStartPanelHTML(user) {
 
 function bindPreStartDocumentButtons(container, workerId = "") {
   const root = container || document;
+  root.querySelectorAll("[data-project-requirement-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeCompanyProjectDocumentsView = normalizeCompanyProjectDocumentsView(
+        button.dataset.projectRequirementView,
+      );
+      render();
+    });
+  });
+  root.querySelectorAll("[data-project-requirement-add]").forEach((button) => {
+    button.addEventListener("click", () =>
+      openProjectRequirementModal(
+        button.dataset.projectRequirementAdd,
+        "",
+        button,
+      ),
+    );
+  });
+  root.querySelectorAll("[data-project-requirement-manage]").forEach((button) => {
+    button.addEventListener("click", () =>
+      openProjectRequirementModal(
+        button.dataset.prestartJob,
+        button.dataset.projectRequirementManage,
+        button,
+      ),
+    );
+  });
   root.querySelectorAll("[data-prestart-add]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const jobId = btn.dataset.prestartAdd;
@@ -5301,7 +5642,7 @@ function bindPreStartDocumentButtons(container, workerId = "") {
       );
       if (!doc) return;
       alert(
-        `${preStartDocumentTypeLabel(doc.documentType)}\n${doc.documentName}\n${doc.required ? "Required" : "Optional"}\nUploaded ${formatDate(doc.uploadedAt)}`,
+        `${projectRequirementTypeLabel(doc.requirementType)}\n${doc.documentName}\n${projectRequirementActionLabel(doc.completionAction)}\n${projectRequirementTimingLabel(doc.timing)}\n${projectRequirementVersionLabel(doc)}\nAdded ${formatDate(doc.uploadedAt)}`,
       );
     });
   });
@@ -9378,6 +9719,7 @@ function agreementHistorySection(agreements) {
 // ─── Company Home ──────────────────────────────────────
 let activeCompanyProjectId = "";
 let activeCompanyProjectSection = "overview";
+let activeCompanyProjectDocumentsView = "requirements";
 let activeCompanyProjectSearch = "";
 let activeCompanyProjectSort = "health_priority";
 let activeCompanyProjectHealthFilters = [];
@@ -13643,47 +13985,486 @@ function companyProjectAttendanceHTML(job, summary) {
   </div>`;
 }
 
+function normalizeCompanyProjectDocumentsView(view) {
+  return ["requirements", "completion", "records"].includes(view)
+    ? view
+    : "requirements";
+}
+
+function projectRequirementVersionLabel(requirement) {
+  const version = String(requirement?.version || "1").trim();
+  return /^v(?:ersion)?\s*/i.test(version) ? version : `Version ${version}`;
+}
+
+function projectRequirementAudienceLabel(job, requirement) {
+  if (requirement?.audience?.type !== "labour_requirement") {
+    return "All project workers";
+  }
+  const labourRequirement = labourRequirementsForJob(job).find(
+    (item) => item.id === requirement.audience.labourRequirementId,
+  );
+  if (!labourRequirement) return "Selected project workers";
+  return [
+    labourRequirement.trade,
+    labourRequirement.specialism || labourRequirement.grade,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function projectRequirementEligibleWorkers(job, requirement, summary) {
+  const workers = summary?.assignedWorkers || [];
+  if (requirement?.audience?.type !== "labour_requirement") return workers;
+  return workers.filter(
+    (worker) =>
+      companyProjectWorkerRequirement(worker, summary)?.id ===
+      requirement.audience.labourRequirementId,
+  );
+}
+
+function projectRequirementProgress(job, requirement, summary) {
+  const workers = projectRequirementEligibleWorkers(job, requirement, summary);
+  const completed = workers.filter((worker) =>
+    workerCompletedProjectRequirement(job, worker.id, requirement),
+  ).length;
+  return { completed, total: workers.length };
+}
+
+function companyProjectRequirementStatusHTML(job, requirement, summary) {
+  const progress = projectRequirementProgress(job, requirement, summary);
+  if (requirement.timing === "optional_reference") {
+    return `<span class="company-project-requirement-state is-neutral">Optional</span>`;
+  }
+  if (!progress.total) {
+    return `<span class="company-project-requirement-state is-neutral">No workers assigned</span>`;
+  }
+  if (progress.completed === progress.total) {
+    return `<span class="company-project-requirement-state is-complete">${progress.completed} / ${progress.total} complete</span>`;
+  }
+  return `<span class="company-project-requirement-state is-outstanding">${progress.total - progress.completed} remaining</span>`;
+}
+
+function companyProjectRequirementRowHTML(job, requirement, summary) {
+  return `<article class="company-project-requirement-record">
+    <div class="company-project-requirement-identity">
+      <strong>${escapeHtml(requirement.documentName)}</strong>
+      ${requirement.description ? `<span>${escapeHtml(requirement.description)}</span>` : ""}
+    </div>
+    <span class="company-project-requirement-type">${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))}</span>
+    <div class="company-project-requirement-record-meta">
+      <span>${escapeHtml(projectRequirementActionLabel(requirement.completionAction))}</span>
+      <span>${escapeHtml(projectRequirementAudienceLabel(job, requirement))}</span>
+      <span>${escapeHtml(projectRequirementVersionLabel(requirement))}</span>
+    </div>
+    <div class="company-project-requirement-record-status">
+      ${companyProjectRequirementStatusHTML(job, requirement, summary)}
+      <button class="company-project-inline-action" type="button" data-project-requirement-manage="${escapeHtml(requirement.documentId)}" data-prestart-job="${escapeHtml(job.id)}">Manage &rarr;</button>
+    </div>
+  </article>`;
+}
+
+function companyProjectRequirementsViewHTML(job, summary, requirements) {
+  if (!requirements.length) {
+    return `<div class="company-project-requirements-empty">
+      <strong>No project requirements added yet.</strong>
+      <span>Add the documents, inductions or forms workers need before starting this project.</span>
+      <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
+    </div>`;
+  }
+  return PROJECT_REQUIREMENT_TIMINGS.map((timing) => {
+    const group = requirements.filter(
+      (requirement) => requirement.timing === timing.value,
+    );
+    if (!group.length) return "";
+    return `<section class="company-project-requirement-group" aria-labelledby="project-requirement-${escapeHtml(job.id)}-${timing.value}">
+      <h3 id="project-requirement-${escapeHtml(job.id)}-${timing.value}">${escapeHtml(timing.label)}</h3>
+      <div class="company-project-requirement-records">
+        ${group
+          .map((requirement) =>
+            companyProjectRequirementRowHTML(job, requirement, summary),
+          )
+          .join("")}
+      </div>
+    </section>`;
+  }).join("");
+}
+
+function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
+  if (!summary.assignedWorkers.length) {
+    return `<div class="company-project-requirements-empty is-compact">
+      <strong>Worker completion will appear once workers are confirmed for this project.</strong>
+      <span>Pre-start readiness and on-arrival actions will be shown here for each assigned worker.</span>
+    </div>`;
+  }
+  if (!requirements.length) {
+    return `<div class="company-project-requirements-empty is-compact">
+      <strong>No project requirements have been added yet.</strong>
+      <span>Add a requirement before reviewing worker readiness and completion.</span>
+      <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
+    </div>`;
+  }
+  const beforeStart = requirements.filter(
+    (requirement) => requirement.timing === "before_first_shift",
+  );
+  const onArrival = requirements.filter(
+    (requirement) => requirement.timing === "on_arrival",
+  );
+  return `<div class="company-project-worker-completion-list">
+    <div class="company-project-worker-completion-head" aria-hidden="true"><span>Worker</span><span>Pre-start</span><span>On arrival</span><span>Status</span></div>
+    ${summary.assignedWorkers
+      .map((worker) => {
+        const workerRequirement = companyProjectWorkerRequirement(worker, summary);
+        const applies = (requirement) =>
+          requirement.audience.type !== "labour_requirement" ||
+          requirement.audience.labourRequirementId === workerRequirement?.id;
+        const workerBeforeStart = beforeStart.filter(applies);
+        const workerOnArrival = onArrival.filter(applies);
+        const preStartComplete = workerBeforeStart.filter((requirement) =>
+          workerCompletedProjectRequirement(job, worker.id, requirement),
+        ).length;
+        const onArrivalOutstanding = workerOnArrival.filter(
+          (requirement) =>
+            !workerCompletedProjectRequirement(job, worker.id, requirement),
+        ).length;
+        const preStartOutstanding = workerBeforeStart.length - preStartComplete;
+        const state = preStartOutstanding
+          ? { label: "Action required", tone: "is-outstanding" }
+          : onArrivalOutstanding
+            ? { label: "On-arrival action", tone: "is-on-arrival" }
+            : { label: "Ready", tone: "is-complete" };
+        return `<article class="company-project-worker-completion-row">
+          <div class="company-project-worker-completion-person"><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml([worker.trade, worker.grade || worker.specialism].filter(Boolean).join(" · ") || "Role not set")}</span></div>
+          <span data-label="Pre-start">${preStartComplete} / ${workerBeforeStart.length} complete</span>
+          <span data-label="On arrival">${onArrivalOutstanding ? `${onArrivalOutstanding} required` : "None outstanding"}</span>
+          <span class="company-project-requirement-state ${state.tone}" data-label="Status">${escapeHtml(state.label)}</span>
+        </article>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function projectRequirementRecordState(record) {
+  if (record.supervisorUserId || record.completionMethod === "supervisor_signoff") {
+    return "Supervisor sign-off";
+  }
+  if (
+    record.signatureReference ||
+    ["read_sign", "complete_sign"].includes(record.completionMethod)
+  ) {
+    return "Signed";
+  }
+  if (record.acknowledgedAt) return "Acknowledged";
+  return "Completed";
+}
+
+function companyProjectRequirementRecordsViewHTML(job) {
+  const records = projectRequirementCompletionsForJob(job.id);
+  const requirements = preStartDocumentsForJob(job, { includeArchived: true });
+  if (!records.length) {
+    return `<div class="company-project-requirements-empty is-compact">
+      <strong>No completed records yet.</strong>
+      <span>Completed acknowledgements, forms, signatures and induction records will appear here.</span>
+    </div>`;
+  }
+  return `<div class="company-project-completion-records">
+    <div class="company-project-completion-records-head" aria-hidden="true"><span>Worker</span><span>Requirement</span><span>Completion</span><span>Completed</span></div>
+    ${records
+      .map((record) => {
+        const worker = findWorker(record.workerId);
+        const requirement = requirements.find(
+          (item) => item.documentId === record.requirementId,
+        );
+        return `<article class="company-project-completion-record">
+          <div><strong>${escapeHtml(worker?.name || "Worker record")}</strong><span>${escapeHtml(worker?.trade || "Worker")}</span></div>
+          <div><strong>${escapeHtml(requirement?.documentName || "Archived requirement")}</strong><span>${escapeHtml(projectRequirementVersionLabel({ version: record.requirementVersion }))}</span></div>
+          <div><strong>${escapeHtml(projectRequirementRecordState(record))}</strong><span>${escapeHtml(projectRequirementActionLabel(record.completionMethod))}</span></div>
+          <time datetime="${escapeHtml(record.completedAt || "")}">${record.completedAt ? escapeHtml(formatDate(record.completedAt)) : "Date not recorded"}</time>
+        </article>`;
+      })
+      .join("")}
+  </div>`;
+}
+
 function companyProjectDocumentsHTML(job, summary) {
-  const documents = preStartDocumentsForJob(job);
-  const requiredDocuments = documents.filter((doc) => doc.required);
-  const documentRows = documents.length
-    ? `<div class="company-project-document-table-head" aria-hidden="true"><span>Document</span><span>Type</span><span>Requirement</span><span>Added</span><span>Action</span></div>
-      <div class="company-project-document-list">${documents.map((doc) => `<div class="company-project-document-row">
-        <div class="company-project-document-name"><strong>${escapeHtml(doc.documentName)}</strong></div>
-        <span class="company-project-document-value" data-label="Type">${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}</span>
-        <span class="company-project-document-requirement" data-label="Requirement">${doc.required ? "Required" : "Optional"}</span>
-        <time class="company-project-document-value" data-label="Added" datetime="${escapeHtml(doc.uploadedAt || "")}">${doc.uploadedAt ? escapeHtml(formatDateOnly(doc.uploadedAt)) : "Not recorded"}</time>
-        <button class="doc-del-btn company-project-document-remove" type="button" data-prestart-remove="${doc.documentId}" data-prestart-job="${job.id}" aria-label="Remove ${escapeHtml(doc.documentName)}">Remove</button>
-      </div>`).join("")}</div>`
-    : `<div class="company-project-document-empty"><strong>No pre-start documents attached.</strong><span>Add the documents workers need before attending this site.</span></div>`;
-  const acknowledgements = requiredDocuments.length
-    ? `<section class="company-project-workspace-card company-project-document-acknowledgements">
-        <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Worker Acknowledgements</p><h2>Pre-start completion</h2><span>Required project-document acknowledgements for workers assigned to this project.</span></div></header>
-        ${summary.assignedWorkers.length ? `<div class="company-project-document-ack-list">${summary.assignedWorkers.map((worker) => {
-          const requirement = preStartRequirementSummary(job, worker.id);
-          const acknowledged = requirement.required.length - requirement.outstanding.length;
-          return `<div class="company-project-document-ack-row"><div><strong>${escapeHtml(worker.name)}</strong><span>${acknowledged} of ${requirement.required.length} required document${requirement.required.length === 1 ? "" : "s"} acknowledged</span></div><span class="prestart-status ${requirement.outstanding.length ? "outstanding" : "complete"}">${requirement.outstanding.length ? `${requirement.outstanding.length} outstanding` : "Complete"}</span></div>`;
-        }).join("")}</div>` : `<div class="company-project-document-empty is-compact"><strong>No assigned workers yet.</strong><span>Acknowledgement status will appear after workers are confirmed for this project.</span></div>`}
-      </section>`
-    : "";
+  const requirements = preStartDocumentsForJob(job);
+  const activeView = normalizeCompanyProjectDocumentsView(
+    activeCompanyProjectDocumentsView,
+  );
+  const viewContent = {
+    requirements: companyProjectRequirementsViewHTML(job, summary, requirements),
+    completion: companyProjectWorkerCompletionViewHTML(job, summary, requirements),
+    records: companyProjectRequirementRecordsViewHTML(job),
+  }[activeView];
+  const views = [
+    ["requirements", "Requirements"],
+    ["completion", "Worker completion"],
+    ["records", "Records"],
+  ];
   return `<div class="company-project-workspace company-project-documents-workspace">
     <section class="company-project-workspace-card company-project-documents-card">
-      <header class="company-project-workspace-head"><div><p class="company-project-workspace-kicker">Project Documents</p><h2>Pre-start documents</h2><span>Project-specific induction, RAMS, site rules and access information.</span></div></header>
-      <div class="company-project-documents-manager" data-prestart-manage="${job.id}">
-        ${documentRows}
-        <div class="company-project-documents-add">
-          <div><strong>Add document record</strong><span>Record the document type, label and whether it is required before site.</span></div>
-          <div class="prestart-add-form">
-            <select class="prestart-type" data-prestart-type="${job.id}" aria-label="Document type">${preStartDocumentTypeOptions()}</select>
-            <input class="prestart-name" data-prestart-name="${job.id}" type="text" placeholder="Document name or upload label" aria-label="Document name or upload label" />
-            <label class="checkbox-row prestart-required"><input type="checkbox" data-prestart-required="${job.id}" checked /><span>Required</span></label>
-            <button class="primary-btn" type="button" data-prestart-add="${job.id}">Add</button>
-          </div>
-        </div>
+      <header class="company-project-workspace-head company-project-requirements-head">
+        <div><p class="company-project-workspace-kicker">Project Requirements</p><h2>Pre-start &amp; site requirements</h2><span>Set what workers must read, watch, complete or sign before or when arriving on site.</span></div>
+        <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
+      </header>
+      <nav class="company-project-requirement-views" aria-label="Project requirement views">
+        ${views
+          .map(
+            ([id, label]) => `<button class="${activeView === id ? "active" : ""}" type="button" data-project-requirement-view="${id}" aria-pressed="${activeView === id ? "true" : "false"}">${escapeHtml(label)}</button>`,
+          )
+          .join("")}
+      </nav>
+      <div class="company-project-requirements-view" data-project-requirements-view="${activeView}">
+        ${viewContent}
       </div>
     </section>
-    ${acknowledgements}
   </div>`;
+}
+
+function projectRequirementActionOptions(type, selected) {
+  return (PROJECT_REQUIREMENT_ACTIONS[type] || [])
+    .map(
+      (action) => `<option value="${action.value}"${action.value === selected ? " selected" : ""}>${escapeHtml(action.label)}</option>`,
+    )
+    .join("");
+}
+
+function projectRequirementAudienceOptions(job, selectedAudience) {
+  const selectedId =
+    selectedAudience?.type === "labour_requirement"
+      ? selectedAudience.labourRequirementId
+      : "";
+  return `<option value=""${selectedId ? "" : " selected"}>All project workers</option>
+    ${labourRequirementsForJob(job)
+      .map((requirement) => {
+        const label = [
+          requirement.trade,
+          requirement.specialism || requirement.grade,
+        ]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .join(" · ");
+        return `<option value="${escapeHtml(requirement.id)}"${selectedId === requirement.id ? " selected" : ""}>${escapeHtml(label || "Labour requirement")}</option>`;
+      })
+      .join("")}`;
+}
+
+let projectRequirementModalTrigger = null;
+
+function closeProjectRequirementModal() {
+  const modal = document.getElementById("projectRequirementModal");
+  if (!modal) return;
+  const trigger = projectRequirementModalTrigger;
+  projectRequirementModalTrigger = null;
+  hideWithMotion(
+    modal,
+    () => {
+      if (trigger instanceof HTMLElement && document.body.contains(trigger)) {
+        trigger.focus();
+      }
+    },
+    { remove: true },
+  );
+}
+
+function syncProjectRequirementModalFields(modal, { resetAction = false } = {}) {
+  const typeInput = modal.querySelector("[data-project-requirement-type]");
+  const actionInput = modal.querySelector("[data-project-requirement-action]");
+  const timingInput = modal.querySelector("[data-project-requirement-timing]");
+  const comprehension = modal.querySelector(
+    "[data-project-requirement-comprehension]",
+  );
+  const type = typeInput?.value || "document";
+  const currentAction = resetAction
+    ? projectRequirementDefaultAction(type)
+    : actionInput?.value || projectRequirementDefaultAction(type);
+  const validAction = (PROJECT_REQUIREMENT_ACTIONS[type] || []).some(
+    (item) => item.value === currentAction,
+  )
+    ? currentAction
+    : projectRequirementDefaultAction(type);
+  if (actionInput) {
+    actionInput.innerHTML = projectRequirementActionOptions(type, validAction);
+    actionInput.value = validAction;
+  }
+  if (type === "onsite_induction" && timingInput) {
+    timingInput.value = "on_arrival";
+  }
+  if (timingInput) timingInput.disabled = type === "onsite_induction";
+  comprehension?.classList.toggle(
+    "hidden",
+    validAction !== "watch_comprehension",
+  );
+}
+
+function openProjectRequirementModal(jobId, requirementId = "", trigger = null) {
+  const job = findJob(jobId);
+  if (!job) return;
+  document.getElementById("projectRequirementModal")?.remove();
+  projectRequirementModalTrigger = trigger instanceof HTMLElement ? trigger : null;
+  const requirement = requirementId
+    ? preStartDocumentsForJob(job).find(
+        (item) => item.documentId === requirementId,
+      )
+    : null;
+  const draft = requirement || normalizePreStartDocument({
+    documentName: "New requirement",
+    requirementType: "document",
+    completionAction: "read_acknowledge",
+    timing: "before_first_shift",
+    version: "1",
+  });
+  const modal = document.createElement("div");
+  modal.id = "projectRequirementModal";
+  modal.className = "modal-overlay project-requirement-modal";
+  modal.innerHTML = `<form class="project-requirement-sheet" data-project-requirement-form="${escapeHtml(job.id)}" data-project-requirement-id="${escapeHtml(requirement?.documentId || "")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
+    <header class="project-requirement-sheet-head">
+      <div><p class="company-project-workspace-kicker">Project Requirement</p><h2 id="projectRequirementModalTitle">${requirement ? "Manage requirement" : "Add requirement"}</h2><span>Define what workers need to complete and when it applies.</span></div>
+      <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
+    </header>
+    <div class="project-requirement-sheet-body">
+      <section class="project-requirement-form-section">
+        <div class="project-requirement-form-heading"><span>Type</span></div>
+        <label class="field-label">Requirement type
+          <select data-project-requirement-type>
+            ${PROJECT_REQUIREMENT_TYPES.map((type) => `<option value="${type.value}"${draft.requirementType === type.value ? " selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}
+          </select>
+        </label>
+      </section>
+      <section class="project-requirement-form-section">
+        <div class="project-requirement-form-heading"><span>Content</span></div>
+        <div class="project-requirement-form-grid">
+          <label class="field-label">Title *
+            <input data-project-requirement-title type="text" required value="${escapeHtml(requirement?.documentName || "")}" placeholder="Requirement title" />
+          </label>
+          <label class="field-label">Source reference
+            <input data-project-requirement-source type="text" value="${escapeHtml(draft.sourceReference || "")}" placeholder="File, video or template reference" />
+            <span class="form-helper">Records a reference only; no file is uploaded by OnSite.</span>
+          </label>
+          <label class="field-label project-requirement-form-span">Description / instructions
+            <textarea data-project-requirement-description rows="3" placeholder="What workers need to know or complete">${escapeHtml(draft.description || "")}</textarea>
+          </label>
+        </div>
+      </section>
+      <section class="project-requirement-form-section">
+        <div class="project-requirement-form-heading"><span>Completion</span></div>
+        <div class="project-requirement-form-grid">
+          <label class="field-label">Required worker action
+            <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
+          </label>
+          <label class="field-label project-requirement-comprehension${draft.completionAction === "watch_comprehension" ? "" : " hidden"}" data-project-requirement-comprehension>Pass threshold
+            <input data-project-requirement-pass type="number" min="1" max="100" value="${draft.comprehensionCheck?.passThreshold || 80}" />
+            <span class="form-helper">Completion requires a passing comprehension result.</span>
+          </label>
+        </div>
+      </section>
+      <section class="project-requirement-form-section">
+        <div class="project-requirement-form-heading"><span>Timing &amp; audience</span></div>
+        <div class="project-requirement-form-grid">
+          <label class="field-label">Timing
+            <select data-project-requirement-timing>
+              ${PROJECT_REQUIREMENT_TIMINGS.map((timing) => `<option value="${timing.value}"${draft.timing === timing.value ? " selected" : ""}>${escapeHtml(timing.label)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field-label">Audience
+            <select data-project-requirement-audience>${projectRequirementAudienceOptions(job, draft.audience)}</select>
+          </label>
+        </div>
+      </section>
+      <section class="project-requirement-form-section">
+        <div class="project-requirement-form-heading"><span>Version</span></div>
+        <div class="project-requirement-form-grid">
+          <label class="field-label">Version / revision
+            <input data-project-requirement-version type="text" required value="${escapeHtml(draft.version || "1")}" />
+          </label>
+          <label class="checkbox-row project-requirement-recompletion">
+            <input data-project-requirement-recompletion type="checkbox"${draft.requireRecompletionOnUpdate ? " checked" : ""} />
+            <span>Require re-completion when a new version is issued</span>
+          </label>
+        </div>
+      </section>
+    </div>
+    <footer class="project-requirement-sheet-actions">
+      ${requirement ? `<button class="secondary-btn danger" type="button" data-project-requirement-remove="${escapeHtml(requirement.documentId)}">Remove requirement</button>` : "<span></span>"}
+      <div><button class="secondary-btn" type="button" data-project-requirement-close>Cancel</button><button class="primary-btn" type="submit">${requirement ? "Save changes" : "Add requirement"}</button></div>
+    </footer>
+  </form>`;
+  document.body.appendChild(modal);
+  syncProjectRequirementModalFields(modal);
+  modal.querySelector("[data-project-requirement-type]")?.addEventListener(
+    "change",
+    () => syncProjectRequirementModalFields(modal, { resetAction: true }),
+  );
+  modal.querySelector("[data-project-requirement-action]")?.addEventListener(
+    "change",
+    () => syncProjectRequirementModalFields(modal),
+  );
+  modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
+    button.addEventListener("click", closeProjectRequirementModal),
+  );
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeProjectRequirementModal();
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeProjectRequirementModal();
+    }
+  });
+  modal
+    .querySelector("[data-project-requirement-remove]")
+    ?.addEventListener("click", (event) => {
+      if (!window.confirm("Remove this project requirement? Existing completion records will be retained.")) return;
+      const result = removePreStartDocument(job.id, event.currentTarget.dataset.projectRequirementRemove);
+      if (!result.ok) {
+        showToast(result.reason);
+        return;
+      }
+      closeProjectRequirementModal();
+      render();
+      showToast("Project requirement removed");
+    });
+  modal
+    .querySelector("[data-project-requirement-form]")
+    ?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (!form.reportValidity()) return;
+      const requirementType = form.querySelector("[data-project-requirement-type]")?.value || "document";
+      const completionAction = form.querySelector("[data-project-requirement-action]")?.value || projectRequirementDefaultAction(requirementType);
+      const timing = form.querySelector("[data-project-requirement-timing]")?.value || "before_first_shift";
+      const audienceRequirementId = form.querySelector("[data-project-requirement-audience]")?.value || "";
+      const result = upsertProjectRequirement(job.id, {
+        ...requirement,
+        documentId: requirement?.documentId,
+        documentName: form.querySelector("[data-project-requirement-title]")?.value || "",
+        requirementType,
+        description: form.querySelector("[data-project-requirement-description]")?.value || "",
+        sourceReference: form.querySelector("[data-project-requirement-source]")?.value || "",
+        completionAction,
+        timing,
+        audience: audienceRequirementId
+          ? { type: "labour_requirement", labourRequirementId: audienceRequirementId }
+          : { type: "all_project_workers", labourRequirementId: "" },
+        version: form.querySelector("[data-project-requirement-version]")?.value || "1",
+        requireRecompletionOnUpdate: !!form.querySelector("[data-project-requirement-recompletion]")?.checked,
+        comprehensionCheck: {
+          enabled: completionAction === "watch_comprehension",
+          passThreshold: Number(form.querySelector("[data-project-requirement-pass]")?.value) || 80,
+          questions: requirement?.comprehensionCheck?.questions || [],
+        },
+      });
+      if (!result.ok) {
+        showToast(result.reason);
+        return;
+      }
+      closeProjectRequirementModal();
+      render();
+      showToast(result.updated ? "Project requirement updated" : "Project requirement added");
+    });
+  requestAnimationFrame(() =>
+    modal.querySelector("[data-project-requirement-title]")?.focus(),
+  );
 }
 
 function projectSitePhotoEntries(job) {
@@ -14902,6 +15683,7 @@ function navigateToCompanyProjectsDirectory({ scroll = true } = {}) {
   activeCompanyProjectId = "";
   activeCompanyProjectEditId = "";
   activeCompanyProjectSection = "overview";
+  activeCompanyProjectDocumentsView = "requirements";
   resetProjectEditMap();
   if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
   render();
@@ -14914,6 +15696,7 @@ function bindCompanyProjectDashboardButtons(scope) {
     activeCompanyProjectEditId = "";
     resetProjectEditMap();
     activeCompanyProjectSection = "overview";
+    activeCompanyProjectDocumentsView = "requirements";
     if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
     render();
     scrollAppToTop();
@@ -14965,6 +15748,7 @@ function bindCompanyProjectDashboardButtons(scope) {
       activeCompanyProjectId = btn.dataset.companyProjectOpenSection || "";
       activeCompanyProjectEditId = "";
       activeCompanyProjectSection = normalizeCompanyProjectSection(btn.dataset.companySectionTarget || "overview");
+      activeCompanyProjectDocumentsView = "requirements";
       resetProjectEditMap();
       if (getSessionUser()?.type === "company") switchTab("jobs", { scroll: false });
       render();
