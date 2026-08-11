@@ -4245,16 +4245,41 @@ const PRE_START_DOCUMENT_TYPES = [
 ];
 
 const PROJECT_REQUIREMENT_TYPES = [
-  { value: "document", label: "Document" },
-  { value: "video_induction", label: "Video" },
-  { value: "form_signature", label: "Form" },
-  { value: "onsite_induction", label: "On-site induction" },
+  {
+    value: "document",
+    label: "Document",
+    shortLabel: "Document",
+    description: "A file or information workers need to read or acknowledge.",
+  },
+  {
+    value: "video_induction",
+    label: "Video induction",
+    shortLabel: "Video",
+    description: "A video briefing workers must watch before starting.",
+  },
+  {
+    value: "form_signature",
+    label: "Form & signature",
+    shortLabel: "Form",
+    description: "A form workers must complete and sign.",
+  },
+  {
+    value: "onsite_induction",
+    label: "On-site induction",
+    shortLabel: "On-site induction",
+    description: "A face-to-face induction completed after the worker arrives.",
+  },
 ];
 
 const PROJECT_REQUIREMENT_TIMINGS = [
   { value: "before_first_shift", label: "Before first shift" },
   { value: "on_arrival", label: "On arrival" },
-  { value: "optional_reference", label: "Optional / reference" },
+  { value: "reference_anytime", label: "Reference / anytime" },
+];
+
+const PROJECT_REQUIREMENT_LEVELS = [
+  { value: "required", label: "Required" },
+  { value: "optional", label: "Optional" },
 ];
 
 const PROJECT_REQUIREMENT_ACTIONS = {
@@ -4264,7 +4289,6 @@ const PROJECT_REQUIREMENT_ACTIONS = {
     { value: "read_sign", label: "Read & sign" },
   ],
   video_induction: [
-    { value: "watch", label: "Watch" },
     { value: "watch_acknowledge", label: "Watch & acknowledge" },
     { value: "watch_comprehension", label: "Watch + comprehension check" },
   ],
@@ -4274,7 +4298,7 @@ const PROJECT_REQUIREMENT_ACTIONS = {
 
 function projectRequirementTypeLabel(type) {
   return (
-    PROJECT_REQUIREMENT_TYPES.find((item) => item.value === type)?.label ||
+    PROJECT_REQUIREMENT_TYPES.find((item) => item.value === type)?.shortLabel ||
     "Document"
   );
 }
@@ -4323,16 +4347,31 @@ function normalizePreStartDocument(doc) {
   )
     ? doc.requirementType
     : "document";
-  const legacyTiming = doc?.required === false
-    ? "optional_reference"
-    : "before_first_shift";
-  const timing = PROJECT_REQUIREMENT_TIMINGS.some(
+  const hasCanonicalTiming = PROJECT_REQUIREMENT_TIMINGS.some(
     (item) => item.value === doc?.timing,
+  );
+  const hasLegacyReferenceTiming = doc?.timing === "optional_reference";
+  const requirementLevel = PROJECT_REQUIREMENT_LEVELS.some(
+    (item) => item.value === doc?.requirementLevel,
   )
+    ? doc.requirementLevel
+    : hasLegacyReferenceTiming || doc?.timing === "reference_anytime"
+      ? "optional"
+      : doc?.timing === "on_arrival"
+        ? "required"
+        : doc?.required === false
+          ? "optional"
+          : "required";
+  let timing = hasCanonicalTiming
     ? doc.timing
-    : legacyTiming;
+    : hasLegacyReferenceTiming || doc?.required === false
+      ? "reference_anytime"
+      : "before_first_shift";
+  if (requirementLevel === "required" && timing === "reference_anytime") {
+    timing = "before_first_shift";
+  }
   const validActions = PROJECT_REQUIREMENT_ACTIONS[requirementType] || [];
-  const legacyAction = timing === "optional_reference"
+  const legacyAction = requirementLevel === "optional"
     ? "view_only"
     : "read_acknowledge";
   const completionAction = validActions.some(
@@ -4369,6 +4408,7 @@ function normalizePreStartDocument(doc) {
     sourceReference: String(doc?.sourceReference || "").trim(),
     completionAction,
     timing,
+    requirementLevel,
     audience: normalizeProjectRequirementAudience(doc?.audience),
     version,
     requireRecompletionOnUpdate: !!doc?.requireRecompletionOnUpdate,
@@ -4378,7 +4418,8 @@ function normalizePreStartDocument(doc) {
       : [],
     // Legacy worker flows use `required` for pre-start blocking. On-arrival
     // requirements remain mandatory in their own timing state, not pre-start.
-    required: timing === "before_first_shift",
+    required:
+      requirementLevel === "required" && timing === "before_first_shift",
   };
 }
 
@@ -5208,10 +5249,14 @@ function preStartRequirementSummary(job, workerId) {
   const documents = preStartDocumentsForJob(job);
   const acknowledgements = preStartAcknowledgementsForWorker(workerId, job?.id);
   const required = documents.filter(
-    (document) => document.timing === "before_first_shift",
+    (document) =>
+      document.requirementLevel === "required" &&
+      document.timing === "before_first_shift",
   );
   const onArrival = documents.filter(
-    (document) => document.timing === "on_arrival",
+    (document) =>
+      document.requirementLevel === "required" &&
+      document.timing === "on_arrival",
   );
   const completed = workerId
     ? documents.filter((document) =>
@@ -9917,7 +9962,7 @@ const COMPANY_PROJECT_SECTIONS = [
   { id: "workforce", label: "Workforce" },
   { id: "attendance", label: "Attendance" },
   { id: "site", label: "Site" },
-  { id: "documents", label: "Documents" },
+  { id: "documents", label: "Pre-start" },
   { id: "commercial", label: "Commercial" },
   { id: "activity", label: "Activity" },
 ];
@@ -14033,8 +14078,11 @@ function projectRequirementProgress(job, requirement, summary) {
 
 function companyProjectRequirementStatusHTML(job, requirement, summary) {
   const progress = projectRequirementProgress(job, requirement, summary);
-  if (requirement.timing === "optional_reference") {
-    return `<span class="company-project-requirement-state is-neutral">Optional</span>`;
+  if (requirement.requirementLevel === "optional") {
+    const completion = progress.total
+      ? ` · ${progress.completed} / ${progress.total} complete`
+      : "";
+    return `<span class="company-project-requirement-state is-neutral">Optional${completion}</span>`;
   }
   if (!progress.total) {
     return `<span class="company-project-requirement-state is-neutral">No workers assigned</span>`;
@@ -14042,7 +14090,9 @@ function companyProjectRequirementStatusHTML(job, requirement, summary) {
   if (progress.completed === progress.total) {
     return `<span class="company-project-requirement-state is-complete">${progress.completed} / ${progress.total} complete</span>`;
   }
-  return `<span class="company-project-requirement-state is-outstanding">${progress.total - progress.completed} remaining</span>`;
+  const isBlocking =
+    requirement.timing === "before_first_shift" && projectStartDays(job) <= 0;
+  return `<span class="company-project-requirement-state ${isBlocking ? "is-blocking" : "is-outstanding"}">${progress.total - progress.completed} remaining</span>`;
 }
 
 function companyProjectRequirementRowHTML(job, requirement, summary) {
@@ -14053,7 +14103,7 @@ function companyProjectRequirementRowHTML(job, requirement, summary) {
     </div>
     <span class="company-project-requirement-type">${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))}</span>
     <div class="company-project-requirement-record-meta">
-      <span>${escapeHtml(projectRequirementActionLabel(requirement.completionAction))}</span>
+      <span>${escapeHtml(requirement.requirementLevel === "optional" ? "Optional" : "Required")} · ${escapeHtml(projectRequirementActionLabel(requirement.completionAction))}</span>
       <span>${escapeHtml(projectRequirementAudienceLabel(job, requirement))}</span>
       <span>${escapeHtml(projectRequirementVersionLabel(requirement))}</span>
     </div>
@@ -14067,9 +14117,8 @@ function companyProjectRequirementRowHTML(job, requirement, summary) {
 function companyProjectRequirementsViewHTML(job, summary, requirements) {
   if (!requirements.length) {
     return `<div class="company-project-requirements-empty">
-      <strong>No project requirements added yet.</strong>
-      <span>Add the documents, inductions or forms workers need before starting this project.</span>
-      <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
+      <strong>No site requirements added yet.</strong>
+      <span>Add the documents, inductions or forms workers need for this project.</span>
     </div>`;
   }
   return PROJECT_REQUIREMENT_TIMINGS.map((timing) => {
@@ -14077,8 +14126,11 @@ function companyProjectRequirementsViewHTML(job, summary, requirements) {
       (requirement) => requirement.timing === timing.value,
     );
     if (!group.length) return "";
+    const groupLabel = timing.value === "reference_anytime"
+      ? "Reference / optional"
+      : timing.label;
     return `<section class="company-project-requirement-group" aria-labelledby="project-requirement-${escapeHtml(job.id)}-${timing.value}">
-      <h3 id="project-requirement-${escapeHtml(job.id)}-${timing.value}">${escapeHtml(timing.label)}</h3>
+      <h3 id="project-requirement-${escapeHtml(job.id)}-${timing.value}">${escapeHtml(groupLabel)}</h3>
       <div class="company-project-requirement-records">
         ${group
           .map((requirement) =>
@@ -14090,54 +14142,99 @@ function companyProjectRequirementsViewHTML(job, summary, requirements) {
   }).join("");
 }
 
+function projectWorkerRequirementReadiness(job, worker, summary, requirements) {
+  const workerRequirement = companyProjectWorkerRequirement(worker, summary);
+  const applicable = requirements.filter(
+    (requirement) =>
+      requirement.audience.type !== "labour_requirement" ||
+      requirement.audience.labourRequirementId === workerRequirement?.id,
+  );
+  const beforeStart = applicable.filter(
+    (requirement) =>
+      requirement.requirementLevel === "required" &&
+      requirement.timing === "before_first_shift",
+  );
+  const onArrival = applicable.filter(
+    (requirement) =>
+      requirement.requirementLevel === "required" &&
+      requirement.timing === "on_arrival",
+  );
+  const preStartComplete = beforeStart.filter((requirement) =>
+    workerCompletedProjectRequirement(job, worker.id, requirement),
+  ).length;
+  const preStartOutstanding = beforeStart.length - preStartComplete;
+  const onArrivalOutstanding = onArrival.filter(
+    (requirement) =>
+      !workerCompletedProjectRequirement(job, worker.id, requirement),
+  ).length;
+  if (!applicable.length) {
+    return {
+      label: "Not applicable",
+      tone: "is-neutral",
+      beforeStart,
+      preStartComplete,
+      onArrival,
+      onArrivalOutstanding,
+    };
+  }
+  if (preStartOutstanding) {
+    return {
+      label: "Action required",
+      tone: "is-blocking",
+      beforeStart,
+      preStartComplete,
+      onArrival,
+      onArrivalOutstanding,
+    };
+  }
+  if (onArrivalOutstanding) {
+    return {
+      label: "On-arrival action",
+      tone: "is-on-arrival",
+      beforeStart,
+      preStartComplete,
+      onArrival,
+      onArrivalOutstanding,
+    };
+  }
+  return {
+    label: "Ready",
+    tone: "is-complete",
+    beforeStart,
+    preStartComplete,
+    onArrival,
+    onArrivalOutstanding,
+  };
+}
+
 function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
   if (!summary.assignedWorkers.length) {
     return `<div class="company-project-requirements-empty is-compact">
-      <strong>Worker completion will appear once workers are confirmed for this project.</strong>
-      <span>Pre-start readiness and on-arrival actions will be shown here for each assigned worker.</span>
+      <strong>No workers to track yet.</strong>
+      <span>Completion status will appear when workers are confirmed for this project.</span>
     </div>`;
   }
   if (!requirements.length) {
     return `<div class="company-project-requirements-empty is-compact">
       <strong>No project requirements have been added yet.</strong>
-      <span>Add a requirement before reviewing worker readiness and completion.</span>
-      <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
+      <span>Worker readiness will appear here after a site requirement is added.</span>
     </div>`;
   }
-  const beforeStart = requirements.filter(
-    (requirement) => requirement.timing === "before_first_shift",
-  );
-  const onArrival = requirements.filter(
-    (requirement) => requirement.timing === "on_arrival",
-  );
   return `<div class="company-project-worker-completion-list">
     <div class="company-project-worker-completion-head" aria-hidden="true"><span>Worker</span><span>Pre-start</span><span>On arrival</span><span>Status</span></div>
     ${summary.assignedWorkers
       .map((worker) => {
-        const workerRequirement = companyProjectWorkerRequirement(worker, summary);
-        const applies = (requirement) =>
-          requirement.audience.type !== "labour_requirement" ||
-          requirement.audience.labourRequirementId === workerRequirement?.id;
-        const workerBeforeStart = beforeStart.filter(applies);
-        const workerOnArrival = onArrival.filter(applies);
-        const preStartComplete = workerBeforeStart.filter((requirement) =>
-          workerCompletedProjectRequirement(job, worker.id, requirement),
-        ).length;
-        const onArrivalOutstanding = workerOnArrival.filter(
-          (requirement) =>
-            !workerCompletedProjectRequirement(job, worker.id, requirement),
-        ).length;
-        const preStartOutstanding = workerBeforeStart.length - preStartComplete;
-        const state = preStartOutstanding
-          ? { label: "Action required", tone: "is-outstanding" }
-          : onArrivalOutstanding
-            ? { label: "On-arrival action", tone: "is-on-arrival" }
-            : { label: "Ready", tone: "is-complete" };
+        const readiness = projectWorkerRequirementReadiness(
+          job,
+          worker,
+          summary,
+          requirements,
+        );
         return `<article class="company-project-worker-completion-row">
           <div class="company-project-worker-completion-person"><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml([worker.trade, worker.grade || worker.specialism].filter(Boolean).join(" · ") || "Role not set")}</span></div>
-          <span data-label="Pre-start">${preStartComplete} / ${workerBeforeStart.length} complete</span>
-          <span data-label="On arrival">${onArrivalOutstanding ? `${onArrivalOutstanding} required` : "None outstanding"}</span>
-          <span class="company-project-requirement-state ${state.tone}" data-label="Status">${escapeHtml(state.label)}</span>
+          <span data-label="Pre-start">${readiness.preStartComplete} / ${readiness.beforeStart.length} complete</span>
+          <span data-label="On arrival">${readiness.onArrivalOutstanding ? `${readiness.onArrivalOutstanding} required` : "None outstanding"}</span>
+          <span class="company-project-requirement-state ${readiness.tone}" data-label="Status">${escapeHtml(readiness.label)}</span>
         </article>`;
       })
       .join("")}
@@ -14164,7 +14261,7 @@ function companyProjectRequirementRecordsViewHTML(job) {
   if (!records.length) {
     return `<div class="company-project-requirements-empty is-compact">
       <strong>No completed records yet.</strong>
-      <span>Completed acknowledgements, forms, signatures and induction records will appear here.</span>
+      <span>Acknowledgements, signed forms and induction records will appear here once workers complete them.</span>
     </div>`;
   }
   return `<div class="company-project-completion-records">
@@ -14204,7 +14301,7 @@ function companyProjectDocumentsHTML(job, summary) {
   return `<div class="company-project-workspace company-project-documents-workspace">
     <section class="company-project-workspace-card company-project-documents-card">
       <header class="company-project-workspace-head company-project-requirements-head">
-        <div><p class="company-project-workspace-kicker">Project Requirements</p><h2>Pre-start &amp; site requirements</h2><span>Set what workers must read, watch, complete or sign before or when arriving on site.</span></div>
+        <div><p class="company-project-workspace-kicker">Pre-start</p><h2>Site requirements</h2><span>Set what workers must read, watch, complete or sign before they can start work on this site.</span></div>
         <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
       </header>
       <nav class="company-project-requirement-views" aria-label="Project requirement views">
@@ -14250,51 +14347,370 @@ function projectRequirementAudienceOptions(job, selectedAudience) {
 }
 
 let projectRequirementModalTrigger = null;
+let projectRequirementEditorState = null;
+
+function projectRequirementSourceFieldHTML(draft) {
+  const content = {
+    document: {
+      label: "External link / reference",
+      placeholder: "Document link or internal reference",
+      helper: "OnSite records this reference only; no file is uploaded.",
+    },
+    video_induction: {
+      label: "Video link / reference",
+      placeholder: "Video link or internal reference",
+      helper: "OnSite records this reference only; viewing progress is not tracked.",
+    },
+    form_signature: {
+      label: "Form / template reference",
+      placeholder: "Fillable form or template reference",
+      helper: "OnSite records the template reference only; a static file is not made fillable.",
+    },
+  }[draft.requirementType];
+  if (!content) return "";
+  return `<label class="field-label">${escapeHtml(content.label)}
+    <input data-project-requirement-source type="text" value="${escapeHtml(draft.sourceReference || "")}" placeholder="${escapeHtml(content.placeholder)}" />
+    <span class="form-helper">${escapeHtml(content.helper)}</span>
+  </label>`;
+}
+
+function projectRequirementTypeChoicesHTML(draft) {
+  return `<fieldset class="project-requirement-fieldset">
+    <legend>Requirement type</legend>
+    <div class="project-requirement-type-choices">
+      ${PROJECT_REQUIREMENT_TYPES.map((type) => `<label class="project-requirement-type-choice">
+        <input type="radio" name="projectRequirementType" value="${type.value}"${draft.requirementType === type.value ? " checked" : ""} />
+        <span><strong>${escapeHtml(type.label)}</strong><small>${escapeHtml(type.description)}</small></span>
+      </label>`).join("")}
+    </div>
+  </fieldset>`;
+}
+
+function projectRequirementStepOneHTML(draft) {
+  return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
+    <div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>
+    ${projectRequirementTypeChoicesHTML(draft)}
+    <div class="project-requirement-form-grid">
+      <label class="field-label${draft.requirementType === "onsite_induction" ? " project-requirement-form-span" : ""}">Title *
+        <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
+      </label>
+      ${projectRequirementSourceFieldHTML(draft)}
+      <label class="field-label project-requirement-form-span">Description / instructions
+        <textarea data-project-requirement-description rows="3" placeholder="What workers need to know or complete">${escapeHtml(draft.description || "")}</textarea>
+      </label>
+    </div>
+  </section>`;
+}
+
+function projectRequirementLevelChoicesHTML(draft) {
+  return `<fieldset class="project-requirement-fieldset">
+    <legend>Requirement level</legend>
+    <div class="project-requirement-level-choices">
+      ${PROJECT_REQUIREMENT_LEVELS.map((level) => `<label class="project-requirement-level-choice">
+        <input type="radio" name="projectRequirementLevel" value="${level.value}"${draft.requirementLevel === level.value ? " checked" : ""} />
+        <span><strong>${escapeHtml(level.label)}</strong><small>${level.value === "required" ? "Contributes to worker readiness." : "Available without blocking readiness."}</small></span>
+      </label>`).join("")}
+    </div>
+  </fieldset>`;
+}
+
+function projectRequirementActionFieldHTML(draft) {
+  const actions = PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [];
+  if (actions.length === 1) {
+    return `<div class="project-requirement-fixed-value"><span>Required worker action</span><strong>${escapeHtml(actions[0].label)}</strong></div>`;
+  }
+  return `<label class="field-label">Required worker action
+    <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
+  </label>`;
+}
+
+function projectRequirementTimingChoicesHTML(draft) {
+  if (draft.requirementType === "onsite_induction") {
+    return `<div class="project-requirement-fixed-value"><span>Completion timing</span><strong>On arrival</strong><small>Complete after the worker arrives on site and before they are cleared to start work.</small></div>`;
+  }
+  const timings = PROJECT_REQUIREMENT_TIMINGS.filter(
+    (timing) =>
+      timing.value !== "reference_anytime" || draft.requirementLevel === "optional",
+  );
+  return `<fieldset class="project-requirement-fieldset">
+    <legend>Completion timing</legend>
+    <div class="project-requirement-timing-choices">
+      ${timings.map((timing) => `<label class="project-requirement-timing-choice">
+        <input type="radio" name="projectRequirementTiming" value="${timing.value}"${draft.timing === timing.value ? " checked" : ""} />
+        <span>${escapeHtml(timing.label)}</span>
+      </label>`).join("")}
+    </div>
+    ${draft.timing === "on_arrival" ? `<p class="project-requirement-choice-help">Complete after the worker arrives on site and before they are cleared to start work.</p>` : ""}
+  </fieldset>`;
+}
+
+function projectRequirementStepTwoHTML(draft) {
+  const comprehension =
+    draft.requirementType === "video_induction" &&
+    draft.completionAction === "watch_comprehension"
+      ? `<div class="project-requirement-comprehension" data-project-requirement-comprehension>
+          <p>Comprehension check</p>
+          <label class="field-label">Pass threshold
+            <div class="project-requirement-percentage"><input data-project-requirement-pass type="number" min="1" max="100" required value="${draft.comprehensionCheck?.passThreshold || 80}" /><span>%</span></div>
+          </label>
+        </div>`
+      : "";
+  return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
+    <div class="project-requirement-step-intro"><p>Completion</p><h3 id="projectRequirementStepTitle" tabindex="-1">What must the worker do, and when?</h3></div>
+    ${projectRequirementLevelChoicesHTML(draft)}
+    <div class="project-requirement-completion-grid">
+      ${projectRequirementActionFieldHTML(draft)}
+      ${projectRequirementTimingChoicesHTML(draft)}
+    </div>
+    ${comprehension}
+  </section>`;
+}
+
+function projectRequirementStepThreeHTML(job, draft, isEditing) {
+  const advancedOpen = isEditing &&
+    (draft.version !== "1" || draft.requireRecompletionOnUpdate);
+  return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
+    <div class="project-requirement-step-intro"><p>Assignment</p><h3 id="projectRequirementStepTitle" tabindex="-1">Who does this apply to?</h3></div>
+    <label class="field-label">Audience
+      <select data-project-requirement-audience>${projectRequirementAudienceOptions(job, draft.audience)}</select>
+      <span class="form-helper">Applies automatically to current and future workers in this audience.</span>
+    </label>
+    <details class="project-requirement-advanced"${advancedOpen ? " open" : ""}>
+      <summary>Advanced</summary>
+      <div class="project-requirement-advanced-body">
+        <label class="field-label">Version / revision
+          <input data-project-requirement-version type="text" required value="${escapeHtml(draft.version || "1")}" />
+        </label>
+        <label class="checkbox-row project-requirement-recompletion">
+          <input data-project-requirement-recompletion type="checkbox"${draft.requireRecompletionOnUpdate ? " checked" : ""} />
+          <span>Require re-completion when a new version is issued</span>
+        </label>
+      </div>
+    </details>
+  </section>`;
+}
+
+function projectRequirementEditorStepHTML(job, editor) {
+  if (editor.step === 1) return projectRequirementStepOneHTML(editor.draft);
+  if (editor.step === 2) return projectRequirementStepTwoHTML(editor.draft);
+  return projectRequirementStepThreeHTML(job, editor.draft, !!editor.requirementId);
+}
+
+function projectRequirementEditorFooterHTML(editor) {
+  const isFinal = editor.step === 3;
+  const remove = isFinal && editor.requirementId
+    ? `<button class="secondary-btn danger" type="button" data-project-requirement-remove="${escapeHtml(editor.requirementId)}">Remove requirement</button>`
+    : "<span></span>";
+  const leftAction = editor.step === 1
+    ? `<button class="secondary-btn" type="button" data-project-requirement-close>Cancel</button>`
+    : `<button class="secondary-btn" type="button" data-project-requirement-back>Back</button>`;
+  const rightAction = isFinal
+    ? `<button class="primary-btn" type="submit">${editor.requirementId ? "Save changes" : "Add requirement"}</button>`
+    : `<button class="secondary-btn project-requirement-continue" type="button" data-project-requirement-next>Continue</button>`;
+  return `<footer class="project-requirement-sheet-actions">${remove}<div>${leftAction}${rightAction}</div></footer>`;
+}
+
+function syncProjectRequirementEditorDraft(modal) {
+  const editor = projectRequirementEditorState;
+  if (!editor) return;
+  const draft = editor.draft;
+  const value = (selector) => modal.querySelector(selector)?.value;
+  const checked = (name) => modal.querySelector(`input[name="${name}"]:checked`)?.value;
+  const type = checked("projectRequirementType");
+  if (type) draft.requirementType = type;
+  if (value("[data-project-requirement-title]") != null) draft.documentName = value("[data-project-requirement-title]");
+  if (value("[data-project-requirement-description]") != null) draft.description = value("[data-project-requirement-description]");
+  if (value("[data-project-requirement-source]") != null) draft.sourceReference = value("[data-project-requirement-source]");
+  if (value("[data-project-requirement-action]") != null) draft.completionAction = value("[data-project-requirement-action]");
+  const level = checked("projectRequirementLevel");
+  if (level) draft.requirementLevel = level;
+  const timing = checked("projectRequirementTiming");
+  if (timing) draft.timing = timing;
+  if (value("[data-project-requirement-pass]") != null) {
+    draft.comprehensionCheck.passThreshold = Number(value("[data-project-requirement-pass]"));
+  }
+  if (value("[data-project-requirement-audience]") != null) {
+    const audienceId = value("[data-project-requirement-audience]");
+    draft.audience = audienceId
+      ? { type: "labour_requirement", labourRequirementId: audienceId }
+      : { type: "all_project_workers", labourRequirementId: "" };
+  }
+  if (value("[data-project-requirement-version]") != null) draft.version = value("[data-project-requirement-version]") || "1";
+  const recompletion = modal.querySelector("[data-project-requirement-recompletion]");
+  if (recompletion) draft.requireRecompletionOnUpdate = recompletion.checked;
+}
+
+function validateProjectRequirementEditorStep(modal) {
+  const form = modal.querySelector("[data-project-requirement-form]");
+  if (!form?.reportValidity()) return false;
+  if (projectRequirementEditorState?.step === 2) {
+    const threshold = modal.querySelector("[data-project-requirement-pass]");
+    if (threshold && (Number(threshold.value) < 1 || Number(threshold.value) > 100)) {
+      threshold.setCustomValidity("Enter a pass threshold between 1 and 100.");
+      threshold.reportValidity();
+      threshold.setCustomValidity("");
+      return false;
+    }
+  }
+  return true;
+}
+
+function renderProjectRequirementEditor({ focusHeading = true } = {}) {
+  const editor = projectRequirementEditorState;
+  const modal = document.getElementById("projectRequirementModal");
+  const job = findJob(editor?.jobId);
+  if (!editor || !modal || !job) return;
+  modal.innerHTML = `<form class="project-requirement-sheet" data-project-requirement-form="${escapeHtml(job.id)}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
+    <header class="project-requirement-sheet-head">
+      <div class="project-requirement-sheet-heading"><p class="company-project-workspace-kicker">Project Requirement</p><h2 id="projectRequirementModalTitle">${editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
+      <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
+      <ol class="project-requirement-steps" aria-label="Requirement creation progress">
+        ${[[1, "Content"], [2, "Completion"], [3, "Assignment"]].map(([step, label]) => `<li class="${editor.step === step ? "active" : editor.step > step ? "complete" : ""}"${editor.step === step ? ` aria-current="step"` : ""}><span>${step}</span>${escapeHtml(label)}</li>`).join("")}
+      </ol>
+    </header>
+    <div class="project-requirement-sheet-body">${projectRequirementEditorStepHTML(job, editor)}</div>
+    ${projectRequirementEditorFooterHTML(editor)}
+  </form>`;
+  bindProjectRequirementEditorControls(modal);
+  if (focusHeading) {
+    requestAnimationFrame(() =>
+      modal.querySelector("#projectRequirementStepTitle")?.focus(),
+    );
+  }
+}
 
 function closeProjectRequirementModal() {
   const modal = document.getElementById("projectRequirementModal");
   if (!modal) return;
   const trigger = projectRequirementModalTrigger;
   projectRequirementModalTrigger = null;
-  hideWithMotion(
-    modal,
-    () => {
-      if (trigger instanceof HTMLElement && document.body.contains(trigger)) {
-        trigger.focus();
-      }
-    },
-    { remove: true },
-  );
+  projectRequirementEditorState = null;
+  hideWithMotion(modal, () => {
+    if (trigger instanceof HTMLElement && document.body.contains(trigger)) trigger.focus();
+  }, { remove: true });
 }
 
-function syncProjectRequirementModalFields(modal, { resetAction = false } = {}) {
-  const typeInput = modal.querySelector("[data-project-requirement-type]");
-  const actionInput = modal.querySelector("[data-project-requirement-action]");
-  const timingInput = modal.querySelector("[data-project-requirement-timing]");
-  const comprehension = modal.querySelector(
-    "[data-project-requirement-comprehension]",
-  );
-  const type = typeInput?.value || "document";
-  const currentAction = resetAction
-    ? projectRequirementDefaultAction(type)
-    : actionInput?.value || projectRequirementDefaultAction(type);
-  const validAction = (PROJECT_REQUIREMENT_ACTIONS[type] || []).some(
-    (item) => item.value === currentAction,
-  )
-    ? currentAction
-    : projectRequirementDefaultAction(type);
-  if (actionInput) {
-    actionInput.innerHTML = projectRequirementActionOptions(type, validAction);
-    actionInput.value = validAction;
+function saveProjectRequirementEditor() {
+  const editor = projectRequirementEditorState;
+  const modal = document.getElementById("projectRequirementModal");
+  if (!editor || !modal) return;
+  syncProjectRequirementEditorDraft(modal);
+  if (!validateProjectRequirementEditorStep(modal)) return;
+  const draft = editor.draft;
+  const result = upsertProjectRequirement(editor.jobId, {
+    ...editor.original,
+    documentId: editor.requirementId || undefined,
+    documentName: draft.documentName,
+    requirementType: draft.requirementType,
+    description: draft.description,
+    sourceReference: draft.requirementType === "onsite_induction" ? "" : draft.sourceReference,
+    completionAction: draft.completionAction,
+    requirementLevel: draft.requirementLevel,
+    timing: draft.requirementType === "onsite_induction" ? "on_arrival" : draft.timing,
+    audience: draft.audience,
+    version: draft.version || "1",
+    requireRecompletionOnUpdate: draft.requireRecompletionOnUpdate,
+    comprehensionCheck: {
+      enabled: draft.requirementType === "video_induction" && draft.completionAction === "watch_comprehension",
+      passThreshold: draft.comprehensionCheck?.passThreshold || 80,
+      questions: editor.original?.comprehensionCheck?.questions || [],
+    },
+  });
+  if (!result.ok) {
+    showToast(result.reason);
+    return;
   }
-  if (type === "onsite_induction" && timingInput) {
-    timingInput.value = "on_arrival";
-  }
-  if (timingInput) timingInput.disabled = type === "onsite_induction";
-  comprehension?.classList.toggle(
-    "hidden",
-    validAction !== "watch_comprehension",
+  closeProjectRequirementModal();
+  render();
+  showToast(result.updated ? "Project requirement updated" : "Project requirement added");
+}
+
+function bindProjectRequirementEditorControls(modal) {
+  modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
+    button.addEventListener("click", closeProjectRequirementModal),
   );
+  modal.querySelectorAll('input[name="projectRequirementType"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const previousType = projectRequirementEditorState.draft.requirementType;
+      syncProjectRequirementEditorDraft(modal);
+      const draft = projectRequirementEditorState.draft;
+      if (draft.requirementType !== previousType) {
+        draft.completionAction = projectRequirementDefaultAction(draft.requirementType);
+        draft.sourceReference = "";
+        if (draft.requirementType === "onsite_induction") draft.timing = "on_arrival";
+      }
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  });
+  modal.querySelector("[data-project-requirement-action]")?.addEventListener("change", () => {
+    syncProjectRequirementEditorDraft(modal);
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
+  modal.querySelectorAll('input[name="projectRequirementLevel"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      syncProjectRequirementEditorDraft(modal);
+      const draft = projectRequirementEditorState.draft;
+      if (draft.requirementLevel === "required" && draft.timing === "reference_anytime") {
+        draft.timing = "before_first_shift";
+      }
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  });
+  modal.querySelectorAll('input[name="projectRequirementTiming"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      syncProjectRequirementEditorDraft(modal);
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  });
+  modal.querySelector("[data-project-requirement-next]")?.addEventListener("click", () => {
+    syncProjectRequirementEditorDraft(modal);
+    if (!validateProjectRequirementEditorStep(modal)) return;
+    projectRequirementEditorState.step += 1;
+    renderProjectRequirementEditor();
+  });
+  modal.querySelector("[data-project-requirement-back]")?.addEventListener("click", () => {
+    syncProjectRequirementEditorDraft(modal);
+    projectRequirementEditorState.step -= 1;
+    renderProjectRequirementEditor();
+  });
+  modal.querySelector("[data-project-requirement-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (projectRequirementEditorState.step < 3) {
+      syncProjectRequirementEditorDraft(modal);
+      if (!validateProjectRequirementEditorStep(modal)) return;
+      projectRequirementEditorState.step += 1;
+      renderProjectRequirementEditor();
+      return;
+    }
+    saveProjectRequirementEditor();
+  });
+  modal.querySelector("[data-project-requirement-remove]")?.addEventListener("click", (event) => {
+    if (!window.confirm("Remove this project requirement? Existing completion records will be retained.")) return;
+    const result = removePreStartDocument(projectRequirementEditorState.jobId, event.currentTarget.dataset.projectRequirementRemove);
+    if (!result.ok) {
+      showToast(result.reason);
+      return;
+    }
+    closeProjectRequirementModal();
+    render();
+    showToast("Project requirement removed");
+  });
+}
+
+function trapProjectRequirementModalFocus(modal, event) {
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'))
+    .filter((element) => element.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function openProjectRequirementModal(jobId, requirementId = "", trigger = null) {
@@ -14303,105 +14719,33 @@ function openProjectRequirementModal(jobId, requirementId = "", trigger = null) 
   document.getElementById("projectRequirementModal")?.remove();
   projectRequirementModalTrigger = trigger instanceof HTMLElement ? trigger : null;
   const requirement = requirementId
-    ? preStartDocumentsForJob(job).find(
-        (item) => item.documentId === requirementId,
-      )
+    ? preStartDocumentsForJob(job).find((item) => item.documentId === requirementId)
     : null;
-  const draft = requirement || normalizePreStartDocument({
-    documentName: "New requirement",
-    requirementType: "document",
-    completionAction: "read_acknowledge",
-    timing: "before_first_shift",
-    version: "1",
-  });
+  const draft = requirement
+    ? structuredClone(requirement)
+    : {
+        documentName: "",
+        requirementType: "document",
+        description: "",
+        sourceReference: "",
+        completionAction: "read_acknowledge",
+        requirementLevel: "required",
+        timing: "before_first_shift",
+        audience: { type: "all_project_workers", labourRequirementId: "" },
+        version: "1",
+        requireRecompletionOnUpdate: false,
+        comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
+      };
+  projectRequirementEditorState = {
+    jobId,
+    requirementId: requirement?.documentId || "",
+    original: requirement,
+    step: 1,
+    draft,
+  };
   const modal = document.createElement("div");
   modal.id = "projectRequirementModal";
   modal.className = "modal-overlay project-requirement-modal";
-  modal.innerHTML = `<form class="project-requirement-sheet" data-project-requirement-form="${escapeHtml(job.id)}" data-project-requirement-id="${escapeHtml(requirement?.documentId || "")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
-    <header class="project-requirement-sheet-head">
-      <div><p class="company-project-workspace-kicker">Project Requirement</p><h2 id="projectRequirementModalTitle">${requirement ? "Manage requirement" : "Add requirement"}</h2><span>Define what workers need to complete and when it applies.</span></div>
-      <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
-    </header>
-    <div class="project-requirement-sheet-body">
-      <section class="project-requirement-form-section">
-        <div class="project-requirement-form-heading"><span>Type</span></div>
-        <label class="field-label">Requirement type
-          <select data-project-requirement-type>
-            ${PROJECT_REQUIREMENT_TYPES.map((type) => `<option value="${type.value}"${draft.requirementType === type.value ? " selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}
-          </select>
-        </label>
-      </section>
-      <section class="project-requirement-form-section">
-        <div class="project-requirement-form-heading"><span>Content</span></div>
-        <div class="project-requirement-form-grid">
-          <label class="field-label">Title *
-            <input data-project-requirement-title type="text" required value="${escapeHtml(requirement?.documentName || "")}" placeholder="Requirement title" />
-          </label>
-          <label class="field-label">Source reference
-            <input data-project-requirement-source type="text" value="${escapeHtml(draft.sourceReference || "")}" placeholder="File, video or template reference" />
-            <span class="form-helper">Records a reference only; no file is uploaded by OnSite.</span>
-          </label>
-          <label class="field-label project-requirement-form-span">Description / instructions
-            <textarea data-project-requirement-description rows="3" placeholder="What workers need to know or complete">${escapeHtml(draft.description || "")}</textarea>
-          </label>
-        </div>
-      </section>
-      <section class="project-requirement-form-section">
-        <div class="project-requirement-form-heading"><span>Completion</span></div>
-        <div class="project-requirement-form-grid">
-          <label class="field-label">Required worker action
-            <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
-          </label>
-          <label class="field-label project-requirement-comprehension${draft.completionAction === "watch_comprehension" ? "" : " hidden"}" data-project-requirement-comprehension>Pass threshold
-            <input data-project-requirement-pass type="number" min="1" max="100" value="${draft.comprehensionCheck?.passThreshold || 80}" />
-            <span class="form-helper">Completion requires a passing comprehension result.</span>
-          </label>
-        </div>
-      </section>
-      <section class="project-requirement-form-section">
-        <div class="project-requirement-form-heading"><span>Timing &amp; audience</span></div>
-        <div class="project-requirement-form-grid">
-          <label class="field-label">Timing
-            <select data-project-requirement-timing>
-              ${PROJECT_REQUIREMENT_TIMINGS.map((timing) => `<option value="${timing.value}"${draft.timing === timing.value ? " selected" : ""}>${escapeHtml(timing.label)}</option>`).join("")}
-            </select>
-          </label>
-          <label class="field-label">Audience
-            <select data-project-requirement-audience>${projectRequirementAudienceOptions(job, draft.audience)}</select>
-          </label>
-        </div>
-      </section>
-      <section class="project-requirement-form-section">
-        <div class="project-requirement-form-heading"><span>Version</span></div>
-        <div class="project-requirement-form-grid">
-          <label class="field-label">Version / revision
-            <input data-project-requirement-version type="text" required value="${escapeHtml(draft.version || "1")}" />
-          </label>
-          <label class="checkbox-row project-requirement-recompletion">
-            <input data-project-requirement-recompletion type="checkbox"${draft.requireRecompletionOnUpdate ? " checked" : ""} />
-            <span>Require re-completion when a new version is issued</span>
-          </label>
-        </div>
-      </section>
-    </div>
-    <footer class="project-requirement-sheet-actions">
-      ${requirement ? `<button class="secondary-btn danger" type="button" data-project-requirement-remove="${escapeHtml(requirement.documentId)}">Remove requirement</button>` : "<span></span>"}
-      <div><button class="secondary-btn" type="button" data-project-requirement-close>Cancel</button><button class="primary-btn" type="submit">${requirement ? "Save changes" : "Add requirement"}</button></div>
-    </footer>
-  </form>`;
-  document.body.appendChild(modal);
-  syncProjectRequirementModalFields(modal);
-  modal.querySelector("[data-project-requirement-type]")?.addEventListener(
-    "change",
-    () => syncProjectRequirementModalFields(modal, { resetAction: true }),
-  );
-  modal.querySelector("[data-project-requirement-action]")?.addEventListener(
-    "change",
-    () => syncProjectRequirementModalFields(modal),
-  );
-  modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
-    button.addEventListener("click", closeProjectRequirementModal),
-  );
   modal.addEventListener("click", (event) => {
     if (event.target === modal) closeProjectRequirementModal();
   });
@@ -14409,62 +14753,12 @@ function openProjectRequirementModal(jobId, requirementId = "", trigger = null) 
     if (event.key === "Escape") {
       event.preventDefault();
       closeProjectRequirementModal();
+      return;
     }
+    trapProjectRequirementModalFocus(modal, event);
   });
-  modal
-    .querySelector("[data-project-requirement-remove]")
-    ?.addEventListener("click", (event) => {
-      if (!window.confirm("Remove this project requirement? Existing completion records will be retained.")) return;
-      const result = removePreStartDocument(job.id, event.currentTarget.dataset.projectRequirementRemove);
-      if (!result.ok) {
-        showToast(result.reason);
-        return;
-      }
-      closeProjectRequirementModal();
-      render();
-      showToast("Project requirement removed");
-    });
-  modal
-    .querySelector("[data-project-requirement-form]")
-    ?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const form = event.currentTarget;
-      if (!form.reportValidity()) return;
-      const requirementType = form.querySelector("[data-project-requirement-type]")?.value || "document";
-      const completionAction = form.querySelector("[data-project-requirement-action]")?.value || projectRequirementDefaultAction(requirementType);
-      const timing = form.querySelector("[data-project-requirement-timing]")?.value || "before_first_shift";
-      const audienceRequirementId = form.querySelector("[data-project-requirement-audience]")?.value || "";
-      const result = upsertProjectRequirement(job.id, {
-        ...requirement,
-        documentId: requirement?.documentId,
-        documentName: form.querySelector("[data-project-requirement-title]")?.value || "",
-        requirementType,
-        description: form.querySelector("[data-project-requirement-description]")?.value || "",
-        sourceReference: form.querySelector("[data-project-requirement-source]")?.value || "",
-        completionAction,
-        timing,
-        audience: audienceRequirementId
-          ? { type: "labour_requirement", labourRequirementId: audienceRequirementId }
-          : { type: "all_project_workers", labourRequirementId: "" },
-        version: form.querySelector("[data-project-requirement-version]")?.value || "1",
-        requireRecompletionOnUpdate: !!form.querySelector("[data-project-requirement-recompletion]")?.checked,
-        comprehensionCheck: {
-          enabled: completionAction === "watch_comprehension",
-          passThreshold: Number(form.querySelector("[data-project-requirement-pass]")?.value) || 80,
-          questions: requirement?.comprehensionCheck?.questions || [],
-        },
-      });
-      if (!result.ok) {
-        showToast(result.reason);
-        return;
-      }
-      closeProjectRequirementModal();
-      render();
-      showToast(result.updated ? "Project requirement updated" : "Project requirement added");
-    });
-  requestAnimationFrame(() =>
-    modal.querySelector("[data-project-requirement-title]")?.focus(),
-  );
+  document.body.appendChild(modal);
+  renderProjectRequirementEditor();
 }
 
 function projectSitePhotoEntries(job) {
