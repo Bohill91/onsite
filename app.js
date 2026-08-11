@@ -13701,22 +13701,17 @@ function projectSitePhotoEntries(job) {
 
 function companyProjectSiteInfoHTML(job) {
   const photos = projectSitePhotoEntries(job);
-  const previewPhotos = photos.slice(0, 2);
-  const additionalPhotoCount = Math.max(photos.length - previewPhotos.length, 0);
   const hasEntrancePin = job.sitePin?.lat != null && job.sitePin?.lng != null;
   const editSiteAction = `<button class="company-project-inline-action" type="button" data-company-project-edit="${job.id}">Edit site details &rarr;</button>`;
   const photoPreview = photos.length
     ? `<div class="company-project-photo-preview">
-        <div class="company-project-photo-grid">${previewPhotos.map((photo, index) => {
-          const remainingLabel = index === previewPhotos.length - 1 && additionalPhotoCount
-            ? ` and ${additionalPhotoCount} more photo${additionalPhotoCount === 1 ? "" : "s"}`
-            : "";
-          return `<button type="button" data-project-photo-gallery="${job.id}" data-lightbox-index="${index}" aria-label="View ${escapeHtml(photo.label)}${remainingLabel}">
-            <div class="company-project-photo-media"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" />${index === previewPhotos.length - 1 && additionalPhotoCount ? `<span class="company-project-photo-more">+${additionalPhotoCount} more</span>` : ""}</div>
+        <span class="company-project-photo-label">Site photos</span>
+        <div class="company-project-photo-grid">${photos.map((photo, index) => {
+          return `<button type="button" data-project-photo-gallery="${job.id}" data-lightbox-index="${index}" aria-label="View ${escapeHtml(photo.label)}">
+            <div class="company-project-photo-media"><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" /></div>
             <span><strong>${escapeHtml(photo.label)}</strong></span>
           </button>`;
         }).join("")}</div>
-        ${photos.length > 2 ? `<button class="company-project-inline-action company-project-photo-view-all" type="button" data-project-photo-gallery="${job.id}" data-lightbox-index="0">View all ${photos.length} photos &rarr;</button>` : ""}
       </div>`
     : `<div class="company-project-reference-empty"><strong>No site photos added.</strong><span>Add entrance, welfare or parking photos to help workers recognise the site.</span></div>`;
   return `
@@ -13729,10 +13724,10 @@ function companyProjectSiteInfoHTML(job) {
         <dl class="company-project-site-details">
           <div><dt>Site address</dt><dd>${escapeHtml(job.siteAddress || job.location || "Not added")}</dd></div>
           <div><dt>Site contact</dt><dd>${escapeHtml([job.siteContact?.name, job.siteContact?.phone].filter(Boolean).join(" · ") || "Not added")}</dd></div>
-          <div><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
+          <div class="is-wide"><dt>Arrival instructions</dt><dd>${escapeHtml(job.arrivalInstructions || "Not added")}</dd></div>
           <div><dt>Parking</dt><dd>${escapeHtml(job.parking || "Not added")}</dd></div>
           <div><dt>PPE requirements</dt><dd>${escapeHtml(job.ppe || "Not added")}</dd></div>
-          <div><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
+          <div class="is-wide"><dt>Additional worker notes</dt><dd>${escapeHtml(job.gateAccess || "Not added")}</dd></div>
         </dl>
         <section class="company-project-arrival-references" aria-labelledby="company-project-arrival-references-${job.id}">
           <header class="company-project-arrival-references-head">
