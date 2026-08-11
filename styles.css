@@ -18069,6 +18069,33 @@ button svg,
   margin: 0;
 }
 
+.project-requirement-sheet-head .modal-close-btn {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+  width: 34px;
+}
+
+.project-requirement-sheet-head .modal-close-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-light);
+  color: var(--ink);
+}
+
+.project-requirement-sheet-head .modal-close-btn:focus-visible {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  outline: 0;
+}
+
 .project-requirement-steps {
   display: grid;
   gap: 12px;
@@ -18081,7 +18108,7 @@ button svg,
 
 .project-requirement-steps li {
   align-items: center;
-  color: var(--ink-3);
+  color: var(--ink-2);
   display: flex;
   font-size: 0.72rem;
   font-weight: 750;
@@ -18093,7 +18120,7 @@ button svg,
   align-items: center;
   background: var(--surface-3);
   border-radius: 50%;
-  color: var(--ink-3);
+  color: var(--ink-2);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0.67rem;
@@ -18116,8 +18143,8 @@ button svg,
 }
 
 .project-requirement-steps li.complete > span {
-  background: var(--ink);
-  color: var(--surface);
+  background: var(--green-bg);
+  color: var(--green-text);
 }
 
 .project-requirement-sheet-body {
@@ -18138,7 +18165,9 @@ button svg,
 .project-requirement-step-intro > p,
 .project-requirement-fieldset > legend,
 .project-requirement-fixed-value > span,
-.project-requirement-comprehension > p {
+.project-requirement-comprehension > p,
+.project-requirement-source > p,
+.project-requirement-review-head > p {
   color: var(--ink-3);
   font-size: 0.68rem;
   font-weight: 800;
@@ -18239,6 +18268,13 @@ button svg,
   grid-column: 1 / -1;
 }
 
+.project-requirement-source {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 10px;
+  padding-top: 18px;
+}
+
 .project-requirement-completion-grid {
   align-items: start;
   border-top: 1px solid var(--card-divider);
@@ -18253,6 +18289,11 @@ button svg,
   gap: 5px;
 }
 
+.project-requirement-action-config {
+  display: grid;
+  gap: 16px;
+}
+
 .project-requirement-fixed-value strong {
   color: var(--ink);
   font-size: 0.82rem;
@@ -18265,6 +18306,27 @@ button svg,
   font-size: 0.72rem;
   line-height: 1.45;
   margin: 0;
+}
+
+.project-requirement-worker-confirmation {
+  align-items: start;
+}
+
+.project-requirement-worker-confirmation > span {
+  display: grid;
+  gap: 3px;
+}
+
+.project-requirement-worker-confirmation strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.project-requirement-worker-confirmation small {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  line-height: 1.4;
 }
 
 .project-requirement-timing-choices {
@@ -18331,6 +18393,77 @@ button svg,
   gap: 18px;
   grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr);
   padding-top: 16px;
+}
+
+.project-requirement-review {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 13px;
+  padding-top: 18px;
+}
+
+.project-requirement-review-head {
+  display: grid;
+  gap: 4px;
+}
+
+.project-requirement-review-head h4 {
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.project-requirement-review dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.project-requirement-review dl > div {
+  border-bottom: 1px solid var(--card-divider);
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px 9px 0;
+}
+
+.project-requirement-review dl > div:nth-child(even) {
+  padding-left: 12px;
+  padding-right: 0;
+}
+
+.project-requirement-review dt {
+  color: var(--ink-3);
+  font-size: 0.67rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.project-requirement-review dd {
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-requirement-review-consequence,
+.project-requirement-review-note {
+  color: var(--ink-2);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.project-requirement-review-consequence {
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  padding: 10px 12px;
+}
+
+.project-requirement-review-note {
+  color: var(--ink-3);
 }
 
 .project-requirement-recompletion {
@@ -18777,6 +18910,14 @@ button svg,
   .project-requirement-steps li {
     font-size: 0.66rem;
     gap: 5px;
+  }
+
+  .project-requirement-review dl {
+    grid-template-columns: 1fr;
+  }
+
+  .project-requirement-review dl > div:nth-child(even) {
+    padding-left: 0;
   }
 
   .project-requirement-sheet-actions {
