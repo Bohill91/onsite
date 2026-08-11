@@ -16484,21 +16484,22 @@ button svg,
 
 .company-project-requirement-counts {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
 }
 
 .company-project-requirement-counts > div {
-  background: var(--surface-2);
-  border: 1px solid var(--card-divider);
-  border-radius: var(--radius-sm);
-  grid-column: span 2;
-  padding: 10px;
+  border-left: 1px solid var(--card-divider);
+  padding: 0 12px;
 }
 
-.company-project-requirement-counts > div:nth-child(n + 4) {
-  grid-column: span 3;
+.company-project-requirement-counts > div:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.company-project-requirement-counts > div:last-child {
+  padding-right: 0;
 }
 
 .company-project-requirement-counts dd {
@@ -16506,6 +16507,134 @@ button svg,
   font-size: 1.05rem;
   font-weight: 850;
   line-height: 1;
+  margin: 0;
+}
+
+.company-project-requirement-fulfilment-head {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.company-project-requirement-fulfilment-head > span {
+  color: var(--ink-2);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.company-project-requirement-progress {
+  background: var(--surface-3);
+  border-radius: 999px;
+  height: 5px;
+  overflow: hidden;
+}
+
+.company-project-requirement-progress > span {
+  background: var(--health-healthy);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.company-project-requirement-counts dt,
+.company-project-requirement-pipeline dt {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.company-project-requirement-counts .is-filled::before,
+.company-project-requirement-counts .is-open::before,
+.company-project-requirement-pipeline dl > div::before {
+  align-self: center;
+  background: var(--health-neutral);
+  border-radius: 50%;
+  content: "";
+  grid-row: 1 / span 2;
+  height: 6px;
+  width: 6px;
+}
+
+.company-project-requirement-counts .is-filled,
+.company-project-requirement-counts .is-open,
+.company-project-requirement-pipeline dl > div {
+  grid-template-columns: 6px minmax(0, 1fr);
+}
+
+.company-project-requirement-counts .is-filled.has-value::before {
+  background: var(--health-healthy);
+}
+
+.company-project-requirement-counts .is-filled.has-value dd {
+  color: var(--green-text);
+}
+
+.company-project-requirement-counts .is-open.has-value::before {
+  background: var(--health-urgent);
+}
+
+.company-project-requirement-counts .is-open.has-value dd {
+  color: var(--health-urgent);
+}
+
+.company-project-requirement-counts .is-open.is-complete::before {
+  background: var(--health-healthy);
+}
+
+.company-project-requirement-counts .is-open.is-complete dd {
+  color: var(--green-text);
+}
+
+.company-project-requirement-counts .is-filled dt,
+.company-project-requirement-counts .is-filled dd,
+.company-project-requirement-counts .is-open dt,
+.company-project-requirement-counts .is-open dd,
+.company-project-requirement-pipeline dt,
+.company-project-requirement-pipeline dd {
+  grid-column: 2;
+}
+
+.company-project-requirement-pipeline {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.company-project-requirement-pipeline dl {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.company-project-requirement-pipeline dl > div {
+  display: grid;
+  gap: 3px 6px;
+  min-width: 0;
+}
+
+.company-project-requirement-pipeline dl > div.has-value::before {
+  background: var(--health-at-risk);
+}
+
+.company-project-requirement-pipeline dl > div.has-value dd {
+  color: var(--amber-text);
+}
+
+.company-project-requirement-pipeline dt {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.company-project-requirement-pipeline dd {
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.2;
   margin: 0;
 }
 
@@ -17502,15 +17631,6 @@ button svg,
   .company-project-photo-grid,
   .company-project-commercial-summary {
     grid-template-columns: 1fr;
-  }
-
-  .company-project-requirement-counts {
-    grid-template-columns: 1fr;
-  }
-
-  .company-project-requirement-counts > div,
-  .company-project-requirement-counts > div:nth-child(n + 4) {
-    grid-column: auto;
   }
 
   .company-project-activity-card .project-activity-row {

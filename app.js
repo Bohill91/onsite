@@ -13225,6 +13225,17 @@ function companyProjectRequirementsHTML(job, summary) {
       const stats = companyRequirementStats(req, summary);
       const nextChange = nextLabourRequirementChange(req);
       const upcoming = labourRequirementUpcomingChanges(req, todayDateStr(), 60);
+      const requirementSubtitle = [req.specialism, req.grade]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" · ");
+      const requirementLabel = [req.trade, requirementSubtitle]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" ") || "Labour";
+      const fulfilmentProgress = stats.required > 0
+        ? Math.min(100, Math.max(0, (stats.filled / stats.required) * 100))
+        : 0;
       const overtime = req.overtimeAvailable
         ? Object.entries(req.overtimeRates || {})
             .filter(([, value]) => value)
@@ -13233,7 +13244,7 @@ function companyProjectRequirementsHTML(job, summary) {
         : "Not offered";
       return `<article class="company-project-requirement-row" data-company-requirement-id="${escapeHtml(req.id || "")}">
         <div class="company-project-requirement-main">
-          <header><p>${escapeHtml(req.trade || "Labour")}</p><h3>${escapeHtml(req.specialism || "Role / specialism TBC")}</h3></header>
+          <header><p>${escapeHtml(req.trade || "Labour")}</p>${requirementSubtitle ? `<h3>${escapeHtml(requirementSubtitle)}</h3>` : ""}</header>
           <dl class="company-project-requirement-meta">
             <div><dt>Grade / experience</dt><dd>${escapeHtml(req.grade || "Not specified")}</dd></div>
             <div><dt>Work activity</dt><dd>${escapeHtml(req.workActivity || "Not specified")}</dd></div>
@@ -13251,14 +13262,25 @@ function companyProjectRequirementsHTML(job, summary) {
           </div>` : ""}
         </div>
         <div class="company-project-requirement-side">
-          <p class="company-project-requirement-side-label">Fulfilment</p>
+          <div class="company-project-requirement-fulfilment-head">
+            <p class="company-project-requirement-side-label">Fulfilment</p>
+            <span>${stats.filled} / ${stats.required} filled</span>
+          </div>
+          <div class="company-project-requirement-progress" role="progressbar" aria-label="${escapeHtml(requirementLabel)} requirement fulfilment" aria-valuemin="0" aria-valuemax="${Math.max(stats.required, 1)}" aria-valuenow="${stats.filled}" aria-valuetext="${stats.filled} of ${stats.required} positions filled">
+            <span style="width: ${fulfilmentProgress}%"></span>
+          </div>
           <dl class="company-project-requirement-counts">
             <div><dt>Required</dt><dd>${stats.required}</dd></div>
-            <div><dt>Filled</dt><dd>${stats.filled}</dd></div>
-            <div><dt>Open</dt><dd>${stats.remaining}</dd></div>
-            <div><dt>Pending offers</dt><dd>${stats.pendingOffers}</dd></div>
-            <div><dt>Awaiting approval</dt><dd>${stats.awaitingApproval}</dd></div>
+            <div class="is-filled${stats.filled > 0 ? " has-value" : ""}"><dt>Filled</dt><dd>${stats.filled}</dd></div>
+            <div class="is-open ${stats.remaining > 0 ? "has-value" : "is-complete"}"><dt>Open</dt><dd>${stats.remaining}</dd></div>
           </dl>
+          <div class="company-project-requirement-pipeline">
+            <p class="company-project-requirement-side-label">Pipeline</p>
+            <dl>
+              <div class="${stats.pendingOffers > 0 ? "has-value" : ""}"><dt>Pending offers</dt><dd>${stats.pendingOffers}</dd></div>
+              <div class="${stats.awaitingApproval > 0 ? "has-value" : ""}"><dt>Awaiting approval</dt><dd>${stats.awaitingApproval}</dd></div>
+            </dl>
+          </div>
           <div class="company-project-requirement-demand">
             <p class="company-project-requirement-side-label">Scheduled demand</p>
             <dl>
