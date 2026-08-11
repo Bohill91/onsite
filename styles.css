@@ -16525,9 +16525,9 @@ button svg,
 }
 
 .company-project-requirement-progress {
-  background: var(--surface-3);
+  background: var(--border);
   border-radius: 999px;
-  height: 5px;
+  height: 4px;
   overflow: hidden;
 }
 
