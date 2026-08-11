@@ -17050,7 +17050,6 @@ button svg,
 
 /* Attendance */
 .company-project-readiness-grid,
-.company-project-attendance-metrics,
 .company-project-commercial-summary {
   display: grid;
   gap: 8px;
@@ -17059,7 +17058,6 @@ button svg,
 }
 
 .company-project-readiness-grid > div,
-.company-project-attendance-metrics > div,
 .company-project-commercial-summary > div {
   background: var(--surface-2);
   border-radius: var(--radius-sm);
@@ -17070,7 +17068,6 @@ button svg,
 }
 
 .company-project-readiness-grid dt,
-.company-project-attendance-metrics span,
 .company-project-commercial-summary dt {
   color: var(--ink-3);
   font-size: 0.7rem;
@@ -17088,15 +17085,68 @@ button svg,
   overflow-wrap: anywhere;
 }
 
-.company-project-attendance-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.company-project-attendance-live-head {
+  align-items: flex-end;
 }
 
-.company-project-attendance-metrics strong {
+.company-project-attendance-live-head > strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.company-project-attendance-metrics {
+  border-bottom: 1px solid var(--card-divider);
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 16px 0 0;
+}
+
+.company-project-attendance-metrics > div {
+  border-right: 1px solid var(--card-divider);
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.company-project-attendance-metrics > div:first-child {
+  padding-left: 0;
+}
+
+.company-project-attendance-metrics > div:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.company-project-attendance-metrics dt {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.company-project-attendance-metrics dd {
   color: var(--ink);
   font-size: 1.35rem;
   font-weight: 850;
   line-height: 1;
+  margin: 0;
+}
+
+.company-project-attendance-metrics .is-healthy dd {
+  color: var(--health-healthy);
+}
+
+.company-project-attendance-metrics .is-warning dd {
+  color: var(--health-at-risk);
+}
+
+.company-project-attendance-metrics .is-danger dd {
+  color: var(--health-urgent);
 }
 
 .company-project-attendance-action {
@@ -17130,6 +17180,47 @@ button svg,
   margin: 2px 0;
 }
 
+.company-project-attendance-empty-action {
+  margin-top: 14px;
+}
+
+.company-project-attendance-roster-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding-bottom: 7px;
+}
+
+.company-project-attendance-roster-head p,
+.company-project-attendance-roster-head span {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1.35;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.company-project-attendance-history-empty {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  padding: 2px 2px;
+}
+
+.company-project-attendance-history-empty strong {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.company-project-attendance-history-empty span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+}
+
 .company-project-attendance-table,
 .company-project-attendance-history {
   display: grid;
@@ -17140,8 +17231,8 @@ button svg,
 .company-project-attendance-worker-row {
   align-items: center;
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(135px, 0.95fr) 72px 90px minmax(110px, 0.85fr) 112px;
+  gap: 16px;
+  grid-template-columns: minmax(230px, 1.6fr) minmax(80px, 0.55fr) minmax(150px, 1fr) minmax(72px, 0.5fr);
   min-width: 0;
 }
 
@@ -17177,10 +17268,56 @@ button svg,
   border-bottom: 0;
 }
 
-.company-project-attendance-worker-row > strong,
 .company-project-attendance-history-row > strong {
   color: var(--ink);
   font-size: 0.78rem;
+}
+
+.company-project-attendance-worker {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.company-project-attendance-worker .worker-avatar {
+  height: 34px;
+  width: 34px;
+}
+
+.company-project-attendance-worker > div:last-child,
+.company-project-attendance-state {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.company-project-attendance-worker strong,
+.company-project-attendance-state strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.company-project-attendance-worker span,
+.company-project-attendance-state span,
+.company-project-attendance-value {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.company-project-attendance-state.is-healthy strong {
+  color: var(--health-healthy);
+}
+
+.company-project-attendance-state.is-warning strong {
+  color: var(--health-at-risk);
+}
+
+.company-project-attendance-state.is-danger strong {
+  color: var(--health-urgent);
 }
 
 .company-project-attendance-status {
@@ -17203,14 +17340,54 @@ button svg,
 }
 
 .company-project-signin-card .site-signin-qr {
+  align-items: start;
   border-top: 1px solid var(--card-divider);
+  grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.18fr);
   padding-top: 16px;
 }
 
 .company-project-signin-card .site-signin-qr-code {
-  background: var(--surface);
-  border-color: var(--card-divider);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0 0;
+}
+
+.company-project-signin-card .site-signin-qr-code .qr-glyph {
+  height: 252px;
+  max-width: 100%;
+  width: 252px;
+}
+
+.company-project-signin-card .site-signin-qr-details {
+  gap: 0;
+}
+
+.company-project-signin-card .qr-meta-row {
+  align-items: baseline;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr);
+  padding: 12px 0;
+}
+
+.company-project-signin-card .qr-meta-row:first-child {
+  border-top: 0;
+}
+
+.company-project-signin-card .qr-meta-row span {
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.company-project-signin-card .qr-meta-row strong {
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.4;
 }
 
 .company-project-signin-actions {
@@ -17250,6 +17427,31 @@ button svg,
 .company-project-late-row span {
   color: var(--ink-3);
   font-size: 0.74rem;
+}
+
+.company-project-late-row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.company-project-late-row small {
+  color: var(--ink-3);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.company-project-late-state {
+  color: var(--health-at-risk);
+  font-size: 0.74rem;
+}
+
+.company-project-late-state.is-healthy {
+  color: var(--health-healthy);
+}
+
+.company-project-late-state.is-danger {
+  color: var(--health-urgent);
 }
 
 /* Site */
@@ -17605,12 +17807,7 @@ button svg,
 
   .company-project-attendance-table-head,
   .company-project-attendance-worker-row {
-    grid-template-columns: minmax(150px, 1.2fr) minmax(130px, 1fr) 70px 84px minmax(110px, 0.9fr);
-  }
-
-  .company-project-attendance-table-head span:last-child,
-  .company-project-attendance-worker-row .company-project-inline-action {
-    display: none;
+    grid-template-columns: minmax(210px, 1.45fr) 72px minmax(140px, 1fr) 72px;
   }
 }
 
@@ -17629,6 +17826,19 @@ button svg,
   .company-project-attendance-action {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .company-project-attendance-live-head > strong {
+    white-space: normal;
+  }
+
+  .company-project-attendance-metrics > div:nth-child(2) {
+    border-right: 0;
+    padding-right: 0;
+  }
+
+  .company-project-attendance-metrics > div:nth-child(3) {
+    padding-left: 0;
   }
 
   .company-project-requirement-meta {
@@ -17656,11 +17866,22 @@ button svg,
 
   .company-project-roster-worker,
   .company-project-offer-row > div,
-  .company-project-attendance-worker-row > strong,
+  .company-project-attendance-worker,
   .company-project-attendance-history-row > strong,
   .company-project-invoice-row > div,
   .company-project-late-row > div {
     grid-column: 1 / -1;
+  }
+
+  .company-project-attendance-value::before,
+  .company-project-attendance-state::before {
+    color: var(--ink-3);
+    content: attr(data-label);
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+    text-transform: uppercase;
   }
 
   .company-project-offer-row > span::before {
@@ -17675,12 +17896,6 @@ button svg,
   .company-project-roster-actions {
     grid-column: 1 / -1;
     justify-content: flex-start;
-  }
-
-  .company-project-attendance-worker-row .company-project-inline-action {
-    display: inline-block;
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 
   .company-project-site-details > div {
@@ -17719,10 +17934,24 @@ button svg,
   }
 
   .company-project-readiness-grid,
-  .company-project-attendance-metrics,
   .company-project-photo-grid,
   .company-project-commercial-summary {
     grid-template-columns: 1fr;
+  }
+
+  .company-project-attendance-history-empty {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .company-project-signin-card .qr-meta-row {
+    gap: 3px;
+    grid-template-columns: 1fr;
+  }
+
+  .company-project-signin-card .qr-meta-row strong {
+    text-align: left;
   }
 
   .company-project-activity-card .project-activity-row {

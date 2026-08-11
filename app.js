@@ -13423,29 +13423,77 @@ function companyProjectAttendanceTime(value) {
   return /^\d{2}:\d{2}/.test(raw) ? raw.slice(0, 5) : formatUKTime(value, "—");
 }
 
-function companyProjectAttendanceStatusLabel(worker, job) {
+function companyProjectAttendanceRowState(worker, job) {
   const row = attendanceStatusForWorker(worker, job);
-  if (row.reportingLate && !row.signedIn) return "Reported late";
-  if (!row.rec && !row.status) return "Not signed in";
-  return ATT_CFG[row.status]?.label || row.status || "Unconfirmed";
+  const expectedStart = jobExpectedStartTime(job);
+  const signInTime = companyProjectAttendanceTime(row.rec?.checkInTime);
+  if (row.reportingLate && !row.signedIn) {
+    const eta = row.lateReport?.estimatedArrivalTime || row.lateReport?.expectedArrival || "";
+    return {
+      label: "Late · informed",
+      detail: eta ? `ETA ${eta}` : "Arrival pending",
+      signInTime: "—",
+      tone: "warning",
+    };
+  }
+  if (row.status === "noShow") {
+    return { label: "No show", detail: "Requires review", signInTime: "—", tone: "danger" };
+  }
+  if (row.status === "notRequired") {
+    return { label: "Not due today", detail: "No attendance expected", signInTime: "—", tone: "neutral" };
+  }
+  if (row.status === "excused") {
+    return { label: ATT_CFG.excused?.label || "Excused", detail: "Attendance recorded", signInTime: "—", tone: "neutral" };
+  }
+  if (row.status === "sentHome") {
+    return { label: ATT_CFG.sentHome?.label || "Sent home", detail: "Attendance recorded", signInTime, tone: "warning" };
+  }
+  if (row.signedIn) {
+    const signedInLate = row.status === "late" || row.rec?.suggestedStatus === "late";
+    return {
+      label: signedInLate ? "Signed in late" : "Signed in",
+      detail: "Attendance recorded",
+      signInTime,
+      tone: signedInLate ? "warning" : "healthy",
+    };
+  }
+  if (row.rec || row.status) {
+    return {
+      label: ATT_CFG[row.status]?.label || row.status || "Recorded",
+      detail: "Attendance recorded",
+      signInTime,
+      tone: row.status === "reportedIssue" ? "warning" : "neutral",
+    };
+  }
+  return {
+    label: "Not signed in",
+    detail: `Expected ${expectedStart}`,
+    signInTime: "—",
+    tone: isPastCutoff(siteStartMs(expectedStart)) ? "danger" : "neutral",
+  };
 }
 
 function companyProjectAttendanceWorkersHTML(job, workers) {
   if (!workers.length) {
-    return `<div class="company-project-workspace-empty is-compact"><strong>No workers assigned yet.</strong><span>Confirmed workers will appear here before their first scheduled shift.</span></div>`;
+    return "";
   }
   return `<div class="company-project-attendance-table">
-    <div class="company-project-attendance-table-head" aria-hidden="true"><span>Worker</span><span>Role</span><span>Expected</span><span>Sign-in time</span><span>Status</span><span>Action</span></div>
+    <div class="company-project-attendance-table-head" aria-hidden="true"><span>Worker</span><span>Expected</span><span>Status</span><span>Sign-in</span></div>
     ${workers.map((worker) => {
-      const row = attendanceStatusForWorker(worker, job);
-      return `<div class="company-project-attendance-worker-row">
-        <strong>${escapeHtml(worker.name || "Worker")}</strong>
-        <span>${escapeHtml(worker.grade || worker.specialism || worker.trade || "Role not set")}</span>
-        <span>${escapeHtml(jobExpectedStartTime(job))}</span>
-        <span>${escapeHtml(companyProjectAttendanceTime(row.rec?.checkInTime))}</span>
-        <span class="company-project-attendance-status is-${escapeHtml(row.reportingLate && !row.signedIn ? "reportedIssue" : row.status || "unconfirmed")}">${escapeHtml(companyProjectAttendanceStatusLabel(worker, job))}</span>
-        <button class="company-project-inline-action" type="button" data-dashboard-attendance-project="${job.id}">Open attendance &rarr;</button>
-      </div>`;
+      const state = companyProjectAttendanceRowState(worker, job);
+      const identity = [worker.trade, worker.specialism, worker.grade]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index)
+        .join(" · ");
+      return `<article class="company-project-attendance-worker-row">
+        <div class="company-project-attendance-worker">
+          <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
+          <div><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml(identity || "Role not set")}</span></div>
+        </div>
+        <span class="company-project-attendance-value" data-label="Expected">${escapeHtml(jobExpectedStartTime(job))}</span>
+        <div class="company-project-attendance-state is-${escapeHtml(state.tone)}" data-label="Status"><strong>${escapeHtml(state.label)}</strong><span>${escapeHtml(state.detail)}</span></div>
+        <span class="company-project-attendance-value" data-label="Sign-in">${escapeHtml(state.signInTime)}</span>
+      </article>`;
     }).join("")}
   </div>`;
 }
@@ -13481,15 +13529,21 @@ function companyProjectAttendanceHistoryHTML(job, records) {
 
 function companyProjectLateReportsHTML(records) {
   const lateRows = records.filter((record) => record.lateReport);
-  if (!lateRows.length) return `<p class="company-project-workspace-quiet-state">No late reports today.</p>`;
+  if (!lateRows.length) return "";
   return `<div class="company-project-late-list">
     ${lateRows.map((record) => {
       const report = record.lateReport || {};
+      const decision = report.supervisorDecision || "";
+      const tone = decision === "valid_reason"
+        ? "healthy"
+        : decision === "worker_did_not_arrive"
+          ? "danger"
+          : "warning";
       return `<div class="company-project-late-row">
         <div><strong>${escapeHtml(findWorker(record.workerId)?.name || "Worker")}</strong><span>${escapeHtml(report.reason || "Reason not supplied")}</span></div>
-        <span>Reported ${escapeHtml(companyProjectAttendanceTime(report.reportedAt || record.recordedAt))}</span>
-        <span>ETA ${escapeHtml(report.estimatedArrivalTime || "TBC")}</span>
-        <span>${escapeHtml(report.supervisorDecision ? LATE_CLASSIFICATION[report.supervisorDecision] || report.supervisorDecision : "Awaiting review")}</span>
+        <span><small>Reported</small>${escapeHtml(companyProjectAttendanceTime(report.reportedAt || record.recordedAt))}</span>
+        <span><small>ETA</small>${escapeHtml(report.estimatedArrivalTime || "TBC")}</span>
+        <strong class="company-project-late-state is-${tone}">${escapeHtml(decision ? LATE_CLASSIFICATION[decision] || decision : "Awaiting review")}</strong>
       </div>`;
     }).join("")}
   </div>`;
@@ -13498,7 +13552,7 @@ function companyProjectLateReportsHTML(records) {
 function companyProjectSignInHTML(job, stage) {
   const code = ensureSiteCode(job.id);
   if (!code) {
-    return `<section class="company-project-workspace-card"><div class="company-project-workspace-empty is-compact"><strong>Site Sign-In QR unavailable.</strong><span>The project QR could not be prepared. Open Attendance to retry.</span><button class="company-project-inline-action" type="button" data-dashboard-attendance-project="${job.id}">Open attendance &rarr;</button></div></section>`;
+    return `<section class="company-project-workspace-card"><div class="company-project-workspace-empty is-compact"><strong>Site Sign-In QR unavailable.</strong><span>The project QR could not be prepared. Refresh this project or review the site sign-in setup.</span></div></section>`;
   }
   return `<section class="company-project-workspace-card company-project-signin-card">
     <header class="company-project-workspace-head">
@@ -13515,56 +13569,48 @@ function companyProjectAttendanceHTML(job, summary) {
   const records = attendanceProjectRecords(job);
   const scheduledToday = isProjectScheduledToday(job);
   const todaySummary = projectAttendanceSummary(workers, job);
-  const startDate = jobStartDateOnly(job);
-  const manager = job.attendanceManager?.name || "Company / manual setup";
-  const hasEntrancePin = job.sitePin?.lat != null && job.sitePin?.lng != null;
   const qrCard = companyProjectSignInHTML(job, stage);
-  if (stage === "upcoming") {
-    return `<div class="company-project-workspace company-project-attendance-workspace">
-      <section class="company-project-workspace-card company-project-attendance-readiness">
-        <header class="company-project-workspace-head">
-          <div><p class="company-project-workspace-kicker">Attendance</p><h2>Starts ${startDate ? formatDateOnly(startDate) : "date to confirm"}</h2><span>Attendance tracking will begin when the project starts.</span></div>
-        </header>
-        <dl class="company-project-readiness-grid">
-          <div><dt>Attendance responsibility</dt><dd>${escapeHtml(manager)}</dd></div>
-          <div><dt>Site sign-in QR</dt><dd>Ready</dd></div>
-          <div><dt>Entrance location</dt><dd>${hasEntrancePin ? "Pinned" : "Not added"}</dd></div>
-          <div><dt>Project start</dt><dd>${startDate ? formatDateOnly(startDate) : "TBC"}</dd></div>
-          <div><dt>Confirmed workers</dt><dd>${workers.length}</dd></div>
-        </dl>
-      </section>
-      ${qrCard}
-    </div>`;
-  }
-  if (stage === "completed") {
-    return `<div class="company-project-workspace company-project-attendance-workspace">
-      <section class="company-project-workspace-card">
-        <header class="company-project-workspace-head"><div><p class="company-project-workspace-kicker">Attendance History</p><h2>Completed project records</h2><span>Attendance for this project is now historical.</span></div></header>
-        ${companyProjectAttendanceHistoryHTML(job, records)}
-      </section>
-      ${qrCard}
-    </div>`;
-  }
   const confirmationRequired = scheduledToday && hasAttendanceConfirmationChanges(workers, job);
-  return `<div class="company-project-workspace company-project-attendance-workspace">
-    ${scheduledToday ? `<section class="company-project-workspace-card">
-      <header class="company-project-workspace-head"><div><p class="company-project-workspace-kicker">Today</p><h2>Live attendance</h2><span>${formatDateOnly(todayDateStr())} · expected start ${escapeHtml(jobExpectedStartTime(job))}</span></div><button class="secondary-btn" type="button" data-dashboard-attendance-project="${job.id}">Open Attendance</button></header>
-      <div class="company-project-attendance-metrics"><div><span>Expected</span><strong>${todaySummary.expected}</strong></div><div><span>Signed in</span><strong>${todaySummary.signedIn}</strong></div><div><span>Late / informed</span><strong>${todaySummary.reportingLate}</strong></div><div><span>Not signed in</span><strong>${todaySummary.unconfirmed}</strong></div></div>
+  const isPastExpectedStart = scheduledToday && isPastCutoff(siteStartMs(jobExpectedStartTime(job)));
+  const todayRecords = Array.isArray(summary?.todayRecords)
+    ? summary.todayRecords
+    : records.filter((record) => record.date === todayDateStr());
+  const lateReports = todayRecords.filter((record) => record.lateReport);
+  const todayContent = scheduledToday && workers.length
+    ? `<header class="company-project-workspace-head company-project-attendance-live-head">
+        <div><p class="company-project-workspace-kicker">Today&apos;s Attendance</p><h2>Live site attendance</h2><span>${formatDateOnly(todayDateStr())} · expected start ${escapeHtml(jobExpectedStartTime(job))}</span></div>
+        <strong>${todaySummary.signedIn} / ${todaySummary.expected} signed in</strong>
+      </header>
+      <dl class="company-project-attendance-metrics" aria-label="Today&apos;s attendance summary">
+        <div><dt>Expected</dt><dd>${todaySummary.expected}</dd></div>
+        <div class="${todaySummary.signedIn > 0 ? "is-healthy" : ""}"><dt>Signed in</dt><dd>${todaySummary.signedIn}</dd></div>
+        <div class="${todaySummary.reportingLate > 0 ? "is-warning" : ""}"><dt>Late / informed</dt><dd>${todaySummary.reportingLate}</dd></div>
+        <div class="${todaySummary.unconfirmed > 0 && isPastExpectedStart ? "is-danger" : ""}"><dt>Not signed in</dt><dd>${todaySummary.unconfirmed}</dd></div>
+      </dl>
       ${confirmationRequired ? `<div class="company-project-attendance-action"><div><strong>Attendance requires confirmation.</strong><span>Review today’s records before they move into the commercial workflow.</span></div><button class="primary-btn" type="button" data-dashboard-attendance-project="${job.id}">Confirm attendance</button></div>` : ""}
-    </section>
-    <section class="company-project-workspace-card">
-      <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Today&apos;s Workers</p><h2>Project attendance roster</h2></div></header>
-      ${companyProjectAttendanceWorkersHTML(job, workers)}
-    </section>` : `<section class="company-project-workspace-card"><header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Today</p><h2>No attendance expected</h2><span>This project is active, but today is not one of its scheduled working days.</span></div></header></section>`}
+      <div class="company-project-attendance-roster-head"><p>Today&apos;s workers</p><span>${workers.length} expected</span></div>
+      ${companyProjectAttendanceWorkersHTML(job, workers)}`
+    : `<header class="company-project-workspace-head is-compact">
+        <div><p class="company-project-workspace-kicker">Today&apos;s Attendance</p><h2>${workers.length ? "No workers are scheduled today." : "No workers expected today."}</h2><span>${workers.length ? "This project has assigned workers, but today is not one of its scheduled working days." : "No workers are currently assigned to this project."}</span></div>
+      </header>
+      ${workers.length ? "" : `<button class="company-project-inline-action company-project-attendance-empty-action" type="button" data-company-project-section="workforce">Review workforce &rarr;</button>`}`;
+  const historySection = records.length
+    ? `<section class="company-project-workspace-card">
+        <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Attendance History</p><h2>${stage === "completed" ? "Completed project records" : "Daily project records"}</h2></div></header>
+        ${companyProjectAttendanceHistoryHTML(job, records)}
+      </section>`
+    : `<div class="company-project-attendance-history-empty"><strong>Attendance history</strong><span>No attendance records yet.</span></div>`;
+  const lateReportsSection = lateReports.length
+    ? `<section class="company-project-workspace-card company-project-late-card">
+        <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Late Reports</p><h2>Today&apos;s reports</h2></div></header>
+        ${companyProjectLateReportsHTML(lateReports)}
+      </section>`
+    : "";
+  return `<div class="company-project-workspace company-project-attendance-workspace">
+    <section class="company-project-workspace-card company-project-attendance-live">${todayContent}</section>
     ${qrCard}
-    <section class="company-project-workspace-card">
-      <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Attendance History</p><h2>Daily project records</h2></div></header>
-      ${companyProjectAttendanceHistoryHTML(job, records)}
-    </section>
-    <section class="company-project-workspace-card company-project-late-card">
-      <header class="company-project-workspace-head is-compact"><div><p class="company-project-workspace-kicker">Late Reports</p><h2>Today&apos;s reports</h2></div></header>
-      ${companyProjectLateReportsHTML(summary.todayRecords)}
-    </section>
+    ${historySection}
+    ${lateReportsSection}
   </div>`;
 }
 
