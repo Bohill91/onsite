@@ -13241,7 +13241,6 @@ function companyProjectRequirementsHTML(job, summary) {
             <div><dt>Daily rate</dt><dd>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day` : "Not specified"}</dd></div>
             <div><dt>Overtime</dt><dd>${escapeHtml(overtime)}</dd></div>
             ${req.accommodationPaid ? `<div><dt>Working away</dt><dd>${req.accommodationAllowancePerNight ? `${formatMoney(req.accommodationAllowancePerNight)}/night` : "Accommodation paid"}</dd></div>` : ""}
-            ${req.labourSchedule?.length ? `<div><dt>Peak demand</dt><dd>${stats.peak} worker${stats.peak === 1 ? "" : "s"}</dd></div>` : ""}
           </dl>
           ${req.labourSchedule?.length ? `<div class="company-project-requirement-forecast">
             <span>Current scheduled demand <strong>${stats.required} worker${stats.required === 1 ? "" : "s"}</strong></span>
@@ -13260,6 +13259,12 @@ function companyProjectRequirementsHTML(job, summary) {
             <div><dt>Pending offers</dt><dd>${stats.pendingOffers}</dd></div>
             <div><dt>Awaiting approval</dt><dd>${stats.awaitingApproval}</dd></div>
           </dl>
+          <div class="company-project-requirement-demand">
+            <p class="company-project-requirement-side-label">Scheduled demand</p>
+            <dl>
+              <div><dt>Peak demand</dt><dd>${stats.peak} worker${stats.peak === 1 ? "" : "s"}</dd></div>
+            </dl>
+          </div>
           <button class="company-project-inline-action" type="button" data-company-project-section="labour" aria-label="Review ${escapeHtml(req.trade || "labour")} requirement">Review requirement &rarr;</button>
         </div>
       </article>`;

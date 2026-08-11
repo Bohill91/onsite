@@ -16485,7 +16485,7 @@ button svg,
 .company-project-requirement-counts {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
 }
 
@@ -16493,7 +16493,12 @@ button svg,
   background: var(--surface-2);
   border: 1px solid var(--card-divider);
   border-radius: var(--radius-sm);
+  grid-column: span 2;
   padding: 10px;
+}
+
+.company-project-requirement-counts > div:nth-child(n + 4) {
+  grid-column: span 3;
 }
 
 .company-project-requirement-counts dd {
@@ -16506,6 +16511,39 @@ button svg,
 
 .company-project-requirement-side .company-project-inline-action {
   justify-self: end;
+}
+
+.company-project-requirement-demand {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.company-project-requirement-demand dl {
+  margin: 0;
+}
+
+.company-project-requirement-demand dl > div {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.company-project-requirement-demand dt {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.company-project-requirement-demand dd {
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.35;
+  margin: 0;
 }
 
 .company-project-requirement-forecast {
@@ -17384,10 +17422,6 @@ button svg,
     grid-template-columns: 1fr;
   }
 
-  .company-project-requirement-counts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .company-project-roster-head,
   .company-project-offer-table-head,
   .company-project-attendance-table-head,
@@ -17471,7 +17505,12 @@ button svg,
   }
 
   .company-project-requirement-counts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .company-project-requirement-counts > div,
+  .company-project-requirement-counts > div:nth-child(n + 4) {
+    grid-column: auto;
   }
 
   .company-project-activity-card .project-activity-row {
