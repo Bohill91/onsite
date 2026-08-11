@@ -18,6 +18,7 @@ const ICON_PATHS = {
   circleSlash: `<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>`,
   clock: `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,
   edit: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
+  externalLink: `<path d="M15 3h6v6"/><path d="m10 14 11-11"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>`,
   fileText: `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>`,
   helpCircle: `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
   home: `<path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
@@ -4296,6 +4297,178 @@ const PROJECT_REQUIREMENT_ACTIONS = {
   onsite_induction: [{ value: "supervisor_signoff", label: "Supervisor sign-off" }],
 };
 
+const PROJECT_REQUIREMENT_RESOURCE_TYPES = [
+  { value: "file", label: "File" },
+  { value: "external_link", label: "External link" },
+  { value: "reference", label: "Reference" },
+];
+
+const PROJECT_REQUIREMENT_COMPLETION_EVIDENCE = [
+  { value: "worker_confirmation", label: "Worker confirmation" },
+  { value: "upload_evidence", label: "Upload evidence" },
+  { value: "company_verification", label: "Company verification" },
+  { value: "supervisor_signoff", label: "Supervisor sign-off" },
+];
+
+const PROJECT_REQUIREMENT_FILE_ACCEPT =
+  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.png,.jpg,.jpeg,.webp";
+const PROJECT_REQUIREMENT_FILE_MAX_BYTES = 1024 * 1024;
+const PROJECT_REQUIREMENT_FILES_TOTAL_MAX_BYTES = 2 * 1024 * 1024;
+
+function projectRequirementResourceTypeLabel(type) {
+  return (
+    PROJECT_REQUIREMENT_RESOURCE_TYPES.find((item) => item.value === type)
+      ?.label || "Resource"
+  );
+}
+
+function validProjectRequirementExternalUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(url.protocol);
+  } catch (_) {
+    return false;
+  }
+}
+
+function projectRequirementFileSizeLabel(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeProjectRequirementResource(resource, fallbackId = "") {
+  const type = PROJECT_REQUIREMENT_RESOURCE_TYPES.some(
+    (item) => item.value === resource?.type,
+  )
+    ? resource.type
+    : "";
+  if (!type) return null;
+  const id = String(resource?.id || fallbackId || createId());
+  const createdAt = resource?.createdAt || new Date().toISOString();
+  if (type === "file") {
+    const fileName = String(resource?.fileName || resource?.label || "").trim();
+    const dataUrl = String(resource?.dataUrl || "");
+    if (!fileName || !dataUrl.startsWith("data:")) return null;
+    return {
+      id,
+      type,
+      label: String(resource?.label || fileName).trim() || fileName,
+      fileName,
+      mimeType: String(resource?.mimeType || "application/octet-stream"),
+      size: Math.max(0, Number(resource?.size) || 0),
+      dataUrl,
+      createdAt,
+    };
+  }
+  if (type === "external_link") {
+    const label = String(resource?.label || "").trim();
+    const url = String(resource?.url || "").trim();
+    if (!label || !validProjectRequirementExternalUrl(url)) return null;
+    return {
+      id,
+      type,
+      label,
+      url,
+      instructions: String(resource?.instructions || "").trim(),
+      createdAt,
+    };
+  }
+  const label = String(resource?.label || "").trim();
+  const details = String(resource?.details || "").trim();
+  if (!label || !details) return null;
+  return { id, type, label, details, createdAt };
+}
+
+function normalizeProjectRequirementResources(doc, documentId) {
+  const resources = (Array.isArray(doc?.resources) ? doc.resources : [])
+    .map((resource, index) =>
+      normalizeProjectRequirementResource(
+        resource,
+        `${documentId}-resource-${index + 1}`,
+      ),
+    )
+    .filter(Boolean);
+  const legacySource = String(doc?.sourceReference || "").trim();
+  if (resources.length || !legacySource) return resources;
+  if (validProjectRequirementExternalUrl(legacySource)) {
+    return [
+      {
+        id: `${documentId}-legacy-resource`,
+        type: "external_link",
+        label: "External resource",
+        url: legacySource,
+        instructions: "",
+        createdAt: doc?.createdAt || doc?.uploadedAt || "",
+      },
+    ];
+  }
+  return [
+    {
+      id: `${documentId}-legacy-resource`,
+      type: "reference",
+      label: "Legacy reference",
+      details: legacySource,
+      createdAt: doc?.createdAt || doc?.uploadedAt || "",
+    },
+  ];
+}
+
+function projectRequirementResourceSummary(resources) {
+  const counts = (Array.isArray(resources) ? resources : []).reduce(
+    (summary, resource) => {
+      if (resource?.type in summary) summary[resource.type] += 1;
+      return summary;
+    },
+    { file: 0, external_link: 0, reference: 0 },
+  );
+  const parts = [
+    counts.file
+      ? `${counts.file} ${counts.file === 1 ? "file" : "files"}`
+      : "",
+    counts.external_link
+      ? `${counts.external_link} external ${counts.external_link === 1 ? "link" : "links"}`
+      : "",
+    counts.reference
+      ? `${counts.reference} ${counts.reference === 1 ? "reference" : "references"}`
+      : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || "No resources";
+}
+
+function projectRequirementHasExternalLink(requirement) {
+  return (requirement?.resources || []).some(
+    (resource) => resource.type === "external_link",
+  );
+}
+
+function projectRequirementEvidenceOptions(requirement) {
+  if (!projectRequirementHasExternalLink(requirement)) return [];
+  const values = requirement.requirementType === "onsite_induction"
+    ? ["supervisor_signoff", "upload_evidence", "company_verification"]
+    : ["worker_confirmation", "upload_evidence", "company_verification"];
+  return PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.filter((option) =>
+    values.includes(option.value),
+  );
+}
+
+function normalizeProjectRequirementCompletionEvidence(requirement) {
+  const options = projectRequirementEvidenceOptions(requirement);
+  if (!options.length) return [];
+  const allowed = new Set(options.map((option) => option.value));
+  const configured = (Array.isArray(requirement?.completionEvidence)
+    ? requirement.completionEvidence
+    : []
+  ).filter((value) => allowed.has(value));
+  if (configured.length) return [...new Set(configured)];
+  return [
+    requirement.requirementType === "onsite_induction"
+      ? "supervisor_signoff"
+      : "worker_confirmation",
+  ];
+}
+
 function projectRequirementTypeLabel(type) {
   return (
     PROJECT_REQUIREMENT_TYPES.find((item) => item.value === type)?.shortLabel ||
@@ -4314,6 +4487,10 @@ function projectRequirementActionLabel(action) {
   if (action === "worker_acknowledgement_signature") {
     return "Worker acknowledgement / signature";
   }
+  const evidenceLabel = PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.find(
+    (item) => item.value === action,
+  )?.label;
+  if (evidenceLabel) return evidenceLabel;
   return (
     Object.values(PROJECT_REQUIREMENT_ACTIONS)
       .flat()
@@ -4400,6 +4577,8 @@ function normalizePreStartDocument(doc) {
     : validActions.some((item) => item.value === legacyAction)
       ? legacyAction
       : projectRequirementDefaultAction(requirementType);
+  const documentId = doc?.documentId || doc?.id || createId();
+  const resources = normalizeProjectRequirementResources(doc, documentId);
   const version = String(doc?.version || doc?.revision || "1").trim() || "1";
   const comprehensionCheck = {
     enabled:
@@ -4414,8 +4593,13 @@ function normalizePreStartDocument(doc) {
       ? doc.comprehensionCheck.questions
       : [],
   };
+  const completionEvidence = normalizeProjectRequirementCompletionEvidence({
+    requirementType,
+    resources,
+    completionEvidence: doc?.completionEvidence,
+  });
   return {
-    documentId: doc?.documentId || doc?.id || createId(),
+    documentId,
     documentType,
     documentName,
     uploadedAt: doc?.uploadedAt || new Date().toISOString(),
@@ -4425,7 +4609,9 @@ function normalizePreStartDocument(doc) {
     requirementType,
     description: String(doc?.description || doc?.instructions || "").trim(),
     sourceReference: String(doc?.sourceReference || "").trim(),
+    resources,
     completionAction,
+    completionEvidence,
     timing,
     requirementLevel,
     audience: normalizeProjectRequirementAudience(doc?.audience),
@@ -4453,6 +4639,16 @@ function normalizeProjectRequirementCompletion(record) {
   const workerId = String(record?.workerId || "").trim();
   if (!requirementId || !projectId || !workerId) return null;
   const completedAt = record?.completedAt || record?.acknowledgedAt || "";
+  const evidenceAttachments = (
+    Array.isArray(record?.evidenceAttachments) ? record.evidenceAttachments : []
+  )
+    .map((attachment, index) =>
+      normalizeProjectRequirementResource(
+        { ...attachment, type: "file" },
+        `${record?.id || requirementId}-evidence-${index + 1}`,
+      ),
+    )
+    .filter(Boolean);
   return {
     id: record?.id || createId(),
     companyId: record?.companyId || "",
@@ -4466,12 +4662,18 @@ function normalizeProjectRequirementCompletion(record) {
     completedAt,
     completionMethod: record?.completionMethod || "read_acknowledge",
     acknowledgedAt: record?.acknowledgedAt || "",
+    workerConfirmedAt: record?.workerConfirmedAt || "",
+    evidenceAttachments,
     signatureReference: record?.signatureReference || "",
     quizResult:
       record?.quizResult && typeof record.quizResult === "object"
         ? record.quizResult
         : null,
     supervisorUserId: record?.supervisorUserId || "",
+    verificationStatus:
+      record?.verificationStatus || (record?.verifiedAt ? "verified" : ""),
+    verifiedAt: record?.verifiedAt || "",
+    verifiedByCompanyUserId: record?.verifiedByCompanyUserId || "",
     completedArtifactReference: record?.completedArtifactReference || "",
     source: record?.source || "project_requirement",
   };
@@ -5160,6 +5362,16 @@ function acknowledgePreStartDocument(workerId, projectId, documentId) {
       reason: `${projectRequirementActionLabel(document.completionAction)} must be completed in its dedicated workflow`,
     };
   }
+  const externalEvidence = normalizeProjectRequirementCompletionEvidence(document);
+  if (
+    projectRequirementHasExternalLink(document) &&
+    !externalEvidence.includes("worker_confirmation")
+  ) {
+    return {
+      ok: false,
+      reason: "This external requirement must be completed through its configured verification workflow",
+    };
+  }
   if (!Array.isArray(state.preStartAcknowledgements))
     state.preStartAcknowledgements = [];
   const existing = state.preStartAcknowledgements.find(
@@ -5172,13 +5384,16 @@ function acknowledgePreStartDocument(workerId, projectId, documentId) {
   );
   if (existing) return { ok: true, acknowledgement: existing, duplicate: true };
   const acknowledgedAt = new Date().toISOString();
+  const completionMethod = projectRequirementHasExternalLink(document)
+    ? "worker_confirmation"
+    : document.completionAction;
   const acknowledgement = {
     id: createId(),
     workerId,
     projectId,
     documentId,
     requirementVersion: document.version,
-    completionMethod: document.completionAction,
+    completionMethod,
     acknowledgedAt,
   };
   state.preStartAcknowledgements.unshift(acknowledgement);
@@ -5190,7 +5405,10 @@ function acknowledgePreStartDocument(workerId, projectId, documentId) {
     status: "completed",
     completedAt: acknowledgedAt,
     acknowledgedAt,
-    completionMethod: document.completionAction,
+    workerConfirmedAt: projectRequirementHasExternalLink(document)
+      ? acknowledgedAt
+      : "",
+    completionMethod,
     source: "worker_acknowledgement",
   });
   saveState();
@@ -5268,6 +5486,38 @@ function workerCompletedProjectRequirement(job, workerId, requirement) {
         (record) => record.requirementVersion === requirement.version,
       )
     : completions;
+  const completionEvidence = normalizeProjectRequirementCompletionEvidence(
+    requirement,
+  );
+  if (projectRequirementHasExternalLink(requirement) && completionEvidence.length) {
+    const evidenceComplete = completionEvidence.every((method) => {
+      if (method === "worker_confirmation") {
+        return validCompletions.some(
+          (record) =>
+            record.completionMethod === "worker_confirmation" ||
+            !!record.workerConfirmedAt ||
+            !!record.acknowledgedAt,
+        );
+      }
+      if (method === "upload_evidence") {
+        return validCompletions.some(
+          (record) =>
+            record.evidenceAttachments?.length ||
+            record.completedArtifactReference,
+        );
+      }
+      if (method === "company_verification") {
+        return validCompletions.some(
+          (record) =>
+            record.verifiedAt && record.verifiedByCompanyUserId,
+        );
+      }
+      return validCompletions.some(
+        (record) => record.completionMethod === "supervisor_signoff",
+      );
+    });
+    if (!evidenceComplete) return false;
+  }
   if (
     requirement.requirementType === "onsite_induction" &&
     requirement.requireWorkerAcknowledgementSignature
@@ -14145,6 +14395,7 @@ function companyProjectRequirementRowHTML(job, requirement, summary) {
     <div class="company-project-requirement-record-meta">
       <span>${escapeHtml(requirement.requirementLevel === "optional" ? "Optional" : "Required")} · ${escapeHtml(projectRequirementConfiguredActionLabel(requirement))}</span>
       <span>${escapeHtml(projectRequirementAudienceLabel(job, requirement))}</span>
+      <span>${escapeHtml(projectRequirementResourceSummary(requirement.resources))}</span>
       <span>${escapeHtml(projectRequirementVersionLabel(requirement))}</span>
     </div>
     <div class="company-project-requirement-record-status">
@@ -14389,34 +14640,112 @@ function projectRequirementAudienceOptions(job, selectedAudience) {
 let projectRequirementModalTrigger = null;
 let projectRequirementEditorState = null;
 
-function projectRequirementSourceFieldHTML(draft) {
-  const content = {
-    document: {
-      heading: "Document source",
-      label: "Document link or reference",
-      placeholder: "Document link or internal reference",
-      helper: "OnSite stores this link or reference with the requirement; no file is uploaded.",
-    },
-    video_induction: {
-      heading: "Video source",
-      label: "Video link",
-      placeholder: "Video link",
-      helper: "OnSite stores the video link; external playback and watch progress are not tracked.",
-    },
-    form_signature: {
-      heading: "Form / template",
-      label: "Form or template link/reference",
-      placeholder: "Form or template link/reference",
-      helper: "OnSite records the template reference only; a static file is not made fillable.",
-    },
-  }[draft.requirementType];
-  if (!content) return "";
-  return `<section class="project-requirement-source project-requirement-form-span">
-    <p>${escapeHtml(content.heading)}</p>
-    <label class="field-label">${escapeHtml(content.label)}
-      <input data-project-requirement-source type="text" value="${escapeHtml(draft.sourceReference || "")}" placeholder="${escapeHtml(content.placeholder)}" />
-      <span class="form-helper">${escapeHtml(content.helper)}</span>
-    </label>
+function projectRequirementFileTypeLabel(resource) {
+  const extension = String(resource?.fileName || "").split(".").pop();
+  if (extension && extension !== resource?.fileName) return extension.toUpperCase();
+  return String(resource?.mimeType || "File").split("/").pop().toUpperCase();
+}
+
+function projectRequirementResourceRowHTML(resource) {
+  const file = resource.type === "file";
+  const external = resource.type === "external_link";
+  const metadata = file
+    ? `${projectRequirementFileTypeLabel(resource)} · ${projectRequirementFileSizeLabel(resource.size)}`
+    : projectRequirementResourceTypeLabel(resource.type);
+  const primaryAction = file
+    ? `<a href="${escapeHtml(resource.dataUrl)}" download="${escapeHtml(resource.fileName)}">Download</a>
+       <label class="project-requirement-resource-file-action">Replace<input type="file" accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-resource-replace="${escapeHtml(resource.id)}" aria-label="Replace ${escapeHtml(resource.fileName)}" /></label>`
+    : external
+      ? `<a href="${escapeHtml(resource.url)}" target="_blank" rel="noopener noreferrer">Open</a>
+         <button type="button" data-project-requirement-resource-edit="${escapeHtml(resource.id)}">Edit</button>`
+      : `<button type="button" data-project-requirement-resource-edit="${escapeHtml(resource.id)}">Edit</button>`;
+  return `<article class="project-requirement-resource-row">
+    <span class="project-requirement-resource-icon">${onsiteIcon(file ? "fileText" : external ? "externalLink" : "tag", 16)}</span>
+    <div class="project-requirement-resource-copy">
+      <strong>${escapeHtml(resource.label)}</strong>
+      <span>${escapeHtml(metadata)}</span>
+    </div>
+    <div class="project-requirement-resource-actions">
+      ${primaryAction}
+      <button type="button" data-project-requirement-resource-remove="${escapeHtml(resource.id)}">Remove</button>
+    </div>
+  </article>`;
+}
+
+function projectRequirementResourceComposerHTML(editor) {
+  const resourceEditor = editor.resourceEditor;
+  if (!resourceEditor) return "";
+  if (resourceEditor.type === "choose") {
+    return `<div class="project-requirement-resource-composer is-chooser" aria-label="Choose resource type">
+      <p>Choose resource type</p>
+      <div class="project-requirement-resource-type-actions">
+        ${PROJECT_REQUIREMENT_RESOURCE_TYPES.map((type) => `<button class="secondary-btn" type="button" data-project-requirement-resource-type="${type.value}">${escapeHtml(type.label)}</button>`).join("")}
+      </div>
+      <button class="project-requirement-resource-cancel" type="button" data-project-requirement-resource-cancel>Cancel</button>
+    </div>`;
+  }
+  const existing = editor.draft.resources.find(
+    (resource) => resource.id === resourceEditor.resourceId,
+  );
+  if (resourceEditor.type === "file") {
+    return `<div class="project-requirement-resource-composer">
+      <div><p>Upload file</p><span>Select one or more project documents.</span></div>
+      <label class="field-label">Choose file
+        <input type="file" multiple required accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-resource-files />
+        <span class="form-helper">Files are stored in this browser for the local prototype. Each file must be 1 MB or smaller, with a 2 MB total per requirement.</span>
+      </label>
+      <button class="project-requirement-resource-cancel" type="button" data-project-requirement-resource-cancel>Cancel</button>
+    </div>`;
+  }
+  if (resourceEditor.type === "external_link") {
+    return `<div class="project-requirement-resource-composer">
+      <div><p>${existing ? "Edit external link" : "External link"}</p><span>Opening a link does not mark the requirement complete.</span></div>
+      <div class="project-requirement-resource-form">
+        <label class="field-label">Resource name *
+          <input type="text" required data-project-requirement-resource-label value="${escapeHtml(existing?.label || "")}" placeholder="Training portal or document name" />
+        </label>
+        <label class="field-label">URL *
+          <input type="url" required data-project-requirement-resource-url value="${escapeHtml(existing?.url || "")}" placeholder="https://" />
+        </label>
+        <label class="field-label project-requirement-form-span">Optional instructions
+          <textarea rows="2" data-project-requirement-resource-instructions placeholder="Explain what the worker should do after opening this link.">${escapeHtml(existing?.instructions || "")}</textarea>
+        </label>
+      </div>
+      <div class="project-requirement-resource-composer-actions">
+        <button class="project-requirement-resource-cancel" type="button" data-project-requirement-resource-cancel>Cancel</button>
+        <button class="secondary-btn" type="button" data-project-requirement-resource-save>Save resource</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="project-requirement-resource-composer">
+    <div><p>${existing ? "Edit reference" : "Reference"}</p><span>Add supporting information that does not require a file or URL.</span></div>
+    <div class="project-requirement-resource-form">
+      <label class="field-label">Reference name *
+        <input type="text" required data-project-requirement-resource-label value="${escapeHtml(existing?.label || "")}" placeholder="Access code or reference name" />
+      </label>
+      <label class="field-label">Reference details *
+        <textarea rows="2" required data-project-requirement-resource-details placeholder="Reference number or supporting detail">${escapeHtml(existing?.details || "")}</textarea>
+      </label>
+    </div>
+    <div class="project-requirement-resource-composer-actions">
+      <button class="project-requirement-resource-cancel" type="button" data-project-requirement-resource-cancel>Cancel</button>
+      <button class="secondary-btn" type="button" data-project-requirement-resource-save>Save resource</button>
+    </div>
+  </div>`;
+}
+
+function projectRequirementResourcesHTML(editor) {
+  const resources = editor.draft.resources || [];
+  return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementResourcesTitle">
+    <div class="project-requirement-resources-head">
+      <p id="projectRequirementResourcesTitle">Resources</p>
+      <span>Attach files, external links or supporting references to this requirement.</span>
+    </div>
+    ${resources.length
+      ? `<div class="project-requirement-resource-list">${resources.map(projectRequirementResourceRowHTML).join("")}</div>`
+      : `<p class="project-requirement-resources-empty">No resources added.</p>`}
+    ${projectRequirementResourceComposerHTML(editor)}
+    ${editor.resourceEditor ? "" : `<button class="project-requirement-add-resource" type="button" data-project-requirement-resource-add>+ Add resource</button>`}
   </section>`;
 }
 
@@ -14432,7 +14761,8 @@ function projectRequirementTypeChoicesHTML(draft) {
   </fieldset>`;
 }
 
-function projectRequirementStepOneHTML(draft) {
+function projectRequirementStepOneHTML(editor) {
+  const draft = editor.draft;
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
     <div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>
     ${projectRequirementTypeChoicesHTML(draft)}
@@ -14440,10 +14770,10 @@ function projectRequirementStepOneHTML(draft) {
       <label class="field-label project-requirement-form-span">Title *
         <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
       </label>
-      <label class="field-label project-requirement-form-span">Description / instructions
-        <textarea data-project-requirement-description rows="3" placeholder="What workers need to know or complete">${escapeHtml(draft.description || "")}</textarea>
+      <label class="field-label project-requirement-form-span">Worker instructions
+        <textarea data-project-requirement-description rows="3" placeholder="Provide clear instructions for completing this requirement.">${escapeHtml(draft.description || "")}</textarea>
       </label>
-      ${projectRequirementSourceFieldHTML(draft)}
+      ${projectRequirementResourcesHTML(editor)}
     </div>
   </section>`;
 }
@@ -14477,6 +14807,34 @@ function projectRequirementActionFieldHTML(draft) {
   return `<label class="field-label">Required worker action
     <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
   </label>`;
+}
+
+function projectRequirementCompletionEvidenceHTML(draft) {
+  const options = projectRequirementEvidenceOptions(draft);
+  if (!options.length) return "";
+  const configured = new Set(
+    normalizeProjectRequirementCompletionEvidence(draft),
+  );
+  const descriptions = {
+    worker_confirmation:
+      "The worker confirms in OnSite that the external activity is complete.",
+    upload_evidence:
+      "The worker provides a completion document, certificate or image.",
+    company_verification:
+      "A company user checks the external system or supplied evidence.",
+    supervisor_signoff:
+      "An authorised site or company user confirms completion.",
+  };
+  return `<fieldset class="project-requirement-evidence">
+    <legend>Completion evidence</legend>
+    <p>Choose the evidence required for activity completed outside OnSite. Opening an external link does not complete this requirement.</p>
+    <div class="project-requirement-evidence-options">
+      ${options.map((option) => `<label class="checkbox-row">
+        <input type="checkbox" name="projectRequirementEvidence" value="${option.value}"${configured.has(option.value) ? " checked" : ""} />
+        <span><strong>${escapeHtml(option.label)}</strong><small>${escapeHtml(descriptions[option.value])}</small></span>
+      </label>`).join("")}
+    </div>
+  </fieldset>`;
 }
 
 function projectRequirementTimingChoicesHTML(draft) {
@@ -14516,6 +14874,7 @@ function projectRequirementStepTwoHTML(draft) {
       ${projectRequirementActionFieldHTML(draft)}
       ${projectRequirementTimingChoicesHTML(draft)}
     </div>
+    ${projectRequirementCompletionEvidenceHTML(draft)}
     ${comprehension}
   </section>`;
 }
@@ -14538,12 +14897,23 @@ function projectRequirementReviewHTML(job, draft) {
   const version = String(draft.version || "").trim();
   const rows = [
     ["Type", projectRequirementTypeLabel(draft.requirementType)],
+    ["Resources", projectRequirementResourceSummary(draft.resources)],
     ["Requirement level", draft.requirementLevel === "optional" ? "Optional" : "Required"],
     ["Worker action", action],
     ["Completion timing", projectRequirementTimingLabel(draft.timing)],
     ["Audience", projectRequirementAudienceLabel(job, draft)],
     ["Version", version || "Not set"],
   ];
+  const evidence = normalizeProjectRequirementCompletionEvidence(draft)
+    .map(
+      (value) =>
+        PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.find(
+          (option) => option.value === value,
+        )?.label,
+    )
+    .filter(Boolean)
+    .join(" + ");
+  if (evidence) rows.splice(4, 0, ["External evidence", evidence]);
   return `<section class="project-requirement-review" data-project-requirement-review aria-labelledby="projectRequirementReviewTitle">
     <div class="project-requirement-review-head">
       <p>Review</p>
@@ -14579,7 +14949,7 @@ function projectRequirementStepThreeHTML(job, draft) {
 }
 
 function projectRequirementEditorStepHTML(job, editor) {
-  if (editor.step === 1) return projectRequirementStepOneHTML(editor.draft);
+  if (editor.step === 1) return projectRequirementStepOneHTML(editor);
   if (editor.step === 2) return projectRequirementStepTwoHTML(editor.draft);
   return projectRequirementStepThreeHTML(job, editor.draft);
 }
@@ -14608,7 +14978,6 @@ function syncProjectRequirementEditorDraft(modal) {
   if (type) draft.requirementType = type;
   if (value("[data-project-requirement-title]") != null) draft.documentName = value("[data-project-requirement-title]");
   if (value("[data-project-requirement-description]") != null) draft.description = value("[data-project-requirement-description]");
-  if (value("[data-project-requirement-source]") != null) draft.sourceReference = value("[data-project-requirement-source]");
   if (value("[data-project-requirement-action]") != null) draft.completionAction = value("[data-project-requirement-action]");
   const level = checked("projectRequirementLevel");
   if (level) draft.requirementLevel = level;
@@ -14634,6 +15003,14 @@ function syncProjectRequirementEditorDraft(modal) {
   if (workerConfirmation) {
     draft.requireWorkerAcknowledgementSignature = workerConfirmation.checked;
   }
+  const evidenceInputs = Array.from(
+    modal.querySelectorAll('input[name="projectRequirementEvidence"]'),
+  );
+  if (evidenceInputs.length) {
+    draft.completionEvidence = evidenceInputs
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+  }
 }
 
 function refreshProjectRequirementReview(modal) {
@@ -14647,12 +15024,28 @@ function refreshProjectRequirementReview(modal) {
 function validateProjectRequirementEditorStep(modal) {
   const form = modal.querySelector("[data-project-requirement-form]");
   if (!form?.reportValidity()) return false;
+  if (
+    projectRequirementEditorState?.step === 1 &&
+    projectRequirementEditorState.resourceEditor
+  ) {
+    showToast("Finish adding the resource or cancel it before continuing");
+    return false;
+  }
   if (projectRequirementEditorState?.step === 2) {
     const threshold = modal.querySelector("[data-project-requirement-pass]");
     if (threshold && (Number(threshold.value) < 1 || Number(threshold.value) > 100)) {
       threshold.setCustomValidity("Enter a pass threshold between 1 and 100.");
       threshold.reportValidity();
       threshold.setCustomValidity("");
+      return false;
+    }
+    const evidenceInputs = Array.from(
+      modal.querySelectorAll('input[name="projectRequirementEvidence"]'),
+    );
+    if (evidenceInputs.length && !evidenceInputs.some((input) => input.checked)) {
+      evidenceInputs[0].setCustomValidity("Choose at least one completion evidence method.");
+      evidenceInputs[0].reportValidity();
+      evidenceInputs[0].setCustomValidity("");
       return false;
     }
   }
@@ -14669,6 +15062,28 @@ function projectRequirementDraftValidationIssue(editor) {
       message: "Enter a requirement title.",
     };
   }
+  const hasFileOrExternal = (draft.resources || []).some((resource) =>
+    ["file", "external_link"].includes(resource.type),
+  );
+  if (
+    draft.requirementType === "video_induction" &&
+    !(draft.resources || []).some(
+      (resource) => resource.type === "external_link",
+    )
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-resource-add]",
+      message: "Add an external video or training link.",
+    };
+  }
+  if (draft.requirementType === "form_signature" && !hasFileOrExternal) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-resource-add]",
+      message: "Add a form file or external form link.",
+    };
+  }
   const validAction = (PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [])
     .some((action) => action.value === draft.completionAction);
   if (!validAction) {
@@ -14676,6 +15091,16 @@ function projectRequirementDraftValidationIssue(editor) {
       step: 2,
       selector: "[data-project-requirement-action]",
       message: "Choose a valid worker action.",
+    };
+  }
+  if (
+    projectRequirementHasExternalLink(draft) &&
+    !normalizeProjectRequirementCompletionEvidence(draft).length
+  ) {
+    return {
+      step: 2,
+      selector: 'input[name="projectRequirementEvidence"]',
+      message: "Choose at least one completion evidence method.",
     };
   }
   if (
@@ -14703,6 +15128,7 @@ function projectRequirementDraftValidationIssue(editor) {
 
 function showProjectRequirementValidationIssue(issue) {
   if (!issue || !projectRequirementEditorState) return;
+  showToast(issue.message);
   projectRequirementEditorState.step = issue.step;
   renderProjectRequirementEditor({ focusHeading: false });
   requestAnimationFrame(() => {
@@ -14713,9 +15139,13 @@ function showProjectRequirementValidationIssue(issue) {
     }
     const field = modal?.querySelector(issue.selector);
     if (!field) return;
-    field.setCustomValidity(issue.message);
-    field.reportValidity();
-    field.setCustomValidity("");
+    if (typeof field.setCustomValidity === "function") {
+      field.setCustomValidity(issue.message);
+      field.reportValidity();
+      field.setCustomValidity("");
+    } else {
+      field.focus();
+    }
   });
 }
 
@@ -14772,8 +15202,10 @@ function saveProjectRequirementEditor() {
     documentName: draft.documentName,
     requirementType: draft.requirementType,
     description: draft.description,
-    sourceReference: draft.requirementType === "onsite_induction" ? "" : draft.sourceReference,
+    sourceReference: "",
+    resources: draft.resources,
     completionAction: draft.completionAction,
+    completionEvidence: normalizeProjectRequirementCompletionEvidence(draft),
     requirementLevel: draft.requirementLevel,
     timing: draft.timing,
     audience: draft.audience,
@@ -14797,10 +15229,258 @@ function saveProjectRequirementEditor() {
   showToast(result.updated ? "Project requirement updated" : "Project requirement added");
 }
 
+function readProjectRequirementFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected file could not be read."));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+function projectRequirementFileExtensionAllowed(fileName) {
+  const extension = `.${String(fileName || "").split(".").pop().toLowerCase()}`;
+  return PROJECT_REQUIREMENT_FILE_ACCEPT.split(",").includes(extension);
+}
+
+function projectRequirementFileBytes(resources, excludedId = "") {
+  return (resources || [])
+    .filter(
+      (resource) =>
+        resource.type === "file" && resource.id !== excludedId,
+    )
+    .reduce((total, resource) => total + (Number(resource.size) || 0), 0);
+}
+
+async function createProjectRequirementFileResources(
+  files,
+  resources,
+  replacedResource = null,
+) {
+  const selected = Array.from(files || []);
+  if (!selected.length) return [];
+  const invalidType = selected.find(
+    (file) => !projectRequirementFileExtensionAllowed(file.name),
+  );
+  if (invalidType) {
+    throw new Error("Choose a supported project document, office file or image.");
+  }
+  const oversized = selected.find(
+    (file) => file.size > PROJECT_REQUIREMENT_FILE_MAX_BYTES,
+  );
+  if (oversized) {
+    throw new Error(`${oversized.name} is larger than the 1 MB local prototype limit.`);
+  }
+  const existingBytes = projectRequirementFileBytes(
+    resources,
+    replacedResource?.id || "",
+  );
+  const selectedBytes = selected.reduce((total, file) => total + file.size, 0);
+  if (existingBytes + selectedBytes > PROJECT_REQUIREMENT_FILES_TOTAL_MAX_BYTES) {
+    throw new Error("Requirement files exceed the 2 MB local prototype limit.");
+  }
+  const createdAt = replacedResource?.createdAt || new Date().toISOString();
+  return Promise.all(
+    selected.map(async (file, index) => ({
+      id:
+        replacedResource && index === 0
+          ? replacedResource.id
+          : createId(),
+      type: "file",
+      label: file.name,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      dataUrl: await readProjectRequirementFile(file),
+      createdAt,
+    })),
+  );
+}
+
+function syncProjectRequirementEvidenceDefaults(draft) {
+  draft.completionEvidence = normalizeProjectRequirementCompletionEvidence({
+    ...draft,
+    completionEvidence: draft.completionEvidence,
+  });
+}
+
+function saveProjectRequirementResource(modal) {
+  const editor = projectRequirementEditorState;
+  const resourceEditor = editor?.resourceEditor;
+  if (!editor || !resourceEditor) return;
+  const composer = modal.querySelector(".project-requirement-resource-composer");
+  const requiredFields = Array.from(
+    composer?.querySelectorAll("input[required], textarea[required]") || [],
+  );
+  const invalidField = requiredFields.find((field) => !field.checkValidity());
+  if (invalidField) {
+    invalidField.reportValidity();
+    return;
+  }
+  const existingIndex = editor.draft.resources.findIndex(
+    (resource) => resource.id === resourceEditor.resourceId,
+  );
+  const existing = editor.draft.resources[existingIndex];
+  const label = modal
+    .querySelector("[data-project-requirement-resource-label]")
+    ?.value.trim();
+  let resource = null;
+  if (resourceEditor.type === "external_link") {
+    const urlField = modal.querySelector(
+      "[data-project-requirement-resource-url]",
+    );
+    const url = urlField?.value.trim();
+    if (!validProjectRequirementExternalUrl(url)) {
+      urlField.setCustomValidity("Enter a valid http or https URL.");
+      urlField.reportValidity();
+      urlField.setCustomValidity("");
+      return;
+    }
+    resource = {
+      id: existing?.id || createId(),
+      type: "external_link",
+      label,
+      url,
+      instructions:
+        modal
+          .querySelector("[data-project-requirement-resource-instructions]")
+          ?.value.trim() || "",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
+  } else if (resourceEditor.type === "reference") {
+    resource = {
+      id: existing?.id || createId(),
+      type: "reference",
+      label,
+      details:
+        modal
+          .querySelector("[data-project-requirement-resource-details]")
+          ?.value.trim() || "",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
+  }
+  const normalized = normalizeProjectRequirementResource(resource);
+  if (!normalized) return;
+  if (existingIndex >= 0) editor.draft.resources[existingIndex] = normalized;
+  else editor.draft.resources.push(normalized);
+  syncProjectRequirementEvidenceDefaults(editor.draft);
+  editor.resourceEditor = null;
+  renderProjectRequirementEditor({ focusHeading: false });
+}
+
 function bindProjectRequirementEditorControls(modal) {
   modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
     button.addEventListener("click", closeProjectRequirementModal),
   );
+  modal
+    .querySelector("[data-project-requirement-resource-add]")
+    ?.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      projectRequirementEditorState.resourceEditor = {
+        type: "choose",
+        resourceId: "",
+      };
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-resource-type]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        projectRequirementEditorState.resourceEditor = {
+          type: button.dataset.projectRequirementResourceType,
+          resourceId: "",
+        };
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
+  modal
+    .querySelector("[data-project-requirement-resource-cancel]")
+    ?.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      projectRequirementEditorState.resourceEditor = null;
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  modal
+    .querySelector("[data-project-requirement-resource-save]")
+    ?.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      saveProjectRequirementResource(modal);
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-resource-edit]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        const resource = projectRequirementEditorState.draft.resources.find(
+          (item) =>
+            item.id === button.dataset.projectRequirementResourceEdit,
+        );
+        if (!resource) return;
+        projectRequirementEditorState.resourceEditor = {
+          type: resource.type,
+          resourceId: resource.id,
+        };
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-resource-remove]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        projectRequirementEditorState.draft.resources =
+          projectRequirementEditorState.draft.resources.filter(
+            (resource) =>
+              resource.id !== button.dataset.projectRequirementResourceRemove,
+          );
+        syncProjectRequirementEvidenceDefaults(
+          projectRequirementEditorState.draft,
+        );
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
+  modal
+    .querySelector("[data-project-requirement-resource-files]")
+    ?.addEventListener("change", async (event) => {
+      syncProjectRequirementEditorDraft(modal);
+      try {
+        const resources = await createProjectRequirementFileResources(
+          event.currentTarget.files,
+          projectRequirementEditorState.draft.resources,
+        );
+        projectRequirementEditorState.draft.resources.push(...resources);
+        projectRequirementEditorState.resourceEditor = null;
+        renderProjectRequirementEditor({ focusHeading: false });
+      } catch (error) {
+        showToast(error.message || "The selected file could not be added");
+      }
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-resource-replace]")
+    .forEach((input) => {
+      input.addEventListener("change", async (event) => {
+        syncProjectRequirementEditorDraft(modal);
+        const resourceId = event.currentTarget.dataset.projectRequirementResourceReplace;
+        const index = projectRequirementEditorState.draft.resources.findIndex(
+          (resource) => resource.id === resourceId,
+        );
+        if (index < 0) return;
+        const existing = projectRequirementEditorState.draft.resources[index];
+        try {
+          const [replacement] = await createProjectRequirementFileResources(
+            event.currentTarget.files,
+            projectRequirementEditorState.draft.resources,
+            existing,
+          );
+          if (!replacement) return;
+          projectRequirementEditorState.draft.resources[index] = replacement;
+          renderProjectRequirementEditor({ focusHeading: false });
+        } catch (error) {
+          showToast(error.message || "The selected file could not be replaced");
+        }
+      });
+    });
   modal.querySelectorAll('input[name="projectRequirementType"]').forEach((input) => {
     input.addEventListener("change", () => {
       const previousType = projectRequirementEditorState.draft.requirementType;
@@ -14808,11 +15488,11 @@ function bindProjectRequirementEditorControls(modal) {
       const draft = projectRequirementEditorState.draft;
       if (draft.requirementType !== previousType) {
         draft.completionAction = projectRequirementDefaultAction(draft.requirementType);
-        draft.sourceReference = "";
         draft.requireWorkerAcknowledgementSignature = false;
         draft.timing = draft.requirementType === "onsite_induction"
           ? "on_arrival"
           : "before_first_shift";
+        syncProjectRequirementEvidenceDefaults(draft);
       }
       renderProjectRequirementEditor({ focusHeading: false });
     });
@@ -14840,6 +15520,13 @@ function bindProjectRequirementEditorControls(modal) {
   modal.querySelector("[data-project-requirement-worker-confirmation]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
   });
+  modal
+    .querySelectorAll('input[name="projectRequirementEvidence"]')
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        syncProjectRequirementEditorDraft(modal);
+      });
+    });
   modal.querySelector("[data-project-requirement-audience]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
     refreshProjectRequirementReview(modal);
@@ -14855,6 +15542,13 @@ function bindProjectRequirementEditorControls(modal) {
   modal.querySelector("[data-project-requirement-next]")?.addEventListener("click", () => {
     syncProjectRequirementEditorDraft(modal);
     if (!validateProjectRequirementEditorStep(modal)) return;
+    const issue = projectRequirementDraftValidationIssue(
+      projectRequirementEditorState,
+    );
+    if (issue?.step === projectRequirementEditorState.step) {
+      showProjectRequirementValidationIssue(issue);
+      return;
+    }
     projectRequirementEditorState.step += 1;
     renderProjectRequirementEditor();
   });
@@ -14868,6 +15562,13 @@ function bindProjectRequirementEditorControls(modal) {
     if (projectRequirementEditorState.step < 3) {
       syncProjectRequirementEditorDraft(modal);
       if (!validateProjectRequirementEditorStep(modal)) return;
+      const issue = projectRequirementDraftValidationIssue(
+        projectRequirementEditorState,
+      );
+      if (issue?.step === projectRequirementEditorState.step) {
+        showProjectRequirementValidationIssue(issue);
+        return;
+      }
       projectRequirementEditorState.step += 1;
       renderProjectRequirementEditor();
       return;
@@ -14918,7 +15619,9 @@ function openProjectRequirementModal(jobId, requirementId = "", trigger = null) 
         requirementType: "document",
         description: "",
         sourceReference: "",
+        resources: [],
         completionAction: "read_acknowledge",
+        completionEvidence: [],
         requirementLevel: "required",
         timing: "before_first_shift",
         audience: { type: "all_project_workers", labourRequirementId: "" },
@@ -14933,6 +15636,7 @@ function openProjectRequirementModal(jobId, requirementId = "", trigger = null) 
     original: requirement,
     step: 1,
     draft,
+    resourceEditor: null,
   };
   const modal = document.createElement("div");
   modal.id = "projectRequirementModal";

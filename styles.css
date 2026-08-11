@@ -18166,7 +18166,9 @@ button svg,
 .project-requirement-fieldset > legend,
 .project-requirement-fixed-value > span,
 .project-requirement-comprehension > p,
-.project-requirement-source > p,
+.project-requirement-resources-head > p,
+.project-requirement-resource-composer > div:first-child > p,
+.project-requirement-evidence > legend,
 .project-requirement-review-head > p {
   color: var(--ink-3);
   font-size: 0.68rem;
@@ -18268,11 +18270,198 @@ button svg,
   grid-column: 1 / -1;
 }
 
-.project-requirement-source {
+.project-requirement-resources {
   border-top: 1px solid var(--card-divider);
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding-top: 18px;
+}
+
+.project-requirement-resources-head,
+.project-requirement-resource-composer > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.project-requirement-resources-head > span,
+.project-requirement-resource-composer > div:first-child > span {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.project-requirement-resources-empty {
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.project-requirement-resource-list {
+  display: grid;
+}
+
+.project-requirement-resource-row {
+  align-items: center;
+  border-bottom: 1px solid var(--card-divider);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  padding: 11px 0;
+}
+
+.project-requirement-resource-row:first-child {
+  padding-top: 2px;
+}
+
+.project-requirement-resource-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.project-requirement-resource-icon {
+  align-items: center;
+  background: var(--surface-3);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.project-requirement-resource-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-requirement-resource-copy strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-requirement-resource-copy span {
+  color: var(--ink-3);
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
+.project-requirement-resource-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.project-requirement-resource-actions a,
+.project-requirement-resource-actions button,
+.project-requirement-resource-file-action,
+.project-requirement-resource-cancel,
+.project-requirement-add-resource {
+  background: none;
+  border: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 750;
+  line-height: 1.35;
+  padding: 0;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.project-requirement-resource-actions a:hover,
+.project-requirement-resource-actions button:hover,
+.project-requirement-resource-file-action:hover,
+.project-requirement-resource-cancel:hover,
+.project-requirement-add-resource:hover {
+  color: var(--orange-dark);
+}
+
+.project-requirement-resource-actions a:focus-visible,
+.project-requirement-resource-actions button:focus-visible,
+.project-requirement-resource-file-action:focus-within,
+.project-requirement-resource-cancel:focus-visible,
+.project-requirement-add-resource:focus-visible {
+  border-radius: 2px;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  outline: 0;
+}
+
+.project-requirement-resource-file-action {
+  position: relative;
+}
+
+.project-requirement-resource-file-action input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.project-requirement-add-resource {
+  color: var(--orange-dark);
+  justify-self: start;
+  padding: 2px 0;
+}
+
+.project-requirement-resource-composer {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.project-requirement-resource-composer.is-chooser {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.project-requirement-resource-composer.is-chooser > p {
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 750;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.project-requirement-resource-type-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-requirement-resource-type-actions .secondary-btn {
+  min-height: 34px;
+  padding: 7px 11px;
+}
+
+.project-requirement-resource-form {
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-requirement-resource-composer-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.project-requirement-resource-composer-actions .secondary-btn {
+  min-height: 36px;
+  padding: 8px 12px;
 }
 
 .project-requirement-completion-grid {
@@ -18356,6 +18545,50 @@ button svg,
   display: grid;
   gap: 10px;
   padding: 14px;
+}
+
+.project-requirement-evidence {
+  background: var(--surface-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+}
+
+.project-requirement-evidence > p {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.project-requirement-evidence-options {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.project-requirement-evidence-options .checkbox-row {
+  align-items: start;
+}
+
+.project-requirement-evidence-options .checkbox-row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.project-requirement-evidence-options strong {
+  color: var(--ink);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.project-requirement-evidence-options small {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  line-height: 1.4;
 }
 
 .project-requirement-comprehension .field-label {
@@ -18842,7 +19075,8 @@ button svg,
   .project-requirement-type-choices,
   .project-requirement-level-choices,
   .project-requirement-completion-grid,
-  .project-requirement-advanced-body {
+  .project-requirement-advanced-body,
+  .project-requirement-resource-form {
     grid-template-columns: 1fr;
   }
 }
@@ -18910,6 +19144,29 @@ button svg,
   .project-requirement-steps li {
     font-size: 0.66rem;
     gap: 5px;
+  }
+
+  .project-requirement-resource-row {
+    align-items: start;
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .project-requirement-resource-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .project-requirement-resource-composer.is-chooser {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .project-requirement-resource-composer.is-chooser > p {
+    grid-column: 1;
+  }
+
+  .project-requirement-resource-composer-actions {
+    justify-content: space-between;
   }
 
   .project-requirement-review dl {
