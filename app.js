@@ -9802,7 +9802,10 @@ function companyRequirementApplicationCount(req, summary, statuses) {
 function companyRequirementStats(req, summary) {
   const required = labourRequirementQuantityOnDate(req, todayDateStr());
   const filled = Math.min(required, companyRequirementFilledCount(req, summary));
-  const offered = companyRequirementApplicationCount(req, summary, ["offered"]);
+  const pendingOffers = companyRequirementApplicationCount(req, summary, ["offered"]);
+  const awaitingApproval = companyRequirementApplicationCount(req, summary, [
+    "under_company_review",
+  ]);
   const accepted = Math.min(
     required,
     filled +
@@ -9814,9 +9817,11 @@ function companyRequirementStats(req, summary) {
   return {
     required,
     filled,
-    offered,
+    offered: pendingOffers,
     accepted,
     remaining: Math.max(0, required - filled),
+    pendingOffers,
+    awaitingApproval,
     peak: labourRequirementPeakQuantity(req),
   };
 }
@@ -13187,24 +13192,33 @@ function companyProjectWorkerRowHTML(worker, job) {
 }
 
 function companyProjectRequirementsHTML(job, summary) {
-  const pendingRows = summary.pendingOffers.length
-    ? summary.pendingOffers
+  const activeOffers = (summary.apps || []).filter((app) =>
+    ["offered", "under_company_review"].includes(app.status),
+  );
+  const pendingRows = activeOffers.length
+    ? activeOffers
         .map((app) => {
           const worker = applicationWorker(app);
           const advertisedRate = app.matchSnapshot?.budget || jobBudget(job);
+          const expiryOrResponse = app.status === "offered"
+            ? app.expiresAt
+              ? `${formatDate(app.expiresAt)} · ${offerExpiryLabel(app)}`
+              : "No expiry"
+            : app.workerRespondedAt
+              ? `Responded ${formatDate(app.workerRespondedAt)}`
+              : "Response received";
           return `<div class="company-project-offer-row">
             <div><strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong><span>${escapeHtml(worker?.trade || app.workerTrade || job.trade || "Trade not set")}${worker?.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</span></div>
-            <span>${escapeHtml(offerStatusLabel(app.status))}</span>
-            <span>${advertisedRate ? `${formatMoney(advertisedRate)}/day` : "Rate not set"}</span>
-            <span>${app.offeredAt ? formatDate(app.offeredAt) : "Not recorded"}</span>
-            <span>${app.expiresAt ? `${formatDate(app.expiresAt)} · ${offerExpiryLabel(app)}` : "No expiry"}</span>
+            <span class="company-project-offer-status is-${escapeHtml(app.status || "offered")}" data-label="Status">${escapeHtml(offerStatusLabel(app.status))}</span>
+            <span data-label="Rate">${advertisedRate ? `${formatMoney(advertisedRate)}/day` : "Rate not set"}</span>
+            <span data-label="Sent">${app.offeredAt ? formatDate(app.offeredAt) : "Not recorded"}</span>
+            <span data-label="Expiry / response">${escapeHtml(expiryOrResponse)}</span>
           </div>`;
         })
         .join("")
     : `<div class="company-project-workspace-empty is-compact">
         <strong>No offers awaiting worker response.</strong>
         <span>Matching will appear here as workers are offered this requirement.</span>
-        <button class="company-project-inline-action" type="button" data-project-request-more="${job.id}">Request more labour &rarr;</button>
       </div>`;
   const requirementRows = uniqueLabourRequirements(summary.labourRequirements)
     .map((req) => {
@@ -13227,25 +13241,26 @@ function companyProjectRequirementsHTML(job, summary) {
             <div><dt>Daily rate</dt><dd>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day` : "Not specified"}</dd></div>
             <div><dt>Overtime</dt><dd>${escapeHtml(overtime)}</dd></div>
             ${req.accommodationPaid ? `<div><dt>Working away</dt><dd>${req.accommodationAllowancePerNight ? `${formatMoney(req.accommodationAllowancePerNight)}/night` : "Accommodation paid"}</dd></div>` : ""}
+            ${req.labourSchedule?.length ? `<div><dt>Peak demand</dt><dd>${stats.peak} worker${stats.peak === 1 ? "" : "s"}</dd></div>` : ""}
           </dl>
           ${req.labourSchedule?.length ? `<div class="company-project-requirement-forecast">
-            <span>Current <strong>${stats.required}</strong></span>
+            <span>Current scheduled demand <strong>${stats.required} worker${stats.required === 1 ? "" : "s"}</strong></span>
             <span>Next change <strong>${nextChange ? `${nextChange.previousQuantity} to ${nextChange.quantity} · ${formatDateOnly(nextChange.startDate)}` : "None scheduled"}</strong></span>
-            <span>Peak <strong>${stats.peak}</strong></span>
           </div>` : ""}
           ${upcoming.length ? `<div class="company-project-requirement-schedule">
             ${upcoming.map((change) => `<span>${formatDateOnly(change.startDate)}–${formatDateOnly(change.endDate)} · <strong>${change.quantity}</strong>${change.phase ? ` · ${escapeHtml(change.phase)}` : ""}</span>`).join("")}
           </div>` : ""}
         </div>
         <div class="company-project-requirement-side">
+          <p class="company-project-requirement-side-label">Fulfilment</p>
           <dl class="company-project-requirement-counts">
-          <div><dt>Required</dt><dd>${stats.required}</dd></div>
-          <div><dt>Offered</dt><dd>${stats.offered}</dd></div>
-          <div><dt>Accepted / assigned</dt><dd>${stats.accepted}</dd></div>
-          <div><dt>Remaining</dt><dd>${stats.remaining}</dd></div>
-          <div><dt>Peak</dt><dd>${stats.peak}</dd></div>
+            <div><dt>Required</dt><dd>${stats.required}</dd></div>
+            <div><dt>Filled</dt><dd>${stats.filled}</dd></div>
+            <div><dt>Open</dt><dd>${stats.remaining}</dd></div>
+            <div><dt>Pending offers</dt><dd>${stats.pendingOffers}</dd></div>
+            <div><dt>Awaiting approval</dt><dd>${stats.awaitingApproval}</dd></div>
           </dl>
-          ${stats.remaining > 0 && companyProjectStatusBucket(job) !== "completed" ? `<button class="company-project-inline-action" type="button" data-project-request-more="${job.id}">Request more labour &rarr;</button>` : ""}
+          <button class="company-project-inline-action" type="button" data-company-project-section="labour" aria-label="Review ${escapeHtml(req.trade || "labour")} requirement">Review requirement &rarr;</button>
         </div>
       </article>`;
     })
@@ -13255,16 +13270,17 @@ function companyProjectRequirementsHTML(job, summary) {
       <section class="company-project-workspace-card">
         <header class="company-project-workspace-head">
           <div><p class="company-project-workspace-kicker">Labour Requirements</p><h2>Requested labour</h2><span>Requirement details, current fulfilment, and scheduled demand for this project.</span></div>
+          ${companyProjectStatusBucket(job) !== "completed" ? `<button class="company-project-inline-action" type="button" data-project-request-more="${job.id}">Add labour requirement &rarr;</button>` : ""}
         </header>
         <div class="company-project-requirement-list">
-          ${requirementRows || `<div class="company-project-workspace-empty"><strong>No labour requirements saved.</strong><span>This project has no saved trade requirements yet.</span><button class="primary-btn" type="button" data-project-request-more="${job.id}">Request more labour</button></div>`}
+          ${requirementRows || `<div class="company-project-workspace-empty"><strong>No labour requirements saved.</strong><span>Add a labour requirement to define the trade, role, rate and schedule needed for this project.</span></div>`}
         </div>
       </section>
       <section class="company-project-workspace-card">
         <header class="company-project-workspace-head is-compact">
           <div><p class="company-project-workspace-kicker">Pending Offers</p><h2>Matching and worker responses</h2></div>
         </header>
-        ${summary.pendingOffers.length ? `<div class="company-project-offer-table-head" aria-hidden="true"><span>Worker</span><span>Status</span><span>Rate</span><span>Sent</span><span>Expiry</span></div>` : ""}
+        ${activeOffers.length ? `<div class="company-project-offer-table-head" aria-hidden="true"><span>Worker</span><span>Status</span><span>Rate</span><span>Sent</span><span>Expiry / response</span></div>` : ""}
         <div class="company-project-offer-list">${pendingRows}</div>
       </section>
     </div>`;
