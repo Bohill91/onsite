@@ -16760,10 +16760,10 @@ button svg,
 /* Workforce */
 .company-project-roster,
 .company-project-roster-row {
-  align-items: start;
+  align-items: center;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(190px, 1.2fr) minmax(150px, 0.85fr) minmax(240px, 1.35fr) minmax(130px, auto);
+  gap: 14px;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(112px, 0.82fr) minmax(124px, 0.86fr) minmax(132px, 0.9fr) minmax(112px, auto);
   min-width: 0;
 }
 
@@ -16777,7 +16777,7 @@ button svg,
 
 .company-project-roster-row {
   border-bottom: 1px solid var(--card-divider);
-  padding: 14px 0;
+  padding: 13px 0;
 }
 
 .company-project-roster-row:last-child {
@@ -16792,13 +16792,13 @@ button svg,
 }
 
 .company-project-roster-worker > div:last-child,
-.company-project-roster-facts {
+.company-project-roster-assignment,
+.company-project-roster-status {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.company-project-roster-worker button,
 .company-project-preferred-row button {
   background: transparent;
   border: 0;
@@ -16811,16 +16811,28 @@ button svg,
   text-align: left;
 }
 
-.company-project-roster-worker button:hover,
-.company-project-roster-worker button:focus-visible,
 .company-project-preferred-row button:hover,
 .company-project-preferred-row button:focus-visible {
   color: var(--orange-dark);
   outline: none;
 }
 
+.company-project-roster-worker strong,
+.company-project-roster-assignment strong,
+.company-project-roster-status strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.company-project-roster-worker strong {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .company-project-roster-worker span,
-.company-project-roster-facts span,
+.company-project-roster-assignment span,
+.company-project-roster-status span,
 .company-project-preferred-row span,
 .company-project-agreement-row span,
 .company-project-review-row span {
@@ -16829,10 +16841,65 @@ button svg,
   line-height: 1.4;
 }
 
-.company-project-roster-facts strong {
-  color: var(--ink);
-  font-size: 0.78rem;
-  line-height: 1.35;
+.company-project-roster-status strong {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.company-project-roster-status strong::before {
+  background: var(--health-neutral);
+  border-radius: 50%;
+  content: "";
+  flex: 0 0 6px;
+  height: 6px;
+  width: 6px;
+}
+
+.company-project-roster-status.is-healthy strong {
+  color: var(--green-text);
+}
+
+.company-project-roster-status.is-healthy strong::before {
+  background: var(--health-healthy);
+}
+
+.company-project-roster-status.is-warning strong {
+  color: var(--amber-text);
+}
+
+.company-project-roster-status.is-warning strong::before {
+  background: var(--health-at-risk);
+}
+
+.company-project-roster-status.is-danger strong {
+  color: var(--red-text);
+}
+
+.company-project-roster-status.is-danger strong::before {
+  background: var(--health-urgent);
+}
+
+.company-project-workforce-summary {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.company-project-workforce-empty {
+  align-items: start;
+  display: grid;
+  gap: 4px;
+}
+
+.company-project-workforce-empty span {
+  flex: none;
+}
+
+.company-project-workforce-empty .company-project-inline-action {
+  justify-self: start;
+  margin-top: 4px;
 }
 
 .company-project-roster-actions {
@@ -17495,11 +17562,26 @@ button svg,
 
   .company-project-roster,
   .company-project-roster-row {
-    grid-template-columns: minmax(190px, 1.1fr) minmax(150px, 0.8fr) minmax(220px, 1.2fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .company-project-roster-head span:last-child {
+  .company-project-roster-head {
     display: none;
+  }
+
+  .company-project-roster-worker {
+    grid-column: 1 / -1;
+  }
+
+  .company-project-roster-assignment::before,
+  .company-project-roster-status::before {
+    color: var(--ink-3);
+    content: attr(data-label);
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 1px;
+    text-transform: uppercase;
   }
 
   .company-project-roster-actions {
@@ -17606,6 +17688,14 @@ button svg,
 }
 
 @media (max-width: 480px) {
+  .company-project-roster-row {
+    grid-template-columns: 1fr;
+  }
+
+  .company-project-roster-row > * {
+    grid-column: 1 / -1;
+  }
+
   .company-project-workspace-empty,
   .company-project-review-row,
   .company-project-preferred-row,

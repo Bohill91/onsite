@@ -12674,12 +12674,10 @@ function companyProjectSectionHTML(job, user, summary) {
 }
 
 function companyProjectWorkforceHTML(job, summary) {
+  const agreements = companyProjectAgreementsForJob(job);
   return `<div class="company-project-workspace company-project-workforce-workspace">
-    ${companyProjectWorkersHTML(job, summary)}
-    <div class="company-project-workspace-split">
-      ${companyProjectPreferredWorkersHTML(job)}
-      ${companyProjectAgreementsHTML(job)}
-    </div>
+    ${companyProjectWorkersHTML(job, summary, agreements)}
+    ${summary.assignedWorkers.length && agreements.length ? companyProjectAgreementsHTML(job, agreements) : ""}
   </div>`;
 }
 
@@ -13028,13 +13026,14 @@ function companyProjectOverviewStageHTML(job, summary, stage, health, totals) {
   return companyProjectOverviewOperationHTML(job, summary, totals);
 }
 
-function companyProjectWorkersHTML(job, summary) {
+function companyProjectWorkersHTML(job, summary, agreements = companyProjectAgreementsForJob(job)) {
+  const openPositions = Math.max(0, Number(summary.openRoles) || 0);
   const rows = summary.assignedWorkers.length
-    ? summary.assignedWorkers.map((worker) => companyProjectWorkerRowHTML(worker, job, summary)).join("")
-    : `<div class="company-project-workspace-empty">
+    ? summary.assignedWorkers.map((worker) => companyProjectWorkerRowHTML(worker, job, summary, agreements)).join("")
+    : `<div class="company-project-workspace-empty company-project-workforce-empty">
         <strong>No workers assigned yet.</strong>
-        <span>Accepted workers will appear here after the offer and company approval flow is complete.</span>
-        <button class="company-project-inline-action" type="button" data-company-project-section="labour">Review labour &rarr;</button>
+        <span>${openPositions ? `${openPositions} labour position${openPositions === 1 ? " is" : "s are"} still open.` : "No labour positions are currently open."}</span>
+        ${openPositions ? `<button class="company-project-inline-action" type="button" data-company-project-section="labour">Review labour &rarr;</button>` : ""}
       </div>`;
   const approvals = summary.reviewWorkers.length
     ? `<div class="company-project-workspace-subsection">
@@ -13066,11 +13065,12 @@ function companyProjectWorkersHTML(job, summary) {
         <div>
           <p class="company-project-workspace-kicker">Assigned Workers</p>
           <h2>Project workforce</h2>
-          <span>${summary.assignedWorkers.length ? `${summary.assignedWorkers.length} confirmed worker${summary.assignedWorkers.length === 1 ? "" : "s"} on this project.` : "Workers confirmed through the offer and approval flow will appear here."}</span>
+          <span>Workers confirmed for this project through the offer and approval flow.</span>
         </div>
+        ${summary.assignedWorkers.length ? `<span class="company-project-workforce-summary">${summary.assignedWorkers.length} assigned</span>` : ""}
       </header>
       ${summary.assignedWorkers.length ? `<div class="company-project-roster company-project-roster-head" aria-hidden="true">
-        <span>Worker</span><span>Assignment</span><span>Operational status</span><span>Action</span>
+        <span>Worker</span><span>Assignment</span><span>Today</span><span>Documents</span><span>Agreement</span><span>Action</span>
       </div>` : ""}
       <div class="company-project-roster-list">${rows}</div>
       ${approvals}
@@ -13103,16 +13103,18 @@ function companyProjectPreferredWorkersHTML(job) {
   </section>`;
 }
 
-function companyProjectAgreementsHTML(job) {
-  const agreements = (state.agreements || []).filter(
+function companyProjectAgreementsForJob(job) {
+  return (state.agreements || []).filter(
     (agreement) =>
       agreement.jobId === job.id ||
       agreement.projectId === job.id ||
       agreement.terms?.siteName === companyProjectTitle(job),
-  );
-  const rows = agreements.length
-    ? [...agreements]
-        .sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0))
+  ).sort((a, b) => new Date(b.generatedAt || 0) - new Date(a.generatedAt || 0));
+}
+
+function companyProjectAgreementsHTML(job, agreements = companyProjectAgreementsForJob(job)) {
+  if (!agreements.length) return "";
+  const rows = agreements
         .map((agreement) => {
           const meta = agreementStatusMeta(agreement);
           return `<button class="company-project-agreement-row" type="button" data-agr-open="${escapeHtml(agreement.id)}">
@@ -13123,61 +13125,163 @@ function companyProjectAgreementsHTML(job) {
             <span class="agr-hist-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</span>
           </button>`;
         })
-        .join("")
-    : `<div class="company-project-workspace-empty is-compact">
-        <strong>No agreements for this project yet.</strong>
-        <span>Agreements with assigned workers will appear here once generated.</span>
-      </div>`;
+        .join("");
   return `<section class="company-project-workspace-card">
     <header class="company-project-workspace-head is-compact">
-      <div><p class="company-project-workspace-kicker">Agreements</p><h2>Project agreements</h2></div>
+      <div><p class="company-project-workspace-kicker">Project Agreements</p><h2>Worker agreements</h2><span>Generated agreements for workers on this project.</span></div>
     </header>
     <div class="company-project-agreement-list">${rows}</div>
   </section>`;
 }
 
-function companyProjectWorkerRowHTML(worker, job) {
-  const rating = buildWorkerRating(worker.id);
-  const docs = workerDocumentsFor(worker);
-  const planned = plannedAbsencesForWorker(worker).find(
-    (absence) => dateOnlyMs(absence.endDate) >= dateOnlyMs(todayDateStr()),
+function companyProjectWorkerRequirement(worker, summary) {
+  const requirements = summary?.labourRequirements || [];
+  if (!requirements.length) return null;
+  const app = (summary.apps || []).find(
+    (item) => item.workerId === worker.id && item.status === "confirmed",
   );
-  const todayState = attendanceStatusForWorker(worker, job);
-  const signInLabel = todayState.reportingLate && !todayState.signedIn
-    ? "Reported late"
-    : todayState.rec
-      ? ATT_CFG[todayState.status]?.label || todayState.status || "Recorded"
-      : isProjectScheduledToday(job)
-        ? "Not signed in"
-        : "Not scheduled today";
+  const explicitId = app?.labourRequirementId || app?.requirementId || app?.matchSnapshot?.requirementId;
+  if (explicitId) {
+    const explicit = requirements.find((req) => req.id === explicitId);
+    if (explicit) return explicit;
+  }
+  const workerTrade = String(worker.trade || app?.trade || "").trim().toLowerCase();
+  const workerRoles = [worker.specialism, worker.grade, app?.specialism]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const roleMatches = requirements.filter((req) => {
+    const trade = String(req.trade || "").trim().toLowerCase();
+    const roles = [req.specialism, req.grade]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    return (!workerTrade || !trade || workerTrade === trade) && workerRoles.some((role) => roles.includes(role));
+  });
+  if (roleMatches.length === 1) return roleMatches[0];
+  if (requirements.length === 1) return requirements[0];
+  const tradeMatches = requirements.filter(
+    (req) => workerTrade && String(req.trade || "").trim().toLowerCase() === workerTrade,
+  );
+  return tradeMatches.length === 1 ? tradeMatches[0] : null;
+}
+
+function companyProjectWorkerAgreement(worker, agreements) {
+  const workerName = String(worker?.name || "").trim().toLowerCase();
+  return agreements.find((agreement) => agreement.workerId === worker.id) ||
+    agreements.find(
+      (agreement) => workerName && String(agreement.terms?.workerName || "").trim().toLowerCase() === workerName,
+    ) || null;
+}
+
+function companyProjectWorkerAgreementState(worker, agreements) {
+  const agreement = companyProjectWorkerAgreement(worker, agreements);
+  if (!agreement) return { label: "Not generated", detail: "No agreement record", tone: "neutral" };
+  const meta = agreementStatusMeta(agreement);
+  if (meta.cls === "ok") return { label: "Complete", detail: meta.label, tone: "healthy" };
+  if (meta.cls === "bad") return { label: "Review required", detail: meta.label, tone: "danger" };
+  return { label: "Pending", detail: meta.label, tone: "warning" };
+}
+
+function companyProjectWorkerDocumentState(worker, job) {
+  const docs = workerDocumentsFor(worker);
   const documentWarnings = requiredDocumentWarnings(worker, job);
-  const documentWarningCount =
-    (documentWarnings.missing || []).length + (documentWarnings.expired || []).length;
+  const missing = (documentWarnings.missing || []).length;
+  const expired = (documentWarnings.expired || []).length;
+  if (missing || expired) {
+    const detail = [missing ? `${missing} missing` : "", expired ? `${expired} expired` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    return { label: "Review required", detail, tone: "danger" };
+  }
+  if (docs.length) {
+    return {
+      label: "Ready",
+      detail: `${docs.length} document${docs.length === 1 ? "" : "s"}`,
+      tone: "healthy",
+    };
+  }
+  return { label: "No records", detail: "No documents recorded", tone: "neutral" };
+}
+
+function companyProjectWorkerAttendanceState(worker, job) {
+  const todayState = attendanceStatusForWorker(worker, job);
+  const status = todayState.status;
+  if (todayState.reportingLate && !todayState.signedIn) {
+    const eta = todayState.lateReport?.estimatedArrivalTime || todayState.lateReport?.expectedArrival || "";
+    return { label: "Reported late", detail: eta ? `ETA ${eta}` : "Arrival pending", tone: "warning" };
+  }
+  if (status === "noShow") return { label: "No show", detail: "Attendance requires review", tone: "danger" };
+  if (status === "late") {
+    return {
+      label: "Late",
+      detail: todayState.rec?.checkInTime ? `Signed in ${companyProjectAttendanceTime(todayState.rec.checkInTime)}` : "Recorded late",
+      tone: "warning",
+    };
+  }
+  if (todayState.signedIn) {
+    return {
+      label: ATT_CFG[status]?.label || "Signed in",
+      detail: todayState.rec?.checkInTime ? companyProjectAttendanceTime(todayState.rec.checkInTime) : "Attendance recorded",
+      tone: "healthy",
+    };
+  }
+  if (todayState.rec || status) {
+    return {
+      label: ATT_CFG[status]?.label || status || "Recorded",
+      detail: "Attendance recorded",
+      tone: ["sentHome", "reportedIssue"].includes(status) ? "warning" : "neutral",
+    };
+  }
+  return isProjectScheduledToday(job)
+    ? { label: "Expected", detail: `Start ${jobExpectedStartTime(job)}`, tone: "neutral" }
+    : { label: "Not due", detail: "No attendance expected today", tone: "neutral" };
+}
+
+function companyProjectRosterStateHTML(state, label) {
+  return `<div class="company-project-roster-status is-${state.tone}" data-label="${escapeHtml(label)}">
+    <strong>${escapeHtml(state.label)}</strong>
+    <span>${escapeHtml(state.detail)}</span>
+  </div>`;
+}
+
+function companyProjectWorkerRowHTML(worker, job, summary, agreements = companyProjectAgreementsForJob(job)) {
+  const requirement = companyProjectWorkerRequirement(worker, summary);
+  const requirementLabel = requirement
+    ? companyProjectDirectoryRequirementDetail(requirement, job)
+    : worker.specialism || worker.grade || job.specialism || job.trade || "Project assignment";
+  const identityParts = [];
+  [worker.trade, worker.specialism, worker.grade].forEach((value) => {
+    const text = String(value || "").trim();
+    if (text && !identityParts.some((part) => part.toLowerCase() === text.toLowerCase())) identityParts.push(text);
+  });
+  const attendanceState = companyProjectWorkerAttendanceState(worker, job);
+  const documentState = companyProjectWorkerDocumentState(worker, job);
+  const agreementState = companyProjectWorkerAgreementState(worker, agreements);
   const assignmentStatus = job.completed || job.completedAt
     ? "Completed"
     : job.bookingStatus === "confirmed" || job.bookingActive
       ? "Active"
       : "Assigned";
+  const startDate = jobStartDateOnly(job);
+  const startLabel = startDate
+    ? `${dateOnlyMs(startDate) > dateOnlyMs(todayDateStr()) ? "Starts" : "Started"} ${formatDateOnly(startDate)}`
+    : "Start date TBC";
   return `<article class="company-project-roster-row">
     <div class="company-project-roster-worker">
       <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
       <div>
-        <button type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">${escapeHtml(worker.name)}</button>
-        <span>${escapeHtml(worker.trade || job.trade || "Trade not set")}${worker.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</span>
+        <strong>${escapeHtml(worker.name)}</strong>
+        <span>${escapeHtml(identityParts.join(" · ") || "Role not set")}</span>
       </div>
     </div>
-    <div class="company-project-roster-facts">
-      <strong>${escapeHtml(assignmentStatus)}</strong>
-      <span>Starts ${jobStartDateOnly(job) ? formatDateOnly(jobStartDateOnly(job)) : "TBC"}</span>
-      <span>${planned ? `Absence ${formatDateOnly(planned.startDate)}` : "No upcoming absence"}</span>
+    <div class="company-project-roster-assignment" data-label="Assignment">
+      <strong>${escapeHtml(requirementLabel)}</strong>
+      <span>${escapeHtml(assignmentStatus)} · ${escapeHtml(startLabel)}</span>
     </div>
-    <div class="company-project-roster-facts">
-      <strong>${escapeHtml(signInLabel)}</strong>
-      <span>${escapeHtml(rating.reliabilityRating)} reliability · ${escapeHtml(rating.punctualityRating)} punctuality</span>
-      <span>${docs.length} document${docs.length === 1 ? "" : "s"}${documentWarningCount ? ` · ${documentWarningCount} requiring attention` : ""}</span>
-    </div>
+    ${companyProjectRosterStateHTML(attendanceState, "Today")}
+    ${companyProjectRosterStateHTML(documentState, "Documents")}
+    ${companyProjectRosterStateHTML(agreementState, "Agreement")}
     <div class="company-project-roster-actions">
-      <button class="company-project-inline-action" type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">View profile &rarr;</button>
+      <button class="company-project-inline-action" type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">View worker &rarr;</button>
       <details class="company-project-row-menu">
         <summary aria-label="More actions for ${escapeHtml(worker.name)}">More</summary>
         <div>
