@@ -16889,8 +16889,10 @@ button svg,
 
 .company-project-workforce-empty {
   align-items: start;
+  border-top: 0;
   display: grid;
   gap: 4px;
+  padding: 0;
 }
 
 .company-project-workforce-empty span {
