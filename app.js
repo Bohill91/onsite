@@ -7440,6 +7440,7 @@ function openLabourRequestPage({ focus = true } = {}) {
   formWrap.classList.remove("hidden");
   switchTab("request-labour");
   updateRequestLabourDatePill();
+  enterJobWizardMode({ reset: true });
   prepareLabourRequestForm({ focus });
 }
 
@@ -7456,6 +7457,7 @@ function openLabourRequestWorkflow() {
     return;
   }
   body.appendChild(formWrap);
+  exitJobWizardMode();
   formWrap.classList.remove("hidden");
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
@@ -7629,6 +7631,159 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && modal && !modal.classList.contains("hidden")) {
     closeLabourRequestWorkflow();
   }
+});
+
+// ─── Request Labour Wizard shell (Phase A) ────────────────
+// Wizard mode is explicit UI state: it is entered only while #formJob is
+// mounted in the company Request Labour page and exited whenever the form
+// moves to the legacy modal, so the modal keeps its native validation and
+// submission behaviour untouched. The COMPANY wizard cannot submit in
+// Phase A — see the capture-phase submit guard below.
+const JOB_WIZARD_STEPS = [
+  "Project",
+  "Labour",
+  "Schedule & Pay",
+  "Site & Attendance",
+  "Pre-start",
+  "Review",
+];
+let jobWizardActive = false;
+let jobWizardStep = 1;
+let jobWizardCompleted = new Set();
+
+function enterJobWizardMode({ reset = false } = {}) {
+  const formWrap = document.getElementById("formJob");
+  if (!formWrap || !jobForm) return;
+  const wasActive = jobWizardActive;
+  jobWizardActive = true;
+  formWrap.classList.add("jw-wizard-mode");
+  // Context-specific novalidate: only while the form operates as the
+  // company wizard. Removed again in exitJobWizardMode().
+  jobForm.setAttribute("novalidate", "");
+  if (reset || !wasActive) {
+    jobWizardStep = 1;
+    jobWizardCompleted = new Set();
+  }
+  goToJobWizardStep(jobWizardStep, { scroll: false });
+}
+
+function exitJobWizardMode() {
+  jobWizardActive = false;
+  document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
+  jobForm?.removeAttribute("novalidate");
+}
+
+function jobWizardStepNavigable(step) {
+  if (step < 1 || step > JOB_WIZARD_STEPS.length) return false;
+  if (step === jobWizardStep) return true;
+  if (jobWizardCompleted.has(step)) return true;
+  // The first not-yet-completed step is reachable; later ones are not.
+  for (let s = 1; s < step; s++) {
+    if (!jobWizardCompleted.has(s)) return false;
+  }
+  return true;
+}
+
+function renderJobWizardChrome() {
+  document.querySelectorAll("#formJob .jw-step").forEach((el) => {
+    el.classList.toggle(
+      "jw-step-active",
+      Number(el.dataset.wizardStep) === jobWizardStep,
+    );
+  });
+  document.querySelectorAll("[data-wizard-goto]").forEach((btn) => {
+    const step = Number(btn.dataset.wizardGoto);
+    const isCurrent = step === jobWizardStep;
+    btn.classList.toggle("is-current", isCurrent);
+    btn.classList.toggle("is-complete", jobWizardCompleted.has(step) && !isCurrent);
+    btn.disabled = !jobWizardStepNavigable(step);
+    if (isCurrent) btn.setAttribute("aria-current", "step");
+    else btn.removeAttribute("aria-current");
+  });
+  const progress = document.getElementById("jobWizardProgress");
+  if (progress) {
+    progress.innerHTML = `Step <strong>${jobWizardStep}</strong> of ${JOB_WIZARD_STEPS.length} — ${escapeHtml(JOB_WIZARD_STEPS[jobWizardStep - 1] || "")}`;
+  }
+  document
+    .getElementById("jobWizardBack")
+    ?.classList.toggle("hidden", jobWizardStep === 1);
+  document
+    .getElementById("jobWizardContinue")
+    ?.classList.toggle("hidden", jobWizardStep === JOB_WIZARD_STEPS.length);
+}
+
+function goToJobWizardStep(step, { scroll = true } = {}) {
+  jobWizardStep = Math.min(Math.max(step, 1), JOB_WIZARD_STEPS.length);
+  renderJobWizardChrome();
+  // Step 4 hosts the persistent #jobPickerMap — re-run the self-guarded
+  // initPickerMap() so Leaflet sizes correctly each time it becomes visible.
+  if (jobWizardStep === 4) requestAnimationFrame(() => initPickerMap());
+  if (scroll) scrollAppToTop();
+}
+
+// Per-step validation: native constraint checks on the visible step's
+// controls only. Required-state decisions made elsewhere (e.g.
+// syncTradeReqBuilderState, updateAssignmentTypeForm) are read, never
+// overwritten. Phase C2 will layer full business validation on top.
+function validateJobWizardStep(step) {
+  const container = document.querySelector(
+    `#formJob .jw-step[data-wizard-step="${step}"]`,
+  );
+  if (!container) return true;
+  const controls = container.querySelectorAll("input, select, textarea");
+  for (const el of controls) {
+    if (el.disabled || !el.willValidate) continue;
+    if (el.closest(".hidden")) continue; // collapsed conditional sections
+    if (!el.checkValidity()) {
+      el.reportValidity();
+      return false;
+    }
+  }
+  return true;
+}
+
+document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
+  if (!jobWizardActive) return;
+  if (!validateJobWizardStep(jobWizardStep)) return;
+  jobWizardCompleted.add(jobWizardStep);
+  goToJobWizardStep(jobWizardStep + 1);
+});
+
+document.getElementById("jobWizardBack")?.addEventListener("click", () => {
+  if (!jobWizardActive) return;
+  goToJobWizardStep(jobWizardStep - 1);
+});
+
+document.querySelectorAll("[data-wizard-goto]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (!jobWizardActive) return;
+    const step = Number(btn.dataset.wizardGoto);
+    if (step === jobWizardStep || !jobWizardStepNavigable(step)) return;
+    goToJobWizardStep(step);
+  });
+});
+
+// Phase A safety: no company-wizard submission path. This capture-phase
+// listener on document fires before any of #jobForm's own submit listeners
+// (restoreFirstTradeRequirement and the main handler keep their existing
+// order for the modal flow, which is unaffected).
+document.addEventListener(
+  "submit",
+  (event) => {
+    if (!jobWizardActive || event.target !== jobForm) return;
+    event.preventDefault();
+    event.stopPropagation();
+  },
+  true,
+);
+
+// Block Enter-key implicit submission while in wizard mode.
+jobForm?.addEventListener("keydown", (event) => {
+  if (!jobWizardActive || event.key !== "Enter") return;
+  const target = event.target;
+  if (target instanceof HTMLTextAreaElement) return;
+  if (target instanceof HTMLButtonElement) return;
+  event.preventDefault();
 });
 
 let pendingTradeRequirements = [];
@@ -18650,6 +18805,7 @@ function renderCompanyRequestLabourPage(user) {
   updateRequestLabourDatePill();
   body.appendChild(formWrap);
   formWrap.classList.remove("hidden");
+  enterJobWizardMode();
   renderJobPreferredWorkerChoices(user);
   syncTradeReqBuilderState();
   updateAssignmentTypeForm();

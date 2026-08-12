@@ -19267,3 +19267,146 @@ button svg,
     padding-right: 0;
   }
 }
+
+/* ─── Request Labour Wizard shell (Phase A) ─────────────── */
+/* Wizard chrome only appears while #formJob is in company wizard mode; the
+   legacy modal keeps the single-page layout untouched. */
+.jw-wizard-stepper,
+.jw-wizard-progress,
+.jw-wizard-nav {
+  display: none;
+}
+
+#formJob:not(.jw-wizard-mode) .jw-step--placeholder {
+  display: none;
+}
+
+.jw-wizard-mode .jw-step {
+  display: none;
+}
+
+.jw-wizard-mode .jw-step.jw-step-active {
+  display: block;
+}
+
+.jw-wizard-mode .jw-submit {
+  display: none !important;
+}
+
+.jw-wizard-mode .jw-wizard-stepper {
+  align-items: flex-start;
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+.jw-wizard-step {
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 2px;
+}
+
+.jw-wizard-step:disabled {
+  cursor: default;
+}
+
+.jw-wizard-dot {
+  align-items: center;
+  background: var(--surface-3);
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  color: var(--ink-3);
+  display: flex;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  transition: all var(--motion-fast) ease;
+  width: 30px;
+}
+
+.jw-wizard-step-label {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.jw-wizard-step.is-current .jw-wizard-dot {
+  background: var(--orange);
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2);
+  color: #fff;
+}
+
+.jw-wizard-step.is-current .jw-wizard-step-label {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.jw-wizard-step.is-complete .jw-wizard-dot {
+  background: var(--orange-light);
+  border-color: var(--orange);
+  color: var(--orange-dark);
+}
+
+.jw-wizard-step.is-complete .jw-wizard-step-label {
+  color: var(--ink-2);
+}
+
+.jw-wizard-step:not(:disabled):not(.is-current):hover .jw-wizard-dot {
+  border-color: var(--orange-muted);
+}
+
+.jw-wizard-mode .jw-wizard-progress {
+  color: var(--ink-3);
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.jw-wizard-mode .jw-wizard-progress strong {
+  color: var(--orange);
+  font-weight: 800;
+}
+
+.jw-wizard-mode .jw-wizard-nav {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.jw-wizard-nav .jw-wizard-continue {
+  margin-left: auto;
+  min-width: 140px;
+}
+
+.jw-wizard-nav .jw-wizard-back.hidden,
+.jw-wizard-nav .jw-wizard-continue.hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .jw-wizard-step-label {
+    display: none;
+  }
+
+  .jw-wizard-mode .jw-wizard-stepper {
+    gap: 0;
+  }
+
+  .jw-wizard-dot {
+    height: 26px;
+    width: 26px;
+  }
+}
