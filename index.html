@@ -823,13 +823,13 @@
 
               <div class="jw-step" data-wizard-step="1">
               <!-- ── PROJECT ─────────────────────────────────── -->
-              <section class="jw-card">
-                <header class="jw-card-head">
+              <section class="jw-card jw-project-step-card">
+                <header class="jw-card-head jw-project-step-head">
                   <p class="jw-kicker">Project</p>
-                  <h3 class="jw-card-title">Project Details</h3>
-                  <p class="jw-card-sub">Reference, assignment type and location for this labour request.</p>
+                  <h3 class="jw-card-title">Project details</h3>
+                  <p class="jw-card-sub">Add the core project information used to identify this labour request.</p>
                 </header>
-                <div class="jw-grid">
+                <div class="jw-grid jw-project-step-grid">
                   <label class="field-label">
                     Job Number *
                     <input id="jobNumber" type="text" placeholder="e.g. HS2-001" required />
@@ -847,7 +847,7 @@
                   </label>
                   <label class="field-label">
                     Location *
-                    <input id="jobLocation" list="locationOptions" type="text" required placeholder="Start typing e.g. Manchester" />
+                    <input id="jobLocation" list="locationOptions" type="text" required placeholder="Start typing a town, city or area" />
                     <datalist id="locationOptions"></datalist>
                   </label>
                 </div>

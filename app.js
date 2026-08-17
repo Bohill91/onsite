@@ -7702,7 +7702,22 @@ function renderJobWizardChrome() {
   });
   const progress = document.getElementById("jobWizardProgress");
   if (progress) {
-    progress.innerHTML = `Step <strong>${jobWizardStep}</strong> of ${JOB_WIZARD_STEPS.length} — ${escapeHtml(JOB_WIZARD_STEPS[jobWizardStep - 1] || "")}`;
+    const stepLabel = escapeHtml(JOB_WIZARD_STEPS[jobWizardStep - 1] || "");
+    progress.innerHTML = `
+      <span class="jw-wizard-progress-copy">
+        <span class="jw-wizard-progress-count">Step ${jobWizardStep} of ${JOB_WIZARD_STEPS.length}</span>
+        <strong class="jw-wizard-progress-label">${stepLabel}</strong>
+      </span>
+      <span class="jw-wizard-progress-track" aria-hidden="true"><span></span></span>
+    `;
+    progress.style.setProperty(
+      "--jw-wizard-progress",
+      `${(jobWizardStep / JOB_WIZARD_STEPS.length) * 100}%`,
+    );
+    progress.setAttribute(
+      "aria-label",
+      `Step ${jobWizardStep} of ${JOB_WIZARD_STEPS.length}: ${JOB_WIZARD_STEPS[jobWizardStep - 1] || ""}`,
+    );
   }
   document
     .getElementById("jobWizardBack")

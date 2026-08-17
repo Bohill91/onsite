@@ -19312,8 +19312,10 @@ button svg,
 
 .jw-wizard-mode .jw-wizard-stepper {
   align-items: flex-start;
+  border-bottom: 1px solid var(--card-divider);
   display: flex;
   gap: 2px;
+  padding: 4px 0 20px;
   width: 100%;
 }
 
@@ -19328,40 +19330,57 @@ button svg,
   gap: 6px;
   min-width: 0;
   padding: 4px 2px;
+  position: relative;
+  transform: none;
 }
 
 .jw-wizard-step:disabled {
   cursor: default;
 }
 
+.jw-wizard-step:not(:last-child)::after {
+  background: var(--card-divider);
+  content: "";
+  height: 1px;
+  left: calc(50% + 17px);
+  pointer-events: none;
+  position: absolute;
+  right: calc(-50% + 17px);
+  top: 19px;
+}
+
 .jw-wizard-dot {
   align-items: center;
-  background: var(--surface-3);
-  border: 2px solid var(--border);
+  background: var(--surface-2);
+  border: 1px solid var(--card-border);
   border-radius: 50%;
   color: var(--ink-3);
   display: flex;
   flex-shrink: 0;
   font-size: 0.75rem;
-  font-weight: 800;
-  height: 30px;
+  font-weight: 700;
+  height: 28px;
   justify-content: center;
-  transition: all var(--motion-fast) ease;
-  width: 30px;
+  position: relative;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+  width: 28px;
+  z-index: 1;
 }
 
 .jw-wizard-step-label {
   color: var(--ink-3);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
   text-align: center;
 }
 
 .jw-wizard-step.is-current .jw-wizard-dot {
   background: var(--orange);
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2);
   color: #fff;
 }
 
@@ -19371,9 +19390,9 @@ button svg,
 }
 
 .jw-wizard-step.is-complete .jw-wizard-dot {
-  background: var(--orange-light);
+  background: var(--surface);
   border-color: var(--orange);
-  color: var(--orange-dark);
+  color: var(--orange);
 }
 
 .jw-wizard-step.is-complete .jw-wizard-step-label {
@@ -19381,31 +19400,67 @@ button svg,
 }
 
 .jw-wizard-step:not(:disabled):not(.is-current):hover .jw-wizard-dot {
-  border-color: var(--orange-muted);
+  border-color: var(--orange);
 }
 
 .jw-wizard-mode .jw-wizard-progress {
-  color: var(--ink-3);
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
+  display: none;
   margin: 0;
 }
 
-.jw-wizard-mode .jw-wizard-progress strong {
-  color: var(--orange);
-  font-weight: 800;
+#formJob.jw-wizard-mode .jw-project-step-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+  padding: 0;
+}
+
+#formJob.jw-wizard-mode .jw-project-step-card:hover {
+  border-color: transparent;
+  box-shadow: none;
+  outline-color: transparent;
+  transform: none;
+}
+
+#formJob.jw-wizard-mode .jw-project-step-head {
+  gap: 4px;
+  padding-bottom: 16px;
+}
+
+#formJob.jw-wizard-mode .jw-project-step-grid {
+  column-gap: 20px;
+  row-gap: 16px;
+}
+
+#formJob.jw-wizard-mode .jw-project-step-grid .field-label {
+  color: var(--ink-2);
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  gap: 8px;
+  letter-spacing: 0;
+}
+
+#formJob.jw-wizard-mode .jw-project-step-grid input,
+#formJob.jw-wizard-mode .jw-project-step-grid select {
+  background-color: var(--surface);
+  border-color: var(--card-border);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
 }
 
 .jw-wizard-mode .jw-wizard-nav {
+  border-top: 1px solid var(--card-divider);
   display: flex;
   gap: 12px;
   justify-content: space-between;
+  padding-top: 20px;
 }
 
 .jw-wizard-nav .jw-wizard-continue {
   margin-left: auto;
-  min-width: 140px;
+  min-width: 148px;
 }
 
 .jw-wizard-nav .jw-wizard-back.hidden,
@@ -19414,16 +19469,68 @@ button svg,
 }
 
 @media (max-width: 640px) {
-  .jw-wizard-step-label {
+  .jw-wizard-mode .jw-wizard-stepper {
     display: none;
   }
 
-  .jw-wizard-mode .jw-wizard-stepper {
-    gap: 0;
+  .jw-wizard-mode .jw-wizard-progress {
+    display: grid;
+    gap: 10px;
+    padding-bottom: 16px;
   }
 
-  .jw-wizard-dot {
-    height: 26px;
-    width: 26px;
+  .jw-wizard-progress-copy {
+    align-items: flex-end;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .jw-wizard-progress-count {
+    color: var(--ink-3);
+    font-size: var(--ui-font-xs);
+    font-weight: var(--ui-weight-semibold);
+  }
+
+  .jw-wizard-progress-label {
+    color: var(--ink);
+    font-size: var(--ui-font-sm);
+    font-weight: var(--ui-weight-bold);
+  }
+
+  .jw-wizard-progress-track {
+    background: var(--surface-3);
+    border-radius: var(--radius-pill);
+    display: block;
+    height: 3px;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .jw-wizard-progress-track > span {
+    background: var(--orange);
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    transition: width 180ms ease;
+    width: var(--jw-wizard-progress, 0%);
+  }
+
+  #formJob.jw-wizard-mode .jw-project-step-head {
+    padding-bottom: 14px;
+  }
+
+  #formJob.jw-wizard-mode .jw-project-step-grid {
+    gap: 14px;
+  }
+
+  .jw-wizard-mode .jw-wizard-nav {
+    padding-top: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jw-wizard-dot,
+  .jw-wizard-progress-track > span {
+    transition: none;
   }
 }
