@@ -1179,81 +1179,151 @@
               </div>
 
               <div class="jw-step" data-wizard-step="4">
-              <!-- ── SITE INFORMATION ────────────────────────── -->
-              <section class="jw-card">
-                <header class="jw-card-head">
-                  <p class="jw-kicker">Site Information</p>
-                  <h3 class="jw-card-title">Arrival &amp; Access</h3>
-                  <p class="jw-card-sub">Exact arrival point and site instructions for your workers.</p>
+              <!-- ── SITE & ATTENDANCE ───────────────────────── -->
+              <section class="jw-card jw-site-step-card">
+                <header class="jw-card-head jw-site-step-head">
+                  <div class="jw-site-step-intro">
+                    <p class="jw-kicker">Site &amp; Attendance</p>
+                    <h3 class="jw-card-title">Site &amp; attendance</h3>
+                    <p class="jw-card-sub">Add the arrival details workers need and confirm how attendance will be managed.</p>
+                  </div>
+                  <div class="jw-site-legacy-head">
+                    <p class="jw-kicker">Site Information</p>
+                    <h3 class="jw-card-title">Arrival &amp; Access</h3>
+                    <p class="jw-card-sub">Exact arrival point, site instructions and attendance responsibility for your workers.</p>
+                  </div>
                 </header>
-                <label class="field-label">
-                  Site Address *
-                  <div class="geocode-row">
-                    <input id="jobSiteAddress" type="text" required placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" />
-                    <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
+
+                <section class="jw-site-surface jw-site-access-surface" aria-labelledby="jobSiteAccessTitle">
+                  <div class="jw-site-section-head">
+                    <p class="jw-subsection-kicker">Site access &amp; arrival</p>
+                    <h4 id="jobSiteAccessTitle">Site access &amp; arrival</h4>
+                    <p>Give workers the exact location, site contact and instructions they need for their first shift.</p>
                   </div>
-                </label>
-                <div class="field-label">
-                  Exact Entrance Pin *
-                  <p class="field-hint">Click the map to place the precise worker arrival point.</p>
-                  <div id="jobPickerMap" class="picker-map"></div>
-                  <div id="pinCoordsDisplay" class="pin-coords-display hidden">
-                    Pin set: <span id="pinCoordsText"></span>
+
+                  <div class="jw-site-section-content">
+                    <label class="field-label">
+                      Site Address *
+                      <div class="geocode-row">
+                        <input id="jobSiteAddress" type="text" required placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" />
+                        <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
+                      </div>
+                    </label>
+                    <div class="jw-grid jw-site-fields-grid">
+                      <label class="field-label">
+                        Site Contact Name *
+                        <input id="jobContactName" type="text" required placeholder="e.g. John Smith" />
+                      </label>
+                      <label class="field-label">
+                        Site Contact Number *
+                        <input id="jobContactPhone" type="tel" required placeholder="e.g. 07700 900123" />
+                      </label>
+                      <label class="field-label jw-span-2">
+                        Arrival Instructions
+                        <textarea id="jobArrivalInstructions" rows="2" placeholder="e.g. Enter via Gate 3 and report to the site office."></textarea>
+                      </label>
+                      <label class="field-label">
+                        Parking Information
+                        <input id="jobParking" type="text" placeholder="e.g. Free parking on site, enter via main gate" />
+                      </label>
+                      <label class="field-label">
+                        PPE Requirements
+                        <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis, safety boots" />
+                      </label>
+                      <label class="field-label jw-span-2">
+                        Additional Notes for Workers
+                        <textarea id="jobGateAccess" rows="2" placeholder="e.g. Fuel cards, parking expenses, required tools or site-specific instructions."></textarea>
+                        <p class="form-helper">Add anything workers should know before starting, such as fuel, parking expenses, tools, welfare, access details or site-specific instructions.</p>
+                      </label>
+                    </div>
                   </div>
-                </div>
-                <div class="jw-grid">
-                  <label class="field-label">
-                    Site Contact Name *
-                    <input id="jobContactName" type="text" required placeholder="e.g. John Smith" />
-                  </label>
-                  <label class="field-label">
-                    Site Contact Number *
-                    <input id="jobContactPhone" type="tel" required placeholder="e.g. 07700 900123" />
-                  </label>
-                  <label class="field-label jw-span-2">
-                    Arrival Instructions
-                    <textarea id="jobArrivalInstructions" rows="2" placeholder="e.g. Enter via Gate 3 and report to the site office."></textarea>
-                  </label>
-                  <label class="field-label">
-                    Parking Information
-                    <input id="jobParking" type="text" placeholder="e.g. Free parking on site, enter via main gate" />
-                  </label>
-                  <label class="field-label">
-                    PPE Requirements
-                    <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis, safety boots" />
-                  </label>
-                  <label class="field-label jw-span-2">
-                    Additional Notes for Workers
-                    <textarea id="jobGateAccess" rows="2" placeholder="e.g. Fuel cards, parking expenses, required tools or site-specific instructions."></textarea>
-                    <p class="form-helper">Add anything workers should know before starting, such as fuel, parking expenses, tools, welfare, access details or site-specific instructions.</p>
-                  </label>
-                </div>
-                <div class="field-label">
-                  Site Photos
-                  <p class="field-hint">Upload optional photos to help workers find the correct entrance, welfare facilities and parking.</p>
-                  <div class="site-photo-grid">
-                    <label class="photo-card" for="photoEntrance">
-                      <input id="photoEntrance" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvEntrance" class="photo-preview" alt="Site entrance preview" />
-                      <span id="phEntrance" class="photo-placeholder">Site entrance</span>
+                </section>
+
+                <section class="jw-site-surface jw-arrival-references-surface" aria-labelledby="jobArrivalReferencesTitle">
+                  <div class="jw-site-section-head">
+                    <p class="jw-subsection-kicker">Arrival references</p>
+                    <h4 id="jobArrivalReferencesTitle">Arrival references</h4>
+                    <p>Pin the exact entrance and add optional photos to help workers identify the correct arrival point.</p>
+                  </div>
+
+                  <div class="jw-arrival-reference-group">
+                    <div class="jw-site-subsection-head">
+                      <h5>Exact entrance pin *</h5>
+                      <p>Click the map to place the precise worker arrival point.</p>
+                    </div>
+                    <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for selecting the exact worker entrance" aria-describedby="jobEntrancePinMessage"></div>
+                    <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
+                      <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
+                      <span class="jw-pin-status-copy">
+                        <strong>Entrance pin set</strong>
+                        <span id="pinCoordsText"></span>
+                      </span>
+                    </div>
+                    <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
+                  </div>
+
+                  <div class="jw-arrival-reference-group jw-site-photos-group">
+                    <div class="jw-site-subsection-head">
+                      <h5>Site photos <span>Optional</span></h5>
+                      <p>Optional photos can help workers find the entrance, welfare and parking areas.</p>
+                    </div>
+                    <div class="site-photo-grid">
+                      <label class="photo-card" for="photoEntrance" tabindex="0" role="button" aria-label="Add or replace site entrance photo">
+                        <input id="photoEntrance" class="photo-file-input" type="file" accept="image/*" />
+                        <img id="prvEntrance" class="photo-preview" alt="Site entrance preview" />
+                        <span id="phEntrance" class="photo-placeholder">Site entrance</span>
+                      </label>
+                      <label class="photo-card" for="photoWelfare" tabindex="0" role="button" aria-label="Add or replace welfare facilities photo">
+                        <input id="photoWelfare" class="photo-file-input" type="file" accept="image/*" />
+                        <img id="prvWelfare" class="photo-preview" alt="Welfare area preview" />
+                        <span id="phWelfare" class="photo-placeholder">Welfare facilities</span>
+                      </label>
+                      <label class="photo-card" for="photoGate" tabindex="0" role="button" aria-label="Add or replace parking photo">
+                        <input id="photoGate" class="photo-file-input" type="file" accept="image/*" />
+                        <img id="prvGate" class="photo-preview" alt="Parking preview" />
+                        <span id="phGate" class="photo-placeholder">Parking</span>
+                      </label>
+                      <label class="photo-card" for="photoOther" tabindex="0" role="button" aria-label="Add or replace additional site photo">
+                        <input id="photoOther" class="photo-file-input" type="file" accept="image/*" />
+                        <img id="prvOther" class="photo-preview" alt="Other site photo preview" />
+                        <span id="phOther" class="photo-placeholder">Additional site photo</span>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="jw-site-surface jw-attendance-setup-surface" aria-labelledby="jobAttendanceSetupTitle">
+                  <div class="jw-site-section-head">
+                    <p class="jw-subsection-kicker">Attendance setup</p>
+                    <h4 id="jobAttendanceSetupTitle">Attendance setup</h4>
+                    <p>Confirm who will be responsible for worker sign-in and attendance on this project.</p>
+                  </div>
+                  <div class="jw-attendance-default">
+                    <span class="jw-attendance-default-mark" aria-hidden="true"></span>
+                    <div>
+                      <strong>Company-managed by default</strong>
+                      <span>Add a site manager or supervisor below only when they will manage attendance.</span>
+                    </div>
+                  </div>
+                  <div class="jw-site-subsection-head jw-attendance-manager-head">
+                    <h5>Attendance manager details <span>Optional</span></h5>
+                  </div>
+                  <div class="jw-grid jw-attendance-manager-grid">
+                    <label class="field-label">
+                      Attendance Manager Name
+                      <input id="attendanceManagerName" type="text" autocomplete="name" placeholder="e.g. Jane Taylor" />
                     </label>
-                    <label class="photo-card" for="photoWelfare">
-                      <input id="photoWelfare" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvWelfare" class="photo-preview" alt="Welfare area preview" />
-                      <span id="phWelfare" class="photo-placeholder">Welfare facilities</span>
+                    <label class="field-label">
+                      Attendance Manager Email
+                      <input id="attendanceManagerEmail" type="email" autocomplete="email" placeholder="e.g. jane@company.co.uk" />
                     </label>
-                    <label class="photo-card" for="photoGate">
-                      <input id="photoGate" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvGate" class="photo-preview" alt="Parking preview" />
-                      <span id="phGate" class="photo-placeholder">Parking</span>
-                    </label>
-                    <label class="photo-card" for="photoOther">
-                      <input id="photoOther" class="photo-file-input" type="file" accept="image/*" />
-                      <img id="prvOther" class="photo-preview" alt="Other site photo preview" />
-                      <span id="phOther" class="photo-placeholder">Additional site photo</span>
+                    <label class="field-label">
+                      Attendance Manager Phone
+                      <input id="attendanceManagerPhone" type="tel" autocomplete="tel" placeholder="e.g. 07700 900123" />
                     </label>
                   </div>
-                </div>
+                  <p class="jw-attendance-qr-note">A project sign-in QR will be available after the project is created.</p>
+                </section>
               </section>
               </div>
 

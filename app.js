@@ -7572,11 +7572,7 @@ function applyRepeatProjectToForm(job) {
   syncTradeReqBuilderState();
   requestAnimationFrame(() => {
     updateJobPhotoPreviews();
-    if (currentJobPin.lat !== null) {
-      document.querySelector("#pinCoordsDisplay")?.classList.remove("hidden");
-      const coords = document.querySelector("#pinCoordsText");
-      if (coords) coords.textContent = `${currentJobPin.lat.toFixed(5)}, ${currentJobPin.lng.toFixed(5)}`;
-    }
+    updatePinCoords();
     initPickerMap();
   });
   document.querySelector("#formJob .jw-form")?.insertAdjacentHTML("afterbegin", repeatProjectNoticeHTML(job));
@@ -7773,11 +7769,32 @@ function validateJobWizardStep(step) {
   return true;
 }
 
+function validateSiteAttendanceWizardStep() {
+  const map = document.getElementById("jobPickerMap");
+  const message = document.getElementById("jobEntrancePinMessage");
+  const hasEntrancePin =
+    currentJobPin?.lat != null &&
+    currentJobPin?.lng != null &&
+    Number.isFinite(Number(currentJobPin.lat)) &&
+    Number.isFinite(Number(currentJobPin.lng));
+
+  map?.setAttribute("aria-invalid", String(!hasEntrancePin));
+  if (message) {
+    message.textContent = hasEntrancePin
+      ? ""
+      : "Place the exact entrance pin before continuing.";
+    message.classList.toggle("hidden", hasEntrancePin);
+  }
+  if (!hasEntrancePin) map?.focus({ preventScroll: true });
+  return hasEntrancePin;
+}
+
 document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
   if (!jobWizardActive) return;
   if (jobWizardStep === 2 && !validateLabourWizardStepNavigation()) return;
   if (jobWizardStep === 3 && !validateSchedulePayWizardStep()) return;
   if (!validateJobWizardStep(jobWizardStep)) return;
+  if (jobWizardStep === 4 && !validateSiteAttendanceWizardStep()) return;
   jobWizardCompleted.add(jobWizardStep);
   goToJobWizardStep(jobWizardStep + 1);
 });
@@ -20286,10 +20303,16 @@ function compressImage(file) {
 }
 
 PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
-  document.getElementById(inputId)?.addEventListener("change", async (e) => {
+  const input = document.getElementById(inputId);
+  const card = input?.closest(".photo-card");
+  card?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    input.click();
+  });
+  input?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const card = e.target.closest(".photo-card");
     card?.classList.add("is-loading");
     try {
       const compressed = await compressImage(file);
@@ -20362,6 +20385,47 @@ let currentJobPin = { lat: null, lng: null };
 
 const siteMapModal = document.getElementById("siteMapModal");
 
+function createPickerPinIcon() {
+  return L.divIcon({
+    className: "",
+    html: `<div class="site-drop-pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+  });
+}
+
+function syncPickerMarkerToCurrentPin() {
+  if (!pickerMap) return;
+  const hasPin =
+    currentJobPin.lat != null &&
+    currentJobPin.lng != null &&
+    Number.isFinite(Number(currentJobPin.lat)) &&
+    Number.isFinite(Number(currentJobPin.lng));
+  if (!hasPin) {
+    pickerMarker?.remove();
+    pickerMarker = null;
+    return;
+  }
+
+  const latLng = L.latLng(Number(currentJobPin.lat), Number(currentJobPin.lng));
+  if (pickerMarker) {
+    pickerMarker.setLatLng(latLng);
+  } else {
+    pickerMarker = L.marker(latLng, {
+      icon: createPickerPinIcon(),
+      draggable: true,
+    }).addTo(pickerMap);
+    pickerMarker.on("dragend", (event) => {
+      const point = event.target.getLatLng();
+      currentJobPin = {
+        lat: parseFloat(point.lat.toFixed(6)),
+        lng: parseFloat(point.lng.toFixed(6)),
+      };
+      updatePinCoords();
+    });
+  }
+}
+
 // ── Toggle location section in job form ────────────────────
 document.getElementById("toggleSiteLocBtn")?.addEventListener("click", () => {
   const fields = document.getElementById("siteLocFields");
@@ -20406,6 +20470,13 @@ document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
 
 function initPickerMap() {
   if (pickerMap) {
+    syncPickerMarkerToCurrentPin();
+    if (currentJobPin.lat != null && currentJobPin.lng != null) {
+      pickerMap.setView(
+        [Number(currentJobPin.lat), Number(currentJobPin.lng)],
+        Math.max(pickerMap.getZoom(), 16),
+      );
+    }
     pickerMap.invalidateSize();
     return;
   }
@@ -20420,12 +20491,13 @@ function initPickerMap() {
     subdomains: "abcd",
   }).addTo(pickerMap);
 
-  const pinIcon = L.divIcon({
-    className: "",
-    html: `<div class="site-drop-pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-  });
+  if (currentJobPin.lat != null && currentJobPin.lng != null) {
+    pickerMap.setView(
+      [Number(currentJobPin.lat), Number(currentJobPin.lng)],
+      17,
+    );
+    syncPickerMarkerToCurrentPin();
+  }
 
   pickerMap.on("click", (e) => {
     const { lat, lng } = e.latlng;
@@ -20433,36 +20505,29 @@ function initPickerMap() {
       lat: parseFloat(lat.toFixed(6)),
       lng: parseFloat(lng.toFixed(6)),
     };
-    if (pickerMarker) {
-      pickerMarker.setLatLng(e.latlng);
-    } else {
-      pickerMarker = L.marker(e.latlng, {
-        icon: pinIcon,
-        draggable: true,
-      }).addTo(pickerMap);
-      pickerMarker.on("dragend", (ev) => {
-        const p = ev.target.getLatLng();
-        currentJobPin = {
-          lat: parseFloat(p.lat.toFixed(6)),
-          lng: parseFloat(p.lng.toFixed(6)),
-        };
-        updatePinCoords();
-      });
-    }
+    syncPickerMarkerToCurrentPin();
     updatePinCoords();
   });
-  
-setTimeout(() => {
-  pickerMap.invalidateSize();
-}, 300);}
+
+  setTimeout(() => {
+    pickerMap.invalidateSize();
+  }, 300);
+}
 
 function updatePinCoords() {
   const el = document.getElementById("pinCoordsDisplay");
   const txt = document.getElementById("pinCoordsText");
+  const map = document.getElementById("jobPickerMap");
+  const message = document.getElementById("jobEntrancePinMessage");
   if (!el || !txt) return;
   if (currentJobPin.lat !== null) {
     txt.textContent = `${currentJobPin.lat}, ${currentJobPin.lng}`;
     el.classList.remove("hidden");
+    map?.setAttribute("aria-invalid", "false");
+    if (message) {
+      message.textContent = "";
+      message.classList.add("hidden");
+    }
   } else {
     el.classList.add("hidden");
   }
