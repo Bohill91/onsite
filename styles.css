@@ -20530,6 +20530,353 @@ button svg,
   color: var(--ink);
 }
 
+#formJob:not(.jw-wizard-mode) .jw-step[data-wizard-step="5"] {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-prestart-step-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 20px;
+  outline: 0;
+  padding: 0;
+}
+
+#formJob.jw-wizard-mode .jw-prestart-step-card:hover {
+  border-color: transparent;
+  box-shadow: none;
+  outline-color: transparent;
+  transform: none;
+}
+
+#formJob.jw-wizard-mode .jw-prestart-step-head {
+  gap: 4px;
+  padding-bottom: 0;
+}
+
+.jw-prestart-setup {
+  border: 0;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.jw-prestart-setup > legend {
+  color: var(--ink-2);
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  line-height: 1.4;
+  padding: 0;
+}
+
+.jw-prestart-setup-options {
+  display: grid;
+  gap: 8px;
+}
+
+.jw-prestart-setup-option {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  padding: 12px 14px;
+  position: relative;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+
+.jw-prestart-setup-option > input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.jw-prestart-setup-mark {
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  height: 16px;
+  position: relative;
+  width: 16px;
+}
+
+.jw-prestart-setup-option:has(input:checked) {
+  background: var(--orange-light);
+  border-color: var(--orange);
+}
+
+.jw-prestart-setup-option:has(input:checked) .jw-prestart-setup-mark {
+  border-color: var(--orange);
+}
+
+.jw-prestart-setup-option:has(input:checked) .jw-prestart-setup-mark::after {
+  background: var(--orange);
+  border-radius: 50%;
+  content: "";
+  inset: 3px;
+  position: absolute;
+}
+
+.jw-prestart-setup-option:hover {
+  border-color: var(--orange);
+}
+
+.jw-prestart-setup-option:has(input:focus-visible) {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+
+.jw-prestart-setup-option > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-prestart-setup-option strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.jw-prestart-setup-option small {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.jw-prestart-validation {
+  background: var(--red-bg);
+  border-radius: var(--radius-xs);
+  color: var(--red-text);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin: -4px 0 0;
+  padding: 10px 12px;
+}
+
+.jw-prestart-validation.hidden,
+.jw-prestart-state-body:empty {
+  display: none;
+}
+
+.jw-prestart-state-body {
+  border-top: 1px solid var(--card-divider);
+  padding-top: 20px;
+}
+
+.jw-prestart-configured,
+.jw-prestart-requirement-list,
+.jw-prestart-requirement-group {
+  display: grid;
+  gap: 16px;
+}
+
+.jw-prestart-state-head {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.jw-prestart-state-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-prestart-state-head h4 {
+  color: var(--ink);
+  font-size: 0.94rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.jw-prestart-state-head p {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.jw-prestart-state-head .secondary-btn {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.jw-prestart-empty,
+.jw-prestart-message {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+}
+
+.jw-prestart-message.is-pending {
+  background: var(--amber-bg);
+}
+
+.jw-prestart-empty strong,
+.jw-prestart-message strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.jw-prestart-empty span,
+.jw-prestart-message span {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.jw-prestart-requirement-group + .jw-prestart-requirement-group {
+  border-top: 1px solid var(--card-divider);
+  padding-top: 16px;
+}
+
+.jw-prestart-requirement-group > h4 {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.jw-prestart-requirement-group > div {
+  display: grid;
+}
+
+.jw-prestart-requirement-row {
+  align-items: center;
+  border-bottom: 1px solid var(--card-divider);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 1.25fr) minmax(170px, 1fr) auto auto;
+  padding: 13px 0;
+}
+
+.jw-prestart-requirement-row:first-child {
+  padding-top: 0;
+}
+
+.jw-prestart-requirement-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.jw-prestart-requirement-main,
+.jw-prestart-requirement-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-prestart-requirement-main strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.jw-prestart-requirement-main span,
+.jw-prestart-requirement-meta span {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.jw-prestart-readiness {
+  border-radius: var(--radius-pill);
+  font-size: 0.67rem;
+  font-weight: 800;
+  line-height: 1.25;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.jw-prestart-readiness.is-ready {
+  background: var(--green-bg);
+  color: var(--green-text);
+}
+
+.jw-prestart-readiness.is-pending {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+}
+
+.jw-prestart-readiness.is-review {
+  background: var(--red-bg);
+  color: var(--red-text);
+}
+
+.jw-prestart-requirement-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.jw-prestart-requirement-actions button {
+  background: none;
+  border: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 750;
+  padding: 3px 0;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.jw-prestart-requirement-actions button:hover {
+  color: var(--orange-dark);
+}
+
+.jw-prestart-requirement-actions button:focus-visible {
+  border-radius: 2px;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  outline: 0;
+}
+
+.project-requirement-content-follow {
+  align-items: start;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.project-requirement-content-follow > span {
+  display: grid;
+  gap: 3px;
+}
+
+.project-requirement-content-follow strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.project-requirement-content-follow small {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
 .jw-requirement-guard-sheet {
   max-width: 520px;
   width: min(100%, 520px);
@@ -20748,6 +21095,33 @@ button svg,
   .jw-labour-section-head > button,
   .jw-phased-schedule-head button {
     width: 100%;
+  }
+
+  #formJob.jw-wizard-mode .jw-prestart-step-card {
+    gap: 16px;
+  }
+
+  .jw-prestart-state-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jw-prestart-state-head .secondary-btn {
+    width: 100%;
+  }
+
+  .jw-prestart-requirement-row {
+    align-items: start;
+    gap: 9px;
+    grid-template-columns: 1fr;
+  }
+
+  .jw-prestart-readiness {
+    justify-self: start;
+  }
+
+  .jw-prestart-requirement-actions {
+    justify-content: flex-start;
   }
 
   .jw-wizard-mode .jw-wizard-nav {

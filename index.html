@@ -1327,14 +1327,38 @@
               </section>
               </div>
 
-              <!-- ── PRE-START (Phase A placeholder) ─────────── -->
-              <div class="jw-step jw-step--placeholder" data-wizard-step="5">
-                <section class="jw-card">
-                  <header class="jw-card-head">
+              <!-- ── PRE-START ──────────────────────────────── -->
+              <div class="jw-step" data-wizard-step="5">
+                <section class="jw-card jw-prestart-step-card" aria-labelledby="jobPreStartTitle">
+                  <header class="jw-card-head jw-prestart-step-head">
                     <p class="jw-kicker">Pre-start</p>
-                    <h3 class="jw-card-title">Pre-start Requirements</h3>
-                    <p class="jw-card-sub">Pre-start setup will be configured here.</p>
+                    <h3 class="jw-card-title" id="jobPreStartTitle">Pre-start requirements</h3>
+                    <p class="jw-card-sub">Set what workers must read, watch, complete or sign before starting work.</p>
                   </header>
+
+                  <fieldset class="jw-prestart-setup" aria-describedby="jobPreStartValidation">
+                    <legend>How will pre-start requirements be handled?</legend>
+                    <div class="jw-prestart-setup-options">
+                      <label class="jw-prestart-setup-option">
+                        <input type="radio" name="jobPreStartSetupStatus" value="configured" />
+                        <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
+                        <span><strong>Configure requirements now</strong><small>Add inductions, documents, forms, external links or other requirements before creating the project.</small></span>
+                      </label>
+                      <label class="jw-prestart-setup-option">
+                        <input type="radio" name="jobPreStartSetupStatus" value="pending" />
+                        <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
+                        <span><strong>I’ll add requirements later</strong><small>Create the project now and finish its pre-start setup before workers are cleared to start.</small></span>
+                      </label>
+                      <label class="jw-prestart-setup-option">
+                        <input type="radio" name="jobPreStartSetupStatus" value="none" />
+                        <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
+                        <span><strong>No pre-start requirements</strong><small>This project does not require any pre-start actions for workers.</small></span>
+                      </label>
+                    </div>
+                  </fieldset>
+
+                  <p id="jobPreStartValidation" class="jw-prestart-validation hidden" role="alert"></p>
+                  <div id="jobPreStartStateBody" class="jw-prestart-state-body" aria-live="polite"></div>
                 </section>
               </div>
 
