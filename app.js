@@ -6374,11 +6374,10 @@ function renderJobPreferredWorkerChoices(user) {
           },
         )
         .join("")
-    : guidedEmptyStateHTML({
-        kicker: "Preferred Workers",
-        title: "No previous or preferred workers available",
-        body: "Workers you have previously used or marked as preferred will appear here so you can request them first.",
-      });
+    : `<div class="preferred-worker-empty-compact">
+        <strong>No preferred workers available yet.</strong>
+        <span>You can continue without selecting a preferred worker.</span>
+      </div>`;
 }
 
 document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
@@ -6392,11 +6391,10 @@ document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (
     const list = document.getElementById("jobPreferredWorkersList");
     list?.insertAdjacentHTML(
       "beforeend",
-      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty">${guidedEmptyStateHTML({
-        kicker: "Search",
-        title: "No workers match that search",
-        body: "Try a different name, trade or card number, or continue without selecting a preferred worker.",
-      })}</div>`,
+      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty-compact">
+        <strong>No workers match that search.</strong>
+        <span>Try a different name, trade or card number.</span>
+      </div>`,
     );
   }
 });
@@ -7538,6 +7536,8 @@ function applyRepeatProjectToForm(job) {
   const vehicleInput = document.querySelector(`input[name="jobVehicleArrangement"][value="${vehicle}"]`);
   if (vehicleInput) vehicleInput.checked = true;
   pendingTradeRequirements = cloneRepeatLabourRequirements(job);
+  activeTradeRequirementId = "";
+  tradeRequirementEditorOpen = !pendingTradeRequirements.length;
   clearTradeReqInputs();
   setInputValue("jobStart", "");
   setInputValue("jobEndDate", "");
@@ -7651,12 +7651,19 @@ let jobWizardActive = false;
 let jobWizardStep = 1;
 let jobWizardCompleted = new Set();
 
+function mountJobPricingBreakdown(mountId) {
+  const panel = document.getElementById("jobPricingBreakdown");
+  const mount = document.getElementById(mountId);
+  if (panel && mount && panel.parentElement !== mount) mount.appendChild(panel);
+}
+
 function enterJobWizardMode({ reset = false } = {}) {
   const formWrap = document.getElementById("formJob");
   if (!formWrap || !jobForm) return;
   const wasActive = jobWizardActive;
   jobWizardActive = true;
   formWrap.classList.add("jw-wizard-mode");
+  mountJobPricingBreakdown("jobPricingBreakdownWizardMount");
   // Context-specific novalidate: only while the form operates as the
   // company wizard. Removed again in exitJobWizardMode().
   jobForm.setAttribute("novalidate", "");
@@ -7670,6 +7677,7 @@ function enterJobWizardMode({ reset = false } = {}) {
 function exitJobWizardMode() {
   jobWizardActive = false;
   document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
+  mountJobPricingBreakdown("jobPricingBreakdownLegacyMount");
   jobForm?.removeAttribute("novalidate");
 }
 
@@ -7730,8 +7738,16 @@ function renderJobWizardChrome() {
 function goToJobWizardStep(step, { scroll = true } = {}) {
   jobWizardStep = Math.min(Math.max(step, 1), JOB_WIZARD_STEPS.length);
   renderJobWizardChrome();
+  if (jobWizardStep === 2) updateTradeRequirementEditorState();
+  else {
+    document.getElementById("formJob")?.classList.remove(
+      "jw-requirement-editor-active",
+      "jw-has-unsaved-requirement",
+    );
+  }
   // Step 4 hosts the persistent #jobPickerMap — re-run the self-guarded
   // initPickerMap() so Leaflet sizes correctly each time it becomes visible.
+  if (jobWizardStep === 3) renderJobPricingBreakdown();
   if (jobWizardStep === 4) requestAnimationFrame(() => initPickerMap());
   if (scroll) scrollAppToTop();
 }
@@ -7759,6 +7775,7 @@ function validateJobWizardStep(step) {
 
 document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
   if (!jobWizardActive) return;
+  if (jobWizardStep === 2 && !validateLabourWizardStepNavigation()) return;
   if (!validateJobWizardStep(jobWizardStep)) return;
   jobWizardCompleted.add(jobWizardStep);
   goToJobWizardStep(jobWizardStep + 1);
@@ -7766,7 +7783,7 @@ document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
 
 document.getElementById("jobWizardBack")?.addEventListener("click", () => {
   if (!jobWizardActive) return;
-  goToJobWizardStep(jobWizardStep - 1);
+  requestJobWizardNavigation(jobWizardStep - 1);
 });
 
 document.querySelectorAll("[data-wizard-goto]").forEach((btn) => {
@@ -7774,7 +7791,7 @@ document.querySelectorAll("[data-wizard-goto]").forEach((btn) => {
     if (!jobWizardActive) return;
     const step = Number(btn.dataset.wizardGoto);
     if (step === jobWizardStep || !jobWizardStepNavigable(step)) return;
-    goToJobWizardStep(step);
+    requestJobWizardNavigation(step);
   });
 });
 
@@ -7803,6 +7820,115 @@ jobForm?.addEventListener("keydown", (event) => {
 
 let pendingTradeRequirements = [];
 let pendingLabourSchedulePeriods = [];
+let activeTradeRequirementId = "";
+let tradeRequirementEditorOpen = true;
+let pendingJobWizardNavigationStep = null;
+
+function closeTradeRequirementGuard() {
+  pendingJobWizardNavigationStep = null;
+  hideWithMotion(document.getElementById("jobRequirementGuardModal"), null, {
+    remove: true,
+  });
+}
+
+function openTradeRequirementGuard(step) {
+  document.getElementById("jobRequirementGuardModal")?.remove();
+  pendingJobWizardNavigationStep = step;
+  const modal = document.createElement("div");
+  modal.id = "jobRequirementGuardModal";
+  modal.className = "modal-overlay";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "jobRequirementGuardTitle");
+  modal.innerHTML = `
+    <div class="dispute-sheet jw-requirement-guard-sheet">
+      <div class="dispute-sheet-header">
+        <div>
+          <h3 class="dispute-sheet-title" id="jobRequirementGuardTitle">Unsaved labour requirement</h3>
+        </div>
+        <button class="modal-close-btn" type="button" aria-label="Close and keep editing" data-requirement-guard-keep>×</button>
+      </div>
+      <div class="dispute-sheet-body">
+        <p class="jw-requirement-guard-copy">Save or discard this requirement before leaving the Labour step.</p>
+        <div class="jw-requirement-guard-actions">
+          <button class="secondary-btn" type="button" data-requirement-guard-keep>Keep editing</button>
+          <button class="secondary-btn" type="button" data-requirement-guard-discard>Discard changes</button>
+          <button class="primary-btn" type="button" data-requirement-guard-save>Save requirement</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-requirement-guard-keep]").forEach((button) =>
+    button.addEventListener("click", closeTradeRequirementGuard),
+  );
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeTradeRequirementGuard();
+  });
+  modal.querySelector("[data-requirement-guard-discard]")?.addEventListener("click", () => {
+    const targetStep = pendingJobWizardNavigationStep;
+    closeTradeRequirementGuard();
+    discardTradeRequirementEditorChanges();
+    if (targetStep) goToJobWizardStep(targetStep);
+  });
+  modal.querySelector("[data-requirement-guard-save]")?.addEventListener("click", () => {
+    const targetStep = pendingJobWizardNavigationStep;
+    closeTradeRequirementGuard();
+    if (saveTradeRequirement() && targetStep) goToJobWizardStep(targetStep);
+  });
+  modal.querySelector("[data-requirement-guard-keep]")?.focus();
+}
+
+function requestJobWizardNavigation(step) {
+  if (jobWizardStep === 2 && step !== 2 && tradeRequirementEditorHasUnsavedChanges()) {
+    openTradeRequirementGuard(step);
+    return;
+  }
+  goToJobWizardStep(step);
+}
+
+function setTradeRequirementMessage(message = "", { allowDiscard = false } = {}) {
+  const messageEl = document.getElementById("jobRequirementEditorMessage");
+  const discard = document.getElementById("jobDiscardTradeRequirement");
+  if (messageEl) {
+    messageEl.textContent = message;
+    messageEl.classList.toggle("hidden", !message);
+  }
+  if (discard) {
+    discard.classList.toggle(
+      "hidden",
+      !(allowDiscard || activeTradeRequirementId),
+    );
+  }
+}
+
+function validateLabourWizardStepNavigation() {
+  if (tradeRequirementEditorHasUnsavedChanges()) {
+    setTradeRequirementMessage(
+      "Save or discard this requirement before continuing.",
+      { allowDiscard: true },
+    );
+    updateTradeRequirementEditorState();
+    document.getElementById("jobAddTradeBtn")?.focus();
+    return false;
+  }
+  if (!pendingTradeRequirements.length) {
+    tradeRequirementEditorOpen = true;
+    updateTradeRequirementEditorState();
+    setTradeRequirementMessage(
+      "Add and save at least one labour requirement to continue.",
+    );
+    document.getElementById("jobTrade")?.focus();
+    return false;
+  }
+  setTradeRequirementMessage();
+  return true;
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.getElementById("jobRequirementGuardModal")) {
+    closeTradeRequirementGuard();
+  }
+});
 
 function updateAssignmentTypeForm() {
   const type = normalizeAssignmentType(
@@ -7938,8 +8064,18 @@ function syncLabourScheduleFromDom() {
 function renderLabourScheduleEditor() {
   const wrap = document.getElementById("jobLabourScheduleWrap");
   const rows = document.getElementById("jobLabourScheduleRows");
+  const toggle = document.getElementById("jobToggleLabourSchedule");
   if (!wrap || !rows) return;
-  wrap.classList.toggle("hidden", !pendingLabourSchedulePeriods.length && wrap.dataset.open !== "true");
+  const isOpen = wrap.dataset.open === "true";
+  wrap.classList.toggle("hidden", !isOpen);
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(isOpen));
+    toggle.textContent = isOpen
+      ? "Hide phased schedule"
+      : pendingLabourSchedulePeriods.length
+        ? `Edit phased schedule (${pendingLabourSchedulePeriods.length})`
+        : "Add phased schedule";
+  }
   rows.innerHTML = pendingLabourSchedulePeriods.length
     ? pendingLabourSchedulePeriods
         .map((period) => `<div class="labour-schedule-row" data-labour-schedule-row="${escapeHtml(period.id)}">
@@ -8084,10 +8220,6 @@ function renderJobPricingBreakdown() {
   const panel = document.getElementById("jobPricingBreakdown");
   if (!panel) return;
   syncDailyLabourRateFields();
-  const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
-  const accommodationAllowance = accommodationPaid
-    ? Math.max(0, Number(document.getElementById("jobAccommodationAllowance")?.value) || 0)
-    : 0;
   const requirements = requestLabourEstimateRequirements();
   const visibleReqs = requirements.map((req, index) => ({
     label:
@@ -8097,6 +8229,9 @@ function renderJobPricingBreakdown() {
     rate: Math.max(0, Number(req.budgetMax) || 0),
     workerReceivesFullAdvertisedRate: req.workerReceivesFullAdvertisedRate !== false,
     overtimeAvailable: !!req.overtimeAvailable,
+    accommodationAllowance: req.accommodationPaid
+      ? Math.max(0, Number(req.accommodationAllowancePerNight) || 0)
+      : 0,
   }));
 
   // TODO: Replace these provisional display-only percentages with configured
@@ -8109,6 +8244,7 @@ function renderJobPricingBreakdown() {
   const rows = visibleReqs
     .map((req) => {
       const rate = req.rate;
+      const accommodationAllowance = req.accommodationAllowance;
       const workerReceivesFullRate = req.workerReceivesFullAdvertisedRate !== false;
       const workerReceives = workerReceivesFullRate
         ? rate
@@ -8151,7 +8287,7 @@ function renderJobPricingBreakdown() {
     </div>
     <div class="jw-price-list">${rows}</div>
     ${
-      accommodationAllowance
+      visibleReqs.some((req) => req.accommodationAllowance > 0)
         ? `<p class="jw-price-note">Accommodation is added to the company invoice without an OnSite service fee.</p>`
         : ""
     }
@@ -8245,11 +8381,18 @@ function applyTradeReqToInputs(req) {
   if (saturday) saturday.value = overtimeRates.saturday || "standard";
   const sunday = document.getElementById("jobSundayRateType");
   if (sunday) sunday.value = overtimeRates.sunday || "standard";
+  const accommodation = document.getElementById("jobAccommodationPaid");
+  if (accommodation) accommodation.checked = !!req.accommodationPaid;
+  const accommodationAllowance = document.getElementById("jobAccommodationAllowance");
+  if (accommodationAllowance) {
+    accommodationAllowance.value = req.accommodationAllowancePerNight || "";
+  }
   pendingLabourSchedulePeriods = normalizeLabourSchedule(req.labourSchedule || []);
   const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
   if (scheduleWrap) scheduleWrap.dataset.open = pendingLabourSchedulePeriods.length ? "true" : "";
   renderLabourScheduleEditor();
   updateOvertimeForm();
+  updateAccommodationForm();
 }
 
 function clearTradeReqInputs() {
@@ -8263,6 +8406,8 @@ function clearTradeReqInputs() {
     requiredQualifications: "",
     budgetMax: "",
     workerReceivesFullAdvertisedRate: true,
+    accommodationPaid: false,
+    accommodationAllowancePerNight: null,
     overtimeAvailable: false,
     overtimeRates: {
       afterStandardHours: "standard",
@@ -8270,6 +8415,165 @@ function clearTradeReqInputs() {
       sunday: "standard",
     },
   });
+}
+
+function tradeRequirementHasMeaningfulInput(req = readTradeReqInputs()) {
+  return !!(
+    req.trade ||
+    req.specialism ||
+    req.grade ||
+    req.workActivity ||
+    req.requiredQualifications ||
+    req.budgetMax ||
+    Number(req.quantity || 1) !== 1 ||
+    req.workerReceivesFullAdvertisedRate === false ||
+    req.overtimeAvailable ||
+    req.accommodationPaid ||
+    normalizeLabourSchedule(req.labourSchedule).length
+  );
+}
+
+function tradeRequirementEditorHasUnsavedChanges() {
+  if (!tradeRequirementEditorOpen) return false;
+  const current = readTradeReqInputs();
+  if (!activeTradeRequirementId) return tradeRequirementHasMeaningfulInput(current);
+  const saved = pendingTradeRequirements.find(
+    (requirement) => requirement.id === activeTradeRequirementId,
+  );
+  return !saved || !sameTradeRequirement(saved, current);
+}
+
+function updateTradeRequirementEditorState() {
+  const hasRequirements = pendingTradeRequirements.length > 0;
+  if (!hasRequirements) tradeRequirementEditorOpen = true;
+  const editor = document.getElementById("jobRequirementEditor");
+  const savedSection = document.getElementById("jobSavedRequirementsSection");
+  const addAnother = document.getElementById("jobAddAnotherRequirement");
+  const editorTitle = document.getElementById("jobRequirementEditorTitle");
+  const editorMode = document.getElementById("jobRequirementEditorMode");
+  const saveButton = document.getElementById("jobAddTradeBtn");
+  const discardButton = document.getElementById("jobDiscardTradeRequirement");
+  const editorVisible = !jobWizardActive || tradeRequirementEditorOpen;
+  editor?.classList.toggle("hidden", !editorVisible);
+  savedSection?.classList.toggle("hidden", !hasRequirements);
+  addAnother?.classList.toggle("hidden", editorVisible);
+  if (editorTitle) {
+    editorTitle.textContent = activeTradeRequirementId
+      ? "Edit requirement"
+      : "New requirement";
+  }
+  editorMode?.classList.toggle("hidden", !activeTradeRequirementId);
+  if (saveButton) {
+    saveButton.textContent = activeTradeRequirementId
+      ? "Save changes"
+      : "Save requirement";
+  }
+  const hasUnsavedChanges = editorVisible && tradeRequirementEditorHasUnsavedChanges();
+  discardButton?.classList.toggle(
+    "hidden",
+    !(activeTradeRequirementId || hasUnsavedChanges),
+  );
+  const formWrap = document.getElementById("formJob");
+  formWrap?.classList.toggle(
+    "jw-requirement-editor-active",
+    jobWizardActive && jobWizardStep === 2 && editorVisible,
+  );
+  formWrap?.classList.toggle(
+    "jw-has-unsaved-requirement",
+    jobWizardActive && jobWizardStep === 2 && hasUnsavedChanges,
+  );
+}
+
+function openTradeRequirementEditor(requirement = null) {
+  activeTradeRequirementId = requirement?.id || "";
+  tradeRequirementEditorOpen = true;
+  if (requirement) applyTradeReqToInputs(requirement);
+  else clearTradeReqInputs();
+  setTradeRequirementMessage();
+  updateTradeRequirementEditorState();
+  requestAnimationFrame(() => document.getElementById("jobTrade")?.focus());
+}
+
+function discardTradeRequirementEditorChanges() {
+  activeTradeRequirementId = "";
+  clearTradeReqInputs();
+  tradeRequirementEditorOpen = !pendingTradeRequirements.length || !jobWizardActive;
+  setTradeRequirementMessage();
+  syncTradeReqBuilderState();
+}
+
+function failTradeRequirementSave(fieldId, message) {
+  setTradeRequirementMessage(message, { allowDiscard: true });
+  const field = document.getElementById(fieldId);
+  field?.focus();
+  if (field?.reportValidity && !field.checkValidity()) field.reportValidity();
+  showToast(message);
+  return false;
+}
+
+function saveTradeRequirement() {
+  const req = readTradeReqInputs();
+  if (!req.trade) return failTradeRequirementSave("jobTrade", "Select a trade first");
+  if (!req.specialism) {
+    return failTradeRequirementSave("jobSpecialism", "Select a role / specialism");
+  }
+  if (!req.workActivity) {
+    return failTradeRequirementSave("workActivity", "Enter the work activity");
+  }
+  const quantity = Number(document.getElementById("jobQuantity")?.value);
+  if (!Number.isFinite(quantity) || quantity < 1) {
+    return failTradeRequirementSave("jobQuantity", "Enter at least one worker");
+  }
+  if (!req.requiredQualifications) {
+    return failTradeRequirementSave(
+      "jobReqQuals",
+      "Enter the required qualifications & tickets",
+    );
+  }
+  if (!req.budgetMax) {
+    return failTradeRequirementSave("jobBudgetMax", "Enter the daily labour rate");
+  }
+  const scheduleError = validateLabourSchedule(
+    req.labourSchedule,
+    currentProjectScheduleBounds(),
+  );
+  if (scheduleError) {
+    setTradeRequirementMessage(scheduleError, { allowDiscard: true });
+    document.querySelector("#jobLabourScheduleRows input")?.focus();
+    showToast(scheduleError);
+    return false;
+  }
+  const duplicate = pendingTradeRequirements.some(
+    (existing) =>
+      existing.id !== activeTradeRequirementId &&
+      sameTradeRequirement(existing, req),
+  );
+  if (duplicate) {
+    setTradeRequirementMessage("This labour requirement has already been added", {
+      allowDiscard: true,
+    });
+    showToast("This labour requirement has already been added");
+    return false;
+  }
+  const editIndex = activeTradeRequirementId
+    ? pendingTradeRequirements.findIndex(
+        (requirement) => requirement.id === activeTradeRequirementId,
+      )
+    : -1;
+  const wasEditing = editIndex >= 0;
+  if (wasEditing) {
+    req.id = pendingTradeRequirements[editIndex].id;
+    pendingTradeRequirements[editIndex] = req;
+  } else {
+    pendingTradeRequirements.push(req);
+  }
+  activeTradeRequirementId = "";
+  clearTradeReqInputs();
+  tradeRequirementEditorOpen = !jobWizardActive;
+  setTradeRequirementMessage();
+  syncTradeReqBuilderState();
+  showToast(wasEditing ? "Labour requirement updated" : "Labour requirement saved");
+  return true;
 }
 
 function renderTradeReqCards() {
@@ -8280,11 +8584,29 @@ function renderTradeReqCards() {
       (r, i) => `
     <div class="jw-req-card">
       <div class="jw-req-main">
-        <div class="jw-req-trade">${escapeHtml(r.trade)}${r.specialism ? ` — ${escapeHtml(r.specialism)}` : ""}</div>
+        <div class="jw-req-heading">
+          <div>
+            <div class="jw-req-trade">${escapeHtml(r.trade || "Labour requirement")}</div>
+            ${r.specialism ? `<div class="jw-req-role">${escapeHtml(r.specialism)}</div>` : ""}
+          </div>
+          <strong class="jw-req-count">${Math.max(1, Number(r.quantity) || 1)} worker${Number(r.quantity) === 1 ? "" : "s"}</strong>
+        </div>
         ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-        <div class="jw-req-count">${r.quantity} Worker${r.quantity === 1 ? "" : "s"}${r.budgetMax ? ` · ${formatMoney(r.budgetMax)}/day` : ""}${r.overtimeAvailable ? " · Overtime" : ""}${scheduleSummaryLabel(r.labourSchedule) ? ` · ${escapeHtml(scheduleSummaryLabel(r.labourSchedule))}` : ""}</div>
+        ${r.requiredQualifications ? `<div class="jw-req-quals">${escapeHtml(r.requiredQualifications)}</div>` : ""}
+        <div class="jw-req-summary">
+          ${r.budgetMax ? `<span class="jw-req-rate">${formatMoney(r.budgetMax)}/day</span>` : ""}
+          <span>${r.workerReceivesFullAdvertisedRate !== false ? "Full advertised rate" : "Service fee within advertised rate"}</span>
+        </div>
+        ${r.overtimeAvailable || r.accommodationPaid || normalizeLabourSchedule(r.labourSchedule).length ? `<div class="jw-req-conditions">
+          ${r.overtimeAvailable ? `<span>Overtime available</span>` : ""}
+          ${r.accommodationPaid ? `<span>Accommodation included${r.accommodationAllowancePerNight ? ` · ${formatMoney(r.accommodationAllowancePerNight)}/night` : ""}</span>` : ""}
+          ${normalizeLabourSchedule(r.labourSchedule).length ? `<span>Phased schedule · ${normalizeLabourSchedule(r.labourSchedule).length} period${normalizeLabourSchedule(r.labourSchedule).length === 1 ? "" : "s"}</span>` : ""}
+        </div>` : ""}
       </div>
-      <button type="button" class="jw-req-remove" data-req-remove="${i}" aria-label="Remove requirement">×</button>
+      <div class="jw-req-actions">
+        <button type="button" class="jw-req-action" data-req-edit="${i}">Edit</button>
+        <button type="button" class="jw-req-action jw-req-action--danger" data-req-remove="${i}">Remove</button>
+      </div>
     </div>`,
     )
     .join("");
@@ -8303,48 +8625,37 @@ function syncTradeReqBuilderState() {
   renderTradeReqCards();
   renderLabourScheduleEditor();
   renderJobPricingBreakdown();
+  updateTradeRequirementEditorState();
 }
 
 function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
   pendingLabourSchedulePeriods = [];
+  activeTradeRequirementId = "";
+  tradeRequirementEditorOpen = true;
   const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
   if (scheduleWrap) scheduleWrap.dataset.open = "";
+  clearTradeReqInputs();
+  setTradeRequirementMessage();
   syncTradeReqBuilderState();
 }
 
 document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
-  const req = readTradeReqInputs();
-  if (!req.trade) return showToast("Select a trade first");
-  if (!req.specialism) return showToast("Select a role / specialism");
-  if (!req.workActivity) return showToast("Enter the work activity");
-  if (!req.requiredQualifications)
-    return showToast("Enter the required qualifications & tickets");
-  if (!req.budgetMax) return showToast("Enter the daily labour rate");
-  const scheduleError = validateLabourSchedule(req.labourSchedule, currentProjectScheduleBounds());
-  if (scheduleError) return showToast(scheduleError);
-  if (pendingTradeRequirements.some((existing) => sameTradeRequirement(existing, req))) {
-    showToast("This labour requirement has already been added");
-    return;
-  }
-  pendingTradeRequirements.push(req);
-  clearTradeReqInputs();
-  syncTradeReqBuilderState();
+  saveTradeRequirement();
+});
+
+document.getElementById("jobAddAnotherRequirement")?.addEventListener("click", () => {
+  openTradeRequirementEditor();
+});
+
+document.getElementById("jobDiscardTradeRequirement")?.addEventListener("click", () => {
+  discardTradeRequirementEditorChanges();
 });
 
 document.getElementById("jobToggleLabourSchedule")?.addEventListener("click", () => {
   const wrap = document.getElementById("jobLabourScheduleWrap");
   if (!wrap) return;
   wrap.dataset.open = wrap.classList.contains("hidden") ? "true" : "";
-  if (!pendingLabourSchedulePeriods.length && wrap.dataset.open === "true") {
-    pendingLabourSchedulePeriods.push({
-      id: createId(),
-      startDate: document.querySelector("#jobStart")?.value?.slice(0, 10) || "",
-      endDate: document.querySelector("#jobEndDate")?.value || "",
-      quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
-      phase: "",
-    });
-  }
   renderLabourScheduleEditor();
 });
 
@@ -8378,10 +8689,30 @@ document.getElementById("jobLabourScheduleRows")?.addEventListener("click", (eve
 });
 
 document.getElementById("jobTradeReqList")?.addEventListener("click", (event) => {
-  const btn = event.target.closest("[data-req-remove]");
-  if (!btn) return;
-  pendingTradeRequirements.splice(Number(btn.dataset.reqRemove), 1);
+  const editButton = event.target.closest("[data-req-edit]");
+  if (editButton) {
+    const requirement = pendingTradeRequirements[Number(editButton.dataset.reqEdit)];
+    if (requirement) openTradeRequirementEditor(requirement);
+    return;
+  }
+  const removeButton = event.target.closest("[data-req-remove]");
+  if (!removeButton) return;
+  const index = Number(removeButton.dataset.reqRemove);
+  const removed = pendingTradeRequirements[index];
+  pendingTradeRequirements.splice(index, 1);
+  if (removed?.id === activeTradeRequirementId) {
+    activeTradeRequirementId = "";
+    clearTradeReqInputs();
+  }
+  if (!pendingTradeRequirements.length) tradeRequirementEditorOpen = true;
   syncTradeReqBuilderState();
+});
+
+["input", "change"].forEach((eventName) => {
+  document.getElementById("jobRequirementEditor")?.addEventListener(eventName, () => {
+    setTradeRequirementMessage();
+    updateTradeRequirementEditorState();
+  });
 });
 
 [

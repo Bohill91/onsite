@@ -864,166 +864,230 @@
 
               <div class="jw-step" data-wizard-step="2">
               <!-- ── LABOUR REQUIREMENTS ─────────────────────── -->
-              <section class="jw-card">
-                <header class="jw-card-head">
-                  <p class="jw-kicker">Labour Requirements</p>
-                  <h3 class="jw-card-title">Build Your Labour Request</h3>
-                  <p class="jw-card-sub">Add each trade you need on this project. Saved trades appear below as summary cards.</p>
+              <section class="jw-card jw-labour-step-card">
+                <header class="jw-card-head jw-labour-step-head">
+                  <p class="jw-kicker">Labour</p>
+                  <h3 class="jw-card-title">Labour requirements</h3>
+                  <p class="jw-card-sub">Add the workers you need. Each role is saved as a separate labour requirement.</p>
                 </header>
-                <div id="jobTradeReqList" class="jw-req-list"></div>
-                <div class="jw-grid">
-                  <label class="field-label">
-                    Trade *
-                    <select id="jobTrade" required>
-                      <option value="">Select trade</option>
-                      <option value="Electrical">Electrical</option>
-                      <option value="Mechanical">Mechanical</option>
-                      <option value="Plumbing">Plumbing</option>
-                      <option value="Pipefitting">Pipefitting</option>
-                      <option value="HVAC">HVAC</option>
-                      <option value="Fire & Security">Fire &amp; Security</option>
-                      <option value="Data & Telecoms">Data &amp; Telecoms</option>
-                      <option value="Carpentry & Joinery">Carpentry &amp; Joinery</option>
-                      <option value="Drylining">Drylining</option>
-                      <option value="Ceilings & Partitions">Ceilings &amp; Partitions</option>
-                      <option value="Bricklaying">Bricklaying</option>
-                      <option value="Groundworks">Groundworks</option>
-                      <option value="Concrete & Formwork">Concrete &amp; Formwork</option>
-                      <option value="Steel Fixing">Steel Fixing</option>
-                      <option value="Welding & Fabrication">Welding &amp; Fabrication</option>
-                      <option value="Scaffolding">Scaffolding</option>
-                      <option value="Roofing">Roofing</option>
-                      <option value="Cladding">Cladding</option>
-                      <option value="Glazing">Glazing</option>
-                      <option value="Painting & Decorating">Painting &amp; Decorating</option>
-                      <option value="Plastering & Rendering">Plastering &amp; Rendering</option>
-                      <option value="Flooring">Flooring</option>
-                      <option value="Tiling">Tiling</option>
-                      <option value="Labouring">Labouring</option>
-                      <option value="Plant Operations">Plant Operations</option>
-                      <option value="Logistics">Logistics</option>
-                      <option value="Traffic Management">Traffic Management</option>
-                      <option value="Management & Supervision">Management &amp; Supervision</option>
-                      <option value="Health & Safety">Health &amp; Safety</option>
-                      <option value="Cleaning">Cleaning</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </label>
-                  <label class="field-label">
-                    Role / Specialism *
-                    <select id="jobSpecialism" required>
-                      <option value="">Select a trade first</option>
-                    </select>
-                  </label>
-                  <label class="field-label">
-                    Experience Level *
-                    <select id="jobGrade">
-                      <option value="">Select experience level</option>
-                      <option value="Apprentice">Apprentice</option>
-                      <option value="Improver">Improver</option>
-                      <option value="Skilled">Skilled</option>
-                      <option value="Advanced / Supervisor">Advanced / Supervisor</option>
-                    </select>
-                  </label>
-                  <label class="field-label">
-                    Work Activity *
-                    <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
-                  </label>
-                  <label class="field-label">
-                    No. Of Workers Required *
-                    <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
-                  </label>
-                  <div class="jw-span-2 labour-schedule-editor">
-                    <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle">Add labour schedule</button>
+
+                <section id="jobSavedRequirementsSection" class="jw-saved-requirements hidden" aria-labelledby="jobSavedRequirementsTitle">
+                  <div class="jw-labour-section-head">
+                    <div>
+                      <p class="jw-subsection-kicker">Saved requirements</p>
+                      <h4 id="jobSavedRequirementsTitle">Your labour requirements</h4>
+                    </div>
+                    <button type="button" id="jobAddAnotherRequirement" class="secondary-btn">+ Add another requirement</button>
+                  </div>
+                  <div id="jobTradeReqList" class="jw-req-list"></div>
+                </section>
+
+                <section id="jobRequirementEditor" class="jw-requirement-builder" aria-labelledby="jobRequirementEditorTitle">
+                  <div class="jw-requirement-builder-head">
+                    <div>
+                      <p class="jw-subsection-kicker">Requirement builder</p>
+                      <h4 id="jobRequirementEditorTitle">New requirement</h4>
+                    </div>
+                    <span id="jobRequirementEditorMode" class="jw-editor-mode hidden">Editing</span>
+                  </div>
+
+                  <section class="jw-requirement-group" aria-labelledby="jobRoleScopeTitle">
+                    <div class="jw-requirement-group-head">
+                      <h5 id="jobRoleScopeTitle">Role &amp; scope</h5>
+                      <p>Define the role, experience and work the team will deliver.</p>
+                    </div>
+                    <div class="jw-grid jw-labour-role-grid">
+                      <label class="field-label">
+                        Trade *
+                        <select id="jobTrade" required>
+                          <option value="">Select trade</option>
+                          <option value="Electrical">Electrical</option>
+                          <option value="Mechanical">Mechanical</option>
+                          <option value="Plumbing">Plumbing</option>
+                          <option value="Pipefitting">Pipefitting</option>
+                          <option value="HVAC">HVAC</option>
+                          <option value="Fire & Security">Fire &amp; Security</option>
+                          <option value="Data & Telecoms">Data &amp; Telecoms</option>
+                          <option value="Carpentry & Joinery">Carpentry &amp; Joinery</option>
+                          <option value="Drylining">Drylining</option>
+                          <option value="Ceilings & Partitions">Ceilings &amp; Partitions</option>
+                          <option value="Bricklaying">Bricklaying</option>
+                          <option value="Groundworks">Groundworks</option>
+                          <option value="Concrete & Formwork">Concrete &amp; Formwork</option>
+                          <option value="Steel Fixing">Steel Fixing</option>
+                          <option value="Welding & Fabrication">Welding &amp; Fabrication</option>
+                          <option value="Scaffolding">Scaffolding</option>
+                          <option value="Roofing">Roofing</option>
+                          <option value="Cladding">Cladding</option>
+                          <option value="Glazing">Glazing</option>
+                          <option value="Painting & Decorating">Painting &amp; Decorating</option>
+                          <option value="Plastering & Rendering">Plastering &amp; Rendering</option>
+                          <option value="Flooring">Flooring</option>
+                          <option value="Tiling">Tiling</option>
+                          <option value="Labouring">Labouring</option>
+                          <option value="Plant Operations">Plant Operations</option>
+                          <option value="Logistics">Logistics</option>
+                          <option value="Traffic Management">Traffic Management</option>
+                          <option value="Management & Supervision">Management &amp; Supervision</option>
+                          <option value="Health & Safety">Health &amp; Safety</option>
+                          <option value="Cleaning">Cleaning</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </label>
+                      <label class="field-label">
+                        Role / Specialism *
+                        <select id="jobSpecialism" required>
+                          <option value="">Select a trade first</option>
+                        </select>
+                      </label>
+                      <label class="field-label">
+                        Experience Level / Grade *
+                        <select id="jobGrade">
+                          <option value="">Select experience level</option>
+                          <option value="Apprentice">Apprentice</option>
+                          <option value="Improver">Improver</option>
+                          <option value="Skilled">Skilled</option>
+                          <option value="Advanced / Supervisor">Advanced / Supervisor</option>
+                        </select>
+                      </label>
+                      <label class="field-label">
+                        Work Activity *
+                        <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
+                      </label>
+                      <label class="field-label">
+                        Workers required *
+                        <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
+                      </label>
+                      <label class="field-label">
+                        Required Qualifications &amp; Tickets *
+                        <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section class="jw-requirement-group" aria-labelledby="jobPayTermsTitle">
+                    <div class="jw-requirement-group-head">
+                      <h5 id="jobPayTermsTitle">Pay &amp; terms</h5>
+                      <p>Set the advertised rate and any role-specific allowances.</p>
+                    </div>
+                    <input id="jobBudgetMin" type="hidden" />
+                    <div class="jw-grid jw-labour-pay-grid">
+                      <label class="field-label">
+                        Daily Labour Rate (£/day) *
+                        <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
+                      </label>
+                      <div class="jw-rate-option">
+                        <label class="checkbox-row jw-check">
+                          <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
+                          <span class="jw-rate-option-label">Worker receives the full advertised rate <small>Recommended</small></span>
+                        </label>
+                        <p class="form-helper">OnSite’s service fee is added separately rather than deducted from the worker’s advertised rate.</p>
+                      </div>
+                    </div>
+                    <div class="jw-labour-terms">
+                      <div class="jw-labour-term">
+                        <label class="checkbox-row jw-check">
+                          <input id="jobOvertimeAvailable" type="checkbox" />
+                          <span>Overtime available</span>
+                        </label>
+                        <div id="jobOvertimeRatesWrap" class="jw-conditional hidden">
+                          <div class="jw-overtime-grid">
+                            <label class="field-label">
+                              After-hours
+                              <select id="jobAfterHoursRateType">
+                                <option value="standard">Standard rate</option>
+                                <option value="time_and_third">Time and a third</option>
+                                <option value="time_and_half">Time and a half</option>
+                                <option value="double_time">Double time</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                            </label>
+                            <label class="field-label">
+                              Saturday rate
+                              <select id="jobSaturdayRateType">
+                                <option value="standard">Standard rate</option>
+                                <option value="time_and_third">Time and a third</option>
+                                <option value="time_and_half">Time and a half</option>
+                                <option value="double_time">Double time</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                            </label>
+                            <label class="field-label">
+                              Sunday rate
+                              <select id="jobSundayRateType">
+                                <option value="standard">Standard rate</option>
+                                <option value="time_and_third">Time and a third</option>
+                                <option value="time_and_half">Time and a half</option>
+                                <option value="double_time">Double time</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                            </label>
+                          </div>
+                          <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
+                        </div>
+                      </div>
+                      <div class="jw-labour-term">
+                        <label class="checkbox-row jw-check">
+                          <input id="jobAccommodationPaid" type="checkbox" />
+                          <span>Accommodation paid for work-away roles</span>
+                        </label>
+                        <div id="jobAccommodationAllowanceWrap" class="jw-conditional hidden">
+                          <label class="field-label">
+                            Accommodation allowance per night
+                            <input id="jobAccommodationAllowance" type="number" min="0" placeholder="£40" />
+                          </label>
+                          <p class="form-helper">This allowance is paid directly to the worker and added to the company invoice without an OnSite service fee.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="jw-requirement-group jw-phased-schedule" aria-labelledby="jobPhasedScheduleTitle">
+                    <div class="jw-requirement-group-head jw-phased-schedule-head">
+                      <div>
+                        <h5 id="jobPhasedScheduleTitle">Phased labour schedule <span>Optional</span></h5>
+                        <p>Change how many workers you need during different periods of the project.</p>
+                      </div>
+                      <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle" aria-expanded="false">Add phased schedule</button>
+                    </div>
                     <div id="jobLabourScheduleWrap" class="jw-conditional hidden">
                       <div class="labour-schedule-head">
                         <div>
-                          <strong>Labour schedule</strong>
-                          <span>Optional phased quantities for this trade during the project.</span>
+                          <strong>Phased periods</strong>
+                          <span>Project dates are set in Step 3. Period boundaries are checked once those dates are available.</span>
                         </div>
                         <button type="button" id="jobAddLabourSchedulePeriod" class="secondary-btn">Add period</button>
                       </div>
                       <div id="jobLabourScheduleRows" class="labour-schedule-rows"></div>
                       <p class="form-helper">Periods must sit inside the project dates where set. Overlapping periods are not allowed.</p>
                     </div>
+                  </section>
+
+                  <div id="jobRequirementEditorMessage" class="jw-requirement-message hidden" role="alert"></div>
+                  <div class="jw-requirement-actions">
+                    <button type="button" id="jobDiscardTradeRequirement" class="secondary-btn hidden">Discard changes</button>
+                    <button type="button" id="jobAddTradeBtn" class="primary-btn jw-requirement-save">Save requirement</button>
                   </div>
-                  <label class="field-label">
-                    Required Qualifications &amp; Tickets *
-                    <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />
-                  </label>
-                  <input id="jobBudgetMin" type="hidden" />
-                  <label class="field-label">
-                    Daily Labour Rate (£/day) *
-                    <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
-                  </label>
-                  <div class="jw-rate-option">
-                    <label class="checkbox-row jw-check">
-                      <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
-                      <span>Worker receives the full advertised rate (Recommended)</span>
-                    </label>
-                    <p class="form-helper">When selected, OnSite’s service fee is added separately instead of being deducted from the worker’s rate.</p>
+                </section>
+
+                <div id="jobPricingBreakdownLegacyMount" class="jw-pricing-legacy-mount">
+                  <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
+                </div>
+
+                <section id="jobPreferredWorkersWrap" class="preferred-workers-picker jw-preferred-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
+                  <div class="jw-labour-section-head">
+                    <div>
+                      <p class="jw-subsection-kicker">Preferred workers <span>Optional</span></p>
+                      <h4 id="jobPreferredWorkersTitle">Preferred workers</h4>
+                      <p>Prioritise workers you’ve previously used or marked as preferred. Standard matching continues if they’re unavailable.</p>
+                    </div>
                   </div>
-                </div>
-                <label class="checkbox-row jw-check">
-                  <input id="jobOvertimeAvailable" type="checkbox" />
-                  <span>Overtime available</span>
-                </label>
-                <div id="jobOvertimeRatesWrap" class="jw-conditional hidden">
-                  <div class="jw-overtime-grid">
-                    <label class="field-label">
-                      After-hours
-                      <select id="jobAfterHoursRateType">
-                        <option value="standard">Standard rate</option>
-                        <option value="time_and_third">Time and a third</option>
-                        <option value="time_and_half">Time and a half</option>
-                        <option value="double_time">Double time</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                    </label>
-                    <label class="field-label">
-                      Saturday rate
-                      <select id="jobSaturdayRateType">
-                        <option value="standard">Standard rate</option>
-                        <option value="time_and_third">Time and a third</option>
-                        <option value="time_and_half">Time and a half</option>
-                        <option value="double_time">Double time</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                    </label>
-                    <label class="field-label">
-                      Sunday rate
-                      <select id="jobSundayRateType">
-                        <option value="standard">Standard rate</option>
-                        <option value="time_and_third">Time and a third</option>
-                        <option value="time_and_half">Time and a half</option>
-                        <option value="double_time">Double time</option>
-                        <option value="custom">Custom</option>
-                      </select>
-                    </label>
-                  </div>
-                  <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
-                </div>
-                <label class="checkbox-row jw-check">
-                  <input id="jobAccommodationPaid" type="checkbox" />
-                  <span>Accommodation paid for work-away roles</span>
-                </label>
-                <div id="jobAccommodationAllowanceWrap" class="jw-conditional hidden">
-                  <label class="field-label">
-                    Accommodation allowance per night
-                    <input id="jobAccommodationAllowance" type="number" min="0" placeholder="£40" />
-                  </label>
-                  <p class="form-helper">This allowance is paid directly to the worker and added to the company invoice without an OnSite service fee.</p>
-                </div>
-                <button type="button" id="jobAddTradeBtn" class="jw-add-trade-btn">Save trade / add another</button>
-                <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
-                <div id="jobPreferredWorkersWrap" class="preferred-workers-picker hidden">
                   <label class="field-label" for="jobPreferredWorkerSearch">
-                    Preferred Workers
+                    Search preferred workers
                     <input id="jobPreferredWorkerSearch" type="search" placeholder="Search previous or preferred workers" autocomplete="off" />
                   </label>
-                  <p class="form-helper">Selected preferred workers will be offered first if availability and matching rules allow.</p>
                   <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
-                </div>
+                </section>
               </section>
               </div>
 
@@ -1069,6 +1133,7 @@
                     <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="sunday" /><span>Sunday</span></label>
                   </div>
                 </div>
+                <div id="jobPricingBreakdownWizardMount" class="jw-pricing-wizard-mount"></div>
               </section>
               </div>
 
