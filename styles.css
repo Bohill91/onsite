@@ -10835,6 +10835,23 @@ body.modal-open {
   padding: var(--space-card);
 }
 
+.request-labour-page-head.request-labour-page-head--unboxed {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: block;
+  padding: 8px 0 0;
+}
+
+.request-labour-page-head--unboxed h1 {
+  color: var(--ink);
+  font-size: var(--ui-font-xl);
+  font-weight: var(--ui-weight-bold);
+  line-height: 1.18;
+  margin: 0;
+}
+
 .company-page-head,
 .company-dashboard-head,
 .attendance-page-head,
