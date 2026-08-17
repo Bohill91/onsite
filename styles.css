@@ -19836,6 +19836,386 @@ button svg,
   padding-top: 20px;
 }
 
+.jw-schedule-step-intro {
+  display: none;
+}
+
+.jw-schedule-legacy-head {
+  display: contents;
+}
+
+#formJob:not(.jw-wizard-mode) .jw-schedule-surface-head,
+#formJob:not(.jw-wizard-mode) .jw-schedule-group-head,
+#formJob:not(.jw-wizard-mode) .jw-wizard-only-copy,
+#formJob:not(.jw-wizard-mode) .jw-schedule-message {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-legacy-head,
+#formJob.jw-wizard-mode .jw-working-days-legacy-label {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-step-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 20px;
+  outline: 0;
+  padding: 0;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-step-card:hover {
+  border-color: transparent;
+  box-shadow: none;
+  outline-color: transparent;
+  transform: none;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-step-head {
+  padding-bottom: 0;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-step-intro {
+  display: grid;
+  gap: 4px;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-surface,
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  padding: 20px;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-surface {
+  gap: 0;
+}
+
+.jw-schedule-surface-head,
+.jw-estimate-head {
+  min-width: 0;
+}
+
+.jw-schedule-surface-head h4,
+.jw-estimate-head h4 {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.jw-schedule-surface-head > p:last-child,
+.jw-estimate-head > div > p:last-child,
+.jw-schedule-group-head p {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-group {
+  display: grid;
+  gap: 14px;
+  padding-top: 20px;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-group + .jw-schedule-group {
+  border-top: 1px solid var(--card-divider);
+  margin-top: 20px;
+}
+
+.jw-schedule-group-head {
+  display: grid;
+  gap: 3px;
+}
+
+.jw-schedule-group-head h5 {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-grid {
+  column-gap: 20px;
+  row-gap: 14px;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-grid .field-label,
+#formJob.jw-wizard-mode .jw-days-wrap {
+  color: var(--ink-2);
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  gap: 8px;
+  letter-spacing: 0;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-grid input {
+  background-color: var(--surface);
+  border-color: var(--card-border);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+}
+
+.jw-end-date-field {
+  display: grid;
+  gap: 9px;
+}
+
+#formJob.jw-wizard-mode .jw-end-date-field.is-disabled input {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+
+#formJob.jw-wizard-mode #jobNoFixedEndWrap {
+  justify-self: start;
+}
+
+#formJob.jw-wizard-mode .jw-days {
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+#formJob.jw-wizard-mode .jw-day-chip span {
+  background: var(--surface);
+  border-color: var(--card-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 6px;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
+}
+
+#formJob.jw-wizard-mode .jw-day-chip span::before {
+  align-items: center;
+  content: "";
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 900;
+  justify-content: center;
+  width: 11px;
+}
+
+#formJob.jw-wizard-mode .jw-day-chip:hover span {
+  border-color: var(--orange-muted);
+  transform: none;
+}
+
+#formJob.jw-wizard-mode .jw-day-chip input:checked + span {
+  background: var(--orange-light);
+  border-color: var(--orange);
+  box-shadow: none;
+  color: var(--ink);
+}
+
+#formJob.jw-wizard-mode .jw-day-chip input:checked + span::before {
+  color: var(--orange-dark);
+  content: "✓";
+}
+
+#formJob.jw-wizard-mode .jw-day-chip input:focus-visible + span {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+}
+
+.jw-schedule-message {
+  background: var(--amber-bg);
+  border-radius: var(--radius-sm);
+  color: var(--amber-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+}
+
+.jw-schedule-message.hidden {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-step-card .jw-pricing-wizard-mount {
+  border-top: 0;
+  padding-top: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard {
+  gap: 0;
+}
+
+.jw-estimate-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding-bottom: 18px;
+}
+
+.jw-inline-link {
+  align-items: center;
+  align-self: start;
+  background: transparent;
+  border: 0;
+  color: var(--orange-dark);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 0;
+  transition: color 180ms ease;
+}
+
+.jw-inline-link:hover,
+.jw-inline-link:focus-visible {
+  color: var(--orange);
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-list {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row {
+  align-items: start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 28px;
+  grid-template-columns: minmax(190px, 0.75fr) minmax(280px, 1.25fr);
+  padding: 16px 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row + .jw-price-row {
+  border-top: 1px solid var(--card-divider);
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row:hover {
+  background: transparent;
+  border-color: var(--card-divider);
+  box-shadow: none;
+  transform: none;
+}
+
+.jw-price-identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-price-identity > strong {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.jw-price-identity > span {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.jw-price-identity .jw-price-rate-summary {
+  color: var(--ink-2);
+  font-weight: 750;
+  margin-top: 5px;
+}
+
+.jw-price-identity .jw-price-context {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines {
+  gap: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines span {
+  border-top: 1px solid var(--card-divider);
+  min-height: 29px;
+  padding: 6px 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines span:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines .jw-price-requirement-total {
+  color: var(--ink);
+  font-weight: 750;
+  padding-bottom: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-note {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  margin: 4px 0 16px;
+  padding: 9px 11px;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-total {
+  border-top: 1px solid var(--card-divider);
+  gap: 7px;
+  padding-top: 16px;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-total span {
+  font-size: 0.78rem;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-grand-total {
+  border-top: 1px solid var(--card-divider);
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 800;
+  margin-top: 5px;
+  padding-top: 12px;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-grand-total strong {
+  font-size: 1.15rem;
+  font-weight: 850;
+}
+
+.jw-estimate-empty {
+  align-items: flex-start;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+}
+
+.jw-estimate-empty strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.jw-estimate-empty span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.jw-estimate-empty .jw-inline-link {
+  margin-top: 5px;
+}
+
 #formJob.jw-wizard-mode.jw-requirement-editor-active .jw-wizard-continue {
   background: var(--surface);
   border-color: var(--card-border);
@@ -19968,6 +20348,34 @@ button svg,
 
   #formJob.jw-wizard-mode .jw-labour-role-grid,
   #formJob.jw-wizard-mode .jw-labour-pay-grid {
+    gap: 14px;
+  }
+
+  #formJob.jw-wizard-mode .jw-schedule-step-card {
+    gap: 16px;
+  }
+
+  #formJob.jw-wizard-mode .jw-schedule-surface,
+  #formJob.jw-wizard-mode .jw-pricing-panel--wizard {
+    padding: 16px;
+  }
+
+  #formJob.jw-wizard-mode .jw-schedule-grid,
+  #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row {
+    grid-template-columns: 1fr;
+  }
+
+  #formJob.jw-wizard-mode .jw-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jw-estimate-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row {
     gap: 14px;
   }
 

@@ -7776,6 +7776,7 @@ function validateJobWizardStep(step) {
 document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
   if (!jobWizardActive) return;
   if (jobWizardStep === 2 && !validateLabourWizardStepNavigation()) return;
+  if (jobWizardStep === 3 && !validateSchedulePayWizardStep()) return;
   if (!validateJobWizardStep(jobWizardStep)) return;
   jobWizardCompleted.add(jobWizardStep);
   goToJobWizardStep(jobWizardStep + 1);
@@ -7936,6 +7937,7 @@ function updateAssignmentTypeForm() {
   );
   const ongoing = type === "ongoing_placement";
   const endInput = document.getElementById("jobEndDate");
+  const endRequired = document.getElementById("jobEndDateRequired");
   const siteAddress = document.getElementById("jobSiteAddress");
   const noFixedEnd = document.getElementById("jobNoFixedEndDate");
   const noFixedWrap = document.getElementById("jobNoFixedEndWrap");
@@ -7947,6 +7949,8 @@ function updateAssignmentTypeForm() {
     endInput.required = !noFixed;
     endInput.disabled = noFixed;
     endInput.classList.remove("hidden");
+    endInput.closest(".jw-end-date-field")?.classList.toggle("is-disabled", noFixed);
+    if (endRequired) endRequired.hidden = noFixed;
     if (noFixed) endInput.value = "";
   }
   if (siteAddress) siteAddress.required = true;
@@ -7999,6 +8003,80 @@ function selectedJobWorkingDays() {
     ),
   );
 }
+
+function setSchedulePayMessage(id, message = "") {
+  const element = document.getElementById(id);
+  if (!element) return;
+  element.textContent = message;
+  element.classList.toggle("hidden", !message);
+}
+
+function clearSchedulePayValidation() {
+  document.getElementById("jobEndDate")?.setCustomValidity("");
+  setSchedulePayMessage("jobWorkingDaysMessage");
+  setSchedulePayMessage("jobScheduleStepMessage");
+}
+
+function validateSchedulePayWizardStep() {
+  clearSchedulePayValidation();
+  const startInput = document.getElementById("jobStart");
+  const endInput = document.getElementById("jobEndDate");
+  const noFixedEndDate = !!document.getElementById("jobNoFixedEndDate")?.checked;
+  const startDate = startInput?.value?.slice(0, 10) || "";
+  const endDate = noFixedEndDate ? "" : endInput?.value || "";
+
+  if (startDate && endDate) {
+    const start = dateOnlyMs(startDate);
+    const end = dateOnlyMs(endDate);
+    if (start !== null && end !== null && end < start) {
+      const message = "Estimated end date must be on or after the project start date.";
+      endInput?.setCustomValidity(message);
+      setSchedulePayMessage("jobScheduleStepMessage", message);
+      endInput?.reportValidity();
+      endInput?.focus();
+      return false;
+    }
+  }
+
+  const selectedWorkingDayCount = document.querySelectorAll(
+    'input[name="jobWorkingDays"]:checked',
+  ).length;
+  if (!selectedWorkingDayCount) {
+    setSchedulePayMessage(
+      "jobWorkingDaysMessage",
+      "Select at least one working day.",
+    );
+    document.querySelector('input[name="jobWorkingDays"]')?.focus();
+    return false;
+  }
+
+  const scheduleError = pendingTradeRequirements
+    .map((requirement) =>
+      validateLabourSchedule(
+        requirement.labourSchedule,
+        currentProjectScheduleBounds(),
+      ),
+    )
+    .find(Boolean);
+  if (scheduleError) {
+    setSchedulePayMessage(
+      "jobScheduleStepMessage",
+      `${scheduleError}. Edit the requirement's phased schedule before continuing.`,
+    );
+    return false;
+  }
+  return true;
+}
+
+["jobStart", "jobEndDate"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("input", clearSchedulePayValidation);
+});
+document.getElementById("jobNoFixedEndDate")?.addEventListener("change", () => {
+  clearSchedulePayValidation();
+});
+document.querySelectorAll('input[name="jobWorkingDays"]').forEach((input) => {
+  input.addEventListener("change", clearSchedulePayValidation);
+});
 
 // ─── Multi-trade labour requirement builder ───────────────
 
@@ -8220,8 +8298,31 @@ function renderJobPricingBreakdown() {
   const panel = document.getElementById("jobPricingBreakdown");
   if (!panel) return;
   syncDailyLabourRateFields();
-  const requirements = requestLabourEstimateRequirements();
+  const wizardPricing = jobWizardActive;
+  const requirements = wizardPricing
+    ? [...pendingTradeRequirements]
+    : requestLabourEstimateRequirements();
+  panel.classList.toggle("jw-pricing-panel--wizard", wizardPricing);
+  if (wizardPricing && !requirements.length) {
+    panel.innerHTML = `
+      <div class="jw-estimate-head">
+        <div>
+          <p class="jw-subsection-kicker">Estimated cost</p>
+          <h4>Estimated labour cost</h4>
+          <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
+        </div>
+      </div>
+      <div class="jw-estimate-empty">
+        <strong>No labour requirements have been added.</strong>
+        <span>Add and save at least one requirement before reviewing costs.</span>
+        <button type="button" class="jw-inline-link" data-edit-labour-requirements>Return to Labour &rarr;</button>
+      </div>`;
+    return;
+  }
   const visibleReqs = requirements.map((req, index) => ({
+    trade: req.trade || "",
+    specialism: req.specialism || "",
+    grade: req.grade || "",
     label:
       [req.trade, req.specialism].filter(Boolean).join(" / ") ||
       `Labour requirement ${index + 1}`,
@@ -8258,6 +8359,27 @@ function renderJobPricingBreakdown() {
       const requirementTotal = totalPerWorker * req.quantity;
       totalWorkers += req.quantity;
       totalDailyCost += requirementTotal;
+      if (wizardPricing) {
+        const roleDetails = [req.specialism, req.grade].filter(Boolean).join(" · ");
+        return `
+          <div class="jw-price-row">
+            <div class="jw-price-identity">
+              <strong>${escapeHtml(req.trade || req.label)}</strong>
+              ${roleDetails ? `<span>${escapeHtml(roleDetails)}</span>` : ""}
+              <span class="jw-price-rate-summary">${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(rate)}/day</span>
+              ${req.overtimeAvailable ? `<span class="jw-price-context">Overtime configured; charged only when applicable.</span>` : ""}
+            </div>
+            <div class="jw-price-lines">
+              <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
+              <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
+              ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>` : ""}
+              <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
+              <span>VAT <strong>${formatMoney(vat)}</strong></span>
+              <span>Total per worker <strong>${formatMoney(totalPerWorker)}</strong></span>
+              <span class="jw-price-requirement-total">Requirement daily total <strong>${formatMoney(requirementTotal)}</strong></span>
+            </div>
+          </div>`;
+      }
       return `
         <div class="jw-price-row">
           <div>
@@ -8278,6 +8400,30 @@ function renderJobPricingBreakdown() {
     })
     .join("");
 
+  if (wizardPricing) {
+    panel.innerHTML = `
+      <div class="jw-estimate-head">
+        <div>
+          <p class="jw-subsection-kicker">Estimated cost</p>
+          <h4>Estimated labour cost</h4>
+          <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
+        </div>
+        <button type="button" class="jw-inline-link" data-edit-labour-requirements>Edit labour requirements &rarr;</button>
+      </div>
+      <div class="jw-price-list">${rows}</div>
+      ${
+        visibleReqs.some((req) => req.accommodationAllowance > 0)
+          ? `<p class="jw-price-note">Accommodation is added to the company invoice without an OnSite service fee.</p>`
+          : ""
+      }
+      <div class="jw-price-total">
+        <span>Total workers <strong>${totalWorkers}</strong></span>
+        <span>Labour requirements <strong>${visibleReqs.length}</strong></span>
+        <span class="jw-price-grand-total">Estimated daily labour cost <strong>${formatMoney(totalDailyCost)}</strong></span>
+      </div>`;
+    return;
+  }
+
   panel.innerHTML = `
     <div class="jw-price-head">
       <div>
@@ -8297,6 +8443,11 @@ function renderJobPricingBreakdown() {
       <span>Total daily cost for all workers: <strong>${formatMoney(totalDailyCost)}</strong></span>
     </div>`;
 }
+
+document.getElementById("jobPricingBreakdown")?.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-edit-labour-requirements]")) return;
+  if (jobWizardActive) goToJobWizardStep(2);
+});
 
 function buildLabourRequirementsFromForm(shared = {}) {
   const current = readTradeReqInputs();

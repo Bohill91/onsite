@@ -1093,46 +1093,87 @@
 
               <div class="jw-step" data-wizard-step="3">
               <!-- ── SCHEDULE ────────────────────────────────── -->
-              <section class="jw-card">
-                <header class="jw-card-head">
-                  <p class="jw-kicker">Schedule</p>
-                  <h3 class="jw-card-title">Dates &amp; Shift Pattern</h3>
+              <section class="jw-card jw-schedule-step-card">
+                <header class="jw-card-head jw-schedule-step-head">
+                  <div class="jw-schedule-step-intro">
+                    <p class="jw-kicker">Schedule &amp; Pay</p>
+                    <h3 class="jw-card-title">Schedule &amp; pay</h3>
+                    <p class="jw-card-sub">Set the project dates and standard working pattern, then review the estimated labour cost.</p>
+                  </div>
+                  <div class="jw-schedule-legacy-head">
+                    <p class="jw-kicker">Schedule</p>
+                    <h3 class="jw-card-title">Dates &amp; Shift Pattern</h3>
+                  </div>
                 </header>
-                <div class="jw-grid">
-                  <label class="field-label">
-                    Start Date &amp; Time *
-                    <input id="jobStart" type="datetime-local" required />
-                  </label>
-                  <div class="field-label">
-                    <span>Estimated End Date *</span>
-                    <input id="jobEndDate" type="date" required />
+
+                <section class="jw-schedule-surface" aria-labelledby="jobProjectScheduleTitle">
+                  <div class="jw-schedule-surface-head">
+                    <p class="jw-subsection-kicker">Project schedule</p>
+                    <h4 id="jobProjectScheduleTitle">Project schedule</h4>
+                    <p>Set the overall project dates and the standard shift pattern workers should expect.</p>
                   </div>
-                  <div class="jw-schedule-spacer" aria-hidden="true"></div>
-                  <label class="checkbox-row jw-check" id="jobNoFixedEndWrap">
-                    <input id="jobNoFixedEndDate" type="checkbox" />
-                    <span>No fixed end date</span>
-                  </label>
-                  <label class="field-label">
-                    Shift Start Time *
-                    <input id="jobShiftStart" type="time" required />
-                  </label>
-                  <label class="field-label">
-                    Shift Finish Time *
-                    <input id="jobShiftFinish" type="time" required />
-                  </label>
-                </div>
-                <div class="field-label jw-days-wrap">
-                  Working Days *
-                  <div class="jw-days" role="group" aria-label="Working days">
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="monday" checked /><span>Monday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="tuesday" checked /><span>Tuesday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="wednesday" checked /><span>Wednesday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="thursday" checked /><span>Thursday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="friday" checked /><span>Friday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="saturday" /><span>Saturday</span></label>
-                    <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="sunday" /><span>Sunday</span></label>
-                  </div>
-                </div>
+
+                  <section class="jw-schedule-group" aria-labelledby="jobProjectDatesTitle">
+                    <div class="jw-schedule-group-head">
+                      <h5 id="jobProjectDatesTitle">Project dates</h5>
+                    </div>
+                    <div class="jw-grid jw-schedule-grid">
+                      <label class="field-label">
+                        Project Start Date *
+                        <input id="jobStart" type="datetime-local" required />
+                        <span class="form-helper jw-wizard-only-copy">Includes the project commencement time. Standard daily shift times are set below.</span>
+                      </label>
+                      <div class="jw-end-date-field">
+                        <label class="field-label">
+                          <span>Estimated End Date <span id="jobEndDateRequired">*</span></span>
+                          <input id="jobEndDate" type="date" required />
+                        </label>
+                        <label class="checkbox-row jw-check" id="jobNoFixedEndWrap">
+                          <input id="jobNoFixedEndDate" type="checkbox" />
+                          <span>No fixed end date</span>
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="jw-schedule-group" aria-labelledby="jobStandardShiftTitle">
+                    <div class="jw-schedule-group-head">
+                      <h5 id="jobStandardShiftTitle">Standard shift</h5>
+                      <p>Set the normal daily start and finish time for this project.</p>
+                    </div>
+                    <div class="jw-grid jw-schedule-grid">
+                      <label class="field-label">
+                        Start time *
+                        <input id="jobShiftStart" type="time" required />
+                      </label>
+                      <label class="field-label">
+                        Finish time *
+                        <input id="jobShiftFinish" type="time" required />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section class="jw-schedule-group" aria-labelledby="jobWorkingDaysTitle">
+                    <div class="jw-schedule-group-head">
+                      <h5 id="jobWorkingDaysTitle">Working days</h5>
+                    </div>
+                    <div class="field-label jw-days-wrap">
+                      <span class="jw-working-days-legacy-label">Working Days *</span>
+                      <div class="jw-days" role="group" aria-label="Working days" aria-describedby="jobWorkingDaysMessage">
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="monday" checked /><span>Monday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="tuesday" checked /><span>Tuesday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="wednesday" checked /><span>Wednesday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="thursday" checked /><span>Thursday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="friday" checked /><span>Friday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="saturday" /><span>Saturday</span></label>
+                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="sunday" /><span>Sunday</span></label>
+                      </div>
+                      <p id="jobWorkingDaysMessage" class="jw-schedule-message hidden" role="alert"></p>
+                    </div>
+                  </section>
+                  <p id="jobScheduleStepMessage" class="jw-schedule-message hidden" role="alert"></p>
+                </section>
+
                 <div id="jobPricingBreakdownWizardMount" class="jw-pricing-wizard-mount"></div>
               </section>
               </div>
