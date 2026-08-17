@@ -5319,6 +5319,7 @@ function upsertProjectRequirement(jobId, input) {
   );
   if (idx === -1) job.preStartDocuments.unshift(record);
   else job.preStartDocuments[idx] = record;
+  job.preStartSetupStatus = "configured";
   saveState();
   return { ok: true, document: record, updated: !!existing };
 }
@@ -7704,6 +7705,9 @@ const JOB_WIZARD_STEPS = [
 let jobWizardActive = false;
 let jobWizardStep = 1;
 let jobWizardCompleted = new Set();
+let jobWizardEnteredFromReview = false;
+let jobWizardSubmissionApproved = false;
+let jobWizardSubmissionInProgress = false;
 
 const DRAFT_PRE_START_SETUP_STATUSES = new Set([
   "configured",
@@ -7776,6 +7780,61 @@ function getDraftPreStartSubmissionPayload() {
       .filter(Boolean)
       .map((requirement) => structuredClone(requirement)),
   };
+}
+
+function finalizeDraftPreStartConfiguration(finalLabourRequirements) {
+  const payload = getDraftPreStartSubmissionPayload();
+  if (!DRAFT_PRE_START_SETUP_STATUSES.has(payload.setupStatus)) {
+    throw new Error("Choose how pre-start requirements will be handled.");
+  }
+  if (payload.setupStatus !== "configured") {
+    return { setupStatus: payload.setupStatus, requirements: [] };
+  }
+
+  const finalRequirements = Array.isArray(finalLabourRequirements)
+    ? finalLabourRequirements
+    : [];
+  const finalById = new Map(
+    finalRequirements.map((requirement) => [requirement.id, requirement]),
+  );
+  const draftToFinalId = new Map(
+    pendingTradeRequirements.map((draftRequirement) => {
+      const persisted =
+        finalById.get(draftRequirement.id) ||
+        finalRequirements.find((requirement) =>
+          sameTradeRequirement(requirement, draftRequirement),
+        );
+      return [draftRequirement.id, persisted?.id || ""];
+    }),
+  );
+
+  const requirements = payload.requirements.map((requirement) => {
+    const audience = normalizeProjectRequirementAudience(requirement.audience);
+    if (audience.type !== "labour_requirement") return requirement;
+    const finalRequirementId = draftToFinalId.get(
+      audience.labourRequirementId,
+    );
+    if (!finalRequirementId) {
+      throw new Error(
+        `Review the labour assignment for ${requirement.documentName}.`,
+      );
+    }
+    return normalizeDraftPreStartRequirement(
+      {
+        ...requirement,
+        audience: {
+          type: "labour_requirement",
+          labourRequirementId: finalRequirementId,
+        },
+      },
+      requirement,
+    );
+  });
+
+  if (requirements.length !== payload.requirements.length) {
+    throw new Error("Review the pre-start requirements before finding labour.");
+  }
+  return { setupStatus: payload.setupStatus, requirements };
 }
 
 function draftPreStartRequirementAssignmentIssue(requirement) {
@@ -7877,41 +7936,66 @@ function renderDraftPreStartStep() {
   if (body) body.innerHTML = draftPreStartStateHTML();
 }
 
-function validateDraftPreStartStep() {
+function validateDraftPreStartStep({ report = true } = {}) {
   if (!DRAFT_PRE_START_SETUP_STATUSES.has(draftPreStartSetupStatus)) {
-    setDraftPreStartValidation(
-      "Choose how pre-start requirements will be handled for this project.",
-    );
-    document
-      .querySelector('input[name="jobPreStartSetupStatus"]')
-      ?.focus();
+    if (report) {
+      setDraftPreStartValidation(
+        "Choose how pre-start requirements will be handled for this project.",
+      );
+      document
+        .querySelector('input[name="jobPreStartSetupStatus"]')
+        ?.focus();
+    }
     return false;
   }
   if (
     draftPreStartSetupStatus === "configured" &&
     !draftPreStartRequirements.length
   ) {
-    setDraftPreStartValidation(
-      "Add at least one pre-start requirement to continue, or choose a different setup option.",
-    );
-    document.querySelector("[data-draft-prestart-add]")?.focus();
+    if (report) {
+      setDraftPreStartValidation(
+        "Add at least one pre-start requirement to continue, or choose a different setup option.",
+      );
+      document.querySelector("[data-draft-prestart-add]")?.focus();
+    }
     return false;
   }
   const assignmentIssue = draftPreStartRequirements.find(
     draftPreStartRequirementAssignmentIssue,
   );
   if (draftPreStartSetupStatus === "configured" && assignmentIssue) {
-    setDraftPreStartValidation(
-      `Review the assignment for ${assignmentIssue.documentName} before continuing.`,
-    );
-    document
-      .querySelector(
-        `[data-draft-prestart-edit="${CSS.escape(assignmentIssue.documentId)}"]`,
-      )
-      ?.focus();
+    if (report) {
+      setDraftPreStartValidation(
+        `Review the assignment for ${assignmentIssue.documentName} before continuing.`,
+      );
+      document
+        .querySelector(
+          `[data-draft-prestart-edit="${CSS.escape(assignmentIssue.documentId)}"]`,
+        )
+        ?.focus();
+    }
     return false;
   }
-  setDraftPreStartValidation();
+  const invalidRequirement = draftPreStartRequirements.find((requirement) =>
+    projectRequirementDraftValidationIssue({
+      mode: "draft",
+      draft: requirement,
+    }),
+  );
+  if (draftPreStartSetupStatus === "configured" && invalidRequirement) {
+    if (report) {
+      setDraftPreStartValidation(
+        `Review ${invalidRequirement.documentName} before continuing.`,
+      );
+      document
+        .querySelector(
+          `[data-draft-prestart-edit="${CSS.escape(invalidRequirement.documentId)}"]`,
+        )
+        ?.focus();
+    }
+    return false;
+  }
+  if (report) setDraftPreStartValidation();
   return true;
 }
 
@@ -8055,6 +8139,9 @@ function enterJobWizardMode({ reset = false } = {}) {
   if (reset || !wasActive) {
     jobWizardStep = 1;
     jobWizardCompleted = new Set();
+    jobWizardEnteredFromReview = false;
+    jobWizardSubmissionApproved = false;
+    jobWizardSubmissionInProgress = false;
   }
   goToJobWizardStep(jobWizardStep, { scroll: false });
 }
@@ -8075,6 +8162,314 @@ function jobWizardStepNavigable(step) {
     if (!jobWizardCompleted.has(s)) return false;
   }
   return true;
+}
+
+function jobWizardReviewRowsHTML(rows) {
+  const visible = rows.filter(([, value]) => String(value ?? "").trim());
+  if (!visible.length) return "";
+  return `<dl class="jw-review-rows">${visible
+    .map(
+      ([label, value]) =>
+        `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`,
+    )
+    .join("")}</dl>`;
+}
+
+function jobWizardReviewSectionHTML({ key, title, step, content }) {
+  const headingId = `jobReview${key.replace(/[^a-z0-9]+/gi, "")}Title`;
+  return `<section class="jw-review-section" aria-labelledby="${headingId}">
+    <header class="jw-review-section-head">
+      <div><p>${escapeHtml(key)}</p><h4 id="${headingId}">${escapeHtml(title)}</h4></div>
+      <button type="button" class="jw-inline-link" data-job-review-edit="${step}">Edit &rarr;</button>
+    </header>
+    ${content}
+  </section>`;
+}
+
+function jobWizardProjectReviewHTML() {
+  const assignmentType = document.getElementById("jobAssignmentType")?.value;
+  return jobWizardReviewSectionHTML({
+    key: "PROJECT",
+    title: "Project",
+    step: 1,
+    content: jobWizardReviewRowsHTML([
+      ["Project name", document.getElementById("projectName")?.value.trim()],
+      ["Job number", document.getElementById("jobNumber")?.value.trim()],
+      [
+        "Assignment type",
+        assignmentType
+          ? assignmentTypeLabel({ assignmentType })
+          : "",
+      ],
+      ["Location", document.getElementById("jobLocation")?.value.trim()],
+    ]),
+  });
+}
+
+function overtimeRateTypeLabel(value) {
+  return {
+    standard: "Standard rate",
+    time_and_third: "Time and a third",
+    time_and_half: "Time and a half",
+    double_time: "Double time",
+    custom: "Custom",
+  }[value] || "Standard rate";
+}
+
+function jobWizardLabourRequirementReviewHTML(requirement) {
+  const quantity = Math.max(1, Number(requirement.quantity) || 1);
+  const identity = [requirement.specialism, `${quantity} worker${quantity === 1 ? "" : "s"}`]
+    .filter(Boolean)
+    .join(" · ");
+  const detail = [requirement.grade, requirement.workActivity]
+    .filter(Boolean)
+    .join(" · ");
+  const conditions = [];
+  if (requirement.overtimeAvailable) {
+    const rates = requirement.overtimeRates || {};
+    conditions.push(
+      `Overtime: after-hours ${overtimeRateTypeLabel(rates.afterStandardHours)}, Saturday ${overtimeRateTypeLabel(rates.saturday)}, Sunday ${overtimeRateTypeLabel(rates.sunday)}`,
+    );
+  }
+  if (requirement.accommodationPaid) {
+    conditions.push(
+      requirement.accommodationAllowancePerNight
+        ? `Accommodation ${formatMoney(requirement.accommodationAllowancePerNight)}/night`
+        : "Accommodation paid",
+    );
+  }
+  const periods = normalizeLabourSchedule(requirement.labourSchedule);
+  if (periods.length) {
+    conditions.push(
+      `Phased schedule · ${periods.length} period${periods.length === 1 ? "" : "s"}`,
+    );
+  }
+  conditions.push(
+    requirement.workerReceivesFullAdvertisedRate !== false
+      ? "Worker receives full advertised rate"
+      : "Service fee included within advertised rate",
+  );
+  return `<article class="jw-review-labour-row">
+    <div class="jw-review-labour-identity">
+      <strong>${escapeHtml(requirement.trade || "Labour requirement")}</strong>
+      ${identity ? `<span>${escapeHtml(identity)}</span>` : ""}
+      ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
+      ${requirement.requiredQualifications ? `<span>${escapeHtml(requirement.requiredQualifications)}</span>` : ""}
+    </div>
+    <div class="jw-review-labour-terms">
+      ${requirement.budgetMax ? `<strong>${formatMoney(requirement.budgetMax)}/day</strong>` : ""}
+      ${conditions.map((condition) => `<span>${escapeHtml(condition)}</span>`).join("")}
+    </div>
+  </article>`;
+}
+
+function jobWizardPreferredWorkersReviewHTML() {
+  const ids = preferredWorkerIdsFromJobForm();
+  if (!ids.length) {
+    return `<p class="jw-review-quiet">No preferred workers selected</p>`;
+  }
+  const names = ids
+    .map((workerId) => findWorker(workerId)?.name || "")
+    .filter(Boolean);
+  return `<div class="jw-review-preferred"><span>Preferred workers</span><strong>${escapeHtml(names.join(" · ") || `${ids.length} selected`)}</strong></div>`;
+}
+
+function jobWizardLabourReviewHTML() {
+  const totalWorkers = pendingTradeRequirements.reduce(
+    (sum, requirement) => sum + Math.max(1, Number(requirement.quantity) || 1),
+    0,
+  );
+  const content = pendingTradeRequirements.length
+    ? `<div class="jw-review-labour-list">${pendingTradeRequirements
+        .map(jobWizardLabourRequirementReviewHTML)
+        .join("")}</div>`
+    : `<p class="jw-review-empty">No saved labour requirements.</p>`;
+  return jobWizardReviewSectionHTML({
+    key: "LABOUR",
+    title: "Labour",
+    step: 2,
+    content: `${content}
+      <div class="jw-review-totals"><span>Total workers <strong>${totalWorkers}</strong></span><span>Labour requirements <strong>${pendingTradeRequirements.length}</strong></span></div>
+      ${jobWizardPreferredWorkersReviewHTML()}`,
+  });
+}
+
+function jobWizardScheduleReviewHTML() {
+  const start = document.getElementById("jobStart")?.value || "";
+  const noFixedEndDate = !!document.getElementById("jobNoFixedEndDate")?.checked;
+  const end = document.getElementById("jobEndDate")?.value || "";
+  const shiftStart = document.getElementById("jobShiftStart")?.value || "";
+  const shiftFinish = document.getElementById("jobShiftFinish")?.value || "";
+  const workingDays = selectedJobWorkingDays()
+    .map((day) => WORKING_DAY_LABELS[day]?.slice(0, 3) || "")
+    .filter(Boolean)
+    .join(" · ");
+  return jobWizardReviewSectionHTML({
+    key: "SCHEDULE & PAY",
+    title: "Schedule & pay",
+    step: 3,
+    content: jobWizardReviewRowsHTML([
+      ["Project start", start ? formatDate(start) : ""],
+      [
+        "Estimated end",
+        noFixedEndDate ? "No fixed end date" : end ? formatDateOnly(end) : "",
+      ],
+      [
+        "Standard shift",
+        [shiftStart, shiftFinish].filter(Boolean).join("–"),
+      ],
+      ["Working days", workingDays],
+    ]),
+  });
+}
+
+function jobWizardSiteReviewHTML() {
+  const contactName = document.getElementById("jobContactName")?.value.trim() || "";
+  const contactPhone = document.getElementById("jobContactPhone")?.value.trim() || "";
+  const managerName = document.getElementById("attendanceManagerName")?.value.trim() || "";
+  const managerEmail = document.getElementById("attendanceManagerEmail")?.value.trim() || "";
+  const managerPhone = document.getElementById("attendanceManagerPhone")?.value.trim() || "";
+  const hasPin =
+    currentJobPin?.lat != null &&
+    currentJobPin?.lng != null &&
+    Number.isFinite(Number(currentJobPin.lat)) &&
+    Number.isFinite(Number(currentJobPin.lng));
+  const photoCount = Object.values(currentJobPhotos || {}).filter(Boolean).length;
+  const attendanceSetup = managerName
+    ? [managerName, managerEmail, managerPhone].filter(Boolean).join(" · ")
+    : "Company-managed";
+  return jobWizardReviewSectionHTML({
+    key: "SITE & ATTENDANCE",
+    title: "Site & attendance",
+    step: 4,
+    content: jobWizardReviewRowsHTML([
+      ["Site address", document.getElementById("jobSiteAddress")?.value.trim()],
+      ["Site contact name", contactName],
+      ["Site contact phone", contactPhone],
+      [
+        "Arrival instructions",
+        document.getElementById("jobArrivalInstructions")?.value.trim(),
+      ],
+      ["Parking", document.getElementById("jobParking")?.value.trim()],
+      ["PPE", document.getElementById("jobPpe")?.value.trim()],
+      [
+        "Additional notes",
+        document.getElementById("jobGateAccess")?.value.trim(),
+      ],
+      ["Entrance pin", hasPin ? "Set" : "Not set"],
+      ["Site photos", `${photoCount} added`],
+      ["Attendance setup", attendanceSetup],
+    ]),
+  });
+}
+
+function jobWizardPreStartReviewHTML() {
+  let content = "";
+  if (draftPreStartSetupStatus === "configured") {
+    const ready = draftPreStartRequirements.filter(
+      (requirement) =>
+        !requirement.contentToFollow &&
+        !draftPreStartRequirementAssignmentIssue(requirement),
+    ).length;
+    const contentToFollow = draftPreStartRequirements.filter(
+      (requirement) => requirement.contentToFollow,
+    ).length;
+    const groups = PROJECT_REQUIREMENT_TIMINGS.map((timing) => {
+      const requirements = draftPreStartRequirements.filter(
+        (requirement) => requirement.timing === timing.value,
+      );
+      if (!requirements.length) return "";
+      const label =
+        timing.value === "reference_anytime"
+          ? "Optional / reference"
+          : timing.label;
+      return `<div class="jw-review-prestart-group"><span>${escapeHtml(label)}</span>${requirements
+        .map(
+          (requirement) => `<div><strong>${escapeHtml(requirement.documentName)}</strong><small>${escapeHtml([
+            projectRequirementTypeLabel(requirement.requirementType),
+            requirement.requirementLevel === "optional" ? "Optional" : "Required",
+            projectRequirementConfiguredActionLabel(requirement),
+            projectRequirementAudienceLabelFromRequirements(
+              pendingTradeRequirements,
+              requirement,
+            ),
+          ].join(" · "))}</small></div>`,
+        )
+        .join("")}</div>`;
+    }).join("");
+    content = `<div class="jw-review-readiness"><strong>${draftPreStartRequirements.length} requirement${draftPreStartRequirements.length === 1 ? "" : "s"}</strong><span>${ready} ready${contentToFollow ? ` · ${contentToFollow} content to follow` : ""}</span></div>${groups}`;
+  } else if (draftPreStartSetupStatus === "pending") {
+    content = `<div class="jw-review-state is-warning"><strong>Pre-start setup pending</strong><span>Requirements will need to be configured from the project before workers are cleared to start.</span></div>`;
+  } else if (draftPreStartSetupStatus === "none") {
+    content = `<div class="jw-review-state"><strong>No pre-start requirements</strong><span>This project has been explicitly marked as not requiring pre-start actions.</span></div>`;
+  } else {
+    content = `<div class="jw-review-state is-blocking"><strong>Pre-start setup not selected</strong><span>Choose how pre-start requirements will be handled before finding labour.</span></div>`;
+  }
+  return jobWizardReviewSectionHTML({
+    key: "PRE-START",
+    title: "Pre-start",
+    step: 5,
+    content,
+  });
+}
+
+function jobWizardEstimatedCostReviewHTML() {
+  const pricing = buildRequestLabourPricingModel(pendingTradeRequirements);
+  const rows = [
+    ["Total workers", String(pricing.totalWorkers)],
+    ["Labour requirements", String(pricing.requirements.length)],
+    ["Worker labour", formatMoney(pricing.totalWorkerLabour)],
+    ["OnSite service fee", formatMoney(pricing.totalServiceFee)],
+    ["VAT", formatMoney(pricing.totalVat)],
+  ];
+  if (pricing.totalAccommodation) {
+    rows.splice(4, 0, ["Accommodation allowance", formatMoney(pricing.totalAccommodation)]);
+  }
+  return `<section class="jw-review-section jw-review-cost" aria-labelledby="jobReviewCostTitle">
+    <header class="jw-review-section-head"><div><p>ESTIMATED COST</p><h4 id="jobReviewCostTitle">Estimated labour cost</h4></div></header>
+    ${jobWizardReviewRowsHTML(rows)}
+    <div class="jw-review-cost-total"><span>Estimated daily total</span><strong>${formatMoney(pricing.totalDailyCost)}</strong></div>
+    <p class="jw-review-disclaimer">Final invoices are based on approved attendance and any applicable adjustments.</p>
+  </section>`;
+}
+
+function jobWizardReviewWarningsHTML() {
+  const warnings = [];
+  if (draftPreStartSetupStatus === "pending") {
+    warnings.push({
+      step: 5,
+      text: "Pre-start requirements will need to be configured from the project before workers are cleared to start.",
+    });
+  }
+  const contentToFollow = draftPreStartRequirements.filter(
+    (requirement) => requirement.contentToFollow,
+  );
+  if (draftPreStartSetupStatus === "configured" && contentToFollow.length) {
+    warnings.push({
+      step: 5,
+      text: `${contentToFollow.length} pre-start requirement${contentToFollow.length === 1 ? " has" : "s have"} content to follow.`,
+    });
+  }
+  if (!warnings.length) return "";
+  return `<section class="jw-review-warnings" aria-labelledby="jobReviewWarningsTitle"><h4 id="jobReviewWarningsTitle">Items to review</h4>${warnings
+    .map(
+      (warning) => `<div><span>${escapeHtml(warning.text)}</span><button type="button" class="jw-inline-link" data-job-review-edit="${warning.step}">Edit &rarr;</button></div>`,
+    )
+    .join("")}</section>`;
+}
+
+function renderJobWizardReview() {
+  const body = document.getElementById("jobWizardReviewBody");
+  if (!body) return;
+  body.innerHTML = [
+    jobWizardProjectReviewHTML(),
+    jobWizardLabourReviewHTML(),
+    jobWizardScheduleReviewHTML(),
+    jobWizardSiteReviewHTML(),
+    jobWizardPreStartReviewHTML(),
+    jobWizardEstimatedCostReviewHTML(),
+    jobWizardReviewWarningsHTML(),
+  ].join("");
 }
 
 function renderJobWizardChrome() {
@@ -8118,6 +8513,16 @@ function renderJobWizardChrome() {
   document
     .getElementById("jobWizardContinue")
     ?.classList.toggle("hidden", jobWizardStep === JOB_WIZARD_STEPS.length);
+  const continueButton = document.getElementById("jobWizardContinue");
+  if (continueButton) {
+    continueButton.textContent =
+      jobWizardEnteredFromReview && jobWizardStep < JOB_WIZARD_STEPS.length
+        ? "Return to review"
+        : "Continue";
+  }
+  document
+    .getElementById("jobWizardSubmit")
+    ?.classList.toggle("hidden", jobWizardStep !== JOB_WIZARD_STEPS.length);
 }
 
 function goToJobWizardStep(step, { scroll = true } = {}) {
@@ -8135,6 +8540,10 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
   if (jobWizardStep === 3) renderJobPricingBreakdown();
   if (jobWizardStep === 4) requestAnimationFrame(() => initPickerMap());
   if (jobWizardStep === 5) renderDraftPreStartStep();
+  if (jobWizardStep === 6) {
+    jobWizardEnteredFromReview = false;
+    renderJobWizardReview();
+  }
   if (scroll) scrollAppToTop();
 }
 
@@ -8142,7 +8551,7 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
 // controls only. Required-state decisions made elsewhere (e.g.
 // syncTradeReqBuilderState, updateAssignmentTypeForm) are read, never
 // overwritten. Phase C2 will layer full business validation on top.
-function validateJobWizardStep(step) {
+function validateJobWizardStep(step, { report = true } = {}) {
   const container = document.querySelector(
     `#formJob .jw-step[data-wizard-step="${step}"]`,
   );
@@ -8152,14 +8561,14 @@ function validateJobWizardStep(step) {
     if (el.disabled || !el.willValidate) continue;
     if (el.closest(".hidden")) continue; // collapsed conditional sections
     if (!el.checkValidity()) {
-      el.reportValidity();
+      if (report) el.reportValidity();
       return false;
     }
   }
   return true;
 }
 
-function validateSiteAttendanceWizardStep() {
+function validateSiteAttendanceWizardStep({ report = true } = {}) {
   const map = document.getElementById("jobPickerMap");
   const message = document.getElementById("jobEntrancePinMessage");
   const hasEntrancePin =
@@ -8168,26 +8577,114 @@ function validateSiteAttendanceWizardStep() {
     Number.isFinite(Number(currentJobPin.lat)) &&
     Number.isFinite(Number(currentJobPin.lng));
 
-  map?.setAttribute("aria-invalid", String(!hasEntrancePin));
-  if (message) {
+  if (report) map?.setAttribute("aria-invalid", String(!hasEntrancePin));
+  if (report && message) {
     message.textContent = hasEntrancePin
       ? ""
       : "Place the exact entrance pin before continuing.";
     message.classList.toggle("hidden", hasEntrancePin);
   }
-  if (!hasEntrancePin) map?.focus({ preventScroll: true });
+  if (report && !hasEntrancePin) map?.focus({ preventScroll: true });
   return hasEntrancePin;
+}
+
+function validateRequestLabourWizardStep(step, { report = false } = {}) {
+  if (step === 2 && !validateLabourWizardStepNavigation({ report })) return false;
+  if (!validateJobWizardStep(step, { report })) return false;
+  if (step === 3 && !validateSchedulePayWizardStep({ report })) return false;
+  if (step === 4 && !validateSiteAttendanceWizardStep({ report })) return false;
+  if (step === 5 && !validateDraftPreStartStep({ report })) return false;
+  return true;
+}
+
+function validateRequestLabourWizard() {
+  for (let step = 1; step <= 5; step += 1) {
+    if (!validateRequestLabourWizardStep(step, { report: false })) {
+      return { valid: false, step };
+    }
+  }
+  return { valid: true, step: 6 };
+}
+
+function routeToInvalidJobWizardStep(
+  step,
+  { preserveReviewReturn = false } = {},
+) {
+  jobWizardEnteredFromReview = preserveReviewReturn;
+  goToJobWizardStep(step);
+  requestAnimationFrame(() => {
+    validateRequestLabourWizardStep(step, { report: true });
+  });
+}
+
+function attemptReturnToJobWizardReview() {
+  const validation = validateRequestLabourWizard();
+  if (!validation.valid) {
+    routeToInvalidJobWizardStep(validation.step, {
+      preserveReviewReturn: true,
+    });
+    return;
+  }
+  for (let step = 1; step <= 5; step += 1) jobWizardCompleted.add(step);
+  goToJobWizardStep(6);
+}
+
+function resetJobWizardSubmissionState() {
+  jobWizardSubmissionApproved = false;
+  jobWizardSubmissionInProgress = false;
+  const submitButton = document.getElementById("jobWizardSubmit");
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Find Labour";
+  }
+}
+
+function submitRequestLabourWizard() {
+  if (!jobWizardActive || jobWizardStep !== 6 || jobWizardSubmissionInProgress) {
+    return;
+  }
+  const validation = validateRequestLabourWizard();
+  if (!validation.valid) {
+    routeToInvalidJobWizardStep(validation.step);
+    return;
+  }
+  jobWizardSubmissionApproved = true;
+  jobWizardSubmissionInProgress = true;
+  const submitButton = document.getElementById("jobWizardSubmit");
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Finding labour…";
+  }
+  try {
+    jobForm.requestSubmit();
+  } catch (error) {
+    resetJobWizardSubmissionState();
+    showToast(error?.message || "The labour request could not be submitted");
+  }
 }
 
 document.getElementById("jobWizardContinue")?.addEventListener("click", () => {
   if (!jobWizardActive) return;
-  if (jobWizardStep === 2 && !validateLabourWizardStepNavigation()) return;
-  if (jobWizardStep === 3 && !validateSchedulePayWizardStep()) return;
-  if (!validateJobWizardStep(jobWizardStep)) return;
-  if (jobWizardStep === 4 && !validateSiteAttendanceWizardStep()) return;
-  if (jobWizardStep === 5 && !validateDraftPreStartStep()) return;
+  if (jobWizardEnteredFromReview) {
+    requestJobWizardNavigation(6);
+    return;
+  }
+  if (!validateRequestLabourWizardStep(jobWizardStep, { report: true })) return;
   jobWizardCompleted.add(jobWizardStep);
   goToJobWizardStep(jobWizardStep + 1);
+});
+
+document
+  .getElementById("jobWizardSubmit")
+  ?.addEventListener("click", submitRequestLabourWizard);
+
+document.getElementById("jobWizardReviewBody")?.addEventListener("click", (event) => {
+  const edit = event.target.closest("[data-job-review-edit]");
+  if (!edit) return;
+  const step = Number(edit.dataset.jobReviewEdit);
+  if (step < 1 || step > 5) return;
+  jobWizardEnteredFromReview = true;
+  goToJobWizardStep(step);
 });
 
 document.getElementById("jobWizardBack")?.addEventListener("click", () => {
@@ -8204,14 +8701,21 @@ document.querySelectorAll("[data-wizard-goto]").forEach((btn) => {
   });
 });
 
-// Phase A safety: no company-wizard submission path. This capture-phase
-// listener on document fires before any of #jobForm's own submit listeners
-// (restoreFirstTradeRequirement and the main handler keep their existing
-// order for the modal flow, which is unaffected).
+// Company wizard submission is permitted only after Step 6 final validation.
+// This capture-phase listener still blocks every other wizard submission while
+// allowing the approved event to continue through the form's existing ordered
+// listeners (restoreFirstTradeRequirement, then the main creation handler).
 document.addEventListener(
   "submit",
   (event) => {
     if (!jobWizardActive || event.target !== jobForm) return;
+    if (
+      jobWizardSubmissionApproved &&
+      jobWizardSubmissionInProgress &&
+      jobWizardStep === 6
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
   },
@@ -8277,12 +8781,14 @@ function openTradeRequirementGuard(step) {
     const targetStep = pendingJobWizardNavigationStep;
     closeTradeRequirementGuard();
     discardTradeRequirementEditorChanges();
-    if (targetStep) goToJobWizardStep(targetStep);
+    if (targetStep) requestJobWizardNavigation(targetStep);
   });
   modal.querySelector("[data-requirement-guard-save]")?.addEventListener("click", () => {
     const targetStep = pendingJobWizardNavigationStep;
     closeTradeRequirementGuard();
-    if (saveTradeRequirement() && targetStep) goToJobWizardStep(targetStep);
+    if (saveTradeRequirement() && targetStep) {
+      requestJobWizardNavigation(targetStep);
+    }
   });
   modal.querySelector("[data-requirement-guard-keep]")?.focus();
 }
@@ -8293,11 +8799,15 @@ function requestJobWizardNavigation(step) {
     step !== 5 &&
     projectRequirementEditorState?.mode === "draft"
   ) {
-    requestProjectRequirementEditorExit(() => goToJobWizardStep(step));
+    requestProjectRequirementEditorExit(() => requestJobWizardNavigation(step));
     return;
   }
   if (jobWizardStep === 2 && step !== 2 && tradeRequirementEditorHasUnsavedChanges()) {
     openTradeRequirementGuard(step);
+    return;
+  }
+  if (step === 6 && jobWizardEnteredFromReview) {
+    attemptReturnToJobWizardReview();
     return;
   }
   goToJobWizardStep(step);
@@ -8318,26 +8828,69 @@ function setTradeRequirementMessage(message = "", { allowDiscard = false } = {})
   }
 }
 
-function validateLabourWizardStepNavigation() {
-  if (tradeRequirementEditorHasUnsavedChanges()) {
-    setTradeRequirementMessage(
-      "Save or discard this requirement before continuing.",
-      { allowDiscard: true },
+function savedLabourRequirementValidationIssue() {
+  for (const requirement of pendingTradeRequirements) {
+    if (!requirement.trade) return { requirement, message: "Select a trade." };
+    if (!requirement.specialism) {
+      return { requirement, message: "Select a role / specialism." };
+    }
+    if (!requirement.workActivity) {
+      return { requirement, message: "Enter the work activity." };
+    }
+    if (!requirement.requiredQualifications) {
+      return {
+        requirement,
+        message: "Enter the required qualifications & tickets.",
+      };
+    }
+    if (!Number.isFinite(Number(requirement.quantity)) || Number(requirement.quantity) < 1) {
+      return { requirement, message: "Enter at least one worker." };
+    }
+    if (!Number.isFinite(Number(requirement.budgetMax)) || Number(requirement.budgetMax) <= 0) {
+      return { requirement, message: "Enter the daily labour rate." };
+    }
+    const scheduleError = validateLabourSchedule(
+      requirement.labourSchedule,
+      currentProjectScheduleBounds(),
     );
-    updateTradeRequirementEditorState();
-    document.getElementById("jobAddTradeBtn")?.focus();
+    if (scheduleError) return { requirement, message: scheduleError };
+  }
+  return null;
+}
+
+function validateLabourWizardStepNavigation({ report = true } = {}) {
+  if (tradeRequirementEditorHasUnsavedChanges()) {
+    if (report) {
+      setTradeRequirementMessage(
+        "Save or discard this requirement before continuing.",
+        { allowDiscard: true },
+      );
+      updateTradeRequirementEditorState();
+      document.getElementById("jobAddTradeBtn")?.focus();
+    }
     return false;
   }
   if (!pendingTradeRequirements.length) {
-    tradeRequirementEditorOpen = true;
-    updateTradeRequirementEditorState();
-    setTradeRequirementMessage(
-      "Add and save at least one labour requirement to continue.",
-    );
-    document.getElementById("jobTrade")?.focus();
+    if (report) {
+      tradeRequirementEditorOpen = true;
+      updateTradeRequirementEditorState();
+      setTradeRequirementMessage(
+        "Add and save at least one labour requirement to continue.",
+      );
+      document.getElementById("jobTrade")?.focus();
+    }
     return false;
   }
-  setTradeRequirementMessage();
+  const issue = savedLabourRequirementValidationIssue();
+  if (issue) {
+    if (report) {
+      openTradeRequirementEditor(issue.requirement);
+      setTradeRequirementMessage(issue.message, { allowDiscard: true });
+      showToast(issue.message);
+    }
+    return false;
+  }
+  if (report) setTradeRequirementMessage();
   return true;
 }
 
@@ -8433,8 +8986,8 @@ function clearSchedulePayValidation() {
   setSchedulePayMessage("jobScheduleStepMessage");
 }
 
-function validateSchedulePayWizardStep() {
-  clearSchedulePayValidation();
+function validateSchedulePayWizardStep({ report = true } = {}) {
+  if (report) clearSchedulePayValidation();
   const startInput = document.getElementById("jobStart");
   const endInput = document.getElementById("jobEndDate");
   const noFixedEndDate = !!document.getElementById("jobNoFixedEndDate")?.checked;
@@ -8446,10 +8999,12 @@ function validateSchedulePayWizardStep() {
     const end = dateOnlyMs(endDate);
     if (start !== null && end !== null && end < start) {
       const message = "Estimated end date must be on or after the project start date.";
-      endInput?.setCustomValidity(message);
-      setSchedulePayMessage("jobScheduleStepMessage", message);
-      endInput?.reportValidity();
-      endInput?.focus();
+      if (report) {
+        endInput?.setCustomValidity(message);
+        setSchedulePayMessage("jobScheduleStepMessage", message);
+        endInput?.reportValidity();
+        endInput?.focus();
+      }
       return false;
     }
   }
@@ -8458,11 +9013,13 @@ function validateSchedulePayWizardStep() {
     'input[name="jobWorkingDays"]:checked',
   ).length;
   if (!selectedWorkingDayCount) {
-    setSchedulePayMessage(
-      "jobWorkingDaysMessage",
-      "Select at least one working day.",
-    );
-    document.querySelector('input[name="jobWorkingDays"]')?.focus();
+    if (report) {
+      setSchedulePayMessage(
+        "jobWorkingDaysMessage",
+        "Select at least one working day.",
+      );
+      document.querySelector('input[name="jobWorkingDays"]')?.focus();
+    }
     return false;
   }
 
@@ -8475,10 +9032,12 @@ function validateSchedulePayWizardStep() {
     )
     .find(Boolean);
   if (scheduleError) {
-    setSchedulePayMessage(
-      "jobScheduleStepMessage",
-      `${scheduleError}. Edit the requirement's phased schedule before continuing.`,
-    );
+    if (report) {
+      setSchedulePayMessage(
+        "jobScheduleStepMessage",
+        `${scheduleError}. Edit the requirement's phased schedule before continuing.`,
+      );
+    }
     return false;
   }
   return true;
@@ -8710,6 +9269,78 @@ function syncDailyLabourRateFields() {
   if (rateInput && minInput) minInput.value = rateInput.value;
 }
 
+function buildRequestLabourPricingModel(requirements = []) {
+  const visibleReqs = requirements.map((req, index) => ({
+    trade: req.trade || "",
+    specialism: req.specialism || "",
+    grade: req.grade || "",
+    label:
+      [req.trade, req.specialism].filter(Boolean).join(" / ") ||
+      `Labour requirement ${index + 1}`,
+    quantity: Math.max(1, Number(req.quantity) || 1),
+    rate: Math.max(0, Number(req.budgetMax) || 0),
+    workerReceivesFullAdvertisedRate: req.workerReceivesFullAdvertisedRate !== false,
+    overtimeAvailable: !!req.overtimeAvailable,
+    accommodationAllowance: req.accommodationPaid
+      ? Math.max(0, Number(req.accommodationAllowancePerNight) || 0)
+      : 0,
+  }));
+
+  // TODO: Replace these provisional display-only percentages with configured
+  // commercial rates when the real checkout/invoicing layer exists.
+  const serviceFeePct = 0.15;
+  const vatPct = 0.2;
+  const pricedRequirements = visibleReqs.map((req) => {
+    const rate = req.rate;
+    const accommodationAllowance = req.accommodationAllowance;
+    const workerReceivesFullRate = req.workerReceivesFullAdvertisedRate !== false;
+    const workerReceives = workerReceivesFullRate
+      ? rate
+      : Math.max(0, Math.floor(rate / (1 + serviceFeePct)));
+    const serviceFee = workerReceivesFullRate
+      ? Math.round(rate * serviceFeePct)
+      : Math.max(0, rate - workerReceives);
+    const companyDayRate = workerReceivesFullRate ? rate + serviceFee : rate;
+    const vat = Math.round(companyDayRate * vatPct);
+    const totalPerWorker = companyDayRate + accommodationAllowance + vat;
+    const requirementTotal = totalPerWorker * req.quantity;
+    return {
+      ...req,
+      workerReceivesFullRate,
+      workerReceives,
+      serviceFee,
+      companyDayRate,
+      vat,
+      totalPerWorker,
+      requirementTotal,
+    };
+  });
+  return {
+    requirements: pricedRequirements,
+    totalWorkers: pricedRequirements.reduce((sum, req) => sum + req.quantity, 0),
+    totalWorkerLabour: pricedRequirements.reduce(
+      (sum, req) => sum + req.workerReceives * req.quantity,
+      0,
+    ),
+    totalServiceFee: pricedRequirements.reduce(
+      (sum, req) => sum + req.serviceFee * req.quantity,
+      0,
+    ),
+    totalAccommodation: pricedRequirements.reduce(
+      (sum, req) => sum + req.accommodationAllowance * req.quantity,
+      0,
+    ),
+    totalVat: pricedRequirements.reduce(
+      (sum, req) => sum + req.vat * req.quantity,
+      0,
+    ),
+    totalDailyCost: pricedRequirements.reduce(
+      (sum, req) => sum + req.requirementTotal,
+      0,
+    ),
+  };
+}
+
 function renderJobPricingBreakdown() {
   const panel = document.getElementById("jobPricingBreakdown");
   if (!panel) return;
@@ -8735,46 +9366,20 @@ function renderJobPricingBreakdown() {
       </div>`;
     return;
   }
-  const visibleReqs = requirements.map((req, index) => ({
-    trade: req.trade || "",
-    specialism: req.specialism || "",
-    grade: req.grade || "",
-    label:
-      [req.trade, req.specialism].filter(Boolean).join(" / ") ||
-      `Labour requirement ${index + 1}`,
-    quantity: Math.max(1, Number(req.quantity) || 1),
-    rate: Math.max(0, Number(req.budgetMax) || 0),
-    workerReceivesFullAdvertisedRate: req.workerReceivesFullAdvertisedRate !== false,
-    overtimeAvailable: !!req.overtimeAvailable,
-    accommodationAllowance: req.accommodationPaid
-      ? Math.max(0, Number(req.accommodationAllowancePerNight) || 0)
-      : 0,
-  }));
-
-  // TODO: Replace these provisional display-only percentages with configured
-  // commercial rates when the real checkout/invoicing layer exists.
-  const serviceFeePct = 0.15;
-  const vatPct = 0.2;
-  let totalWorkers = 0;
-  let totalDailyCost = 0;
-
+  const pricing = buildRequestLabourPricingModel(requirements);
+  const visibleReqs = pricing.requirements;
   const rows = visibleReqs
     .map((req) => {
-      const rate = req.rate;
-      const accommodationAllowance = req.accommodationAllowance;
-      const workerReceivesFullRate = req.workerReceivesFullAdvertisedRate !== false;
-      const workerReceives = workerReceivesFullRate
-        ? rate
-        : Math.max(0, Math.floor(rate / (1 + serviceFeePct)));
-      const serviceFee = workerReceivesFullRate
-        ? Math.round(rate * serviceFeePct)
-        : Math.max(0, rate - workerReceives);
-      const companyDayRate = workerReceivesFullRate ? rate + serviceFee : rate;
-      const vat = Math.round(companyDayRate * vatPct);
-      const totalPerWorker = companyDayRate + accommodationAllowance + vat;
-      const requirementTotal = totalPerWorker * req.quantity;
-      totalWorkers += req.quantity;
-      totalDailyCost += requirementTotal;
+      const {
+        rate,
+        accommodationAllowance,
+        workerReceivesFullRate,
+        workerReceives,
+        serviceFee,
+        vat,
+        totalPerWorker,
+        requirementTotal,
+      } = req;
       if (wizardPricing) {
         const roleDetails = [req.specialism, req.grade].filter(Boolean).join(" · ");
         return `
@@ -8833,9 +9438,9 @@ function renderJobPricingBreakdown() {
           : ""
       }
       <div class="jw-price-total">
-        <span>Total workers <strong>${totalWorkers}</strong></span>
+        <span>Total workers <strong>${pricing.totalWorkers}</strong></span>
         <span>Labour requirements <strong>${visibleReqs.length}</strong></span>
-        <span class="jw-price-grand-total">Estimated daily labour cost <strong>${formatMoney(totalDailyCost)}</strong></span>
+        <span class="jw-price-grand-total">Estimated daily labour cost <strong>${formatMoney(pricing.totalDailyCost)}</strong></span>
       </div>`;
     return;
   }
@@ -8854,9 +9459,9 @@ function renderJobPricingBreakdown() {
         : ""
     }
     <div class="jw-price-total">
-      <span>Total workers: <strong>${totalWorkers}</strong></span>
+      <span>Total workers: <strong>${pricing.totalWorkers}</strong></span>
       <span>Total trades / labour requirements: <strong>${visibleReqs.length}</strong></span>
-      <span>Total daily cost for all workers: <strong>${formatMoney(totalDailyCost)}</strong></span>
+      <span>Total daily cost for all workers: <strong>${formatMoney(pricing.totalDailyCost)}</strong></span>
     </div>`;
 }
 
@@ -15490,6 +16095,23 @@ function companyProjectRequirementRowHTML(job, requirement, summary) {
 
 function companyProjectRequirementsViewHTML(job, summary, requirements) {
   if (!requirements.length) {
+    const setupStatus = DRAFT_PRE_START_SETUP_STATUSES.has(
+      job?.preStartSetupStatus,
+    )
+      ? job.preStartSetupStatus
+      : "";
+    if (setupStatus === "pending") {
+      return `<div class="company-project-requirements-empty">
+        <strong>Pre-start setup pending</strong>
+        <span>Add the inductions, documents or other requirements workers need before starting.</span>
+      </div>`;
+    }
+    if (setupStatus === "none") {
+      return `<div class="company-project-requirements-empty">
+        <strong>No pre-start requirements</strong>
+        <span>No pre-start actions are currently required for this project.</span>
+      </div>`;
+    }
     return `<div class="company-project-requirements-empty">
       <strong>No site requirements added yet.</strong>
       <span>Add the documents, inductions or forms workers need for this project.</span>
@@ -19600,6 +20222,11 @@ workerForm.addEventListener("submit", (e) => {
 
 jobForm.addEventListener("submit", (e) => {
   e.preventDefault();
+  const companyWizardSubmission =
+    jobWizardActive &&
+    jobWizardSubmissionApproved &&
+    jobWizardSubmissionInProgress &&
+    jobWizardStep === 6;
   // Block new labour requests from companies with outstanding overdue invoices.
   const poster = getSessionUser();
   if (poster?.type === "company" && isCompanyRestricted(poster.id)) {
@@ -19608,6 +20235,7 @@ jobForm.addEventListener("submit", (e) => {
         ? "Account suspended for overdue payments — contact OnSite to reinstate"
         : "Overdue invoices must be cleared before posting new labour requests",
     );
+    if (companyWizardSubmission) resetJobWizardSubmissionState();
     return;
   }
   const jobNumber = document.querySelector("#jobNumber")?.value.trim() || "";
@@ -19702,7 +20330,21 @@ jobForm.addEventListener("submit", (e) => {
     });
   } catch (err) {
     showToast(err?.message || "Check the labour schedule");
+    if (companyWizardSubmission) resetJobWizardSubmissionState();
     return;
+  }
+  let preStartConfiguration = null;
+  if (companyWizardSubmission) {
+    try {
+      preStartConfiguration = finalizeDraftPreStartConfiguration(
+        labourRequirements,
+      );
+    } catch (error) {
+      resetJobWizardSubmissionState();
+      showToast(error?.message || "Review the pre-start requirements");
+      routeToInvalidJobWizardStep(5);
+      return;
+    }
   }
 
   const job = {
@@ -19775,7 +20417,11 @@ jobForm.addEventListener("submit", (e) => {
         },
     preferredWorkerIds,
     preferredFirst: preferredWorkerIds.length > 0,
-    preStartDocuments: pendingRepeatProjectTemplate?.preStartDocuments || [],
+    preStartSetupStatus: preStartConfiguration?.setupStatus,
+    preStartDocuments:
+      preStartConfiguration?.requirements ||
+      pendingRepeatProjectTemplate?.preStartDocuments ||
+      [],
     noticePeriodDays:
       Number.isFinite(noticeRaw) && noticeRaw > 0
         ? noticeRaw
@@ -19900,6 +20546,11 @@ jobForm.addEventListener("submit", (e) => {
   );
   jobForm.reset();
   resetJobTradeRequirements();
+  clearRepeatProjectTemplate();
+  jobWizardCompleted = new Set();
+  jobWizardStep = 1;
+  jobWizardEnteredFromReview = false;
+  resetJobWizardSubmissionState();
 
   // Reset location section
   currentJobPin = { lat: null, lng: null };

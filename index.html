@@ -1362,20 +1362,22 @@
                 </section>
               </div>
 
-              <!-- ── REVIEW (Phase A placeholder) ────────────── -->
-              <div class="jw-step jw-step--placeholder" data-wizard-step="6">
-                <section class="jw-card">
-                  <header class="jw-card-head">
+              <!-- ── REVIEW ──────────────────────────────────── -->
+              <div class="jw-step" data-wizard-step="6">
+                <section class="jw-card jw-review-step-card" aria-labelledby="jobReviewTitle">
+                  <header class="jw-card-head jw-review-step-head">
                     <p class="jw-kicker">Review</p>
-                    <h3 class="jw-card-title">Review &amp; Submit</h3>
-                    <p class="jw-card-sub">The full request summary and submission will be enabled in a later phase.</p>
+                    <h3 class="jw-card-title" id="jobReviewTitle">Review request</h3>
+                    <p class="jw-card-sub">Check the project, labour and site setup before finding workers.</p>
                   </header>
+                  <div id="jobWizardReviewBody" class="jw-review-body" aria-live="polite"></div>
                 </section>
               </div>
 
               <div class="jw-wizard-nav">
                 <button type="button" id="jobWizardBack" class="secondary-btn jw-wizard-back">Back</button>
                 <button type="button" id="jobWizardContinue" class="primary-btn jw-wizard-continue">Continue</button>
+                <button type="button" id="jobWizardSubmit" class="primary-btn jw-wizard-submit hidden">Find Labour</button>
               </div>
 
               <button type="submit" class="primary-btn full-width jw-submit">Find Labour</button>

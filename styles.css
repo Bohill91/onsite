@@ -20904,6 +20904,300 @@ button svg,
   margin-top: 20px;
 }
 
+#formJob.jw-wizard-mode .jw-review-step-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 20px;
+  outline: 0;
+  padding: 0;
+}
+
+#formJob.jw-wizard-mode .jw-review-step-card:hover {
+  border-color: transparent;
+  box-shadow: none;
+  outline-color: transparent;
+  transform: none;
+}
+
+.jw-review-step-head {
+  gap: 4px;
+  padding-bottom: 0;
+}
+
+.jw-review-body {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+}
+
+.jw-review-section {
+  display: grid;
+  gap: 14px;
+  padding: 20px 0;
+}
+
+.jw-review-section + .jw-review-section,
+.jw-review-warnings {
+  border-top: 1px solid var(--card-divider);
+}
+
+.jw-review-section-head {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.jw-review-section-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-review-section-head p,
+.jw-review-warnings > h4 {
+  color: var(--orange);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.jw-review-section-head h4 {
+  color: var(--ink);
+  font-size: 0.96rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.jw-review-section-head .jw-inline-link {
+  flex: 0 0 auto;
+}
+
+.jw-review-rows {
+  display: grid;
+  margin: 0;
+}
+
+.jw-review-rows > div {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(130px, 0.45fr) minmax(0, 1fr);
+  padding: 7px 0;
+}
+
+.jw-review-rows dt,
+.jw-review-rows dd {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.jw-review-rows dt {
+  color: var(--ink-3);
+}
+
+.jw-review-rows dd {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.jw-review-labour-list {
+  display: grid;
+}
+
+.jw-review-labour-row {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(210px, 0.9fr);
+  padding: 14px 0;
+}
+
+.jw-review-labour-row:first-child {
+  padding-top: 0;
+}
+
+.jw-review-labour-row:last-child {
+  padding-bottom: 0;
+}
+
+.jw-review-labour-row + .jw-review-labour-row {
+  border-top: 1px solid var(--card-divider);
+}
+
+.jw-review-labour-identity,
+.jw-review-labour-terms {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.jw-review-labour-identity strong,
+.jw-review-labour-terms strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.jw-review-labour-identity span,
+.jw-review-labour-terms span {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.jw-review-labour-terms {
+  text-align: right;
+}
+
+.jw-review-totals,
+.jw-review-preferred,
+.jw-review-readiness {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  justify-content: space-between;
+  padding: 11px 12px;
+}
+
+.jw-review-totals span,
+.jw-review-preferred span,
+.jw-review-readiness span {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+}
+
+.jw-review-totals strong,
+.jw-review-preferred strong,
+.jw-review-readiness strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.jw-review-quiet,
+.jw-review-empty,
+.jw-review-disclaimer {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.jw-review-prestart-group {
+  display: grid;
+  gap: 8px;
+}
+
+.jw-review-prestart-group > span {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.jw-review-prestart-group > div {
+  display: grid;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.jw-review-prestart-group strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.jw-review-prestart-group small {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.jw-review-state {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.jw-review-state.is-warning {
+  background: var(--amber-bg);
+}
+
+.jw-review-state.is-blocking {
+  background: var(--red-bg);
+}
+
+.jw-review-state strong,
+.jw-review-state span {
+  line-height: 1.45;
+}
+
+.jw-review-state strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.jw-review-state span {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+}
+
+.jw-review-cost-total {
+  align-items: baseline;
+  border-top: 1px solid var(--card-divider);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-top: 14px;
+}
+
+.jw-review-cost-total span {
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.jw-review-cost-total strong {
+  color: var(--ink);
+  font-size: 1.08rem;
+}
+
+.jw-review-warnings {
+  display: grid;
+  gap: 10px;
+  padding: 20px 0;
+}
+
+.jw-review-warnings > h4 {
+  color: var(--amber-text);
+}
+
+.jw-review-warnings > div {
+  align-items: center;
+  background: var(--amber-bg);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.jw-review-warnings span {
+  color: var(--amber-text);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
 .jw-wizard-mode .jw-wizard-nav {
   border-top: 1px solid var(--card-divider);
   display: flex;
@@ -20917,8 +21211,14 @@ button svg,
   min-width: 148px;
 }
 
+.jw-wizard-nav .jw-wizard-submit {
+  margin-left: auto;
+  min-width: 148px;
+}
+
 .jw-wizard-nav .jw-wizard-back.hidden,
-.jw-wizard-nav .jw-wizard-continue.hidden {
+.jw-wizard-nav .jw-wizard-continue.hidden,
+.jw-wizard-nav .jw-wizard-submit.hidden {
   display: none;
 }
 
@@ -21122,6 +21422,41 @@ button svg,
 
   .jw-prestart-requirement-actions {
     justify-content: flex-start;
+  }
+
+  #formJob.jw-wizard-mode .jw-review-step-card {
+    gap: 16px;
+  }
+
+  .jw-review-section {
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  .jw-review-rows > div,
+  .jw-review-labour-row {
+    gap: 4px;
+    grid-template-columns: 1fr;
+  }
+
+  .jw-review-labour-terms {
+    text-align: left;
+  }
+
+  .jw-review-totals,
+  .jw-review-preferred,
+  .jw-review-readiness,
+  .jw-review-warnings > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .jw-review-section-head {
+    gap: 10px;
+  }
+
+  .jw-review-cost-total {
+    align-items: flex-start;
   }
 
   .jw-wizard-mode .jw-wizard-nav {
