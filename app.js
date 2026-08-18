@@ -6380,6 +6380,7 @@ function renderJobPreferredWorkerChoices(user) {
         <strong>No preferred workers available yet.</strong>
         <span>You can continue without selecting a preferred worker.</span>
       </div>`;
+  syncJobPreferredWorkersDisclosureState();
 }
 
 document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
@@ -6399,6 +6400,18 @@ document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (
       </div>`,
     );
   }
+});
+
+document.getElementById("jobPreferredWorkersToggle")?.addEventListener("click", () => {
+  jobPreferredWorkersOpen = !jobPreferredWorkersOpen;
+  syncJobPreferredWorkersDisclosureState();
+  if (jobPreferredWorkersOpen) {
+    requestAnimationFrame(() => document.getElementById("jobPreferredWorkerSearch")?.focus());
+  }
+});
+
+document.getElementById("jobPreferredWorkersList")?.addEventListener("change", () => {
+  syncJobPreferredWorkersDisclosureState();
 });
 
 function tryPreferredWorkerOffers(job) {
@@ -7414,7 +7427,12 @@ function prepareLabourRequestForm({ focus = false } = {}) {
   updateAssignmentTypeForm();
   updateAccommodationForm();
   updateOvertimeForm();
-  requestAnimationFrame(() => initPickerMap());
+  syncJobLabourDisclosureState();
+  syncJobPreferredWorkersDisclosureState();
+  syncJobSiteDisclosureState();
+  if (!jobWizardActive || jobEntrancePinOpen) {
+    requestAnimationFrame(() => initPickerMap());
+  }
   if (focus) setTimeout(() => document.getElementById("jobNumber")?.focus(), 0);
 }
 
@@ -7632,7 +7650,7 @@ function applyRepeatProjectToForm(job) {
   requestAnimationFrame(() => {
     updateJobPhotoPreviews();
     updatePinCoords();
-    initPickerMap();
+    syncJobSiteDisclosureState();
   });
   document.querySelector("#formJob .jw-form")?.insertAdjacentHTML("afterbegin", repeatProjectNoticeHTML(job));
   document.querySelector("[data-repeat-clear]")?.addEventListener("click", () => {
@@ -7643,6 +7661,7 @@ function applyRepeatProjectToForm(job) {
     updateAssignmentTypeForm();
     updateAccommodationForm();
     updateOvertimeForm();
+    prepareJobSiteDisclosures();
   });
 }
 
@@ -7708,6 +7727,157 @@ let jobWizardCompleted = new Set();
 let jobWizardEnteredFromReview = false;
 let jobWizardSubmissionApproved = false;
 let jobWizardSubmissionInProgress = false;
+let jobLabourMoreOptionsOpen = false;
+let jobPreferredWorkersOpen = false;
+let jobArrivalDetailsOpen = false;
+let jobEntrancePinOpen = false;
+let jobSitePhotosOpen = false;
+let jobAttendanceManagerOpen = false;
+
+function labourRequirementHasAdvancedOptions(requirement = {}) {
+  return !!(
+    requirement.overtimeAvailable ||
+    requirement.accommodationPaid ||
+    normalizeLabourSchedule(requirement.labourSchedule).length
+  );
+}
+
+function syncJobLabourDisclosureState() {
+  const panel = document.getElementById("jobLabourMoreOptionsPanel");
+  const toggle = document.getElementById("jobLabourMoreOptionsToggle");
+  const expanded = !jobWizardActive || jobLabourMoreOptionsOpen;
+  panel?.classList.toggle("hidden", !expanded);
+  toggle?.setAttribute("aria-expanded", String(expanded));
+  const label = toggle?.querySelector("strong");
+  if (label) label.textContent = expanded && jobWizardActive ? "Hide options" : "More options";
+}
+
+function syncJobPreferredWorkersDisclosureState() {
+  const panel = document.getElementById("jobPreferredWorkersPanel");
+  const toggle = document.getElementById("jobPreferredWorkersToggle");
+  const expanded = !jobWizardActive || jobPreferredWorkersOpen;
+  const selectedCount = preferredWorkerIdsFromJobForm().length;
+  panel?.classList.toggle("hidden", !expanded);
+  toggle?.setAttribute("aria-expanded", String(expanded));
+  if (toggle) {
+    toggle.textContent = expanded && jobWizardActive
+      ? "Done"
+      : selectedCount
+        ? `Manage preferred workers (${selectedCount})`
+        : "Choose preferred workers";
+  }
+}
+
+function formFieldHasValue(id) {
+  return !!String(document.getElementById(id)?.value || "").trim();
+}
+
+function jobArrivalDetailsHaveValues() {
+  return ["jobArrivalInstructions", "jobParking", "jobPpe", "jobGateAccess"].some(
+    formFieldHasValue,
+  );
+}
+
+function jobAttendanceManagerHasValues() {
+  return [
+    "attendanceManagerName",
+    "attendanceManagerEmail",
+    "attendanceManagerPhone",
+  ].some(formFieldHasValue);
+}
+
+function currentJobHasEntrancePin() {
+  return !!(
+    currentJobPin?.lat != null &&
+    currentJobPin?.lng != null &&
+    Number.isFinite(Number(currentJobPin.lat)) &&
+    Number.isFinite(Number(currentJobPin.lng))
+  );
+}
+
+function currentJobPhotoCount() {
+  return Object.values(currentJobPhotos || {}).filter(Boolean).length;
+}
+
+function syncJobSiteDisclosureState() {
+  const wizard = jobWizardActive;
+  const disclosureStates = [
+    ["jobArrivalDetailsPanel", "jobArrivalDetailsToggle", jobArrivalDetailsOpen],
+    ["jobEntrancePinPanel", "jobEntrancePinToggle", jobEntrancePinOpen],
+    ["jobSitePhotosPanel", "jobSitePhotosToggle", jobSitePhotosOpen],
+    ["jobAttendanceManagerPanel", "jobAttendanceManagerToggle", jobAttendanceManagerOpen],
+  ];
+  disclosureStates.forEach(([panelId, toggleId, open]) => {
+    const expanded = !wizard || open;
+    document.getElementById(panelId)?.classList.toggle("hidden", !expanded);
+    document.getElementById(toggleId)?.setAttribute("aria-expanded", String(expanded));
+  });
+
+  const arrivalToggle = document.getElementById("jobArrivalDetailsToggle");
+  const arrivalLabel = arrivalToggle?.querySelector("strong");
+  if (arrivalLabel) {
+    arrivalLabel.textContent = jobArrivalDetailsOpen
+      ? "Hide arrival details"
+      : jobArrivalDetailsHaveValues()
+        ? "Arrival details"
+        : "Add arrival details";
+  }
+
+  const hasPin = currentJobHasEntrancePin();
+  const pinSummary = document.getElementById("jobEntrancePinSummary");
+  const pinToggle = document.getElementById("jobEntrancePinToggle");
+  if (pinSummary) pinSummary.textContent = hasPin ? "Entrance pin set" : "Not set";
+  if (pinToggle) {
+    pinToggle.textContent = jobEntrancePinOpen
+      ? "Close map"
+      : hasPin
+        ? "Edit pin"
+        : "Set entrance pin";
+  }
+
+  const photoCount = currentJobPhotoCount();
+  const photoSummary = document.getElementById("jobSitePhotosSummary");
+  const photoToggle = document.getElementById("jobSitePhotosToggle");
+  if (photoSummary) {
+    photoSummary.textContent = photoCount
+      ? `${photoCount} photo${photoCount === 1 ? "" : "s"} added`
+      : "No photos added";
+  }
+  if (photoToggle) {
+    photoToggle.textContent = jobSitePhotosOpen
+      ? "Done"
+      : photoCount
+        ? "Manage photos"
+        : "Add photos";
+  }
+
+  const managerToggle = document.getElementById("jobAttendanceManagerToggle");
+  const hasManager = jobAttendanceManagerHasValues();
+  const managerLabel = managerToggle?.querySelector("strong");
+  if (managerLabel) {
+    managerLabel.textContent = jobAttendanceManagerOpen
+      ? "Hide attendance manager"
+      : hasManager
+        ? "Attendance manager details"
+        : "Assign attendance manager now";
+  }
+}
+
+function prepareJobSiteDisclosures() {
+  jobArrivalDetailsOpen = jobArrivalDetailsHaveValues();
+  jobEntrancePinOpen = false;
+  jobSitePhotosOpen = false;
+  jobAttendanceManagerOpen = jobAttendanceManagerHasValues();
+  syncJobSiteDisclosureState();
+}
+
+function setJobEntrancePinDisclosure(open) {
+  jobEntrancePinOpen = !!open;
+  syncJobSiteDisclosureState();
+  if (jobEntrancePinOpen || !jobWizardActive) {
+    requestAnimationFrame(() => initPickerMap());
+  }
+}
 
 const DRAFT_PRE_START_SETUP_STATUSES = new Set([
   "configured",
@@ -8142,7 +8312,16 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobWizardEnteredFromReview = false;
     jobWizardSubmissionApproved = false;
     jobWizardSubmissionInProgress = false;
+    jobLabourMoreOptionsOpen = false;
+    jobPreferredWorkersOpen = false;
+    jobArrivalDetailsOpen = false;
+    jobEntrancePinOpen = false;
+    jobSitePhotosOpen = false;
+    jobAttendanceManagerOpen = false;
   }
+  syncJobLabourDisclosureState();
+  syncJobPreferredWorkersDisclosureState();
+  syncJobSiteDisclosureState();
   goToJobWizardStep(jobWizardStep, { scroll: false });
 }
 
@@ -8151,6 +8330,9 @@ function exitJobWizardMode() {
   document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
   mountJobPricingBreakdown("jobPricingBreakdownLegacyMount");
   jobForm?.removeAttribute("novalidate");
+  syncJobLabourDisclosureState();
+  syncJobPreferredWorkersDisclosureState();
+  syncJobSiteDisclosureState();
 }
 
 function jobWizardStepNavigable(step) {
@@ -8526,19 +8708,25 @@ function renderJobWizardChrome() {
 }
 
 function goToJobWizardStep(step, { scroll = true } = {}) {
+  const previousStep = jobWizardStep;
   jobWizardStep = Math.min(Math.max(step, 1), JOB_WIZARD_STEPS.length);
   renderJobWizardChrome();
-  if (jobWizardStep === 2) updateTradeRequirementEditorState();
+  if (jobWizardStep === 2) {
+    updateTradeRequirementEditorState();
+    syncJobLabourDisclosureState();
+    syncJobPreferredWorkersDisclosureState();
+  }
   else {
     document.getElementById("formJob")?.classList.remove(
       "jw-requirement-editor-active",
       "jw-has-unsaved-requirement",
     );
   }
-  // Step 4 hosts the persistent #jobPickerMap — re-run the self-guarded
-  // initPickerMap() so Leaflet sizes correctly each time it becomes visible.
   if (jobWizardStep === 3) renderJobPricingBreakdown();
-  if (jobWizardStep === 4) requestAnimationFrame(() => initPickerMap());
+  if (jobWizardStep === 4) {
+    if (previousStep !== 4) prepareJobSiteDisclosures();
+    else syncJobSiteDisclosureState();
+  }
   if (jobWizardStep === 5) renderDraftPreStartStep();
   if (jobWizardStep === 6) {
     jobWizardEnteredFromReview = false;
@@ -8584,7 +8772,10 @@ function validateSiteAttendanceWizardStep({ report = true } = {}) {
       : "Place the exact entrance pin before continuing.";
     message.classList.toggle("hidden", hasEntrancePin);
   }
-  if (report && !hasEntrancePin) map?.focus({ preventScroll: true });
+  if (report && !hasEntrancePin) {
+    setJobEntrancePinDisclosure(true);
+    requestAnimationFrame(() => map?.focus({ preventScroll: true }));
+  }
   return hasEntrancePin;
 }
 
@@ -9124,10 +9315,10 @@ function renderLabourScheduleEditor() {
   if (toggle) {
     toggle.setAttribute("aria-expanded", String(isOpen));
     toggle.textContent = isOpen
-      ? "Hide phased schedule"
+      ? "Hide schedule"
       : pendingLabourSchedulePeriods.length
-        ? `Edit phased schedule (${pendingLabourSchedulePeriods.length})`
-        : "Add phased schedule";
+        ? `Edit schedule (${pendingLabourSchedulePeriods.length})`
+        : "Add schedule";
   }
   rows.innerHTML = pendingLabourSchedulePeriods.length
     ? pendingLabourSchedulePeriods
@@ -9354,7 +9545,6 @@ function renderJobPricingBreakdown() {
     panel.innerHTML = `
       <div class="jw-estimate-head">
         <div>
-          <p class="jw-subsection-kicker">Estimated cost</p>
           <h4>Estimated labour cost</h4>
           <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
         </div>
@@ -9425,7 +9615,6 @@ function renderJobPricingBreakdown() {
     panel.innerHTML = `
       <div class="jw-estimate-head">
         <div>
-          <p class="jw-subsection-kicker">Estimated cost</p>
           <h4>Estimated labour cost</h4>
           <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
         </div>
@@ -9525,6 +9714,7 @@ function buildLabourRequirementsFromForm(shared = {}) {
 }
 
 function applyTradeReqToInputs(req) {
+  jobLabourMoreOptionsOpen = labourRequirementHasAdvancedOptions(req);
   const tradeSelect = document.getElementById("jobTrade");
   if (tradeSelect) {
     tradeSelect.value = req.trade;
@@ -9565,6 +9755,7 @@ function applyTradeReqToInputs(req) {
   renderLabourScheduleEditor();
   updateOvertimeForm();
   updateAccommodationForm();
+  syncJobLabourDisclosureState();
 }
 
 function clearTradeReqInputs() {
@@ -9798,6 +9989,7 @@ function syncTradeReqBuilderState() {
   renderLabourScheduleEditor();
   renderJobPricingBreakdown();
   updateTradeRequirementEditorState();
+  syncJobLabourDisclosureState();
 }
 
 function resetJobTradeRequirements() {
@@ -9822,6 +10014,11 @@ document.getElementById("jobAddAnotherRequirement")?.addEventListener("click", (
 
 document.getElementById("jobDiscardTradeRequirement")?.addEventListener("click", () => {
   discardTradeRequirementEditorChanges();
+});
+
+document.getElementById("jobLabourMoreOptionsToggle")?.addEventListener("click", () => {
+  jobLabourMoreOptionsOpen = !jobLabourMoreOptionsOpen;
+  syncJobLabourDisclosureState();
 });
 
 document.getElementById("jobToggleLabourSchedule")?.addEventListener("click", () => {
@@ -20601,7 +20798,10 @@ function renderCompanyRequestLabourPage(user) {
   updateAssignmentTypeForm();
   updateAccommodationForm();
   updateOvertimeForm();
-  requestAnimationFrame(() => initPickerMap());
+  syncJobLabourDisclosureState();
+  syncJobPreferredWorkersDisclosureState();
+  syncJobSiteDisclosureState();
+  if (jobEntrancePinOpen) requestAnimationFrame(() => initPickerMap());
 }
 
 // ─── Render ───────────────────────────────────────────────
@@ -21609,6 +21809,7 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
       if (card) {
         card.classList.add("has-photo");
       }
+      syncJobSiteDisclosureState();
     } catch (_) {
       showToast("Photo upload failed — try a different image");
     } finally {
@@ -21635,6 +21836,8 @@ function resetJobPhotos() {
   });
   currentJobPhotos = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
   currentJobPhotoMeta = Object.fromEntries(PHOTO_KEYS.map(({ key }) => [key, null]));
+  jobSitePhotosOpen = false;
+  syncJobSiteDisclosureState();
 }
 
 function updateJobPhotoPreviews() {
@@ -21650,6 +21853,7 @@ function updateJobPhotoPreviews() {
     if (ph) ph.style.display = src ? "none" : "";
     card?.classList.toggle("has-photo", !!src);
   });
+  syncJobSiteDisclosureState();
 }
 
 // ─── Site Location & Map System ───────────────────────────
@@ -21715,6 +21919,34 @@ document.getElementById("toggleSiteLocBtn")?.addEventListener("click", () => {
   }
 });
 
+document.getElementById("jobArrivalDetailsToggle")?.addEventListener("click", () => {
+  jobArrivalDetailsOpen = !jobArrivalDetailsOpen;
+  syncJobSiteDisclosureState();
+});
+
+document.getElementById("jobEntrancePinToggle")?.addEventListener("click", () => {
+  setJobEntrancePinDisclosure(!jobEntrancePinOpen);
+});
+
+document.getElementById("jobEntrancePinDone")?.addEventListener("click", () => {
+  setJobEntrancePinDisclosure(false);
+  document.getElementById("jobEntrancePinToggle")?.focus();
+});
+
+document.getElementById("jobSitePhotosToggle")?.addEventListener("click", () => {
+  jobSitePhotosOpen = !jobSitePhotosOpen;
+  syncJobSiteDisclosureState();
+});
+
+document.getElementById("jobAttendanceManagerToggle")?.addEventListener("click", () => {
+  jobAttendanceManagerOpen = !jobAttendanceManagerOpen;
+  syncJobSiteDisclosureState();
+});
+
+["attendanceManagerName", "attendanceManagerEmail", "attendanceManagerPhone"].forEach(
+  (id) => document.getElementById(id)?.addEventListener("input", syncJobSiteDisclosureState),
+);
+
 // ── Geocode button ─────────────────────────────────────────
 document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
   const addr = document.getElementById("jobSiteAddress")?.value.trim();
@@ -21722,6 +21954,7 @@ document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
     showToast("Enter a site address first");
     return;
   }
+  if (jobWizardActive) setJobEntrancePinDisclosure(true);
   const btn = document.getElementById("geocodeBtn");
   setButtonLoading(btn, true, "Searching");
   try {
@@ -21795,8 +22028,9 @@ function updatePinCoords() {
   const txt = document.getElementById("pinCoordsText");
   const map = document.getElementById("jobPickerMap");
   const message = document.getElementById("jobEntrancePinMessage");
+  syncJobSiteDisclosureState();
   if (!el || !txt) return;
-  if (currentJobPin.lat !== null) {
+  if (currentJobHasEntrancePin()) {
     txt.textContent = `${currentJobPin.lat}, ${currentJobPin.lng}`;
     el.classList.remove("hidden");
     map?.setAttribute("aria-invalid", "false");

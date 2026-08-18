@@ -874,7 +874,6 @@
                 <section id="jobSavedRequirementsSection" class="jw-saved-requirements hidden" aria-labelledby="jobSavedRequirementsTitle">
                   <div class="jw-labour-section-head">
                     <div>
-                      <p class="jw-subsection-kicker">Saved requirements</p>
                       <h4 id="jobSavedRequirementsTitle">Your labour requirements</h4>
                     </div>
                     <button type="button" id="jobAddAnotherRequirement" class="secondary-btn">+ Add another requirement</button>
@@ -885,7 +884,6 @@
                 <section id="jobRequirementEditor" class="jw-requirement-builder" aria-labelledby="jobRequirementEditorTitle">
                   <div class="jw-requirement-builder-head">
                     <div>
-                      <p class="jw-subsection-kicker">Requirement builder</p>
                       <h4 id="jobRequirementEditorTitle">New requirement</h4>
                     </div>
                     <span id="jobRequirementEditorMode" class="jw-editor-mode hidden">Editing</span>
@@ -951,12 +949,12 @@
                         </select>
                       </label>
                       <label class="field-label">
-                        Work Activity *
-                        <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
-                      </label>
-                      <label class="field-label">
                         Workers required *
                         <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
+                      </label>
+                      <label class="field-label">
+                        Work Activity *
+                        <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
                       </label>
                       <label class="field-label">
                         Required Qualifications &amp; Tickets *
@@ -967,8 +965,8 @@
 
                   <section class="jw-requirement-group" aria-labelledby="jobPayTermsTitle">
                     <div class="jw-requirement-group-head">
-                      <h5 id="jobPayTermsTitle">Pay &amp; terms</h5>
-                      <p>Set the advertised rate and any role-specific allowances.</p>
+                      <h5 id="jobPayTermsTitle">Daily rate</h5>
+                      <p>Set the advertised rate for this labour requirement.</p>
                     </div>
                     <input id="jobBudgetMin" type="hidden" />
                     <div class="jw-grid jw-labour-pay-grid">
@@ -984,7 +982,14 @@
                         <p class="form-helper">OnSite’s service fee is added separately rather than deducted from the worker’s advertised rate.</p>
                       </div>
                     </div>
-                    <div class="jw-labour-terms">
+
+                    <button type="button" id="jobLabourMoreOptionsToggle" class="jw-disclosure-toggle" aria-expanded="false" aria-controls="jobLabourMoreOptionsPanel">
+                      <span><strong>More options</strong><small>Overtime, accommodation and phased scheduling</small></span>
+                      <span class="jw-disclosure-chevron" aria-hidden="true">⌄</span>
+                    </button>
+
+                    <div id="jobLabourMoreOptionsPanel" class="jw-labour-more-options hidden">
+                      <div class="jw-labour-terms">
                       <div class="jw-labour-term">
                         <label class="checkbox-row jw-check">
                           <input id="jobOvertimeAvailable" type="checkbox" />
@@ -1039,27 +1044,28 @@
                           <p class="form-helper">This allowance is paid directly to the worker and added to the company invoice without an OnSite service fee.</p>
                         </div>
                       </div>
-                    </div>
-                  </section>
-
-                  <section class="jw-requirement-group jw-phased-schedule" aria-labelledby="jobPhasedScheduleTitle">
-                    <div class="jw-requirement-group-head jw-phased-schedule-head">
-                      <div>
-                        <h5 id="jobPhasedScheduleTitle">Phased labour schedule <span>Optional</span></h5>
-                        <p>Change how many workers you need during different periods of the project.</p>
                       </div>
-                      <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle" aria-expanded="false">Add phased schedule</button>
-                    </div>
-                    <div id="jobLabourScheduleWrap" class="jw-conditional hidden">
-                      <div class="labour-schedule-head">
+
+                      <section class="jw-phased-schedule" aria-labelledby="jobPhasedScheduleTitle">
+                        <div class="jw-phased-schedule-head">
+                          <div>
+                            <h5 id="jobPhasedScheduleTitle">Phased worker schedule</h5>
+                            <p>Change worker quantities during different project periods.</p>
+                          </div>
+                          <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle" aria-expanded="false">Add schedule</button>
+                        </div>
+                        <div id="jobLabourScheduleWrap" class="jw-conditional hidden">
+                          <div class="labour-schedule-head">
                         <div>
                           <strong>Phased periods</strong>
                           <span>Project dates are set in Step 3. Period boundaries are checked once those dates are available.</span>
                         </div>
                         <button type="button" id="jobAddLabourSchedulePeriod" class="secondary-btn">Add period</button>
-                      </div>
-                      <div id="jobLabourScheduleRows" class="labour-schedule-rows"></div>
-                      <p class="form-helper">Periods must sit inside the project dates where set. Overlapping periods are not allowed.</p>
+                          </div>
+                          <div id="jobLabourScheduleRows" class="labour-schedule-rows"></div>
+                          <p class="form-helper">Periods must sit inside the project dates where set. Overlapping periods are not allowed.</p>
+                        </div>
+                      </section>
                     </div>
                   </section>
 
@@ -1077,16 +1083,18 @@
                 <section id="jobPreferredWorkersWrap" class="preferred-workers-picker jw-preferred-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
                   <div class="jw-labour-section-head">
                     <div>
-                      <p class="jw-subsection-kicker">Preferred workers <span>Optional</span></p>
-                      <h4 id="jobPreferredWorkersTitle">Preferred workers</h4>
-                      <p>Prioritise workers you’ve previously used or marked as preferred. Standard matching continues if they’re unavailable.</p>
+                      <h4 id="jobPreferredWorkersTitle">Preferred workers <span>Optional</span></h4>
+                      <p>Prioritise workers you've previously used or marked as preferred.</p>
                     </div>
+                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobPreferredWorkersPanel">Choose preferred workers</button>
                   </div>
-                  <label class="field-label" for="jobPreferredWorkerSearch">
-                    Search preferred workers
-                    <input id="jobPreferredWorkerSearch" type="search" placeholder="Search previous or preferred workers" autocomplete="off" />
-                  </label>
-                  <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
+                  <div id="jobPreferredWorkersPanel" class="jw-preferred-workers-panel hidden">
+                    <label class="field-label" for="jobPreferredWorkerSearch">
+                      Search preferred workers
+                      <input id="jobPreferredWorkerSearch" type="search" placeholder="Search previous or preferred workers" autocomplete="off" />
+                    </label>
+                    <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
+                  </div>
                 </section>
               </section>
               </div>
@@ -1108,7 +1116,6 @@
 
                 <section class="jw-schedule-surface" aria-labelledby="jobProjectScheduleTitle">
                   <div class="jw-schedule-surface-head">
-                    <p class="jw-subsection-kicker">Project schedule</p>
                     <h4 id="jobProjectScheduleTitle">Project schedule</h4>
                     <p>Set the overall project dates and the standard shift pattern workers should expect.</p>
                   </div>
@@ -1196,9 +1203,8 @@
 
                 <section class="jw-site-surface jw-site-access-surface" aria-labelledby="jobSiteAccessTitle">
                   <div class="jw-site-section-head">
-                    <p class="jw-subsection-kicker">Site access &amp; arrival</p>
-                    <h4 id="jobSiteAccessTitle">Site access &amp; arrival</h4>
-                    <p>Give workers the exact location, site contact and instructions they need for their first shift.</p>
+                    <h4 id="jobSiteAccessTitle">Site details</h4>
+                    <p>Add the site address and contact workers can use on arrival.</p>
                   </div>
 
                   <div class="jw-site-section-content">
@@ -1218,6 +1224,13 @@
                         Site Contact Number *
                         <input id="jobContactPhone" type="tel" required placeholder="e.g. 07700 900123" />
                       </label>
+                    </div>
+
+                    <button type="button" id="jobArrivalDetailsToggle" class="jw-disclosure-toggle" aria-expanded="false" aria-controls="jobArrivalDetailsPanel">
+                      <span><strong>Add arrival details</strong><small>Instructions, parking, PPE and worker notes</small></span>
+                      <span class="jw-disclosure-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    <div id="jobArrivalDetailsPanel" class="jw-grid jw-site-fields-grid jw-optional-site-fields hidden">
                       <label class="field-label jw-span-2">
                         Arrival Instructions
                         <textarea id="jobArrivalInstructions" rows="2" placeholder="e.g. Enter via Gate 3 and report to the site office."></textarea>
@@ -1241,33 +1254,42 @@
 
                 <section class="jw-site-surface jw-arrival-references-surface" aria-labelledby="jobArrivalReferencesTitle">
                   <div class="jw-site-section-head">
-                    <p class="jw-subsection-kicker">Arrival references</p>
-                    <h4 id="jobArrivalReferencesTitle">Arrival references</h4>
-                    <p>Pin the exact entrance and add optional photos to help workers identify the correct arrival point.</p>
+                    <h4 id="jobArrivalReferencesTitle">Entrance &amp; photos</h4>
+                    <p>Confirm the exact entrance and add optional arrival references.</p>
                   </div>
 
                   <div class="jw-arrival-reference-group">
-                    <div class="jw-site-subsection-head">
-                      <h5>Exact entrance pin *</h5>
-                      <p>Click the map to place the precise worker arrival point.</p>
+                    <div class="jw-compact-disclosure-row">
+                      <div>
+                        <h5>Exact entrance pin *</h5>
+                        <p id="jobEntrancePinSummary">Not set</p>
+                      </div>
+                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set entrance pin</button>
                     </div>
-                    <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for selecting the exact worker entrance" aria-describedby="jobEntrancePinMessage"></div>
-                    <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
-                      <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
-                      <span class="jw-pin-status-copy">
-                        <strong>Entrance pin set</strong>
-                        <span id="pinCoordsText"></span>
-                      </span>
+                    <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
+                      <p class="jw-disclosure-helper">Click the map to place the precise worker arrival point.</p>
+                      <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for selecting the exact worker entrance" aria-describedby="jobEntrancePinMessage"></div>
+                      <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
+                        <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
+                        <span class="jw-pin-status-copy">
+                          <strong>Entrance pin set</strong>
+                          <span id="pinCoordsText"></span>
+                        </span>
+                      </div>
+                      <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
+                      <button type="button" id="jobEntrancePinDone" class="secondary-btn jw-disclosure-done">Done</button>
                     </div>
-                    <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
                   </div>
 
                   <div class="jw-arrival-reference-group jw-site-photos-group">
-                    <div class="jw-site-subsection-head">
-                      <h5>Site photos <span>Optional</span></h5>
-                      <p>Optional photos can help workers find the entrance, welfare and parking areas.</p>
+                    <div class="jw-compact-disclosure-row">
+                      <div>
+                        <h5>Site photos <span>Optional</span></h5>
+                        <p id="jobSitePhotosSummary">No photos added</p>
+                      </div>
+                      <button type="button" id="jobSitePhotosToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobSitePhotosPanel">Add photos</button>
                     </div>
-                    <div class="site-photo-grid">
+                    <div id="jobSitePhotosPanel" class="site-photo-grid hidden">
                       <label class="photo-card" for="photoEntrance" tabindex="0" role="button" aria-label="Add or replace site entrance photo">
                         <input id="photoEntrance" class="photo-file-input" type="file" accept="image/*" />
                         <img id="prvEntrance" class="photo-preview" alt="Site entrance preview" />
@@ -1294,35 +1316,36 @@
 
                 <section class="jw-site-surface jw-attendance-setup-surface" aria-labelledby="jobAttendanceSetupTitle">
                   <div class="jw-site-section-head">
-                    <p class="jw-subsection-kicker">Attendance setup</p>
-                    <h4 id="jobAttendanceSetupTitle">Attendance setup</h4>
-                    <p>Confirm who will be responsible for worker sign-in and attendance on this project.</p>
+                    <h4 id="jobAttendanceSetupTitle">Attendance</h4>
                   </div>
                   <div class="jw-attendance-default">
                     <span class="jw-attendance-default-mark" aria-hidden="true"></span>
                     <div>
                       <strong>Company-managed by default</strong>
-                      <span>Add a site manager or supervisor below only when they will manage attendance.</span>
+                      <span>Attendance can be managed by your company after the project is created.</span>
                     </div>
                   </div>
-                  <div class="jw-site-subsection-head jw-attendance-manager-head">
-                    <h5>Attendance manager details <span>Optional</span></h5>
+                  <div class="jw-attendance-manager-disclosure">
+                    <button type="button" id="jobAttendanceManagerToggle" class="jw-disclosure-toggle" aria-expanded="false" aria-controls="jobAttendanceManagerPanel">
+                      <span><strong>Assign attendance manager now</strong><small>Add a site manager or supervisor for this project</small></span>
+                      <span class="jw-disclosure-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    <div id="jobAttendanceManagerPanel" class="jw-grid jw-attendance-manager-grid hidden">
+                      <label class="field-label">
+                        Attendance Manager Name
+                        <input id="attendanceManagerName" type="text" autocomplete="name" placeholder="e.g. Jane Taylor" />
+                      </label>
+                      <label class="field-label">
+                        Attendance Manager Email
+                        <input id="attendanceManagerEmail" type="email" autocomplete="email" placeholder="e.g. jane@company.co.uk" />
+                      </label>
+                      <label class="field-label">
+                        Attendance Manager Phone
+                        <input id="attendanceManagerPhone" type="tel" autocomplete="tel" placeholder="e.g. 07700 900123" />
+                      </label>
+                    </div>
                   </div>
-                  <div class="jw-grid jw-attendance-manager-grid">
-                    <label class="field-label">
-                      Attendance Manager Name
-                      <input id="attendanceManagerName" type="text" autocomplete="name" placeholder="e.g. Jane Taylor" />
-                    </label>
-                    <label class="field-label">
-                      Attendance Manager Email
-                      <input id="attendanceManagerEmail" type="email" autocomplete="email" placeholder="e.g. jane@company.co.uk" />
-                    </label>
-                    <label class="field-label">
-                      Attendance Manager Phone
-                      <input id="attendanceManagerPhone" type="tel" autocomplete="tel" placeholder="e.g. 07700 900123" />
-                    </label>
-                  </div>
-                  <p class="jw-attendance-qr-note">A project sign-in QR will be available after the project is created.</p>
+                  <p class="jw-attendance-qr-note">Project sign-in QR available after creation.</p>
                 </section>
               </section>
               </div>

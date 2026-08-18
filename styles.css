@@ -19518,11 +19518,11 @@ button svg,
 }
 
 .jw-requirement-group-head h5 {
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0;
-  line-height: 1.25;
-  text-transform: uppercase;
+  line-height: 1.3;
+  text-transform: none;
 }
 
 .jw-requirement-group-head {
@@ -19644,6 +19644,73 @@ button svg,
   gap: 14px;
 }
 
+.jw-disclosure-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--card-divider);
+  border-radius: 0;
+  border-top: 1px solid var(--card-divider);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.jw-disclosure-toggle > span:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.jw-disclosure-toggle strong {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.jw-disclosure-toggle small {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.jw-disclosure-chevron {
+  color: var(--ink-3);
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 180ms ease;
+}
+
+.jw-disclosure-toggle[aria-expanded="true"] .jw-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.jw-disclosure-toggle:hover strong,
+.jw-disclosure-toggle:focus-visible strong {
+  color: var(--orange-dark);
+}
+
+.jw-disclosure-toggle:focus-visible {
+  border-color: var(--orange);
+  outline: 2px solid rgba(249, 115, 22, 0.16);
+  outline-offset: 2px;
+}
+
+#formJob.jw-wizard-mode .jw-labour-more-options {
+  display: grid;
+  gap: 16px;
+}
+
+#formJob.jw-wizard-mode .jw-labour-more-options.hidden,
+#formJob.jw-wizard-mode .jw-preferred-workers-panel.hidden {
+  display: none;
+}
+
 .jw-labour-term {
   display: grid;
   gap: 10px;
@@ -19662,6 +19729,28 @@ button svg,
 
 .jw-phased-schedule-head > div {
   min-width: 0;
+}
+
+.jw-phased-schedule {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.jw-phased-schedule-head h5 {
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.jw-phased-schedule-head p {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 3px 0 0;
 }
 
 #formJob.jw-wizard-mode .jw-phased-schedule > .jw-conditional {
@@ -19808,6 +19897,30 @@ button svg,
   margin-top: 0;
 }
 
+.jw-labour-section-head h4 span {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.jw-preferred-workers-panel {
+  display: grid;
+  gap: 12px;
+}
+
+#formJob:not(.jw-wizard-mode) :is(
+  #jobLabourMoreOptionsToggle,
+  #jobPreferredWorkersToggle,
+  #jobArrivalDetailsToggle,
+  #jobEntrancePinToggle,
+  #jobEntrancePinDone,
+  #jobSitePhotosToggle,
+  #jobAttendanceManagerToggle
+) {
+  display: none;
+}
+
 .preferred-worker-empty-compact {
   background: var(--surface-2);
   border-radius: var(--radius-sm);
@@ -19862,7 +19975,7 @@ button svg,
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 20px;
+  gap: 18px;
   outline: 0;
   padding: 0;
 }
@@ -19889,7 +20002,7 @@ button svg,
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   display: grid;
-  padding: 20px;
+  padding: 18px;
 }
 
 #formJob.jw-wizard-mode .jw-schedule-surface {
@@ -19921,13 +20034,13 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-schedule-group {
   display: grid;
-  gap: 14px;
-  padding-top: 20px;
+  gap: 12px;
+  padding-top: 16px;
 }
 
 #formJob.jw-wizard-mode .jw-schedule-group + .jw-schedule-group {
   border-top: 1px solid var(--card-divider);
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .jw-schedule-group-head {
@@ -19937,12 +20050,12 @@ button svg,
 
 .jw-schedule-group-head h5 {
   color: var(--ink);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.25;
   margin: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 #formJob.jw-wizard-mode .jw-schedule-grid {
@@ -20061,7 +20174,7 @@ button svg,
   display: flex;
   gap: 20px;
   justify-content: space-between;
-  padding-bottom: 18px;
+  padding-bottom: 14px;
 }
 
 .jw-inline-link {
@@ -20097,7 +20210,7 @@ button svg,
   border-radius: 0;
   gap: 28px;
   grid-template-columns: minmax(190px, 0.75fr) minmax(280px, 1.25fr);
-  padding: 16px 0;
+  padding: 13px 0;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-row + .jw-price-row {
@@ -20146,8 +20259,8 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines span {
   border-top: 1px solid var(--card-divider);
-  min-height: 29px;
-  padding: 6px 0;
+  min-height: 27px;
+  padding: 5px 0;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines span:first-child {
@@ -20164,14 +20277,14 @@ button svg,
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-note {
   background: var(--surface-2);
   border-radius: var(--radius-sm);
-  margin: 4px 0 16px;
+  margin: 4px 0 12px;
   padding: 9px 11px;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-total {
   border-top: 1px solid var(--card-divider);
   gap: 7px;
-  padding-top: 16px;
+  padding-top: 14px;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-total span {
@@ -20238,7 +20351,7 @@ button svg,
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 20px;
+  gap: 16px;
   outline: 0;
   padding: 0;
 }
@@ -20268,8 +20381,8 @@ button svg,
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   display: grid;
-  gap: 20px;
-  padding: 20px;
+  gap: 16px;
+  padding: 18px;
 }
 
 .jw-site-section-head,
@@ -20297,7 +20410,65 @@ button svg,
 .jw-site-section-content,
 .jw-arrival-reference-group {
   display: grid;
-  gap: 14px;
+  gap: 12px;
+}
+
+#formJob.jw-wizard-mode :is(
+  #jobArrivalDetailsPanel,
+  #jobEntrancePinPanel,
+  #jobSitePhotosPanel,
+  #jobAttendanceManagerPanel
+).hidden {
+  display: none;
+}
+
+.jw-optional-site-fields {
+  padding-top: 2px;
+}
+
+.jw-compact-disclosure-row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.jw-compact-disclosure-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.jw-compact-disclosure-row h5 {
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.jw-compact-disclosure-row h5 span {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.jw-compact-disclosure-row p,
+.jw-disclosure-helper {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.jw-entrance-pin-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.jw-disclosure-done {
+  justify-self: end;
 }
 
 #formJob.jw-wizard-mode .jw-site-fields-grid {
@@ -20341,7 +20512,7 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-arrival-reference-group + .jw-arrival-reference-group {
   border-top: 1px solid var(--card-divider);
-  padding-top: 20px;
+  padding-top: 14px;
 }
 
 .jw-site-subsection-head h5 {
@@ -20469,7 +20640,7 @@ button svg,
   border-radius: var(--radius-sm);
   display: flex;
   gap: 10px;
-  padding: 12px 13px;
+  padding: 10px 12px;
 }
 
 .jw-attendance-default-mark {
@@ -20496,9 +20667,9 @@ button svg,
   line-height: 1.4;
 }
 
-.jw-attendance-manager-head {
-  border-top: 1px solid var(--card-divider);
-  padding-top: 18px;
+.jw-attendance-manager-disclosure {
+  display: grid;
+  gap: 14px;
 }
 
 #formJob.jw-wizard-mode .jw-attendance-manager-grid {
@@ -20507,13 +20678,11 @@ button svg,
 }
 
 .jw-attendance-qr-note {
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
   color: var(--ink-3);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   line-height: 1.45;
   margin: 0;
-  padding: 10px 12px;
+  padding: 0 1px;
 }
 
 #formJob.jw-wizard-mode.jw-requirement-editor-active .jw-wizard-continue {
@@ -21350,6 +21519,18 @@ button svg,
   }
 
   #formJob.jw-wizard-mode .jw-site-step-card .geocode-btn {
+    width: 100%;
+  }
+
+  .jw-compact-disclosure-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .jw-compact-disclosure-row > button,
+  .jw-disclosure-done {
+    justify-content: center;
     width: 100%;
   }
 
