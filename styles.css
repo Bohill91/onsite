@@ -19450,6 +19450,10 @@ button svg,
   min-height: 44px;
 }
 
+#formJob.jw-wizard-mode #jobVehicleWrap {
+  display: none;
+}
+
 #formJob.jw-wizard-mode .jw-labour-step-card {
   background: transparent;
   border: 0;
@@ -19469,6 +19473,38 @@ button svg,
 #formJob.jw-wizard-mode .jw-labour-step-head {
   gap: 4px;
   padding-bottom: 16px;
+}
+
+#formJob.jw-wizard-mode .jw-labour-empty {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+#formJob.jw-wizard-mode .jw-labour-empty.hidden {
+  display: none;
+}
+
+.jw-labour-empty > div {
+  display: grid;
+  gap: 4px;
+}
+
+.jw-labour-empty h4 {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.jw-labour-empty p {
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  margin: 0;
 }
 
 #formJob.jw-wizard-mode .jw-saved-requirements,
@@ -20114,13 +20150,7 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-day-chip span::before {
-  align-items: center;
-  content: "";
-  display: inline-flex;
-  font-size: 0.7rem;
-  font-weight: 900;
-  justify-content: center;
-  width: 11px;
+  display: none;
 }
 
 #formJob.jw-wizard-mode .jw-day-chip:hover span {
@@ -20129,15 +20159,14 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-day-chip input:checked + span {
-  background: var(--orange-light);
+  background: #f97316;
   border-color: var(--orange);
   box-shadow: none;
-  color: var(--ink);
+  color: #fff;
 }
 
 #formJob.jw-wizard-mode .jw-day-chip input:checked + span::before {
-  color: var(--orange-dark);
-  content: "✓";
+  display: none;
 }
 
 #formJob.jw-wizard-mode .jw-day-chip input:focus-visible + span {
@@ -20351,7 +20380,7 @@ button svg,
   border-radius: 0;
   box-shadow: none;
   display: grid;
-  gap: 16px;
+  gap: 0;
   outline: 0;
   padding: 0;
 }
@@ -20363,26 +20392,23 @@ button svg,
   transform: none;
 }
 
-#formJob.jw-wizard-mode .jw-site-step-head {
-  padding-bottom: 0;
-}
-
-#formJob.jw-wizard-mode .jw-site-step-intro {
-  display: grid;
-  gap: 4px;
-}
-
 #formJob.jw-wizard-mode .jw-site-legacy-head {
   display: none;
 }
 
 #formJob.jw-wizard-mode .jw-site-surface {
-  background: var(--surface);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 14px;
+  padding: 0;
+}
+
+#formJob.jw-wizard-mode .jw-site-surface + .jw-site-surface {
+  border-top: 1px solid var(--card-divider);
+  margin-top: 18px;
+  padding-top: 18px;
 }
 
 .jw-site-section-head,
@@ -20439,6 +20465,7 @@ button svg,
   min-width: 0;
 }
 
+.jw-compact-disclosure-row h4,
 .jw-compact-disclosure-row h5 {
   color: var(--ink);
   font-size: 0.8rem;
@@ -20447,6 +20474,7 @@ button svg,
   margin: 0;
 }
 
+.jw-compact-disclosure-row h4 span,
 .jw-compact-disclosure-row h5 span {
   color: var(--ink-3);
   font-size: 0.68rem;
@@ -20510,11 +20538,6 @@ button svg,
   min-width: 128px;
 }
 
-#formJob.jw-wizard-mode .jw-arrival-reference-group + .jw-arrival-reference-group {
-  border-top: 1px solid var(--card-divider);
-  padding-top: 14px;
-}
-
 .jw-site-subsection-head h5 {
   color: var(--ink);
   font-size: 0.76rem;
@@ -20533,7 +20556,7 @@ button svg,
   text-transform: none;
 }
 
-#formJob.jw-wizard-mode .jw-arrival-references-surface .picker-map {
+#formJob.jw-wizard-mode .jw-site-location-surface .picker-map {
   background: #eef2f5;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
@@ -20543,13 +20566,13 @@ button svg,
   min-height: 320px;
 }
 
-#formJob.jw-wizard-mode .jw-arrival-references-surface .picker-map:focus-visible {
+#formJob.jw-wizard-mode .jw-site-location-surface .picker-map:focus-visible {
   border-color: var(--orange);
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
   outline: none;
 }
 
-#formJob.jw-wizard-mode .jw-arrival-references-surface .picker-map[aria-invalid="true"] {
+#formJob.jw-wizard-mode .jw-site-location-surface .picker-map[aria-invalid="true"] {
   border-color: var(--red);
 }
 
@@ -21450,6 +21473,15 @@ button svg,
     padding-bottom: 14px;
   }
 
+  #formJob.jw-wizard-mode .jw-labour-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #formJob.jw-wizard-mode .jw-labour-empty .primary-btn {
+    width: 100%;
+  }
+
   .jw-labour-section-head,
   .jw-requirement-builder-head,
   .jw-requirement-group-head,
@@ -21472,12 +21504,11 @@ button svg,
   }
 
   #formJob.jw-wizard-mode .jw-site-step-card {
-    gap: 16px;
+    gap: 0;
   }
 
   #formJob.jw-wizard-mode .jw-schedule-surface,
-  #formJob.jw-wizard-mode .jw-pricing-panel--wizard,
-  #formJob.jw-wizard-mode .jw-site-surface {
+  #formJob.jw-wizard-mode .jw-pricing-panel--wizard {
     padding: 16px;
   }
 
@@ -21534,7 +21565,7 @@ button svg,
     width: 100%;
   }
 
-  #formJob.jw-wizard-mode .jw-arrival-references-surface .picker-map {
+  #formJob.jw-wizard-mode .jw-site-location-surface .picker-map {
     height: 280px;
     min-height: 280px;
   }

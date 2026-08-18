@@ -6381,6 +6381,9 @@ function renderJobPreferredWorkerChoices(user) {
         <span>You can continue without selecting a preferred worker.</span>
       </div>`;
   syncJobPreferredWorkersDisclosureState();
+  if (jobWizardActive && (tradeRequirementEditorOpen || !pendingTradeRequirements.length)) {
+    wrap.classList.add("hidden");
+  }
 }
 
 document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
@@ -7814,13 +7817,19 @@ function syncJobSiteDisclosureState() {
   });
 
   const arrivalToggle = document.getElementById("jobArrivalDetailsToggle");
-  const arrivalLabel = arrivalToggle?.querySelector("strong");
-  if (arrivalLabel) {
-    arrivalLabel.textContent = jobArrivalDetailsOpen
-      ? "Hide arrival details"
-      : jobArrivalDetailsHaveValues()
-        ? "Arrival details"
-        : "Add arrival details";
+  const arrivalSummary = document.getElementById("jobArrivalDetailsSummary");
+  const hasArrivalDetails = jobArrivalDetailsHaveValues();
+  if (arrivalSummary) {
+    arrivalSummary.textContent = hasArrivalDetails
+      ? "Added"
+      : "Add instructions, parking, PPE or worker notes.";
+  }
+  if (arrivalToggle) {
+    arrivalToggle.textContent = jobArrivalDetailsOpen
+      ? "Done"
+      : hasArrivalDetails
+        ? "Edit"
+        : "Add details";
   }
 
   const hasPin = currentJobHasEntrancePin();
@@ -7853,21 +7862,26 @@ function syncJobSiteDisclosureState() {
 
   const managerToggle = document.getElementById("jobAttendanceManagerToggle");
   const hasManager = jobAttendanceManagerHasValues();
-  const managerLabel = managerToggle?.querySelector("strong");
-  if (managerLabel) {
-    managerLabel.textContent = jobAttendanceManagerOpen
-      ? "Hide attendance manager"
+  const managerSummary = document.getElementById("jobAttendanceManagerSummary");
+  if (managerSummary) {
+    managerSummary.textContent = hasManager
+      ? "Attendance manager assigned"
+      : "Company-managed by default";
+  }
+  if (managerToggle) {
+    managerToggle.textContent = jobAttendanceManagerOpen
+      ? "Done"
       : hasManager
-        ? "Attendance manager details"
-        : "Assign attendance manager now";
+        ? "Edit manager"
+        : "Assign attendance manager";
   }
 }
 
 function prepareJobSiteDisclosures() {
-  jobArrivalDetailsOpen = jobArrivalDetailsHaveValues();
+  jobArrivalDetailsOpen = false;
   jobEntrancePinOpen = false;
   jobSitePhotosOpen = false;
-  jobAttendanceManagerOpen = jobAttendanceManagerHasValues();
+  jobAttendanceManagerOpen = false;
   syncJobSiteDisclosureState();
 }
 
@@ -8302,6 +8316,12 @@ function enterJobWizardMode({ reset = false } = {}) {
   const wasActive = jobWizardActive;
   jobWizardActive = true;
   formWrap.classList.add("jw-wizard-mode");
+  const projectStart = document.getElementById("jobStart");
+  if (projectStart) {
+    const startDate = String(projectStart.value || "").slice(0, 10);
+    projectStart.type = "date";
+    projectStart.value = startDate;
+  }
   mountJobPricingBreakdown("jobPricingBreakdownWizardMount");
   // Context-specific novalidate: only while the form operates as the
   // company wizard. Removed again in exitJobWizardMode().
@@ -8319,6 +8339,8 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobSitePhotosOpen = false;
     jobAttendanceManagerOpen = false;
   }
+  const shiftStart = document.getElementById("jobShiftStart");
+  if (shiftStart && !shiftStart.value) shiftStart.value = "07:00";
   syncJobLabourDisclosureState();
   syncJobPreferredWorkersDisclosureState();
   syncJobSiteDisclosureState();
@@ -8328,6 +8350,13 @@ function enterJobWizardMode({ reset = false } = {}) {
 function exitJobWizardMode() {
   jobWizardActive = false;
   document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
+  const projectStart = document.getElementById("jobStart");
+  if (projectStart) {
+    const startDate = String(projectStart.value || "").slice(0, 10);
+    const startTime = document.getElementById("jobShiftStart")?.value || "";
+    projectStart.type = "datetime-local";
+    projectStart.value = startDate && startTime ? `${startDate}T${startTime}` : startDate;
+  }
   mountJobPricingBreakdown("jobPricingBreakdownLegacyMount");
   jobForm?.removeAttribute("novalidate");
   syncJobLabourDisclosureState();
@@ -8491,7 +8520,7 @@ function jobWizardScheduleReviewHTML() {
     title: "Schedule & pay",
     step: 3,
     content: jobWizardReviewRowsHTML([
-      ["Project start", start ? formatDate(start) : ""],
+      ["Project start", start ? formatDateOnly(start) : ""],
       [
         "Estimated end",
         noFixedEndDate ? "No fixed end date" : end ? formatDateOnly(end) : "",
@@ -8925,7 +8954,7 @@ jobForm?.addEventListener("keydown", (event) => {
 let pendingTradeRequirements = [];
 let pendingLabourSchedulePeriods = [];
 let activeTradeRequirementId = "";
-let tradeRequirementEditorOpen = true;
+let tradeRequirementEditorOpen = false;
 let pendingJobWizardNavigationStep = null;
 
 function closeTradeRequirementGuard() {
@@ -9236,6 +9265,14 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
 
 ["jobStart", "jobEndDate"].forEach((id) => {
   document.getElementById(id)?.addEventListener("input", clearSchedulePayValidation);
+});
+["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("change", (event) => {
+    const control = event.currentTarget;
+    if (control.value) {
+      requestAnimationFrame(() => control.blur());
+    }
+  });
 });
 document.getElementById("jobNoFixedEndDate")?.addEventListener("change", () => {
   clearSchedulePayValidation();
@@ -9808,9 +9845,10 @@ function tradeRequirementEditorHasUnsavedChanges() {
 
 function updateTradeRequirementEditorState() {
   const hasRequirements = pendingTradeRequirements.length > 0;
-  if (!hasRequirements) tradeRequirementEditorOpen = true;
   const editor = document.getElementById("jobRequirementEditor");
+  const emptyState = document.getElementById("jobLabourEmptyState");
   const savedSection = document.getElementById("jobSavedRequirementsSection");
+  const preferredSection = document.getElementById("jobPreferredWorkersWrap");
   const addAnother = document.getElementById("jobAddAnotherRequirement");
   const editorTitle = document.getElementById("jobRequirementEditorTitle");
   const editorMode = document.getElementById("jobRequirementEditorMode");
@@ -9818,7 +9856,17 @@ function updateTradeRequirementEditorState() {
   const discardButton = document.getElementById("jobDiscardTradeRequirement");
   const editorVisible = !jobWizardActive || tradeRequirementEditorOpen;
   editor?.classList.toggle("hidden", !editorVisible);
-  savedSection?.classList.toggle("hidden", !hasRequirements);
+  emptyState?.classList.toggle(
+    "hidden",
+    !jobWizardActive || hasRequirements || editorVisible,
+  );
+  savedSection?.classList.toggle(
+    "hidden",
+    !hasRequirements || (jobWizardActive && editorVisible),
+  );
+  if (preferredSection && jobWizardActive) {
+    preferredSection.classList.toggle("hidden", !hasRequirements || editorVisible);
+  }
   addAnother?.classList.toggle("hidden", editorVisible);
   if (editorTitle) {
     editorTitle.textContent = activeTradeRequirementId
@@ -9832,10 +9880,15 @@ function updateTradeRequirementEditorState() {
       : "Save requirement";
   }
   const hasUnsavedChanges = editorVisible && tradeRequirementEditorHasUnsavedChanges();
-  discardButton?.classList.toggle(
-    "hidden",
-    !(activeTradeRequirementId || hasUnsavedChanges),
-  );
+  if (discardButton) {
+    discardButton.textContent = activeTradeRequirementId || hasUnsavedChanges
+      ? "Discard changes"
+      : "Cancel";
+    discardButton.classList.toggle(
+      "hidden",
+      !jobWizardActive && !(activeTradeRequirementId || hasUnsavedChanges),
+    );
+  }
   const formWrap = document.getElementById("formJob");
   formWrap?.classList.toggle(
     "jw-requirement-editor-active",
@@ -9860,7 +9913,7 @@ function openTradeRequirementEditor(requirement = null) {
 function discardTradeRequirementEditorChanges() {
   activeTradeRequirementId = "";
   clearTradeReqInputs();
-  tradeRequirementEditorOpen = !pendingTradeRequirements.length || !jobWizardActive;
+  tradeRequirementEditorOpen = !jobWizardActive;
   setTradeRequirementMessage();
   syncTradeReqBuilderState();
 }
@@ -9996,7 +10049,7 @@ function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
   pendingLabourSchedulePeriods = [];
   activeTradeRequirementId = "";
-  tradeRequirementEditorOpen = true;
+  tradeRequirementEditorOpen = !jobWizardActive;
   const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
   if (scheduleWrap) scheduleWrap.dataset.open = "";
   clearTradeReqInputs();
@@ -10006,6 +10059,10 @@ function resetJobTradeRequirements() {
 
 document.getElementById("jobAddTradeBtn")?.addEventListener("click", () => {
   saveTradeRequirement();
+});
+
+document.getElementById("jobAddFirstRequirement")?.addEventListener("click", () => {
+  openTradeRequirementEditor();
 });
 
 document.getElementById("jobAddAnotherRequirement")?.addEventListener("click", () => {
@@ -10073,7 +10130,7 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
     activeTradeRequirementId = "";
     clearTradeReqInputs();
   }
-  if (!pendingTradeRequirements.length) tradeRequirementEditorOpen = true;
+  if (!pendingTradeRequirements.length) tradeRequirementEditorOpen = !jobWizardActive;
   syncTradeReqBuilderState();
 });
 
@@ -20486,9 +20543,12 @@ jobForm.addEventListener("submit", (e) => {
     ? ""
     : document.querySelector("#jobEndDate")?.value || "";
   const noticeRaw = Number(document.querySelector("#jobNoticeDays")?.value);
-  const jobStartValue = document.querySelector("#jobStart").value;
+  const projectStartDate = document.querySelector("#jobStart").value;
   const shiftStartTime = document.querySelector("#jobShiftStart")?.value || "";
   const shiftFinishTime = document.querySelector("#jobShiftFinish")?.value || "";
+  const jobStartValue = jobWizardActive && projectStartDate
+    ? `${projectStartDate.slice(0, 10)}T${shiftStartTime}`
+    : projectStartDate;
   const workingDays = normalizeWorkingDays(
     Array.from(document.querySelectorAll('input[name="jobWorkingDays"]:checked')).map(
       (input) => input.value,
