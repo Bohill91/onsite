@@ -840,11 +840,14 @@
                       <option value="ongoing_placement">Ongoing placement</option>
                     </select>
                   </label>
-                  <label class="field-label">
-                    Location *
-                    <input id="jobLocation" list="locationOptions" type="text" required placeholder="Start typing a town, city or area" />
-                    <datalist id="locationOptions"></datalist>
-                  </label>
+                  <div class="field-label">
+                    <label for="jobLocation">Location *</label>
+                    <div class="uk-location-picker" data-uk-location-picker>
+                      <input id="jobLocation" type="text" required placeholder="Start typing a town or city" aria-describedby="jobLocationMessage" />
+                      <div id="jobLocationResults" class="uk-location-results hidden" role="listbox" aria-label="UK town and city suggestions"></div>
+                      <p id="jobLocationMessage" class="form-helper uk-location-message hidden" aria-live="polite"></p>
+                    </div>
+                  </div>
                 </div>
                 <div id="jobVehicleWrap" class="jw-conditional hidden">
                   <h4>Vehicle arrangements</h4>
@@ -1857,6 +1860,8 @@
     <script src="boot.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="ui.js"></script>
+    <script src="data/uk-settlements.js"></script>
+    <script src="uk-location-picker.js"></script>
     <script src="app.js"></script>
     <script src="auth.js"></script>
     <script src="ai.js"></script>

@@ -2742,6 +2742,78 @@ margin-bottom: 12px;
   padding-right: 36px;
 }
 
+.uk-location-picker {
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.uk-location-results {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  display: grid;
+  left: 0;
+  margin-top: 6px;
+  max-height: 304px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 90;
+}
+
+.uk-location-results.hidden {
+  display: none;
+}
+
+.uk-location-option {
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  transition: background-color 180ms ease;
+}
+
+.uk-location-option + .uk-location-option {
+  border-top: 1px solid var(--card-divider);
+}
+
+.uk-location-option strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.uk-location-option span {
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.uk-location-option:hover,
+.uk-location-option.is-active {
+  background: var(--orange-light);
+}
+
+.uk-location-message.form-helper {
+  margin: 6px 0 0;
+}
+
+.uk-location-message[data-tone="empty"] {
+  color: var(--ink-3);
+}
+
+.uk-location-picker input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
 .score-input-wrap {
   position: relative;
 }

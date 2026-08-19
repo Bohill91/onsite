@@ -7411,6 +7411,13 @@ function reactivateIdentity(wid) {
 // ─── DOM References ───────────────────────────────────────
 const workerForm = document.querySelector("#workerForm");
 const jobForm = document.querySelector("#jobForm");
+const jobLocationPicker = window.OnSiteLocations?.initUkLocationPicker({
+  input: "#jobLocation",
+  listbox: "#jobLocationResults",
+  message: "#jobLocationMessage",
+  minCharacters: 2,
+  maxResults: 8,
+});
 const workersList = document.querySelector("#workersList");
 const workersEmpty = document.querySelector("#workersEmpty");
 const jobsList = document.querySelector("#jobsList");
@@ -7597,6 +7604,7 @@ function applyRepeatProjectToForm(job) {
     preStartDocuments: copiedPreStartRequirements,
   };
   jobForm.reset();
+  jobLocationPicker?.clear({ clearInput: true, emit: false });
   resetJobTradeRequirements();
   resetJobPhotos();
   currentJobPin = job.sitePin ? { ...job.sitePin } : { lat: null, lng: null };
@@ -7605,7 +7613,15 @@ function applyRepeatProjectToForm(job) {
   setInputValue("jobNumber", "");
   setInputValue("projectName", `${companyProjectTitle(job)} repeat`);
   setSelectValue(document.getElementById("jobAssignmentType"), normalizeAssignmentType(job.assignmentType || job.jobType || "site_project"));
-  setInputValue("jobLocation", job.location || "");
+  if (job.locationData) {
+    const restoredLocation = jobLocationPicker?.setSelectedLocation(job.locationData, {
+      focus: false,
+      emit: false,
+    });
+    if (!restoredLocation) jobLocationPicker?.setLegacyValue(job.location || "");
+  } else {
+    jobLocationPicker?.setLegacyValue(job.location || "");
+  }
   const vehicle = job.vehicleArrangement || "not_required";
   const vehicleInput = document.querySelector(`input[name="jobVehicleArrangement"][value="${vehicle}"]`);
   if (vehicleInput) vehicleInput.checked = true;
@@ -7659,6 +7675,7 @@ function applyRepeatProjectToForm(job) {
   document.querySelector("[data-repeat-clear]")?.addEventListener("click", () => {
     clearRepeatProjectTemplate();
     jobForm.reset();
+    jobLocationPicker?.clear({ clearInput: true, emit: false });
     resetJobTradeRequirements();
     resetJobPhotos();
     updateAssignmentTypeForm();
@@ -8785,6 +8802,22 @@ function validateJobWizardStep(step, { report = true } = {}) {
   return true;
 }
 
+function validateJobLocationSelection({ report = true } = {}) {
+  const input = document.getElementById("jobLocation");
+  if (!input) return false;
+  if (!jobLocationPicker) {
+    input.setCustomValidity(
+      "UK town and city selection is unavailable. Refresh and try again.",
+    );
+    if (report) {
+      input.reportValidity();
+      input.focus();
+    }
+    return false;
+  }
+  return jobLocationPicker.validate({ report });
+}
+
 function validateSiteAttendanceWizardStep({ report = true } = {}) {
   const map = document.getElementById("jobPickerMap");
   const message = document.getElementById("jobEntrancePinMessage");
@@ -8809,6 +8842,7 @@ function validateSiteAttendanceWizardStep({ report = true } = {}) {
 }
 
 function validateRequestLabourWizardStep(step, { report = false } = {}) {
+  if (step === 1 && !validateJobLocationSelection({ report })) return false;
   if (step === 2 && !validateLabourWizardStepNavigation({ report })) return false;
   if (!validateJobWizardStep(step, { report })) return false;
   if (step === 3 && !validateSchedulePayWizardStep({ report })) return false;
@@ -20492,6 +20526,14 @@ jobForm.addEventListener("submit", (e) => {
     if (companyWizardSubmission) resetJobWizardSubmissionState();
     return;
   }
+  if (!validateJobLocationSelection({ report: !companyWizardSubmission })) {
+    if (companyWizardSubmission) {
+      resetJobWizardSubmissionState();
+      routeToInvalidJobWizardStep(1);
+    }
+    return;
+  }
+  const locationData = jobLocationPicker.getSelectedLocation();
   const jobNumber = document.querySelector("#jobNumber")?.value.trim() || "";
   const postedAt = new Date().toISOString();
 
@@ -20639,6 +20681,7 @@ jobForm.addEventListener("submit", (e) => {
     specialism,
     labourRequirements,
     location,
+    locationData: { ...locationData },
     start: jobStartValue,
     shiftStartTime:
       shiftStartTime ||
@@ -20802,6 +20845,7 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
+  jobLocationPicker?.clear({ clearInput: true, emit: false });
   resetJobTradeRequirements();
   clearRepeatProjectTemplate();
   jobWizardCompleted = new Set();
