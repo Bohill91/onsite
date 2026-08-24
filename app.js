@@ -8968,9 +8968,7 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
 
 function jobWizardPreferredWorkersReviewHTML() {
   const ids = preferredWorkerIdsFromJobForm();
-  if (!ids.length) {
-    return `<p class="jw-review-quiet">No specific workers selected</p>`;
-  }
+  if (!ids.length) return "";
   const companyId = getSessionUser()?.id || "";
   const previousWorkers = companyPreviousWorkerHistory(companyId);
   return `<div class="jw-review-specific-workers" aria-label="Specific workers requested for this labour request">
