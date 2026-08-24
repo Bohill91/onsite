@@ -8541,7 +8541,7 @@ function draftPreStartRequirementRowHTML(requirement) {
   return `<article class="jw-prestart-requirement-row">
     <div class="jw-prestart-requirement-main">
       <strong>${escapeHtml(requirement.documentName)}</strong>
-      <span>${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))} · ${escapeHtml(requirement.requirementLevel === "optional" ? "Optional" : "Required")} · ${escapeHtml(projectRequirementConfiguredActionLabel(requirement))}</span>
+      <span>${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))} · ${escapeHtml(requirement.requirementLevel === "optional" ? "Optional" : "Required")} · ${escapeHtml(projectRequirementTimingLabel(requirement.timing))} · ${escapeHtml(projectRequirementConfiguredActionLabel(requirement))}</span>
     </div>
     <div class="jw-prestart-requirement-meta">
       <span>${escapeHtml(projectRequirementAudienceLabelFromRequirements(pendingTradeRequirements, requirement))}</span>
@@ -8589,7 +8589,7 @@ function draftPreStartStateHTML() {
     return draftPreStartConfiguredHTML();
   }
   if (draftPreStartSetupStatus === "pending") {
-    return `<div class="jw-prestart-message is-pending"><strong>Pre-start setup pending</strong><span>You’ll be able to add requirements from the project after it is created. Workers should not be treated as pre-start ready until setup is complete.</span></div>`;
+    return `<div class="jw-prestart-message is-pending"><strong>Pre-start setup pending</strong><span>You can finish the requirements from the project after it is created.</span></div>`;
   }
   if (draftPreStartSetupStatus === "none") {
     return `<div class="jw-prestart-message"><strong>No pre-start requirements</strong><span>No pre-start requirements will be added to this project.</span></div>`;
@@ -8701,7 +8701,7 @@ function openDraftPreStartConfirmDialog({
   modal.setAttribute("aria-labelledby", "draftPreStartConfirmTitle");
   modal.innerHTML = `<div class="dispute-sheet jw-requirement-guard-sheet">
     <div class="dispute-sheet-header"><div><h3 class="dispute-sheet-title" id="draftPreStartConfirmTitle">${escapeHtml(title)}</h3></div><button class="modal-close-btn" type="button" aria-label="Close" data-draft-prestart-confirm-cancel>×</button></div>
-    <div class="dispute-sheet-body"><p class="jw-requirement-guard-copy">${escapeHtml(description)}</p><div class="jw-requirement-guard-actions"><button class="secondary-btn" type="button" data-draft-prestart-confirm-cancel>Keep requirements and stay here</button><button class="primary-btn" type="button" data-draft-prestart-confirm>${escapeHtml(confirmLabel)}</button></div></div>
+    <div class="dispute-sheet-body"><p class="jw-requirement-guard-copy">${escapeHtml(description)}</p><div class="jw-requirement-guard-actions"><button class="secondary-btn" type="button" data-draft-prestart-confirm-cancel>Keep requirements</button><button class="primary-btn" type="button" data-draft-prestart-confirm>${escapeHtml(confirmLabel)}</button></div></div>
   </div>`;
   document.body.appendChild(modal);
   const close = () => {
