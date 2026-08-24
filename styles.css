@@ -19918,7 +19918,6 @@ button svg,
   #jobPreferredWorkersToggle,
   #jobArrivalDetailsToggle,
   #jobEntrancePinToggle,
-  #jobEntrancePinDone,
   #jobSitePhotosToggle,
   #jobAttendanceManagerToggle
 ) {
@@ -20721,26 +20720,11 @@ button svg,
 
 .jw-entrance-pin-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .jw-disclosure-done {
   justify-self: end;
-}
-
-#formJob.jw-wizard-mode .jw-entrance-pin-panel .jw-disclosure-done {
-  background: var(--orange);
-  border-color: var(--orange);
-  color: #fff;
-}
-
-#formJob.jw-wizard-mode .jw-entrance-pin-panel .jw-disclosure-done:hover {
-  background: var(--orange-dark);
-  border-color: var(--orange-dark);
-}
-
-#formJob.jw-wizard-mode .jw-entrance-pin-panel .jw-disclosure-done.hidden {
-  display: none;
 }
 
 #formJob.jw-wizard-mode .jw-site-fields-grid {
@@ -20801,8 +20785,8 @@ button svg,
 }
 
 .jw-entrance-pin-row {
-  border-top: 1px solid var(--card-divider);
-  padding-top: 12px;
+  align-items: flex-start;
+  padding-top: 2px;
 }
 
 .jw-entrance-pin-summary {
@@ -20827,7 +20811,30 @@ button svg,
 }
 
 .jw-entrance-pin-summary.is-set::before {
-  background: var(--green);
+  background: transparent;
+  color: var(--green);
+  content: "✓";
+  flex-basis: auto;
+  font-size: 0.75rem;
+  font-weight: 900;
+  height: auto;
+  width: auto;
+}
+
+.jw-arrival-point-copy {
+  max-width: 460px;
+}
+
+.jw-arrival-point-helper {
+  color: var(--ink-2);
+  font-weight: 650;
+}
+
+#formJob.jw-wizard-mode :is(
+  #jobEntrancePinToggle,
+  #jobArrivalPointHelper
+).hidden {
+  display: none;
 }
 
 .jw-site-subsection-head h5 {
@@ -20864,11 +20871,17 @@ button svg,
   outline: none;
 }
 
+#formJob.jw-wizard-mode .jw-site-location-surface .picker-map.is-adjusting {
+  border-color: rgba(249, 115, 22, 0.72);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map[aria-invalid="true"] {
   border-color: var(--red);
 }
 
 #formJob.jw-wizard-mode .pin-coords-display {
+  display: none;
   align-items: center;
   background: var(--green-bg);
   border: 0;

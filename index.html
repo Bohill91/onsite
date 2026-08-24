@@ -1177,26 +1177,26 @@
                         <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
                       </div>
                     </label>
-                    <div class="jw-compact-disclosure-row jw-entrance-pin-row">
-                      <div>
-                        <h5>Exact entrance pin *</h5>
-                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not set</p>
-                      </div>
-                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set entrance pin</button>
-                    </div>
                     <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
-                      <p class="jw-disclosure-helper">Click the map to place the precise worker arrival point.</p>
-                      <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for selecting the exact worker entrance" aria-describedby="jobEntrancePinMessage"></div>
+                      <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
                       <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
                         <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
                         <span class="jw-pin-status-copy">
-                          <strong>Entrance pin set</strong>
+                          <strong>Arrival point set</strong>
                           <span id="pinCoordsText"></span>
                         </span>
                       </div>
                       <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
-                      <button type="button" id="jobEntrancePinDone" class="secondary-btn jw-disclosure-done hidden">Done</button>
                     </div>
+                    <div class="jw-compact-disclosure-row jw-entrance-pin-row">
+                      <div>
+                        <h5>Arrival point</h5>
+                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not set</p>
+                        <p class="jw-arrival-point-copy">Workers will use this point when arriving on site.</p>
+                      </div>
+                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn hidden" aria-expanded="false" aria-controls="jobPickerMap jobArrivalPointHelper">Adjust arrival point</button>
+                    </div>
+                    <p id="jobArrivalPointHelper" class="jw-disclosure-helper jw-arrival-point-helper hidden">Click the map to set the exact point workers should arrive.</p>
                   </div>
                 </section>
 
