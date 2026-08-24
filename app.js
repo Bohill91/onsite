@@ -8263,14 +8263,16 @@ function syncJobSiteDisclosureState() {
   const hasPin = currentJobHasEntrancePin();
   const pinSummary = document.getElementById("jobEntrancePinSummary");
   const pinToggle = document.getElementById("jobEntrancePinToggle");
-  if (pinSummary) pinSummary.textContent = hasPin ? "Entrance pin set" : "Not set";
-  if (pinToggle) {
-    pinToggle.textContent = jobEntrancePinOpen
-      ? "Close map"
-      : hasPin
-        ? "Edit pin"
-        : "Set entrance pin";
+  const pinDone = document.getElementById("jobEntrancePinDone");
+  if (pinSummary) {
+    pinSummary.textContent = hasPin ? "Entrance pin set" : "Not set";
+    pinSummary.classList.toggle("is-set", hasPin);
+    pinSummary.classList.toggle("is-unset", !hasPin);
   }
+  if (pinToggle) {
+    pinToggle.textContent = hasPin ? "Edit pin" : "Set entrance pin";
+  }
+  pinDone?.classList.toggle("hidden", wizard && !hasPin);
 
   const photoCount = currentJobPhotoCount();
   const photoSummary = document.getElementById("jobSitePhotosSummary");
