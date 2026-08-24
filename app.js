@@ -2738,6 +2738,32 @@ function dateFromValue(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function splitProjectStartValue(value) {
+  const match = String(value || "").match(
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?/,
+  );
+  return {
+    date: match?.[1] || "",
+    time: match?.[2] || "",
+  };
+}
+
+function composeProjectStartValue(dateValue, shiftStartValue) {
+  const date = splitProjectStartValue(dateValue).date;
+  const time = String(shiftStartValue || "").match(/^(\d{2}:\d{2})/)?.[1] || "";
+  if (!date) return "";
+  return time ? `${date}T${time}` : date;
+}
+
+function projectShiftStartValue(job) {
+  return (
+    job?.shiftStartTime ||
+    job?.defaultShiftTimes?.start ||
+    splitProjectStartValue(job?.startDate || job?.start).time ||
+    ""
+  );
+}
+
 function formatUKDateTime(value, fallback = "No date set") {
   const d = dateFromValue(value);
   return d ? UK_DATE_TIME_FORMATTER.format(d) : fallback;
@@ -5004,10 +5030,7 @@ function migrateState(s) {
       sunday: weekendRates.sunday,
     };
     if (!j.shiftStartTime) {
-      j.shiftStartTime =
-        j.start && String(j.start).includes("T")
-          ? String(j.start).split("T")[1].slice(0, 5)
-          : "08:00";
+      j.shiftStartTime = projectShiftStartValue(j) || "08:00";
     }
     if (!j.shiftFinishTime) j.shiftFinishTime = "";
     if (j.accommodationPaid == null) j.accommodationPaid = false;
@@ -8055,10 +8078,11 @@ function applyRepeatProjectToForm(job) {
   activeTradeRequirementId = "";
   tradeRequirementEditorOpen = !pendingTradeRequirements.length;
   clearTradeReqInputs();
-  setInputValue("jobStart", "");
+  jobWizardShiftStartInitialized = true;
+  setInputValue("jobStart", jobStartDateOnly(job));
   setInputValue("jobEndDate", "");
   setCheckboxValue("jobNoFixedEndDate", !!job.noFixedEndDate);
-  setInputValue("jobShiftStart", job.shiftStartTime || "");
+  setInputValue("jobShiftStart", projectShiftStartValue(job));
   setInputValue("jobShiftFinish", job.shiftFinishTime || "");
   const days = new Set(normalizeWorkingDays(job.workingDays));
   document.querySelectorAll('input[name="jobWorkingDays"]').forEach((input) => {
@@ -8101,6 +8125,8 @@ function applyRepeatProjectToForm(job) {
     jobLocationPicker?.clear({ clearInput: true, emit: false });
     resetJobTradeRequirements();
     resetJobPhotos();
+    jobWizardShiftStartInitialized = false;
+    initializeNewRequestShiftStart();
     currentJobPin = { lat: null, lng: null };
     jobArrivalPointSource = "";
     jobArrivalPointAddress = "";
@@ -8186,6 +8212,15 @@ let jobArrivalPointSource = "";
 let jobArrivalPointAddress = "";
 let jobSitePhotosOpen = false;
 let jobAttendanceManagerOpen = false;
+let jobWizardShiftStartInitialized = false;
+
+function initializeNewRequestShiftStart() {
+  if (jobWizardShiftStartInitialized) return;
+  const shiftStart = document.getElementById("jobShiftStart");
+  if (!shiftStart) return;
+  if (!shiftStart.value) shiftStart.value = "07:00";
+  jobWizardShiftStartInitialized = true;
+}
 
 function labourRequirementHasAdvancedOptions(requirement = {}) {
   return !!(
@@ -8777,7 +8812,7 @@ function enterJobWizardMode({ reset = false } = {}) {
   formWrap.classList.add("jw-wizard-mode");
   const projectStart = document.getElementById("jobStart");
   if (projectStart) {
-    const startDate = String(projectStart.value || "").slice(0, 10);
+    const startDate = splitProjectStartValue(projectStart.value).date;
     projectStart.type = "date";
     projectStart.value = startDate;
   }
@@ -8797,8 +8832,7 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobSitePhotosOpen = false;
     jobAttendanceManagerOpen = false;
   }
-  const shiftStart = document.getElementById("jobShiftStart");
-  if (shiftStart && !shiftStart.value) shiftStart.value = "07:00";
+  initializeNewRequestShiftStart();
   syncJobLabourDisclosureState();
   syncJobPreferredWorkersDisclosureState();
   syncJobSiteDisclosureState();
@@ -8810,10 +8844,10 @@ function exitJobWizardMode() {
   document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
   const projectStart = document.getElementById("jobStart");
   if (projectStart) {
-    const startDate = String(projectStart.value || "").slice(0, 10);
+    const startDate = splitProjectStartValue(projectStart.value).date;
     const startTime = document.getElementById("jobShiftStart")?.value || "";
     projectStart.type = "datetime-local";
-    projectStart.value = startDate && startTime ? `${startDate}T${startTime}` : startDate;
+    projectStart.value = composeProjectStartValue(startDate, startTime);
   }
   mountJobPricingBreakdown("jobPricingBreakdownLegacyMount");
   jobForm?.removeAttribute("novalidate");
@@ -10097,12 +10131,10 @@ function renderJobPricingBreakdown() {
               ${req.overtimeAvailable ? `<span class="jw-price-context">Overtime configured; charged only when applicable.</span>` : ""}
             </div>
             <div class="jw-price-lines">
-              <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
               <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
               ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>` : ""}
               <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
               <span>VAT <strong>${formatMoney(vat)}</strong></span>
-              <span>Total per worker <strong>${formatMoney(totalPerWorker)}</strong></span>
               <span class="jw-price-requirement-total">Requirement daily total <strong>${formatMoney(requirementTotal)}</strong></span>
             </div>
           </div>`;
@@ -21043,8 +21075,8 @@ jobForm.addEventListener("submit", (e) => {
   const projectStartDate = document.querySelector("#jobStart").value;
   const shiftStartTime = document.querySelector("#jobShiftStart")?.value || "";
   const shiftFinishTime = document.querySelector("#jobShiftFinish")?.value || "";
-  const jobStartValue = jobWizardActive && projectStartDate
-    ? `${projectStartDate.slice(0, 10)}T${shiftStartTime}`
+  const jobStartValue = jobWizardActive
+    ? composeProjectStartValue(projectStartDate, shiftStartTime)
     : projectStartDate;
   const workingDays = normalizeWorkingDays(
     Array.from(document.querySelectorAll('input[name="jobWorkingDays"]:checked')).map(
@@ -21302,6 +21334,7 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
+  jobWizardShiftStartInitialized = false;
   jobLocationPicker?.clear({ clearInput: true, emit: false });
   resetJobTradeRequirements();
   clearRepeatProjectTemplate();
@@ -23550,11 +23583,7 @@ function isPastCutoff(startMs) {
 function jobExpectedStartTime(job) {
   const code = job?.id ? activeSiteCode(job.id) : null;
   if (code?.startTime) return code.startTime;
-  if (job?.shiftStartTime) return job.shiftStartTime;
-  if (job?.start && String(job.start).includes("T")) {
-    return String(job.start).split("T")[1].slice(0, 5);
-  }
-  return "08:00";
+  return projectShiftStartValue(job) || "08:00";
 }
 
 function lateReportFor(workerId, date = todayDateStr()) {
@@ -23603,8 +23632,7 @@ function notifyLateReport(worker, job, lateReport) {
 // ─── Project Site Sign-In QR Codes ────────────────────────
 function jobStartDateOnly(job) {
   const value = job?.startDate || job?.start || "";
-  if (!value) return "";
-  return String(value).split("T")[0];
+  return splitProjectStartValue(value).date;
 }
 
 function jobEndDateOnly(job) {

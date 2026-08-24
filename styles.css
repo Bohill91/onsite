@@ -21823,7 +21823,7 @@ button svg,
   }
 
   #formJob.jw-wizard-mode .jw-days {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .jw-estimate-head {
