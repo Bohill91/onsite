@@ -876,9 +876,9 @@
                     <div>
                       <h4 id="jobSavedRequirementsTitle">Labour requirements</h4>
                     </div>
-                    <button type="button" id="jobAddAnotherRequirement" class="secondary-btn">+ Add another requirement</button>
                   </div>
                   <div id="jobTradeReqList" class="jw-req-list"></div>
+                  <button type="button" id="jobAddAnotherRequirement" class="secondary-btn jw-add-requirement-action">+ Add another requirement</button>
                 </section>
 
                 <section id="jobRequirementEditor" class="jw-requirement-builder" aria-labelledby="jobRequirementEditorTitle">
@@ -1078,21 +1078,15 @@
                   <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
                 </div>
 
-                <section id="jobPreferredWorkersWrap" class="preferred-workers-picker jw-preferred-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
+                <section id="jobPreferredWorkersWrap" class="jw-specific-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
                   <div class="jw-labour-section-head">
                     <div>
-                      <h4 id="jobPreferredWorkersTitle">Preferred workers <span>Optional</span></h4>
-                      <p>Prioritise workers you've previously used.</p>
+                      <h4 id="jobPreferredWorkersTitle">Specific workers <span>Optional</span></h4>
+                      <p>Prioritise people you already know or have worked with.</p>
                     </div>
-                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobPreferredWorkersPanel">Choose preferred workers</button>
+                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-haspopup="dialog">Choose workers</button>
                   </div>
-                  <div id="jobPreferredWorkersPanel" class="jw-preferred-workers-panel hidden">
-                    <label class="field-label" for="jobPreferredWorkerSearch">
-                      Search preferred workers
-                      <input id="jobPreferredWorkerSearch" type="search" placeholder="Search previous or preferred workers" autocomplete="off" />
-                    </label>
-                    <div id="jobPreferredWorkersList" class="preferred-workers-list"></div>
-                  </div>
+                  <div id="jobSpecificWorkersSummary" class="jw-specific-workers-summary hidden" aria-live="polite"></div>
                 </section>
               </section>
               </div>

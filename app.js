@@ -27,6 +27,7 @@ const ICON_PATHS = {
   minusCircle: `<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   qrCode: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/>`,
+  search: `<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>`,
   shield: `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>`,
   tag: `<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>`,
   user: `<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>`,
@@ -6323,115 +6324,533 @@ function togglePreferredWorker(companyId, workerId) {
 }
 
 function preferredWorkerIdsFromJobForm() {
-  return Array.from(
-    document.querySelectorAll('input[name="jobPreferredWorkerIds"]:checked'),
-  ).map((input) => input.value);
+  return Array.from(new Set(jobRequestedWorkerIds)).filter((workerId) =>
+    !!findWorker(workerId),
+  );
+}
+
+function normalizeWorkerPickerSearch(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function workerPickerSearchMatches(searchText, query) {
+  const haystack = normalizeWorkerPickerSearch(searchText);
+  const words = haystack.split(/\s+/).filter(Boolean);
+  const terms = normalizeWorkerPickerSearch(query).split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  return terms.every((term) => {
+    if (haystack.includes(term)) return true;
+    if (term.length < 3) return false;
+    return words.some((word) => {
+      let index = 0;
+      for (const character of word) {
+        if (character === term[index]) index += 1;
+        if (index === term.length) return true;
+      }
+      return false;
+    });
+  });
+}
+
+function workerBroadLocation(worker = {}) {
+  const locationData = worker.locationData || {};
+  const structured =
+    locationData.settlement ||
+    locationData.town ||
+    locationData.city ||
+    locationData.displayName ||
+    "";
+  if (structured) return String(structured).split(",")[0].trim();
+  const raw = String(worker.location || "").trim();
+  if (!raw) return "";
+  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  const broad = [...parts]
+    .reverse()
+    .find(
+      (part) =>
+        !/^(uk|united kingdom|england|scotland|wales|northern ireland)$/i.test(part) &&
+        !/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(part) &&
+        !/\d/.test(part),
+    );
+  return broad || (!/\d/.test(raw) ? raw : "");
+}
+
+function workerAvailabilityLabel(worker = {}) {
+  if (worker.availability === "available") return "Available";
+  if (worker.nextAvailableDate) {
+    return `Available ${formatDateOnly(worker.nextAvailableDate)}`;
+  }
+  return worker.availability ? "Unavailable" : "Availability not set";
+}
+
+function projectRelationshipDateLabel(job, records = []) {
+  const workedDates = records
+    .map((record) => String(record?.date || "").slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  const start = workedDates[0] || String(job?.startDate || job?.start || "").slice(0, 10);
+  const end =
+    workedDates[workedDates.length - 1] ||
+    String(job?.estimatedEndDate || job?.endDate || "").slice(0, 10);
+  if (!start && !end) return "Dates not recorded";
+  if (!start || !end || start === end) return formatDateOnly(start || end);
+  return `${formatDateOnly(start)} – ${formatDateOnly(end)}`;
+}
+
+function companyPreviousWorkerHistory(companyId) {
+  const byWorker = new Map();
+  if (!companyId) return byWorker;
+  (state.jobs || [])
+    .filter((job) => companyOwnsJob(job, companyId))
+    .forEach((job) => {
+      const attendance = (attendanceRecords || []).filter(
+        (record) => record.jobId === job.id && record.workerId,
+      );
+      const workerIds = new Set([
+        ...companyAssignedWorkers(job).map((worker) => worker.id),
+        ...attendance.map((record) => record.workerId),
+        ...(state.applications || [])
+          .filter(
+            (application) =>
+              application.jobId === job.id && application.status === "confirmed",
+          )
+          .map((application) => application.workerId),
+      ]);
+      workerIds.forEach((workerId) => {
+        const worker = findWorker(workerId);
+        if (!worker) return;
+        const workerAttendance = attendance.filter(
+          (record) => record.workerId === workerId,
+        );
+        const sortValue =
+          dateFromValue(
+            workerAttendance.at(-1)?.date ||
+              job.estimatedEndDate ||
+              job.endDate ||
+              job.startDate ||
+              job.start ||
+              job.createdAt,
+          )?.getTime() || 0;
+        const project = {
+          id: job.id,
+          name: companyProjectTitle(job),
+          location: job.location || job.siteAddress || "Location not set",
+          dateLabel: projectRelationshipDateLabel(job, workerAttendance),
+          sortValue,
+        };
+        const existing = byWorker.get(workerId) || { worker, projects: [] };
+        if (!existing.projects.some((item) => item.id === project.id)) {
+          existing.projects.push(project);
+        }
+        existing.projects.sort((a, b) => b.sortValue - a.sortValue);
+        byWorker.set(workerId, existing);
+      });
+    });
+  return byWorker;
+}
+
+function workerRequirementRelevance(worker = {}) {
+  return pendingTradeRequirements.reduce((best, requirement) => {
+    const workerTrade = normalizeWorkerPickerSearch(worker.trade);
+    const workerSpecialism = normalizeWorkerPickerSearch(worker.specialism);
+    const workerGrade = normalizeWorkerPickerSearch(worker.grade);
+    const trade = normalizeWorkerPickerSearch(requirement.trade);
+    const specialism = normalizeWorkerPickerSearch(requirement.specialism);
+    const grade = normalizeWorkerPickerSearch(requirement.grade);
+    let score = 0;
+    if (trade && workerTrade === trade) score += 30;
+    if (
+      specialism &&
+      [workerSpecialism, workerGrade].some(
+        (value) => value && (value.includes(specialism) || specialism.includes(value)),
+      )
+    ) score += 12;
+    if (grade && workerGrade && (workerGrade.includes(grade) || grade.includes(workerGrade))) {
+      score += 6;
+    }
+    return Math.max(best, score);
+  }, 0);
+}
+
+function specificWorkerPickerModels(companyId) {
+  const history = companyPreviousWorkerHistory(companyId);
+  const preferred = preferredWorkersForCompany(companyId).filter(
+    (item) => item.worker,
+  );
+  const preferredIds = new Set(preferred.map((item) => item.workerId));
+  const previousIds = new Set(history.keys());
+  const toModel = (worker, source, preferredAt = "") => {
+    const workerHistory = history.get(worker.id);
+    const latestProject = workerHistory?.projects?.[0] || null;
+    const rating = buildWorkerRating(worker.id);
+    const specialism = worker.specialism || worker.grade || "";
+    const location = workerBroadLocation(worker);
+    const model = {
+      worker,
+      source,
+      latestProject,
+      projectCount: workerHistory?.projects?.length || 0,
+      reliability: rating.reliabilityRating || "New / Unproven",
+      availability: workerAvailabilityLabel(worker),
+      relevance: workerRequirementRelevance(worker),
+      preferredAt: dateFromValue(preferredAt)?.getTime() || 0,
+      searchText: "",
+    };
+    model.searchText = [
+      worker.name,
+      worker.trade,
+      specialism,
+      location,
+      worker.qualifications,
+      ...(workerHistory?.projects || []).flatMap((project) => [
+        project.name,
+        project.location,
+      ]),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return model;
+  };
+  const sortModels = (items) =>
+    items.sort(
+      (a, b) =>
+        b.relevance - a.relevance ||
+        (b.latestProject?.sortValue || b.preferredAt || 0) -
+          (a.latestProject?.sortValue || a.preferredAt || 0) ||
+        String(a.worker.name || "").localeCompare(String(b.worker.name || "")),
+    );
+  return {
+    preferred: sortModels(
+      preferred.map((item) =>
+        toModel(item.worker, "preferred", item.addedAt),
+      ),
+    ),
+    previous: sortModels(
+      Array.from(history.values())
+        .filter((item) => !preferredIds.has(item.worker.id))
+        .map((item) => toModel(item.worker, "previous")),
+    ),
+    global: sortModels(
+      (state.workers || [])
+        .filter(
+          (worker) =>
+            worker?.id &&
+            !preferredIds.has(worker.id) &&
+            !previousIds.has(worker.id),
+        )
+        .map((worker) => toModel(worker, "global")),
+    ),
+  };
+}
+
+function specificWorkerAvatarHTML(worker, className = "") {
+  const photo = String(
+    worker?.profilePhotoDataUrl || worker?.profilePhoto || worker?.photo || "",
+  );
+  const safePhoto =
+    photo.startsWith("data:image/") || photo.startsWith("/") ? photo : "";
+  if (safePhoto) {
+    return `<span class="jw-worker-avatar ${className}"><img src="${escapeHtml(safePhoto)}" alt="" /></span>`;
+  }
+  return `<span class="jw-worker-avatar ${avatarColor(worker?.name || "Worker")} ${className}" aria-hidden="true">${escapeHtml(initials(worker?.name || "Worker"))}</span>`;
 }
 
 function renderJobPreferredWorkerChoices(user) {
   const wrap = document.getElementById("jobPreferredWorkersWrap");
-  const list = document.getElementById("jobPreferredWorkersList");
-  const search = document.getElementById("jobPreferredWorkerSearch");
-  if (!wrap || !list) return;
+  const summary = document.getElementById("jobSpecificWorkersSummary");
+  const toggle = document.getElementById("jobPreferredWorkersToggle");
+  if (!wrap || !summary || !toggle) return;
   if (user?.type !== "company") {
     wrap.classList.add("hidden");
-    list.innerHTML = "";
-    if (search) search.value = "";
+    summary.classList.add("hidden");
+    summary.innerHTML = "";
     return;
   }
-  const prefs = preferredWorkersForCompany(user.id).filter((pref) => pref.worker);
+  const selected = preferredWorkerIdsFromJobForm()
+    .map((workerId) => findWorker(workerId))
+    .filter(Boolean);
   wrap.classList.remove("hidden");
-  if (search) search.value = "";
-  list.innerHTML = prefs.length
-    ? prefs
-        .map(
-          (pref) => {
-            const worker = pref.worker || {};
-            const rating = buildWorkerRating(worker.id || pref.workerId || "");
-            const cardNumber = worker.cscsCard || worker.ecsCard || "";
-            const searchText = [
-              worker.name,
-              pref.workerName,
-              worker.trade,
-              pref.workerTrade,
-              cardNumber,
-              rating.reliabilityRating,
-              rating.punctualityRating,
-            ]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase();
-            return `
-        <label class="preferred-worker-choice" data-preferred-worker-card data-search="${escapeHtml(searchText)}">
-          <input type="checkbox" name="jobPreferredWorkerIds" value="${pref.workerId}" />
-          <span class="preferred-worker-choice-main">
-            <strong>${escapeHtml(worker.name || pref.workerName || "Worker")}</strong>
-            <small>${escapeHtml(worker.trade || pref.workerTrade || "Trade not set")}</small>
-          </span>
-          <span class="preferred-worker-choice-meta">
-            <small>${cardNumber ? `CSCS/ECS ${escapeHtml(cardNumber)}` : "Card number not added"}</small>
-            <small>${escapeHtml(rating.reliabilityRating || "New / Unproven")} / ${escapeHtml(rating.punctualityRating || "New / Unproven")}</small>
-          </span>
-        </label>`;
-          },
-        )
-        .join("")
-    : `<div class="preferred-worker-empty-compact">
-        <strong>No preferred workers available yet.</strong>
-        <span>You can continue without selecting a preferred worker.</span>
-      </div>`;
-  syncJobPreferredWorkersDisclosureState();
+  toggle.textContent = selected.length ? "Manage workers" : "Choose workers";
+  toggle.setAttribute(
+    "aria-label",
+    selected.length
+      ? `Manage ${selected.length} selected specific worker${selected.length === 1 ? "" : "s"}`
+      : "Choose specific workers",
+  );
+  summary.classList.toggle("hidden", !selected.length);
+  summary.innerHTML = selected.length
+    ? `<div class="jw-specific-workers-selected">
+        <div class="jw-specific-worker-avatars">${selected
+          .slice(0, 4)
+          .map((worker) => specificWorkerAvatarHTML(worker, "is-small"))
+          .join("")}</div>
+        <div><strong>${selected.length} selected</strong><span>${escapeHtml(
+          selected
+            .slice(0, 3)
+            .map((worker) => worker.name || "Worker")
+            .join(" · "),
+        )}${selected.length > 3 ? ` · +${selected.length - 3} more` : ""}</span></div>
+      </div>`
+    : "";
   if (jobWizardActive && (tradeRequirementEditorOpen || !pendingTradeRequirements.length)) {
     wrap.classList.add("hidden");
   }
 }
 
-document.getElementById("jobPreferredWorkerSearch")?.addEventListener("input", (event) => {
-  const term = event.target.value.trim().toLowerCase();
-  const cards = Array.from(document.querySelectorAll("[data-preferred-worker-card]"));
-  cards.forEach((card) => {
-    card.classList.toggle("hidden", !!term && !card.dataset.search.includes(term));
+function specificWorkerSourceLabel(source) {
+  return {
+    preferred: "Preferred",
+    previous: "Previous workers",
+    global: "Find an OnSite worker",
+  }[source] || "Previous workers";
+}
+
+function specificWorkerSourceEmptyHTML(source, hasQuery) {
+  if (source === "preferred") {
+    return `<div class="jw-specific-worker-empty"><strong>${hasQuery ? "No preferred workers match your search." : "No preferred workers yet."}</strong><span>${hasQuery ? "Try a different name, trade, project or location." : "Workers your company stars will appear here."}</span></div>`;
+  }
+  if (source === "previous") {
+    return `<div class="jw-specific-worker-empty"><strong>${hasQuery ? "No previous workers match your search." : "No previous OnSite workers yet."}</strong><span>${hasQuery ? "Try a different name, trade, project or location." : "Workers assigned to this company’s OnSite projects will appear here."}</span></div>`;
+  }
+  return `<div class="jw-specific-worker-empty"><strong>${hasQuery ? "No OnSite workers match your search." : "No other OnSite workers are available to browse."}</strong><span>${hasQuery ? "Try a partial name, trade, specialism or town." : "You can continue without choosing a specific worker."}</span></div>`;
+}
+
+function specificWorkerRowHTML(model) {
+  const { worker, source, latestProject, projectCount } = model;
+  const selected = specificWorkerPickerDraftIds.has(worker.id);
+  const role = [worker.trade, worker.specialism || worker.grade]
+    .filter(Boolean)
+    .join(" · ") || "Trade not set";
+  const broadLocation = workerBroadLocation(worker);
+  const qualificationSummary = String(worker.qualifications || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(", ");
+  const relationship = latestProject
+    ? `<div class="jw-specific-worker-project"><strong>${escapeHtml(latestProject.name)}</strong><span>${escapeHtml(latestProject.location)} · ${escapeHtml(latestProject.dateLabel)}</span>${projectCount > 1 ? `<small>Worked with you on ${projectCount} projects</small>` : ""}</div>`
+    : `<div class="jw-specific-worker-project"><span>${escapeHtml(broadLocation || "Location not set")}${qualificationSummary ? ` · ${escapeHtml(qualificationSummary)}` : ""}</span></div>`;
+  return `<label class="jw-specific-worker-row${selected ? " is-selected" : ""}">
+    <input type="checkbox" value="${escapeHtml(worker.id)}" data-specific-worker-select ${selected ? "checked" : ""} />
+    ${specificWorkerAvatarHTML(worker)}
+    <span class="jw-specific-worker-main">
+      <span class="jw-specific-worker-name"><strong>${escapeHtml(worker.name || "Worker")}</strong>${source === "preferred" ? `<small>★ Preferred</small>` : ""}</span>
+      <span class="jw-specific-worker-role">${escapeHtml(role)}</span>
+      ${relationship}
+      <span class="jw-specific-worker-status"><small>${escapeHtml(model.reliability)}</small><small>${escapeHtml(model.availability)}</small></span>
+    </span>
+    <span class="jw-specific-worker-select-label">${selected ? "Selected" : "Select"}</span>
+  </label>`;
+}
+
+function renderSpecificWorkerPickerResults() {
+  const modal = document.getElementById("jobSpecificWorkersModal");
+  const results = modal?.querySelector("[data-specific-worker-results]");
+  if (!results) return;
+  const user = getSessionUser();
+  const models = specificWorkerPickerModels(user?.id || "");
+  const sourceModels = models[jobSpecificWorkerPickerSource] || [];
+  const filtered = sourceModels.filter((model) =>
+    workerPickerSearchMatches(model.searchText, jobSpecificWorkerPickerQuery),
+  );
+  results.innerHTML = filtered.length
+    ? filtered.map(specificWorkerRowHTML).join("")
+    : specificWorkerSourceEmptyHTML(
+        jobSpecificWorkerPickerSource,
+        !!jobSpecificWorkerPickerQuery.trim(),
+      );
+  const count = modal.querySelector("[data-specific-worker-selected-count]");
+  if (count) {
+    count.textContent = `${specificWorkerPickerDraftIds.size} selected`;
+  }
+}
+
+function renderSpecificWorkerPickerSource() {
+  const modal = document.getElementById("jobSpecificWorkersModal");
+  if (!modal) return;
+  const models = specificWorkerPickerModels(getSessionUser()?.id || "");
+  modal.querySelectorAll("[data-specific-worker-source]").forEach((button) => {
+    const active = button.dataset.specificWorkerSource === jobSpecificWorkerPickerSource;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   });
-  document.getElementById("jobPreferredWorkerNoResults")?.remove();
-  if (term && cards.length && cards.every((card) => card.classList.contains("hidden"))) {
-    const list = document.getElementById("jobPreferredWorkersList");
-    list?.insertAdjacentHTML(
-      "beforeend",
-      `<div id="jobPreferredWorkerNoResults" class="preferred-worker-empty-compact">
-        <strong>No workers match that search.</strong>
-        <span>Try a different name, trade or card number.</span>
-      </div>`,
+  const sourceModels = models[jobSpecificWorkerPickerSource] || [];
+  const searchWrap = modal.querySelector("[data-specific-worker-search-wrap]");
+  const search = modal.querySelector("[data-specific-worker-search]");
+  searchWrap?.classList.toggle("hidden", !sourceModels.length);
+  if (search) {
+    search.value = jobSpecificWorkerPickerQuery;
+    search.placeholder =
+      jobSpecificWorkerPickerSource === "global"
+        ? "Search by name, trade, specialism or town"
+        : "Search by name, trade, project or location";
+    search.setAttribute(
+      "aria-label",
+      `Search ${specificWorkerSourceLabel(jobSpecificWorkerPickerSource)}`,
     );
   }
-});
-
-document.getElementById("jobPreferredWorkersToggle")?.addEventListener("click", () => {
-  jobPreferredWorkersOpen = !jobPreferredWorkersOpen;
-  syncJobPreferredWorkersDisclosureState();
-  if (jobPreferredWorkersOpen) {
-    requestAnimationFrame(() => document.getElementById("jobPreferredWorkerSearch")?.focus());
+  const description = modal.querySelector("[data-specific-worker-source-copy]");
+  if (description) {
+    description.textContent = {
+      preferred: "Workers privately starred by your company.",
+      previous: "Workers assigned to or recorded on your company’s OnSite projects.",
+      global: "Search other registered worker profiles using public professional details.",
+    }[jobSpecificWorkerPickerSource];
   }
-});
+  renderSpecificWorkerPickerResults();
+}
 
-document.getElementById("jobPreferredWorkersList")?.addEventListener("change", () => {
-  syncJobPreferredWorkersDisclosureState();
+function closeSpecificWorkerPicker({ apply = false } = {}) {
+  const modal = document.getElementById("jobSpecificWorkersModal");
+  if (!modal) return;
+  if (apply) {
+    jobRequestedWorkerIds = Array.from(specificWorkerPickerDraftIds).filter(
+      (workerId) => !!findWorker(workerId),
+    );
+    renderJobPreferredWorkerChoices(getSessionUser());
+  }
+  hideWithMotion(
+    modal,
+    () => {
+      if (!document.querySelector(".modal-overlay:not(.hidden)")) {
+        document.body.classList.remove("modal-open");
+      }
+      jobSpecificWorkerPickerTrigger?.focus();
+      jobSpecificWorkerPickerTrigger = null;
+    },
+    { remove: true },
+  );
+}
+
+function openSpecificWorkerPicker(trigger = null) {
+  const user = getSessionUser();
+  if (user?.type !== "company") return;
+  document.getElementById("jobSpecificWorkersModal")?.remove();
+  const models = specificWorkerPickerModels(user.id);
+  jobSpecificWorkerPickerSource = models.preferred.length
+    ? "preferred"
+    : models.previous.length
+      ? "previous"
+      : "global";
+  jobSpecificWorkerPickerQuery = "";
+  specificWorkerPickerDraftIds = new Set(preferredWorkerIdsFromJobForm());
+  jobSpecificWorkerPickerTrigger = trigger instanceof HTMLElement ? trigger : null;
+  const modal = document.createElement("div");
+  modal.id = "jobSpecificWorkersModal";
+  modal.className = "modal-overlay jw-specific-workers-overlay";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "jobSpecificWorkersModalTitle");
+  modal.innerHTML = `<div class="dispute-sheet jw-specific-workers-sheet">
+    <header class="dispute-sheet-header jw-specific-workers-modal-head">
+      <div><h3 class="dispute-sheet-title" id="jobSpecificWorkersModalTitle">Choose specific workers</h3><p class="dispute-sheet-sub">Prioritise workers for this request. Eligibility checks still apply before an offer is created.</p></div>
+      <button class="modal-close-btn" type="button" aria-label="Close specific workers" data-specific-worker-cancel>${onsiteIcon("x", 18)}</button>
+    </header>
+    <div class="dispute-sheet-body jw-specific-workers-body">
+      <div class="jw-specific-worker-tabs" role="tablist" aria-label="Worker sources">
+        ${[
+          ["preferred", "Preferred", models.preferred.length],
+          ["previous", "Previous workers", models.previous.length],
+          ["global", "Find an OnSite worker", models.global.length],
+        ]
+          .map(
+            ([source, label, count]) => `<button type="button" role="tab" data-specific-worker-source="${source}">${escapeHtml(label)} <span>${count}</span></button>`,
+          )
+          .join("")}
+      </div>
+      <p class="jw-specific-worker-source-copy" data-specific-worker-source-copy></p>
+      <label class="jw-specific-worker-search" data-specific-worker-search-wrap>
+        <span class="sr-only">Search workers</span>
+        <span class="search-wrap"><span class="search-icon">${onsiteIcon("search", 17)}</span><input type="search" data-specific-worker-search autocomplete="off" /></span>
+      </label>
+      <div class="jw-specific-worker-results" data-specific-worker-results></div>
+    </div>
+    <footer class="jw-specific-workers-footer">
+      <span data-specific-worker-selected-count>${specificWorkerPickerDraftIds.size} selected</span>
+      <div><button class="secondary-btn" type="button" data-specific-worker-cancel>Cancel</button><button class="primary-btn" type="button" data-specific-worker-done>Done</button></div>
+    </footer>
+  </div>`;
+  document.body.appendChild(modal);
+  document.body.classList.add("modal-open");
+  renderSpecificWorkerPickerSource();
+  modal.querySelectorAll("[data-specific-worker-cancel]").forEach((button) =>
+    button.addEventListener("click", () => closeSpecificWorkerPicker()),
+  );
+  modal.querySelector("[data-specific-worker-done]")?.addEventListener("click", () =>
+    closeSpecificWorkerPicker({ apply: true }),
+  );
+  modal.querySelectorAll("[data-specific-worker-source]").forEach((button) =>
+    button.addEventListener("click", () => {
+      jobSpecificWorkerPickerSource = button.dataset.specificWorkerSource;
+      jobSpecificWorkerPickerQuery = "";
+      renderSpecificWorkerPickerSource();
+      modal.querySelector("[data-specific-worker-search]")?.focus();
+    }),
+  );
+  modal.querySelector("[data-specific-worker-search]")?.addEventListener("input", (event) => {
+    jobSpecificWorkerPickerQuery = event.currentTarget.value;
+    renderSpecificWorkerPickerResults();
+  });
+  modal.querySelector("[data-specific-worker-results]")?.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-specific-worker-select]");
+    if (!input) return;
+    if (input.checked) specificWorkerPickerDraftIds.add(input.value);
+    else specificWorkerPickerDraftIds.delete(input.value);
+    const row = input.closest(".jw-specific-worker-row");
+    row?.classList.toggle("is-selected", input.checked);
+    const label = row?.querySelector(".jw-specific-worker-select-label");
+    if (label) label.textContent = input.checked ? "Selected" : "Select";
+    const count = modal.querySelector("[data-specific-worker-selected-count]");
+    if (count) count.textContent = `${specificWorkerPickerDraftIds.size} selected`;
+  });
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeSpecificWorkerPicker();
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSpecificWorkerPicker();
+      return;
+    }
+    trapProjectRequirementModalFocus(modal, event);
+  });
+  requestAnimationFrame(() => {
+    const search = modal.querySelector("[data-specific-worker-search-wrap]:not(.hidden) input");
+    (search || modal.querySelector("[data-specific-worker-source]"))?.focus();
+  });
+}
+
+document.getElementById("jobPreferredWorkersToggle")?.addEventListener("click", (event) => {
+  openSpecificWorkerPicker(event.currentTarget);
 });
 
 function tryPreferredWorkerOffers(job) {
-  const ids = Array.isArray(job?.preferredWorkerIds) ? job.preferredWorkerIds : [];
-  if (!job || !ids.length) return { ok: false, reason: "No preferred workers selected" };
+  const ids = Array.isArray(job?.requestedWorkerIds)
+    ? job.requestedWorkerIds
+    : Array.isArray(job?.preferredWorkerIds)
+      ? job.preferredWorkerIds
+      : [];
+  if (!job || !ids.length) return { ok: false, reason: "No specific workers selected" };
   const matches = getMatches(job);
   for (const workerId of ids) {
     const rank = matches.findIndex((match) => match.id === workerId);
+    if (rank < 0) continue;
     const res = createJobOffer(
       job.id,
       workerId,
-      "preferred_worker",
-      rank >= 0 ? rank + 1 : null,
+      "requested_worker",
+      rank + 1,
     );
     if (res.ok && !res.duplicate) return res;
   }
-  return { ok: false, reason: "No selected preferred worker available" };
+  return { ok: false, reason: "No selected specific worker is currently eligible" };
 }
 
 function openProjectTransferModal(jobId) {
@@ -6701,7 +7120,7 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
   if (worker.availability !== "available")
     return { ok: false, reason: "Worker is unavailable" };
   if (
-    ["manual", "preferred_worker", "project_transfer"].includes(source) &&
+    ["manual", "preferred_worker", "requested_worker", "project_transfer"].includes(source) &&
     !getMatches(job).some((match) => match.id === worker.id)
   ) {
     return { ok: false, reason: "Worker is not eligible for this job offer" };
@@ -7748,7 +8167,11 @@ let jobWizardEnteredFromReview = false;
 let jobWizardSubmissionApproved = false;
 let jobWizardSubmissionInProgress = false;
 let jobLabourMoreOptionsOpen = false;
-let jobPreferredWorkersOpen = false;
+let jobRequestedWorkerIds = [];
+let specificWorkerPickerDraftIds = new Set();
+let jobSpecificWorkerPickerSource = "previous";
+let jobSpecificWorkerPickerQuery = "";
+let jobSpecificWorkerPickerTrigger = null;
 let jobArrivalDetailsOpen = false;
 let jobEntrancePinOpen = false;
 let jobSitePhotosOpen = false;
@@ -7773,19 +8196,7 @@ function syncJobLabourDisclosureState() {
 }
 
 function syncJobPreferredWorkersDisclosureState() {
-  const panel = document.getElementById("jobPreferredWorkersPanel");
-  const toggle = document.getElementById("jobPreferredWorkersToggle");
-  const expanded = !jobWizardActive || jobPreferredWorkersOpen;
-  const selectedCount = preferredWorkerIdsFromJobForm().length;
-  panel?.classList.toggle("hidden", !expanded);
-  toggle?.setAttribute("aria-expanded", String(expanded));
-  if (toggle) {
-    toggle.textContent = expanded && jobWizardActive
-      ? "Done"
-      : selectedCount
-        ? `Manage preferred workers (${selectedCount})`
-        : "Choose preferred workers";
-  }
+  renderJobPreferredWorkerChoices(getSessionUser());
 }
 
 function formFieldHasValue(id) {
@@ -8350,7 +8761,6 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobWizardSubmissionApproved = false;
     jobWizardSubmissionInProgress = false;
     jobLabourMoreOptionsOpen = false;
-    jobPreferredWorkersOpen = false;
     jobArrivalDetailsOpen = false;
     jobEntrancePinOpen = false;
     jobSitePhotosOpen = false;
@@ -8494,12 +8904,12 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
 function jobWizardPreferredWorkersReviewHTML() {
   const ids = preferredWorkerIdsFromJobForm();
   if (!ids.length) {
-    return `<p class="jw-review-quiet">No preferred workers selected</p>`;
+    return `<p class="jw-review-quiet">No specific workers selected</p>`;
   }
   const names = ids
     .map((workerId) => findWorker(workerId)?.name || "")
     .filter(Boolean);
-  return `<div class="jw-review-preferred"><span>Preferred workers</span><strong>${escapeHtml(names.join(" · ") || `${ids.length} selected`)}</strong></div>`;
+  return `<div class="jw-review-preferred"><span>Specific workers</span><strong>${escapeHtml(names.join(" · ") || `${ids.length} selected`)}</strong></div>`;
 }
 
 function jobWizardLabourReviewHTML() {
@@ -8747,6 +9157,10 @@ function renderJobWizardChrome() {
       jobWizardEnteredFromReview && jobWizardStep < JOB_WIZARD_STEPS.length
         ? "Return to review"
         : "Continue";
+    const labourStepBlocked =
+      jobWizardStep === 2 && pendingTradeRequirements.length === 0;
+    continueButton.disabled = labourStepBlocked;
+    continueButton.setAttribute("aria-disabled", String(labourStepBlocked));
   }
   document
     .getElementById("jobWizardSubmit")
@@ -10030,35 +10444,41 @@ function renderTradeReqCards() {
   const list = document.getElementById("jobTradeReqList");
   if (!list) return;
   list.innerHTML = pendingTradeRequirements
-    .map(
-      (r, i) => `
-    <div class="jw-req-card">
+    .map((r, i) => {
+      const advanced = [
+        r.overtimeAvailable ? "Overtime" : "",
+        r.accommodationPaid
+          ? `Accommodation${r.accommodationAllowancePerNight ? ` ${formatMoney(r.accommodationAllowancePerNight)}/night` : ""}`
+          : "",
+        normalizeLabourSchedule(r.labourSchedule).length
+          ? `Phased schedule (${normalizeLabourSchedule(r.labourSchedule).length})`
+          : "",
+      ].filter(Boolean);
+      const quantity = Math.max(1, Number(r.quantity) || 1);
+      return `
+    <article class="jw-req-card">
       <div class="jw-req-main">
         <div class="jw-req-heading">
           <div>
             <div class="jw-req-trade">${escapeHtml(r.trade || "Labour requirement")}</div>
             ${r.specialism ? `<div class="jw-req-role">${escapeHtml(r.specialism)}</div>` : ""}
           </div>
-          <strong class="jw-req-count">${Math.max(1, Number(r.quantity) || 1)} worker${Number(r.quantity) === 1 ? "" : "s"}</strong>
         </div>
         ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-        ${r.requiredQualifications ? `<div class="jw-req-quals">${escapeHtml(r.requiredQualifications)}</div>` : ""}
+        ${r.requiredQualifications ? `<div class="jw-req-quals"><span>Qualifications</span>${escapeHtml(r.requiredQualifications)}</div>` : ""}
         <div class="jw-req-summary">
           ${r.budgetMax ? `<span class="jw-req-rate">${formatMoney(r.budgetMax)}/day</span>` : ""}
           <span>${r.workerReceivesFullAdvertisedRate !== false ? "Full advertised rate" : "Service fee within advertised rate"}</span>
         </div>
-        ${r.overtimeAvailable || r.accommodationPaid || normalizeLabourSchedule(r.labourSchedule).length ? `<div class="jw-req-conditions">
-          ${r.overtimeAvailable ? `<span>Overtime available</span>` : ""}
-          ${r.accommodationPaid ? `<span>Accommodation included${r.accommodationAllowancePerNight ? ` · ${formatMoney(r.accommodationAllowancePerNight)}/night` : ""}</span>` : ""}
-          ${normalizeLabourSchedule(r.labourSchedule).length ? `<span>Phased schedule · ${normalizeLabourSchedule(r.labourSchedule).length} period${normalizeLabourSchedule(r.labourSchedule).length === 1 ? "" : "s"}</span>` : ""}
-        </div>` : ""}
+        ${advanced.length ? `<div class="jw-req-conditions">${advanced.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
       </div>
+      <strong class="jw-req-count">${quantity} worker${quantity === 1 ? "" : "s"}</strong>
       <div class="jw-req-actions">
         <button type="button" class="jw-req-action" data-req-edit="${i}">Edit</button>
         <button type="button" class="jw-req-action jw-req-action--danger" data-req-remove="${i}">Remove</button>
       </div>
-    </div>`,
-    )
+    </article>`;
+    })
     .join("");
 }
 
@@ -10077,11 +10497,15 @@ function syncTradeReqBuilderState() {
   renderJobPricingBreakdown();
   updateTradeRequirementEditorState();
   syncJobLabourDisclosureState();
+  renderJobPreferredWorkerChoices(getSessionUser());
+  if (jobWizardActive && jobWizardStep === 2) renderJobWizardChrome();
 }
 
 function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
   pendingLabourSchedulePeriods = [];
+  jobRequestedWorkerIds = [];
+  specificWorkerPickerDraftIds = new Set();
   activeTradeRequirementId = "";
   tradeRequirementEditorOpen = !jobWizardActive;
   const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
@@ -20607,7 +21031,7 @@ jobForm.addEventListener("submit", (e) => {
     Number.isFinite(sundayRateRaw) && sundayRateRaw > 0
       ? Math.round(sundayRateRaw)
       : budgetMax;
-  const preferredWorkerIds = preferredWorkerIdsFromJobForm();
+  const requestedWorkerIds = preferredWorkerIdsFromJobForm();
   let labourRequirements = [];
   try {
     labourRequirements = buildLabourRequirementsFromForm({
@@ -20715,8 +21139,10 @@ jobForm.addEventListener("submit", (e) => {
           saturday: "standard",
           sunday: "standard",
         },
-    preferredWorkerIds,
-    preferredFirst: preferredWorkerIds.length > 0,
+    requestedWorkerIds,
+    // Legacy mirror retained for existing offer and stored-project readers.
+    preferredWorkerIds: [...requestedWorkerIds],
+    preferredFirst: requestedWorkerIds.length > 0,
     preStartSetupStatus: preStartConfiguration?.setupStatus,
     preStartDocuments:
       preStartConfiguration?.requirements ||
@@ -20832,7 +21258,7 @@ jobForm.addEventListener("submit", (e) => {
       type: PROJECT_ACTIVITY_TYPES.MATCHING_STARTED,
       title: "Matching started.",
       description: preferredOffer.ok
-        ? "Preferred worker offer created first."
+        ? "Requested worker offer created first."
         : "OnSite started matching suitable workers.",
       timestamp: new Date().toISOString(),
       source: "matching",
