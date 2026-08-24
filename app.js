@@ -8971,10 +8971,32 @@ function jobWizardPreferredWorkersReviewHTML() {
   if (!ids.length) {
     return `<p class="jw-review-quiet">No specific workers selected</p>`;
   }
-  const names = ids
-    .map((workerId) => findWorker(workerId)?.name || "")
-    .filter(Boolean);
-  return `<div class="jw-review-preferred"><span>Specific workers</span><strong>${escapeHtml(names.join(" · ") || `${ids.length} selected`)}</strong></div>`;
+  const companyId = getSessionUser()?.id || "";
+  const previousWorkers = companyPreviousWorkerHistory(companyId);
+  return `<div class="jw-review-specific-workers" aria-label="Specific workers requested for this labour request">
+    <span class="jw-review-specific-workers-label">Specific workers</span>
+    ${ids
+      .map((workerId) => {
+        const worker = findWorker(workerId);
+        if (!worker) return "";
+        const role = [worker.trade, worker.specialism || worker.grade]
+          .filter(Boolean)
+          .join(" · ") || "Trade not set";
+        const statuses = [
+          isPreferredWorker(companyId, worker.id) ? "★ Preferred" : "",
+          previousWorkers.has(worker.id) ? "Previous worker" : "",
+        ].filter(Boolean);
+        return `<article class="jw-review-specific-worker">
+          ${specificWorkerAvatarHTML(worker, "jw-review-worker-avatar")}
+          <div class="jw-review-specific-worker-copy">
+            <strong>${escapeHtml(worker.name || "Worker")}</strong>
+            <span>${escapeHtml(role)}</span>
+          </div>
+          ${statuses.length ? `<div class="jw-review-specific-worker-status">${statuses.map((status) => `<span>${escapeHtml(status)}</span>`).join("")}</div>` : ""}
+        </article>`;
+      })
+      .join("")}
+  </div>`;
 }
 
 function jobWizardLabourReviewHTML() {
@@ -9038,6 +9060,13 @@ function jobWizardSiteReviewHTML() {
     Number.isFinite(Number(currentJobPin.lat)) &&
     Number.isFinite(Number(currentJobPin.lng));
   const photoCount = Object.values(currentJobPhotos || {}).filter(Boolean).length;
+  const arrivalPoint = hasPin
+    ? jobArrivalPointSource === "manual"
+      ? "Adjusted manually"
+      : jobArrivalPointSource === "address"
+        ? "Set from site address"
+        : "Set"
+    : "Not set";
   const attendanceSetup = managerName
     ? [managerName, managerEmail, managerPhone].filter(Boolean).join(" · ")
     : "Company-managed";
@@ -9059,8 +9088,13 @@ function jobWizardSiteReviewHTML() {
         "Additional notes",
         document.getElementById("jobGateAccess")?.value.trim(),
       ],
-      ["Arrival point", hasPin ? "Set" : "Not set"],
-      ["Site photos", `${photoCount} added`],
+      ["Arrival point", arrivalPoint],
+      [
+        "Site photos",
+        photoCount
+          ? `${photoCount} photo${photoCount === 1 ? "" : "s"} added`
+          : "",
+      ],
       ["Attendance setup", attendanceSetup],
     ]),
   });
@@ -9077,6 +9111,9 @@ function jobWizardPreStartReviewHTML() {
     const contentToFollow = draftPreStartRequirements.filter(
       (requirement) => requirement.contentToFollow,
     ).length;
+    const needsAssignmentReview = draftPreStartRequirements.filter(
+      draftPreStartRequirementAssignmentIssue,
+    ).length;
     const groups = PROJECT_REQUIREMENT_TIMINGS.map((timing) => {
       const requirements = draftPreStartRequirements.filter(
         (requirement) => requirement.timing === timing.value,
@@ -9088,21 +9125,25 @@ function jobWizardPreStartReviewHTML() {
           : timing.label;
       return `<div class="jw-review-prestart-group"><span>${escapeHtml(label)}</span>${requirements
         .map(
-          (requirement) => `<div><strong>${escapeHtml(requirement.documentName)}</strong><small>${escapeHtml([
-            projectRequirementTypeLabel(requirement.requirementType),
-            requirement.requirementLevel === "optional" ? "Optional" : "Required",
-            projectRequirementConfiguredActionLabel(requirement),
-            projectRequirementAudienceLabelFromRequirements(
-              pendingTradeRequirements,
-              requirement,
-            ),
-          ].join(" · "))}</small></div>`,
+          (requirement) => {
+            const readiness = draftPreStartRequirementReadiness(requirement);
+            return `<div><strong>${escapeHtml(requirement.documentName)}</strong><small>${escapeHtml([
+              projectRequirementTypeLabel(requirement.requirementType),
+              requirement.requirementLevel === "optional" ? "Optional" : "Required",
+              projectRequirementConfiguredActionLabel(requirement),
+              projectRequirementAudienceLabelFromRequirements(
+                pendingTradeRequirements,
+                requirement,
+              ),
+              readiness.label,
+            ].join(" · "))}</small></div>`;
+          },
         )
         .join("")}</div>`;
     }).join("");
-    content = `<div class="jw-review-readiness"><strong>${draftPreStartRequirements.length} requirement${draftPreStartRequirements.length === 1 ? "" : "s"}</strong><span>${ready} ready${contentToFollow ? ` · ${contentToFollow} content to follow` : ""}</span></div>${groups}`;
+    content = `<div class="jw-review-readiness"><strong>${draftPreStartRequirements.length} requirement${draftPreStartRequirements.length === 1 ? "" : "s"}</strong><span>${ready} ready${contentToFollow ? ` · ${contentToFollow} content to follow` : ""}${needsAssignmentReview ? ` · ${needsAssignmentReview} need assignment review` : ""}</span></div>${groups}`;
   } else if (draftPreStartSetupStatus === "pending") {
-    content = `<div class="jw-review-state is-warning"><strong>Pre-start setup pending</strong><span>Requirements will need to be configured from the project before workers are cleared to start.</span></div>`;
+    content = `<div class="jw-review-state is-warning"><strong>Pre-start setup pending</strong><span>Requirements can be completed from the project before workers start.</span></div>`;
   } else if (draftPreStartSetupStatus === "none") {
     content = `<div class="jw-review-state"><strong>No pre-start requirements</strong><span>This project has been explicitly marked as not requiring pre-start actions.</span></div>`;
   } else {
