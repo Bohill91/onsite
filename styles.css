@@ -19626,7 +19626,7 @@ button svg,
 #formJob.jw-wizard-mode .jw-rate-option {
   align-self: start;
   gap: 4px;
-  padding-top: 20px;
+  padding-top: 15px;
 }
 
 #formJob.jw-wizard-mode .jw-rate-option .form-helper {
@@ -19734,8 +19734,10 @@ button svg,
 }
 
 .jw-accommodation-settings {
+  align-items: start;
   display: grid;
-  gap: 10px;
+  gap: 16px 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 2px 0 0 26px;
 }
 
@@ -19801,10 +19803,8 @@ button svg,
 }
 
 .jw-accommodation-allowance {
-  align-items: center;
   display: grid;
-  gap: 6px 10px;
-  grid-template-columns: auto minmax(104px, 132px);
+  gap: 7px;
   justify-content: start;
 }
 
@@ -19846,9 +19846,9 @@ button svg,
 
 .jw-accommodation-allowance .form-helper {
   font-size: 0.71rem;
-  grid-column: 1 / -1;
   line-height: 1.35;
   margin: 0;
+  max-width: 280px;
 }
 
 #formJob.jw-wizard-mode .jw-labour-term .jw-conditional {
@@ -22024,11 +22024,13 @@ button svg,
   }
 
   .jw-accommodation-settings {
+    gap: 10px;
+    grid-template-columns: 1fr;
     padding-left: 0;
   }
 
   .jw-accommodation-allowance {
-    grid-template-columns: 1fr minmax(104px, 132px);
+    justify-content: stretch;
   }
 
   #formJob.jw-wizard-mode .jw-site-fields-grid,
