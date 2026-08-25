@@ -376,8 +376,9 @@ function setupTradeSpecialismDropdowns() {
 document.addEventListener("DOMContentLoaded", setupTradeSpecialismDropdowns);
 
 function closeAppPopovers(except = null) {
+  window.OnSiteUI?.closeSelects?.(except);
   document.querySelectorAll("details[open]").forEach((details) => {
-    if (except && details === except) return;
+    if (except && (details === except || details.contains(except))) return;
     details.removeAttribute("open");
   });
 
@@ -435,7 +436,9 @@ function bindGlobalDropdownBehaviour() {
       target.closest("[data-sidebar-account-toggle]") ||
       target.closest("[data-sidebar-account-menu]") ||
       target.closest("[data-worker-notifications]") ||
-      target.closest("#workerNotificationPanel")
+      target.closest("#workerNotificationPanel") ||
+      target.closest(".os-select") ||
+      target.closest(".os-select-listbox")
     ) {
       return;
     }
@@ -448,7 +451,8 @@ function bindGlobalDropdownBehaviour() {
     const openDetails = target.closest("details[open]");
     const openSidebarMenu = target.closest("[data-sidebar-account-menu]");
     const openWorkerPanel = target.closest("#workerNotificationPanel");
-    if (openDetails || openSidebarMenu || openWorkerPanel) return;
+    const openCustomSelect = target.closest(".os-select, .os-select-listbox");
+    if (openDetails || openSidebarMenu || openWorkerPanel || openCustomSelect) return;
     closeAppPopovers();
   });
 
