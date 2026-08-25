@@ -19623,15 +19623,20 @@ button svg,
   min-height: 44px;
 }
 
+#formJob.jw-wizard-mode .jw-check input[type="checkbox"] {
+  min-height: 0;
+}
+
 #formJob.jw-wizard-mode .jw-rate-option {
   align-self: start;
   gap: 4px;
-  padding-top: 15px;
+  padding-top: 23px;
 }
 
 #formJob.jw-wizard-mode .jw-rate-option .form-helper {
   font-size: 0.72rem;
   line-height: 1.35;
+  margin: 0;
   max-width: 420px;
 }
 
@@ -19804,7 +19809,7 @@ button svg,
 
 .jw-accommodation-allowance {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   justify-content: start;
 }
 
