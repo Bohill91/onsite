@@ -983,7 +983,7 @@
 
                     <button type="button" id="jobLabourMoreOptionsToggle" class="jw-disclosure-toggle" aria-expanded="false" aria-controls="jobLabourMoreOptionsPanel">
                       <span><strong>More options</strong><small>Overtime, accommodation and phased scheduling</small></span>
-                      <span class="jw-disclosure-chevron" aria-hidden="true">⌄</span>
+                      <span class="jw-disclosure-action"><span data-job-labour-options-label>Show options</span><span class="jw-disclosure-chevron" aria-hidden="true">⌄</span></span>
                     </button>
 
                     <div id="jobLabourMoreOptionsPanel" class="jw-labour-more-options hidden">
@@ -1035,8 +1035,7 @@
                           <span>Working away / accommodation</span>
                         </label>
                         <div id="jobAccommodationArrangementWrap" class="jw-accommodation-settings hidden">
-                          <fieldset class="jw-accommodation-arrangement">
-                            <legend>Accommodation arrangement</legend>
+                          <fieldset class="jw-accommodation-arrangement" aria-label="Accommodation arrangement">
                             <div class="jw-accommodation-choices">
                               <label>
                                 <input type="radio" name="jobAccommodationArrangement" value="company_provided" />
@@ -1049,12 +1048,14 @@
                             </div>
                           </fieldset>
                           <div id="jobAccommodationAllowanceWrap" class="jw-accommodation-allowance hidden">
-                            <label for="jobAccommodationAllowance">Allowance per night</label>
-                            <div class="jw-accommodation-money-input">
-                              <span aria-hidden="true">£</span>
-                              <input id="jobAccommodationAllowance" type="number" min="1" inputmode="decimal" placeholder="40" />
+                            <div class="jw-accommodation-allowance-control">
+                              <div class="jw-accommodation-money-input">
+                                <span aria-hidden="true">£</span>
+                                <input id="jobAccommodationAllowance" type="number" min="1" inputmode="decimal" placeholder="40" aria-label="Accommodation allowance per night" />
+                              </div>
+                              <span class="jw-accommodation-night-suffix">/ night</span>
                             </div>
-                            <p class="form-helper">Paid to the worker and added to the company invoice without an OnSite service fee.</p>
+                            <p class="form-helper">Paid to the worker with no OnSite service fee.</p>
                           </div>
                         </div>
                       </div>

@@ -19803,9 +19803,11 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-requirement-builder {
+  --jw-form-section-space: 20px;
   background: var(--surface);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
+  gap: var(--jw-form-section-space);
   padding: 20px;
 }
 
@@ -19824,12 +19826,16 @@ button svg,
 }
 
 .jw-rate-group {
-  gap: 10px;
+  gap: 0;
 }
 
 .jw-requirement-group + .jw-requirement-group {
   border-top: 1px solid var(--card-divider);
-  padding-top: 20px;
+  padding-top: var(--jw-form-section-space, 20px);
+}
+
+.jw-rate-group > .jw-requirement-group-head {
+  margin-bottom: 14px;
 }
 
 #formJob.jw-wizard-mode .jw-labour-role-grid,
@@ -19895,14 +19901,13 @@ button svg,
 
 .jw-labour-terms {
   display: grid;
-  gap: 14px;
+  gap: 0;
 }
 
 .jw-disclosure-toggle {
   align-items: center;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--card-divider);
   border-radius: 0;
   border-top: 1px solid var(--card-divider);
   color: var(--ink);
@@ -19910,7 +19915,8 @@ button svg,
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  padding: 12px 0;
+  margin-top: var(--jw-form-section-space, 20px);
+  padding: 14px 0;
   text-align: left;
   width: 100%;
 }
@@ -19918,6 +19924,7 @@ button svg,
 .jw-disclosure-toggle > span:first-child {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .jw-disclosure-toggle strong {
@@ -19940,6 +19947,20 @@ button svg,
   transition: transform 180ms ease;
 }
 
+.jw-disclosure-action {
+  align-items: center;
+  color: var(--ink-3);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 6px;
+}
+
+#formJob:not(.jw-wizard-mode) [data-job-labour-options-label] {
+  display: none;
+}
+
 .jw-disclosure-toggle[aria-expanded="true"] .jw-disclosure-chevron {
   transform: rotate(180deg);
 }
@@ -19957,7 +19978,7 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-labour-more-options {
   display: grid;
-  gap: 16px;
+  gap: 0;
 }
 
 #formJob.jw-wizard-mode .jw-labour-more-options.hidden {
@@ -19971,14 +19992,15 @@ button svg,
 
 .jw-labour-term + .jw-labour-term {
   border-top: 1px solid var(--card-divider);
-  padding-top: 14px;
+  margin-top: var(--jw-form-section-space, 20px);
+  padding-top: var(--jw-form-section-space, 20px);
 }
 
 .jw-accommodation-settings {
-  align-items: start;
-  display: grid;
-  gap: 16px 20px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   padding: 2px 0 0 26px;
 }
 
@@ -19991,13 +20013,6 @@ button svg,
   border: 0;
   margin: 0;
   padding: 0;
-}
-
-.jw-accommodation-arrangement legend {
-  color: var(--ink-3);
-  font-size: 0.72rem;
-  font-weight: 700;
-  margin-bottom: 7px;
 }
 
 .jw-accommodation-choices {
@@ -20049,10 +20064,10 @@ button svg,
   justify-content: start;
 }
 
-.jw-accommodation-allowance > label {
-  color: var(--ink-2);
-  font-size: 0.76rem;
-  font-weight: 700;
+.jw-accommodation-allowance-control {
+  align-items: center;
+  display: flex;
+  gap: 7px;
 }
 
 .jw-accommodation-money-input {
@@ -20063,6 +20078,7 @@ button svg,
   display: flex;
   min-height: 38px;
   padding-left: 10px;
+  width: 94px;
 }
 
 .jw-accommodation-money-input > span {
@@ -20077,7 +20093,15 @@ button svg,
   box-shadow: none;
   min-height: 36px;
   padding: 7px 9px 7px 4px;
-  width: 100%;
+  min-width: 0;
+  width: 58px;
+}
+
+.jw-accommodation-night-suffix {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .jw-accommodation-money-input:focus-within {
@@ -20106,7 +20130,8 @@ button svg,
   border-top: 1px solid var(--card-divider);
   display: grid;
   gap: 12px;
-  padding-top: 14px;
+  margin-top: var(--jw-form-section-space, 20px);
+  padding-top: var(--jw-form-section-space, 20px);
 }
 
 .jw-phased-schedule-head h5 {
@@ -20156,7 +20181,7 @@ button svg,
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-  padding-top: 16px;
+  padding-top: var(--jw-form-section-space, 20px);
 }
 
 .jw-requirement-save {
@@ -22286,7 +22311,7 @@ button svg,
 
   .jw-accommodation-settings {
     gap: 10px;
-    grid-template-columns: 1fr;
+    flex-direction: column;
     padding-left: 0;
   }
 

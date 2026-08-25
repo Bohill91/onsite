@@ -8247,8 +8247,8 @@ function syncJobLabourDisclosureState() {
   const expanded = !jobWizardActive || jobLabourMoreOptionsOpen;
   panel?.classList.toggle("hidden", !expanded);
   toggle?.setAttribute("aria-expanded", String(expanded));
-  const label = toggle?.querySelector("strong");
-  if (label) label.textContent = expanded && jobWizardActive ? "Hide options" : "More options";
+  const label = toggle?.querySelector("[data-job-labour-options-label]");
+  if (label) label.textContent = expanded && jobWizardActive ? "Hide options" : "Show options";
 }
 
 function syncJobPreferredWorkersDisclosureState() {
