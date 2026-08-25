@@ -184,6 +184,14 @@
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   }
 
+  function isCustomSelectMenuOption(option) {
+    return Boolean(option && !option.hidden && option.value !== "");
+  }
+
+  function isCustomSelectChoice(option) {
+    return isCustomSelectMenuOption(option) && !option.disabled;
+  }
+
   function enhanceSelect(select) {
     if (!shouldEnhanceSelect(select) || selectControllerByElement.has(select)) return;
 
@@ -234,16 +242,14 @@
       renderOptions() {
         const fragment = document.createDocumentFragment();
         Array.from(select.options).forEach((option, index) => {
-          if (option.hidden) return;
+          if (!isCustomSelectMenuOption(option)) return;
           const row = document.createElement("button");
           const label = document.createElement("span");
           const check = document.createElement("span");
-          const placeholder = option.value === "";
 
           row.className = cx(
             "os-select-option",
-            placeholder && "is-placeholder",
-            option.selected && !placeholder && "is-selected",
+            option.selected && "is-selected",
           );
           row.type = "button";
           row.tabIndex = -1;
@@ -297,7 +303,7 @@
         const above = rect.top - gap - viewportPadding;
         const openUp = below < 180 && above > below;
         const available = Math.max(120, openUp ? above : below);
-        const maxHeight = Math.min(320, available);
+        const maxHeight = Math.min(304, available);
         const left = Math.min(
           Math.max(viewportPadding, rect.left),
           Math.max(viewportPadding, viewportWidth - width - viewportPadding),
@@ -319,7 +325,7 @@
         const options = Array.from(select.options);
         if (!options.length) return;
         let next = index;
-        while (next >= 0 && next < options.length && (options[next].disabled || options[next].hidden)) {
+        while (next >= 0 && next < options.length && !isCustomSelectChoice(options[next])) {
           next += index >= this.highlightedIndex ? 1 : -1;
         }
         if (next < 0 || next >= options.length) return;
@@ -342,13 +348,15 @@
         } while (
           index >= 0 &&
           index < options.length &&
-          (options[index].disabled || options[index].hidden)
+          !isCustomSelectChoice(options[index])
         );
         if (index >= 0 && index < options.length) this.highlight(index);
       },
 
       open() {
-        if (select.disabled || !select.options.length) return;
+        const options = Array.from(select.options);
+        const firstChoiceIndex = options.findIndex(isCustomSelectChoice);
+        if (select.disabled || firstChoiceIndex < 0) return;
         closeCustomSelects(wrapper);
         window.closeAppPopovers?.(wrapper);
         this.sync({ forceOptions: true });
@@ -358,7 +366,9 @@
         listbox.hidden = false;
         document.body.appendChild(listbox);
         this.position();
-        const selectedIndex = Math.max(0, select.selectedIndex);
+        const selectedIndex = isCustomSelectChoice(options[select.selectedIndex])
+          ? select.selectedIndex
+          : firstChoiceIndex;
         this.highlight(selectedIndex, { scroll: false });
         requestAnimationFrame(() => {
           this.position();
@@ -380,7 +390,7 @@
 
       choose(index) {
         const option = select.options[index];
-        if (!option || option.disabled || option.hidden) return;
+        if (!isCustomSelectChoice(option)) return;
         select.value = option.value;
         this.sync({ forceOptions: true });
         select.dispatchEvent(new Event("input", { bubbles: true }));
@@ -426,10 +436,16 @@
       if (activeSelectController !== controller) return;
       if (event.key === "Home") {
         event.preventDefault();
-        controller.highlight(0);
+        const firstChoiceIndex = Array.from(select.options).findIndex(isCustomSelectChoice);
+        if (firstChoiceIndex >= 0) controller.highlight(firstChoiceIndex);
       } else if (event.key === "End") {
         event.preventDefault();
-        controller.highlight(select.options.length - 1);
+        const options = Array.from(select.options);
+        let lastChoiceIndex = options.length - 1;
+        while (lastChoiceIndex >= 0 && !isCustomSelectChoice(options[lastChoiceIndex])) {
+          lastChoiceIndex -= 1;
+        }
+        if (lastChoiceIndex >= 0) controller.highlight(lastChoiceIndex);
       } else if (event.key === "Escape") {
         event.preventDefault();
         controller.close({ restoreFocus: true });
