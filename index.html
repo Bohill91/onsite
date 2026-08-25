@@ -1063,21 +1063,15 @@
                       <section class="jw-phased-schedule" aria-labelledby="jobPhasedScheduleTitle">
                         <div class="jw-phased-schedule-head">
                           <div>
-                            <h5 id="jobPhasedScheduleTitle">Phased worker schedule</h5>
-                            <p>Change worker quantities during different project periods.</p>
+                            <h5 id="jobPhasedScheduleTitle">Worker numbers change during project</h5>
+                            <p>Set different worker quantities for different periods.</p>
                           </div>
                           <button type="button" id="jobToggleLabourSchedule" class="secondary-btn labour-schedule-toggle" aria-expanded="false">Add schedule</button>
                         </div>
-                        <div id="jobLabourScheduleWrap" class="jw-conditional hidden">
-                          <div class="labour-schedule-head">
-                        <div>
-                          <strong>Phased periods</strong>
-                          <span>Project dates are set in Step 3. Period boundaries are checked once those dates are available.</span>
-                        </div>
-                        <button type="button" id="jobAddLabourSchedulePeriod" class="secondary-btn">Add period</button>
-                          </div>
+                        <div id="jobLabourScheduleWrap" class="jw-phased-period-editor hidden">
                           <div id="jobLabourScheduleRows" class="labour-schedule-rows"></div>
-                          <p class="form-helper">Periods must sit inside the project dates where set. Overlapping periods are not allowed.</p>
+                          <button type="button" id="jobAddLabourSchedulePeriod" class="secondary-btn jw-labour-schedule-add">+ Add another period</button>
+                          <p class="form-helper">Periods must fall within the project dates and cannot overlap.</p>
                         </div>
                       </section>
                     </div>

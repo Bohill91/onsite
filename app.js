@@ -9964,6 +9964,19 @@ function syncLabourScheduleFromDom() {
   pendingLabourSchedulePeriods = normalizeLabourSchedule(readLabourScheduleRows());
 }
 
+function newLabourScheduleDraft() {
+  return {
+    id: createId(),
+    startDate: "",
+    endDate: "",
+    quantity: Math.max(
+      1,
+      Number(document.getElementById("jobQuantity")?.value) || 1,
+    ),
+    phase: "",
+  };
+}
+
 function renderLabourScheduleEditor() {
   const wrap = document.getElementById("jobLabourScheduleWrap");
   const rows = document.getElementById("jobLabourScheduleRows");
@@ -9979,17 +9992,22 @@ function renderLabourScheduleEditor() {
         ? `Edit schedule (${pendingLabourSchedulePeriods.length})`
         : "Add schedule";
   }
-  rows.innerHTML = pendingLabourSchedulePeriods.length
+  const periodsToRender = pendingLabourSchedulePeriods.length
     ? pendingLabourSchedulePeriods
+    : isOpen
+      ? [newLabourScheduleDraft()]
+      : [];
+  rows.innerHTML = periodsToRender.length
+    ? periodsToRender
         .map((period) => `<div class="labour-schedule-row" data-labour-schedule-row="${escapeHtml(period.id)}">
-          <label class="field-label">Start date<input type="date" value="${escapeHtml(period.startDate)}" data-schedule-start /></label>
-          <label class="field-label">End date<input type="date" value="${escapeHtml(period.endDate)}" data-schedule-end /></label>
-          <label class="field-label">Required workers<input type="number" min="1" value="${escapeHtml(period.quantity)}" data-schedule-quantity /></label>
-          <label class="field-label">Work phase / notes<input type="text" value="${escapeHtml(period.phase || "")}" placeholder="e.g. 2nd fix ramp-up" data-schedule-phase /></label>
+          <label class="field-label">From<input type="date" value="${escapeHtml(period.startDate)}" data-schedule-start /></label>
+          <label class="field-label">Until<input type="date" value="${escapeHtml(period.endDate)}" data-schedule-end /></label>
+          <label class="field-label">Workers<input type="number" min="1" value="${escapeHtml(period.quantity)}" data-schedule-quantity /></label>
+          <label class="field-label">Note (optional)<input type="text" value="${escapeHtml(period.phase || "")}" placeholder="e.g. 2nd fix ramp-up" data-schedule-phase /></label>
           <button type="button" class="jw-req-remove" data-schedule-remove="${escapeHtml(period.id)}" aria-label="Remove schedule period">×</button>
         </div>`)
         .join("")
-    : `<div class="labour-schedule-empty">No phased periods added. Fixed quantity will be used.</div>`;
+    : "";
 }
 
 function scheduleSummaryLabel(periods = []) {
@@ -10738,13 +10756,7 @@ document.getElementById("jobToggleLabourSchedule")?.addEventListener("click", ()
 
 document.getElementById("jobAddLabourSchedulePeriod")?.addEventListener("click", () => {
   syncLabourScheduleFromDom();
-  pendingLabourSchedulePeriods.push({
-    id: createId(),
-    startDate: "",
-    endDate: "",
-    quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
-    phase: "",
-  });
+  pendingLabourSchedulePeriods.push(newLabourScheduleDraft());
   document.getElementById("jobLabourScheduleWrap")?.setAttribute("data-open", "true");
   renderLabourScheduleEditor();
 });
@@ -10761,6 +10773,9 @@ document.getElementById("jobLabourScheduleRows")?.addEventListener("click", (eve
   pendingLabourSchedulePeriods = pendingLabourSchedulePeriods.filter(
     (period) => period.id !== btn.dataset.scheduleRemove,
   );
+  if (!pendingLabourSchedulePeriods.length) {
+    document.getElementById("jobLabourScheduleWrap")?.setAttribute("data-open", "");
+  }
   renderLabourScheduleEditor();
   renderJobPricingBreakdown();
 });

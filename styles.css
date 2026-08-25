@@ -19883,10 +19883,30 @@ button svg,
   margin: 3px 0 0;
 }
 
-#formJob.jw-wizard-mode .jw-phased-schedule > .jw-conditional {
-  background: var(--surface-2);
-  border-color: var(--card-divider);
-  border-radius: var(--radius-sm);
+.jw-phased-period-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.jw-phased-period-editor.hidden {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-phased-period-editor .labour-schedule-row {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--card-divider);
+  border-radius: 0;
+  padding: 0 0 12px;
+}
+
+.jw-labour-schedule-add {
+  justify-self: start;
+}
+
+.jw-phased-period-editor > .form-helper {
+  font-size: 0.71rem;
+  margin: 0;
 }
 
 .jw-requirement-actions {
