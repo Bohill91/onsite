@@ -19587,6 +19587,10 @@ button svg,
   gap: 14px;
 }
 
+.jw-rate-group {
+  gap: 10px;
+}
+
 .jw-requirement-group + .jw-requirement-group {
   border-top: 1px solid var(--card-divider);
   padding-top: 20px;
@@ -19621,8 +19625,14 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-rate-option {
   align-self: start;
-  gap: 6px;
-  padding-top: 23px;
+  gap: 4px;
+  padding-top: 20px;
+}
+
+#formJob.jw-wizard-mode .jw-rate-option .form-helper {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  max-width: 420px;
 }
 
 .jw-rate-option-label {
@@ -19721,6 +19731,124 @@ button svg,
 .jw-labour-term + .jw-labour-term {
   border-top: 1px solid var(--card-divider);
   padding-top: 14px;
+}
+
+.jw-accommodation-settings {
+  display: grid;
+  gap: 10px;
+  padding: 2px 0 0 26px;
+}
+
+.jw-accommodation-settings.hidden,
+.jw-accommodation-allowance.hidden {
+  display: none;
+}
+
+.jw-accommodation-arrangement {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.jw-accommodation-arrangement legend {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.jw-accommodation-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jw-accommodation-choices label {
+  cursor: pointer;
+  position: relative;
+}
+
+.jw-accommodation-choices input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.jw-accommodation-choices span {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 7px 10px;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.jw-accommodation-choices input:checked + span {
+  background: var(--orange-light);
+  border-color: var(--orange);
+  color: var(--orange-dark);
+}
+
+.jw-accommodation-choices input:focus-visible + span {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+}
+
+.jw-accommodation-allowance {
+  align-items: center;
+  display: grid;
+  gap: 6px 10px;
+  grid-template-columns: auto minmax(104px, 132px);
+  justify-content: start;
+}
+
+.jw-accommodation-allowance > label {
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.jw-accommodation-money-input {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  min-height: 38px;
+  padding-left: 10px;
+}
+
+.jw-accommodation-money-input > span {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+#formJob.jw-wizard-mode .jw-labour-term .jw-accommodation-money-input input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 36px;
+  padding: 7px 9px 7px 4px;
+  width: 100%;
+}
+
+.jw-accommodation-money-input:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+}
+
+.jw-accommodation-allowance .form-helper {
+  font-size: 0.71rem;
+  grid-column: 1 / -1;
+  line-height: 1.35;
+  margin: 0;
 }
 
 #formJob.jw-wizard-mode .jw-labour-term .jw-conditional {
@@ -21893,6 +22021,14 @@ button svg,
 
   #formJob.jw-wizard-mode .jw-rate-option {
     padding-top: 0;
+  }
+
+  .jw-accommodation-settings {
+    padding-left: 0;
+  }
+
+  .jw-accommodation-allowance {
+    grid-template-columns: 1fr minmax(104px, 132px);
   }
 
   #formJob.jw-wizard-mode .jw-site-fields-grid,

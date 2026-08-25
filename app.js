@@ -8102,8 +8102,15 @@ function applyRepeatProjectToForm(job) {
   setInputValue("attendanceManagerEmail", job.attendanceManager?.email || "");
   setInputValue("attendanceManagerPhone", job.attendanceManager?.phone || "");
   const firstReq = pendingTradeRequirements[0] || {};
-  setCheckboxValue("jobAccommodationPaid", !!(job.accommodationPaid || firstReq.accommodationPaid));
-  setInputValue("jobAccommodationAllowance", job.accommodationAllowancePerNight || firstReq.accommodationAllowancePerNight || "");
+  const repeatedAccommodation = normalizedAccommodationState(
+    accommodationArrangementFor(firstReq) ? firstReq : job,
+  );
+  setCheckboxValue("jobAccommodationPaid", repeatedAccommodation.accommodationPaid);
+  setJobAccommodationArrangement(repeatedAccommodation.accommodationArrangement);
+  setInputValue(
+    "jobAccommodationAllowance",
+    repeatedAccommodation.accommodationAllowancePerNight || "",
+  );
   setCheckboxValue("jobOvertimeAvailable", !!(job.overtimeAvailable || firstReq.overtimeAvailable));
   const overtimeRates = job.overtimeRates || firstReq.overtimeRates || {};
   setSelectValue(document.getElementById("jobAfterHoursRateType"), overtimeRates.afterStandardHours || "standard");
@@ -8225,7 +8232,7 @@ function initializeNewRequestShiftStart() {
 function labourRequirementHasAdvancedOptions(requirement = {}) {
   return !!(
     requirement.overtimeAvailable ||
-    requirement.accommodationPaid ||
+    accommodationArrangementFor(requirement) ||
     normalizeLabourSchedule(requirement.labourSchedule).length
   );
 }
@@ -8935,11 +8942,7 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
     );
   }
   if (requirement.accommodationPaid) {
-    conditions.push(
-      requirement.accommodationAllowancePerNight
-        ? `Accommodation ${formatMoney(requirement.accommodationAllowancePerNight)}/night`
-        : "Accommodation paid",
-    );
+    conditions.push(accommodationSummaryFor(requirement));
   }
   const periods = normalizeLabourSchedule(requirement.labourSchedule);
   if (periods.length) {
@@ -9697,12 +9700,76 @@ function updateAssignmentTypeForm() {
   if (siteAddress) siteAddress.required = true;
 }
 
+const JOB_ACCOMMODATION_ARRANGEMENTS = new Set([
+  "company_provided",
+  "nightly_allowance",
+]);
+
+function accommodationArrangementFor(record = {}) {
+  const explicit = String(record.accommodationArrangement || "");
+  if (JOB_ACCOMMODATION_ARRANGEMENTS.has(explicit)) return explicit;
+  if (Number(record.accommodationAllowancePerNight) > 0) {
+    return "nightly_allowance";
+  }
+  return record.accommodationPaid ? "company_provided" : "";
+}
+
+function normalizedAccommodationState(record = {}) {
+  const accommodationArrangement = accommodationArrangementFor(record);
+  const allowance = Number(record.accommodationAllowancePerNight);
+  return {
+    accommodationPaid: !!accommodationArrangement,
+    accommodationArrangement,
+    accommodationAllowancePerNight:
+      accommodationArrangement === "nightly_allowance" && allowance > 0
+        ? Math.round(allowance)
+        : null,
+  };
+}
+
+function accommodationSummaryFor(record = {}) {
+  const accommodationArrangement = accommodationArrangementFor(record);
+  if (!accommodationArrangement) return "";
+  return accommodationArrangement === "nightly_allowance" &&
+    Number(record.accommodationAllowancePerNight) > 0
+    ? `${formatMoney(record.accommodationAllowancePerNight)}/night accommodation`
+    : "Accommodation provided";
+}
+
+function selectedJobAccommodationArrangement() {
+  return (
+    document.querySelector('input[name="jobAccommodationArrangement"]:checked')
+      ?.value || ""
+  );
+}
+
+function setJobAccommodationArrangement(value) {
+  const arrangement = JOB_ACCOMMODATION_ARRANGEMENTS.has(value)
+    ? value
+    : "";
+  document
+    .querySelectorAll('input[name="jobAccommodationArrangement"]')
+    .forEach((input) => {
+      input.checked = input.value === arrangement;
+    });
+}
+
 function updateAccommodationForm() {
   const paid = !!document.getElementById("jobAccommodationPaid")?.checked;
-  const wrap = document.getElementById("jobAccommodationAllowanceWrap");
+  const settings = document.getElementById("jobAccommodationArrangementWrap");
+  let arrangement = selectedJobAccommodationArrangement();
+  if (paid && !JOB_ACCOMMODATION_ARRANGEMENTS.has(arrangement)) {
+    arrangement = "company_provided";
+    setJobAccommodationArrangement(arrangement);
+  }
+  const allowanceWrap = document.getElementById("jobAccommodationAllowanceWrap");
   const allowance = document.getElementById("jobAccommodationAllowance");
-  if (wrap) wrap.classList.toggle("hidden", !paid);
-  if (!paid && allowance) allowance.value = "";
+  settings?.classList.toggle("hidden", !paid);
+  allowanceWrap?.classList.toggle(
+    "hidden",
+    !paid || arrangement !== "nightly_allowance",
+  );
+  if (allowance) allowance.required = paid && arrangement === "nightly_allowance";
   renderJobPricingBreakdown();
 }
 
@@ -9730,6 +9797,9 @@ document
 document
   .getElementById("jobAccommodationPaid")
   ?.addEventListener("change", updateAccommodationForm);
+document
+  .querySelectorAll('input[name="jobAccommodationArrangement"]')
+  .forEach((input) => input.addEventListener("change", updateAccommodationForm));
 document
   .getElementById("jobOvertimeAvailable")
   ?.addEventListener("change", updateOvertimeForm);
@@ -9941,11 +10011,15 @@ function readTradeReqInputs() {
   const workerReceivesFullAdvertisedRate =
     !!document.getElementById("jobWorkerReceivesFullRate")?.checked;
   const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
+  const accommodationArrangement = accommodationPaid
+    ? selectedJobAccommodationArrangement() || "company_provided"
+    : "";
   const accommodationAllowanceRaw = Number(
     document.getElementById("jobAccommodationAllowance")?.value,
   );
   const accommodationAllowancePerNight =
     accommodationPaid &&
+    accommodationArrangement === "nightly_allowance" &&
     Number.isFinite(accommodationAllowanceRaw) &&
     accommodationAllowanceRaw > 0
       ? Math.round(accommodationAllowanceRaw)
@@ -9963,6 +10037,7 @@ function readTradeReqInputs() {
     budgetMax,
     workerReceivesFullAdvertisedRate,
     accommodationPaid,
+    accommodationArrangement,
     accommodationAllowancePerNight,
     overtimeAvailable,
     overtimeRates: overtimeAvailable
@@ -10009,6 +10084,7 @@ function labourRequirementKey(req) {
     overtimeRates.saturday || "standard",
     overtimeRates.sunday || "standard",
     !!req?.accommodationPaid,
+    accommodationArrangementFor(req),
     Number(req?.accommodationAllowancePerNight || 0),
     scheduleKey,
   ].join("|");
@@ -10283,11 +10359,14 @@ function buildLabourRequirementsFromForm(shared = {}) {
         req.workerReceivesFullAdvertisedRate ??
         shared.workerReceivesFullAdvertisedRate ??
         true,
-      accommodationPaid: !!(req.accommodationPaid ?? shared.accommodationPaid),
-      accommodationAllowancePerNight:
-        req.accommodationAllowancePerNight ??
-        shared.accommodationAllowancePerNight ??
-        null,
+      ...normalizedAccommodationState({
+        accommodationPaid: req.accommodationPaid ?? shared.accommodationPaid,
+        accommodationArrangement:
+          req.accommodationArrangement ?? shared.accommodationArrangement,
+        accommodationAllowancePerNight:
+          req.accommodationAllowancePerNight ??
+          shared.accommodationAllowancePerNight,
+      }),
       overtimeAvailable: !!req.overtimeAvailable,
       overtimeRates: req.overtimeRates || {
         afterStandardHours: "standard",
@@ -10330,11 +10409,14 @@ function applyTradeReqToInputs(req) {
   if (saturday) saturday.value = overtimeRates.saturday || "standard";
   const sunday = document.getElementById("jobSundayRateType");
   if (sunday) sunday.value = overtimeRates.sunday || "standard";
+  const accommodationState = normalizedAccommodationState(req);
   const accommodation = document.getElementById("jobAccommodationPaid");
-  if (accommodation) accommodation.checked = !!req.accommodationPaid;
+  if (accommodation) accommodation.checked = accommodationState.accommodationPaid;
+  setJobAccommodationArrangement(accommodationState.accommodationArrangement);
   const accommodationAllowance = document.getElementById("jobAccommodationAllowance");
   if (accommodationAllowance) {
-    accommodationAllowance.value = req.accommodationAllowancePerNight || "";
+    accommodationAllowance.value =
+      accommodationState.accommodationAllowancePerNight || "";
   }
   pendingLabourSchedulePeriods = normalizeLabourSchedule(req.labourSchedule || []);
   const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
@@ -10357,6 +10439,7 @@ function clearTradeReqInputs() {
     budgetMax: "",
     workerReceivesFullAdvertisedRate: true,
     accommodationPaid: false,
+    accommodationArrangement: "",
     accommodationAllowancePerNight: null,
     overtimeAvailable: false,
     overtimeRates: {
@@ -10499,6 +10582,16 @@ function saveTradeRequirement() {
   if (!req.budgetMax) {
     return failTradeRequirementSave("jobBudgetMax", "Enter the daily labour rate");
   }
+  if (
+    req.accommodationPaid &&
+    req.accommodationArrangement === "nightly_allowance" &&
+    !req.accommodationAllowancePerNight
+  ) {
+    return failTradeRequirementSave(
+      "jobAccommodationAllowance",
+      "Enter the nightly accommodation allowance",
+    );
+  }
   const scheduleError = validateLabourSchedule(
     req.labourSchedule,
     currentProjectScheduleBounds(),
@@ -10549,9 +10642,7 @@ function renderTradeReqCards() {
     .map((r, i) => {
       const advanced = [
         r.overtimeAvailable ? "Overtime" : "",
-        r.accommodationPaid
-          ? `Accommodation${r.accommodationAllowancePerNight ? ` ${formatMoney(r.accommodationAllowancePerNight)}/night` : ""}`
-          : "",
+        accommodationSummaryFor(r),
         normalizeLabourSchedule(r.labourSchedule).length
           ? `Phased schedule (${normalizeLabourSchedule(r.labourSchedule).length})`
           : "",
@@ -12834,11 +12925,14 @@ function labourRequirementsForJob(job) {
         saturday: "standard",
         sunday: "standard",
       },
-      accommodationPaid: !!(req.accommodationPaid ?? job.accommodationPaid),
-      accommodationAllowancePerNight:
-        req.accommodationAllowancePerNight ??
-        job.accommodationAllowancePerNight ??
-        null,
+      ...normalizedAccommodationState({
+        accommodationPaid: req.accommodationPaid ?? job.accommodationPaid,
+        accommodationArrangement:
+          req.accommodationArrangement ?? job.accommodationArrangement,
+        accommodationAllowancePerNight:
+          req.accommodationAllowancePerNight ??
+          job.accommodationAllowancePerNight,
+      }),
       workingDays: normalizeWorkingDays(req.workingDays || job.workingDays),
       shiftStartTime: req.shiftStartTime || job.shiftStartTime || "",
       shiftFinishTime: req.shiftFinishTime || job.shiftFinishTime || "",
@@ -12866,8 +12960,7 @@ function labourRequirementsForJob(job) {
         saturday: "standard",
         sunday: "standard",
       },
-      accommodationPaid: !!job?.accommodationPaid,
-      accommodationAllowancePerNight: job?.accommodationAllowancePerNight ?? null,
+      ...normalizedAccommodationState(job),
       workingDays: normalizeWorkingDays(job?.workingDays),
       shiftStartTime: job?.shiftStartTime || "",
       shiftFinishTime: job?.shiftFinishTime || "",
@@ -15294,6 +15387,7 @@ function companyProjectDirectoryLabourTotals(summary) {
         overtimeAvailable: !!req.overtimeAvailable,
         overtimeRates: req.overtimeRates || {},
         accommodationPaid: !!req.accommodationPaid,
+        accommodationArrangement: accommodationArrangementFor(req),
         accommodationAllowancePerNight: Number(
           req.accommodationAllowancePerNight || 0,
         ),
@@ -16524,7 +16618,7 @@ function companyProjectRequirementsHTML(job, summary) {
             <div><dt>Qualifications</dt><dd>${escapeHtml(req.requiredQualifications || "None specified")}</dd></div>
             <div><dt>Daily rate</dt><dd>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day` : "Not specified"}</dd></div>
             <div><dt>Overtime</dt><dd>${escapeHtml(overtime)}</dd></div>
-            ${req.accommodationPaid ? `<div><dt>Working away</dt><dd>${req.accommodationAllowancePerNight ? `${formatMoney(req.accommodationAllowancePerNight)}/night` : "Accommodation paid"}</dd></div>` : ""}
+            ${req.accommodationPaid ? `<div><dt>Working away</dt><dd>${escapeHtml(accommodationSummaryFor(req))}</dd></div>` : ""}
           </dl>
           ${req.labourSchedule?.length ? `<div class="company-project-requirement-forecast">
             <span>Current scheduled demand <strong>${stats.required} worker${stats.required === 1 ? "" : "s"}</strong></span>
@@ -21072,6 +21166,9 @@ jobForm.addEventListener("submit", (e) => {
   const noFixedEndDate = !!document.querySelector("#jobNoFixedEndDate")?.checked;
   const defaultRateRaw = Number(document.querySelector("#jobDefaultRate")?.value);
   const accommodationPaid = !!document.querySelector("#jobAccommodationPaid")?.checked;
+  const accommodationArrangement = accommodationPaid
+    ? selectedJobAccommodationArrangement() || "company_provided"
+    : "";
   const accommodationAllowanceRaw = Number(
     document.querySelector("#jobAccommodationAllowance")?.value,
   );
@@ -21141,8 +21238,10 @@ jobForm.addEventListener("submit", (e) => {
       budgetMax,
       workerReceivesFullAdvertisedRate,
       accommodationPaid,
+      accommodationArrangement,
       accommodationAllowancePerNight:
         accommodationPaid &&
+        accommodationArrangement === "nightly_allowance" &&
         Number.isFinite(accommodationAllowanceRaw) &&
         accommodationAllowanceRaw > 0
           ? Math.round(accommodationAllowanceRaw)
@@ -21256,6 +21355,7 @@ jobForm.addEventListener("submit", (e) => {
         : DEFAULT_NOTICE_DAYS,
     assignedWorkerId: "",
     accommodationPaid,
+    accommodationArrangement,
     repeatedFromProjectId: pendingRepeatProjectTemplate?.sourceProjectId || "",
     createdAt: postedAt,
     postedAt,
@@ -21266,6 +21366,7 @@ jobForm.addEventListener("submit", (e) => {
   }
   if (
     accommodationPaid &&
+    accommodationArrangement === "nightly_allowance" &&
     Number.isFinite(accommodationAllowanceRaw) &&
     accommodationAllowanceRaw > 0
   ) {

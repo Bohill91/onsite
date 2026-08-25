@@ -962,7 +962,7 @@
                     </div>
                   </section>
 
-                  <section class="jw-requirement-group" aria-labelledby="jobPayTermsTitle">
+                  <section class="jw-requirement-group jw-rate-group" aria-labelledby="jobPayTermsTitle">
                     <div class="jw-requirement-group-head">
                       <h5 id="jobPayTermsTitle">Daily rate</h5>
                     </div>
@@ -1032,14 +1032,30 @@
                       <div class="jw-labour-term">
                         <label class="checkbox-row jw-check">
                           <input id="jobAccommodationPaid" type="checkbox" />
-                          <span>Accommodation paid for work-away roles</span>
+                          <span>Working away / accommodation</span>
                         </label>
-                        <div id="jobAccommodationAllowanceWrap" class="jw-conditional hidden">
-                          <label class="field-label">
-                            Accommodation allowance per night
-                            <input id="jobAccommodationAllowance" type="number" min="0" placeholder="£40" />
-                          </label>
-                          <p class="form-helper">This allowance is paid directly to the worker and added to the company invoice without an OnSite service fee.</p>
+                        <div id="jobAccommodationArrangementWrap" class="jw-accommodation-settings hidden">
+                          <fieldset class="jw-accommodation-arrangement">
+                            <legend>Accommodation arrangement</legend>
+                            <div class="jw-accommodation-choices">
+                              <label>
+                                <input type="radio" name="jobAccommodationArrangement" value="company_provided" />
+                                <span>Company provided</span>
+                              </label>
+                              <label>
+                                <input type="radio" name="jobAccommodationArrangement" value="nightly_allowance" />
+                                <span>Nightly allowance</span>
+                              </label>
+                            </div>
+                          </fieldset>
+                          <div id="jobAccommodationAllowanceWrap" class="jw-accommodation-allowance hidden">
+                            <label for="jobAccommodationAllowance">Allowance per night</label>
+                            <div class="jw-accommodation-money-input">
+                              <span aria-hidden="true">£</span>
+                              <input id="jobAccommodationAllowance" type="number" min="1" inputmode="decimal" placeholder="40" />
+                            </div>
+                            <p class="form-helper">Paid to the worker and added to the company invoice without an OnSite service fee.</p>
+                          </div>
                         </div>
                       </div>
                       </div>
