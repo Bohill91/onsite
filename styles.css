@@ -19804,6 +19804,7 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-requirement-builder {
   --jw-form-section-space: 20px;
+  --jw-form-control-height: 44px;
   background: var(--surface);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
@@ -19862,7 +19863,22 @@ button svg,
   background-color: var(--surface);
   border-color: var(--card-border);
   border-radius: var(--radius-sm);
-  min-height: 44px;
+  min-height: var(--jw-form-control-height);
+}
+
+#formJob.jw-wizard-mode .jw-requirement-builder .os-select {
+  --os-select-height: var(--jw-form-control-height);
+}
+
+#formJob.jw-wizard-mode .jw-requirement-builder input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+#formJob.jw-wizard-mode .jw-requirement-builder input[type="number"]::-webkit-inner-spin-button,
+#formJob.jw-wizard-mode .jw-requirement-builder input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 #formJob.jw-wizard-mode .jw-check input[type="checkbox"] {
@@ -19997,7 +20013,7 @@ button svg,
 }
 
 .jw-accommodation-settings {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 20px;
@@ -20042,7 +20058,7 @@ button svg,
   display: inline-flex;
   font-size: 0.76rem;
   font-weight: 700;
-  min-height: 34px;
+  min-height: 38px;
   padding: 7px 10px;
   transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
@@ -20111,6 +20127,7 @@ button svg,
 }
 
 .jw-accommodation-allowance .form-helper {
+  color: var(--ink-2);
   font-size: 0.71rem;
   line-height: 1.35;
   margin: 0;
@@ -20120,9 +20137,11 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-labour-term .jw-conditional {
-  background: var(--surface-2);
-  border-color: var(--card-divider);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: var(--ui-space-1);
+  padding: var(--ui-space-1) 0 0 26px;
 }
 
 .jw-phased-schedule-head > div {
