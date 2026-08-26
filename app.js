@@ -7948,14 +7948,11 @@ function clearRepeatProjectTemplate() {
 }
 
 function cloneRepeatLabourRequirements(job) {
-  return uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) => ({
-    ...req,
-    id: createId(),
-    labourSchedule: normalizeLabourSchedule(req.labourSchedule).map((period) => ({
-      ...period,
-      id: createId(),
-    })),
-  }));
+  return uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) => {
+    const copied = { ...req, id: createId() };
+    delete copied.labourSchedule;
+    return copied;
+  });
 }
 
 function applyRepeatProjectPreStartDraft(
@@ -8236,8 +8233,7 @@ function initializeNewRequestShiftStart() {
 function labourRequirementHasAdvancedOptions(requirement = {}) {
   return !!(
     requirement.overtimeAvailable ||
-    accommodationArrangementFor(requirement) ||
-    normalizeLabourSchedule(requirement.labourSchedule).length
+    accommodationArrangementFor(requirement)
   );
 }
 
@@ -8948,12 +8944,6 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
   if (requirement.accommodationPaid) {
     conditions.push(accommodationSummaryFor(requirement));
   }
-  const periods = normalizeLabourSchedule(requirement.labourSchedule);
-  if (periods.length) {
-    conditions.push(
-      `Phased schedule · ${periods.length} period${periods.length === 1 ? "" : "s"}`,
-    );
-  }
   conditions.push(
     requirement.workerReceivesFullAdvertisedRate !== false
       ? "Worker receives full advertised rate"
@@ -9511,7 +9501,6 @@ jobForm?.addEventListener("keydown", (event) => {
 });
 
 let pendingTradeRequirements = [];
-let pendingLabourSchedulePeriods = [];
 let activeTradeRequirementId = "";
 let tradeRequirementEditorOpen = false;
 let pendingJobWizardNavigationStep = null;
@@ -9628,11 +9617,6 @@ function savedLabourRequirementValidationIssue() {
     if (!Number.isFinite(Number(requirement.budgetMax)) || Number(requirement.budgetMax) <= 0) {
       return { requirement, message: "Enter the daily labour rate." };
     }
-    const scheduleError = validateLabourSchedule(
-      requirement.labourSchedule,
-      currentProjectScheduleBounds(),
-    );
-    if (scheduleError) return { requirement, message: scheduleError };
   }
   return null;
 }
@@ -9869,23 +9853,6 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
     return false;
   }
 
-  const scheduleError = pendingTradeRequirements
-    .map((requirement) =>
-      validateLabourSchedule(
-        requirement.labourSchedule,
-        currentProjectScheduleBounds(),
-      ),
-    )
-    .find(Boolean);
-  if (scheduleError) {
-    if (report) {
-      setSchedulePayMessage(
-        "jobScheduleStepMessage",
-        `${scheduleError}. Edit the requirement's phased schedule before continuing.`,
-      );
-    }
-    return false;
-  }
   return true;
 }
 
@@ -9945,85 +9912,8 @@ function validateLabourSchedule(periods = [], { projectStart = "", projectEnd = 
   return "";
 }
 
-function currentProjectScheduleBounds() {
-  const noFixedEndDate = !!document.querySelector("#jobNoFixedEndDate")?.checked;
-  return {
-    projectStart: document.querySelector("#jobStart")?.value?.slice(0, 10) || "",
-    projectEnd: noFixedEndDate ? "" : document.querySelector("#jobEndDate")?.value || "",
-    noFixedEndDate,
-  };
-}
-
-function readLabourScheduleRows() {
-  return Array.from(document.querySelectorAll("[data-labour-schedule-row]")).map((row) => ({
-    id: row.dataset.labourScheduleRow || createId(),
-    startDate: row.querySelector("[data-schedule-start]")?.value || "",
-    endDate: row.querySelector("[data-schedule-end]")?.value || "",
-    quantity: Math.max(1, Number(row.querySelector("[data-schedule-quantity]")?.value) || 1),
-    phase: row.querySelector("[data-schedule-phase]")?.value.trim() || "",
-  }));
-}
-
-function syncLabourScheduleFromDom() {
-  pendingLabourSchedulePeriods = normalizeLabourSchedule(readLabourScheduleRows());
-}
-
-function newLabourScheduleDraft() {
-  return {
-    id: createId(),
-    startDate: "",
-    endDate: "",
-    quantity: Math.max(
-      1,
-      Number(document.getElementById("jobQuantity")?.value) || 1,
-    ),
-    phase: "",
-  };
-}
-
-function renderLabourScheduleEditor() {
-  const wrap = document.getElementById("jobLabourScheduleWrap");
-  const rows = document.getElementById("jobLabourScheduleRows");
-  const toggle = document.getElementById("jobToggleLabourSchedule");
-  if (!wrap || !rows) return;
-  const isOpen = wrap.dataset.open === "true";
-  wrap.classList.toggle("hidden", !isOpen);
-  if (toggle) {
-    toggle.setAttribute("aria-expanded", String(isOpen));
-    toggle.textContent = isOpen
-      ? "Hide schedule"
-      : pendingLabourSchedulePeriods.length
-        ? `Edit schedule (${pendingLabourSchedulePeriods.length})`
-        : "Add schedule";
-  }
-  const periodsToRender = pendingLabourSchedulePeriods.length
-    ? pendingLabourSchedulePeriods
-    : isOpen
-      ? [newLabourScheduleDraft()]
-      : [];
-  rows.innerHTML = periodsToRender.length
-    ? periodsToRender
-        .map((period) => `<div class="labour-schedule-row" data-labour-schedule-row="${escapeHtml(period.id)}">
-          <label class="field-label">From<input type="date" value="${escapeHtml(period.startDate)}" data-schedule-start /></label>
-          <label class="field-label">Until<input type="date" value="${escapeHtml(period.endDate)}" data-schedule-end /></label>
-          <label class="field-label">Workers<input type="number" min="1" value="${escapeHtml(period.quantity)}" data-schedule-quantity /></label>
-          <label class="field-label">Note (optional)<input type="text" value="${escapeHtml(period.phase || "")}" placeholder="e.g. 2nd fix ramp-up" data-schedule-phase /></label>
-          <button type="button" class="jw-req-remove" data-schedule-remove="${escapeHtml(period.id)}" aria-label="Remove schedule period">×</button>
-        </div>`)
-        .join("")
-    : "";
-}
-
-function scheduleSummaryLabel(periods = []) {
-  const normalized = normalizeLabourSchedule(periods);
-  if (!normalized.length) return "";
-  const peak = Math.max(...normalized.map((period) => Number(period.quantity) || 1));
-  return `${normalized.length} scheduled period${normalized.length === 1 ? "" : "s"} · peak ${peak}`;
-}
-
 function readTradeReqInputs() {
   syncDailyLabourRateFields();
-  syncLabourScheduleFromDom();
   const budgetMaxRaw = Number(document.getElementById("jobBudgetMax")?.value);
   const budgetMax =
     Number.isFinite(budgetMaxRaw) && budgetMaxRaw > 0
@@ -10053,7 +9943,6 @@ function readTradeReqInputs() {
     grade: document.getElementById("jobGrade")?.value || "",
     workActivity: document.getElementById("workActivity")?.value.trim() || "",
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
-    labourSchedule: normalizeLabourSchedule(pendingLabourSchedulePeriods),
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
     budgetMin: budgetMax,
     budgetMax,
@@ -10346,15 +10235,7 @@ document.getElementById("jobPricingBreakdown")?.addEventListener("click", (event
 
 function buildLabourRequirementsFromForm(shared = {}) {
   const current = readTradeReqInputs();
-  const scheduleError = validateLabourSchedule(current.labourSchedule, currentProjectScheduleBounds());
-  if (scheduleError) {
-    throw new Error(scheduleError);
-  }
   const requirements = [...pendingTradeRequirements];
-  const savedScheduleError = requirements
-    .map((req) => validateLabourSchedule(req.labourSchedule, currentProjectScheduleBounds()))
-    .find(Boolean);
-  if (savedScheduleError) throw new Error(savedScheduleError);
   if (
     tradeReqHasCoreFields(current) &&
     !requirements.some((req) => sameTradeRequirement(req, current))
@@ -10372,7 +10253,6 @@ function buildLabourRequirementsFromForm(shared = {}) {
       requiredQualifications: req.requiredQualifications || "",
       workActivity: req.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
-      labourSchedule: normalizeLabourSchedule(req.labourSchedule),
       budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
       budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
       saturdayRate: req.saturdayRate ?? shared.saturdayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
@@ -10440,10 +10320,6 @@ function applyTradeReqToInputs(req) {
     accommodationAllowance.value =
       accommodationState.accommodationAllowancePerNight || "";
   }
-  pendingLabourSchedulePeriods = normalizeLabourSchedule(req.labourSchedule || []);
-  const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
-  if (scheduleWrap) scheduleWrap.dataset.open = pendingLabourSchedulePeriods.length ? "true" : "";
-  renderLabourScheduleEditor();
   updateOvertimeForm();
   updateAccommodationForm();
   syncJobLabourDisclosureState();
@@ -10456,7 +10332,6 @@ function clearTradeReqInputs() {
     grade: "",
     workActivity: "",
     quantity: 1,
-    labourSchedule: [],
     requiredQualifications: "",
     budgetMax: "",
     workerReceivesFullAdvertisedRate: true,
@@ -10483,8 +10358,7 @@ function tradeRequirementHasMeaningfulInput(req = readTradeReqInputs()) {
     Number(req.quantity || 1) !== 1 ||
     req.workerReceivesFullAdvertisedRate === false ||
     req.overtimeAvailable ||
-    req.accommodationPaid ||
-    normalizeLabourSchedule(req.labourSchedule).length
+    req.accommodationPaid
   );
 }
 
@@ -10614,16 +10488,6 @@ function saveTradeRequirement() {
       "Enter the nightly accommodation allowance",
     );
   }
-  const scheduleError = validateLabourSchedule(
-    req.labourSchedule,
-    currentProjectScheduleBounds(),
-  );
-  if (scheduleError) {
-    setTradeRequirementMessage(scheduleError, { allowDiscard: true });
-    document.querySelector("#jobLabourScheduleRows input")?.focus();
-    showToast(scheduleError);
-    return false;
-  }
   const duplicate = pendingTradeRequirements.some(
     (existing) =>
       existing.id !== activeTradeRequirementId &&
@@ -10665,9 +10529,6 @@ function renderTradeReqCards() {
       const advanced = [
         r.overtimeAvailable ? "Overtime" : "",
         accommodationSummaryFor(r),
-        normalizeLabourSchedule(r.labourSchedule).length
-          ? `Phased schedule (${normalizeLabourSchedule(r.labourSchedule).length})`
-          : "",
       ].filter(Boolean);
       const quantity = Math.max(1, Number(r.quantity) || 1);
       return `
@@ -10708,7 +10569,6 @@ function syncTradeReqBuilderState() {
     },
   );
   renderTradeReqCards();
-  renderLabourScheduleEditor();
   renderJobPricingBreakdown();
   updateTradeRequirementEditorState();
   syncJobLabourDisclosureState();
@@ -10718,13 +10578,10 @@ function syncTradeReqBuilderState() {
 
 function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
-  pendingLabourSchedulePeriods = [];
   jobRequestedWorkerIds = [];
   specificWorkerPickerDraftIds = new Set();
   activeTradeRequirementId = "";
   tradeRequirementEditorOpen = !jobWizardActive;
-  const scheduleWrap = document.getElementById("jobLabourScheduleWrap");
-  if (scheduleWrap) scheduleWrap.dataset.open = "";
   clearTradeReqInputs();
   setTradeRequirementMessage();
   syncTradeReqBuilderState();
@@ -10749,39 +10606,6 @@ document.getElementById("jobDiscardTradeRequirement")?.addEventListener("click",
 document.getElementById("jobLabourMoreOptionsToggle")?.addEventListener("click", () => {
   jobLabourMoreOptionsOpen = !jobLabourMoreOptionsOpen;
   syncJobLabourDisclosureState();
-});
-
-document.getElementById("jobToggleLabourSchedule")?.addEventListener("click", () => {
-  const wrap = document.getElementById("jobLabourScheduleWrap");
-  if (!wrap) return;
-  wrap.dataset.open = wrap.classList.contains("hidden") ? "true" : "";
-  renderLabourScheduleEditor();
-});
-
-document.getElementById("jobAddLabourSchedulePeriod")?.addEventListener("click", () => {
-  syncLabourScheduleFromDom();
-  pendingLabourSchedulePeriods.push(newLabourScheduleDraft());
-  document.getElementById("jobLabourScheduleWrap")?.setAttribute("data-open", "true");
-  renderLabourScheduleEditor();
-});
-
-document.getElementById("jobLabourScheduleRows")?.addEventListener("input", () => {
-  syncLabourScheduleFromDom();
-  renderJobPricingBreakdown();
-});
-
-document.getElementById("jobLabourScheduleRows")?.addEventListener("click", (event) => {
-  const btn = event.target.closest("[data-schedule-remove]");
-  if (!btn) return;
-  syncLabourScheduleFromDom();
-  pendingLabourSchedulePeriods = pendingLabourSchedulePeriods.filter(
-    (period) => period.id !== btn.dataset.scheduleRemove,
-  );
-  if (!pendingLabourSchedulePeriods.length) {
-    document.getElementById("jobLabourScheduleWrap")?.setAttribute("data-open", "");
-  }
-  renderLabourScheduleEditor();
-  renderJobPricingBreakdown();
 });
 
 document.getElementById("jobTradeReqList")?.addEventListener("click", (event) => {
@@ -21272,7 +21096,7 @@ jobForm.addEventListener("submit", (e) => {
       shiftFinishTime,
     });
   } catch (err) {
-    showToast(err?.message || "Check the labour schedule");
+    showToast(err?.message || "Check the labour requirements");
     if (companyWizardSubmission) resetJobWizardSubmissionState();
     return;
   }

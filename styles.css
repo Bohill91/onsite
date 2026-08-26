@@ -20059,9 +20059,10 @@ button svg,
 }
 
 .jw-accommodation-allowance {
-  display: grid;
-  gap: 5px;
-  justify-content: start;
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .jw-accommodation-allowance-control {
@@ -20113,7 +20114,9 @@ button svg,
   font-size: 0.71rem;
   line-height: 1.35;
   margin: 0;
-  max-width: 280px;
+  max-width: none;
+  white-space: nowrap;
+  width: auto;
 }
 
 #formJob.jw-wizard-mode .jw-labour-term .jw-conditional {
@@ -22316,7 +22319,13 @@ button svg,
   }
 
   .jw-accommodation-allowance {
-    justify-content: stretch;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .jw-accommodation-allowance .form-helper {
+    white-space: normal;
   }
 
   #formJob.jw-wizard-mode .jw-site-fields-grid,
