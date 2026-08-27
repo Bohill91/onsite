@@ -211,18 +211,17 @@
                     <div class="auth-field">
                       <label class="auth-label" for="regTrade">Trade</label>
                       <select class="auth-input auth-select" id="regTrade" required>
-                        <option value="Electrical">Electrical</option>
-                        <option value="Plumbing">Plumbing</option>
-                        <option value="Carpentry">Carpentry</option>
-                        <option value="Groundworks">Groundworks</option>
-                        <option value="Other">Other</option>
+                        <option value="">Select trade</option>
                       </select>
                     </div>
                     <div class="auth-field">
-                      <label class="auth-label" for="regGrade">Role / Grade</label>
-                      <select class="auth-input auth-select" id="regGrade" required></select>
+                      <label class="auth-label" for="regRole">Role / Specialism</label>
+                      <select class="auth-input auth-select" id="regRole" required disabled>
+                        <option value="">Select a trade first</option>
+                      </select>
                     </div>
                   </div>
+                  <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="worker">My trade or role isn't listed</button>
                   <div class="auth-input-row">
                     <div class="auth-field">
                       <label class="auth-label" for="regYearsExp">Years Experience</label>
@@ -898,53 +897,12 @@
                         Trade *
                         <select id="jobTrade" required>
                           <option value="">Select trade</option>
-                          <option value="Electrical">Electrical</option>
-                          <option value="Mechanical">Mechanical</option>
-                          <option value="Plumbing">Plumbing</option>
-                          <option value="Pipefitting">Pipefitting</option>
-                          <option value="HVAC">HVAC</option>
-                          <option value="Fire & Security">Fire &amp; Security</option>
-                          <option value="Data & Telecoms">Data &amp; Telecoms</option>
-                          <option value="Carpentry & Joinery">Carpentry &amp; Joinery</option>
-                          <option value="Drylining">Drylining</option>
-                          <option value="Ceilings & Partitions">Ceilings &amp; Partitions</option>
-                          <option value="Bricklaying">Bricklaying</option>
-                          <option value="Groundworks">Groundworks</option>
-                          <option value="Concrete & Formwork">Concrete &amp; Formwork</option>
-                          <option value="Steel Fixing">Steel Fixing</option>
-                          <option value="Welding & Fabrication">Welding &amp; Fabrication</option>
-                          <option value="Scaffolding">Scaffolding</option>
-                          <option value="Roofing">Roofing</option>
-                          <option value="Cladding">Cladding</option>
-                          <option value="Glazing">Glazing</option>
-                          <option value="Painting & Decorating">Painting &amp; Decorating</option>
-                          <option value="Plastering & Rendering">Plastering &amp; Rendering</option>
-                          <option value="Flooring">Flooring</option>
-                          <option value="Tiling">Tiling</option>
-                          <option value="Labouring">Labouring</option>
-                          <option value="Plant Operations">Plant Operations</option>
-                          <option value="Logistics">Logistics</option>
-                          <option value="Traffic Management">Traffic Management</option>
-                          <option value="Management & Supervision">Management &amp; Supervision</option>
-                          <option value="Health & Safety">Health &amp; Safety</option>
-                          <option value="Cleaning">Cleaning</option>
-                          <option value="Other">Other</option>
                         </select>
                       </label>
                       <label class="field-label">
                         Role / Specialism *
-                        <select id="jobSpecialism" required>
+                        <select id="jobSpecialism" required disabled>
                           <option value="">Select a trade first</option>
-                        </select>
-                      </label>
-                      <label class="field-label">
-                        Experience Level / Grade *
-                        <select id="jobGrade">
-                          <option value="">Select experience level</option>
-                          <option value="Apprentice">Apprentice</option>
-                          <option value="Improver">Improver</option>
-                          <option value="Skilled">Skilled</option>
-                          <option value="Advanced / Supervisor">Advanced / Supervisor</option>
                         </select>
                       </label>
                       <label class="field-label">
@@ -955,11 +913,12 @@
                         Work Activity *
                         <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
                       </label>
-                      <label class="field-label">
+                      <label class="field-label jw-span-2">
                         Required Qualifications &amp; Tickets *
                         <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />
                       </label>
                     </div>
+                    <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
                   </section>
 
                   <section class="jw-requirement-group jw-rate-group" aria-labelledby="jobPayTermsTitle">
@@ -1846,6 +1805,7 @@
     <script src="boot.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="ui.js"></script>
+    <script src="taxonomy.js"></script>
     <script src="data/uk-settlements.js"></script>
     <script src="uk-location-picker.js"></script>
     <script src="app.js"></script>

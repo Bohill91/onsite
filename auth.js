@@ -2,14 +2,6 @@
 const AUTH_SESSION_KEY = 'onsite_auth_v1';
 const AUTH_USERS_KEY   = 'onsite_users_v1';
 
-const TRADE_GRADES = {
-  'Electrical':  ['Mate', 'Improver', 'Electrician', 'Approved Electrician', 'Supervisor'],
-  'Plumbing':    ['Mate', 'Improver', 'Plumber', 'Pipefitter', 'Mechanical Supervisor'],
-  'Carpentry':   ['Mate', 'Carpenter', 'Shopfitter', 'Supervisor'],
-  'Groundworks': ['Labourer', 'Groundworker', 'Plant Operator', 'Foreman'],
-  'Other':       ['Worker', 'Skilled Worker', 'Supervisor', 'Foreman'],
-};
-
 const CERT_OPTIONS = ['CSCS', 'ECS', 'JIB', 'IPAF', 'PASMA', 'SSSTS', 'SMSTS', 'First Aid'];
 
 // ─── In-progress registration data ─────────────────────────
@@ -193,8 +185,13 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
 // ─── Worker Reg — Step 2 ───────────────────────────────────
 document.getElementById('workerStep2Form').addEventListener('submit', function(e) {
   e.preventDefault();
-  workerRegData.trade    = document.getElementById('regTrade').value;
-  workerRegData.grade    = document.getElementById('regGrade').value;
+  workerRegData.trade = document.getElementById('regTrade').value;
+  workerRegData.tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(workerRegData.trade) || '';
+  workerRegData.specialism = document.getElementById('regRole').value;
+  workerRegData.roleKey = window.OnSiteTaxonomy?.roleKeyFor(
+    workerRegData.trade,
+    workerRegData.specialism,
+  ) || '';
   workerRegData.yearsExp = document.getElementById('regYearsExp').value;
   workerRegData.location = document.getElementById('regLocation').value.trim();
   workerRegData.minRate  = document.getElementById('regMinRate').value;
@@ -237,7 +234,11 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     phone:    workerRegData.phone,
     password: workerRegData.password,
     trade:    workerRegData.trade,
-    grade:    workerRegData.grade,
+    tradeKey: workerRegData.tradeKey,
+    specialism: workerRegData.specialism,
+    roleKey: workerRegData.roleKey,
+    // Compatibility mirror for legacy matching/profile readers.
+    grade: workerRegData.specialism,
     yearsExp: workerRegData.yearsExp,
     location: workerRegData.location,
     minRate:  workerRegData.minRate,
@@ -362,7 +363,7 @@ function deleteWorkerAccount() {
 function calcCompletion(user) {
   let score = 0;
   if (user.name && user.email && user.phone)          score += 20;
-  if (user.trade && user.grade)                        score += 20;
+  if (user.trade && (user.specialism || user.grade))  score += 20;
   if (user.utr)                                        score += 15;
   if (user.rightToWork)                               score += 15;
   if (user.certifications && user.certifications.length > 0) score += 20;
@@ -372,7 +373,7 @@ function calcCompletion(user) {
 function renderCompletionChecklist(user) {
   const items = [
     { label: 'Basic Information',  done: !!(user.name && user.email && user.phone) },
-    { label: 'Trade Information',  done: !!(user.trade && user.grade)               },
+    { label: 'Trade Information',  done: !!(user.trade && (user.specialism || user.grade)) },
     { label: 'Profile Photo',      done: false                                       },
     { label: 'UTR Number',         done: !!user.utr                                  },
     { label: 'Right to Work',      done: !!user.rightToWork                          },
@@ -392,18 +393,27 @@ function renderCompletionChecklist(user) {
   }).join('');
 }
 
-// ─── Trade → Grade dynamic update ─────────────────────────
-document.getElementById('regTrade').addEventListener('change', function() {
-  populateGrades(this.value);
-});
-
-function populateGrades(trade) {
-  const grades = TRADE_GRADES[trade] || TRADE_GRADES['Other'];
-  const sel = document.getElementById('regGrade');
-  sel.innerHTML = grades.map(function(g) {
-    return '<option value="' + g + '">' + g + '</option>';
-  }).join('');
+// ─── Canonical Trade → Role classification ────────────────
+function initialiseWorkerTaxonomyFields() {
+  const trade = document.getElementById('regTrade');
+  const role = document.getElementById('regRole');
+  if (!trade || !role || !window.OnSiteTaxonomy) return;
+  window.OnSiteTaxonomy.populateTradeSelect(trade, {
+    selectedValue: trade.value,
+    preserveUnknown: true,
+  });
+  window.OnSiteTaxonomy.populateRoleSelect(role, trade.value, {
+    selectedValue: role.value,
+    preserveUnknown: true,
+  });
 }
+
+document.getElementById('regTrade').addEventListener('change', function() {
+  window.OnSiteTaxonomy?.populateRoleSelect(
+    document.getElementById('regRole'),
+    this.value,
+  );
+});
 
 // ─── Company Reg — Step 1 ──────────────────────────────────
 document.getElementById('companyStep1Form').addEventListener('submit', function(e) {
@@ -542,8 +552,8 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
         '</label>';
     }).join('');
 
-    // Populate initial grades
-    populateGrades(document.getElementById('regTrade').value);
+    // Populate the shared V1 trade and role taxonomy.
+    initialiseWorkerTaxonomyFields();
 
     document.getElementById('useCurrentLocationBtn')?.addEventListener('click', async function() {
       const btn = this;

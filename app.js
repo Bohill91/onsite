@@ -130,8 +130,8 @@ function normalize(v) {
   return (v || "").trim().toLowerCase();
 }
 
-// Map common trade role/category synonyms to a canonical category so that
-// company job trades and worker registration trades match reliably.
+// Legacy display-string aliases remain only for historic matcher compatibility.
+// New company and worker classifications use stable V1 taxonomy keys instead.
 const TRADE_SYNONYMS = {
   electrical: "electrical",
   electrician: "electrical",
@@ -155,221 +155,24 @@ function canonicalTrade(v) {
   const n = normalize(v);
   return TRADE_SYNONYMS[n] || n;
 }
-const TRADE_SPECIALISMS = {
-  Electrical: [
-    "General Electrical",
-    "Testing & Inspection",
-    "Commissioning",
-    "Fire Alarm Systems",
-    "Data & Communications",
-    "Industrial Electrical",
-    "Building Controls / BMS",
-    "EV Charging",
-    "Solar PV",
-    "Street Lighting",
-  ],
-
-  Mechanical: [
-    "General Mechanical",
-    "Pipefitting",
-    "Plant Room Installation",
-    "Welding",
-    "Commercial Heating",
-    "Mechanical Maintenance",
-  ],
-
-  Plumbing: [
-    "General Plumbing",
-    "Commercial Plumbing",
-    "Domestic Plumbing",
-    "Heating",
-    "Sanitaryware",
-    "Plant Room Plumbing",
-  ],
-
-  HVAC: [
-    "Ductwork",
-    "Ventilation",
-    "Air Conditioning",
-    "Refrigeration",
-    "Commissioning",
-  ],
-
-  "Fire & Security": [
-    "Fire Alarm Systems",
-    "Security Systems",
-    "CCTV",
-    "Access Control",
-    "Intruder Alarms",
-  ],
-
-  "Data & Telecoms": [
-    "Data Cabling",
-    "Fibre Optics",
-    "Telecoms",
-    "Network Cabling",
-  ],
-
-  Groundworks: [
-    "General Groundworks",
-    "Drainage",
-    "Ducting",
-    "Kerbing",
-    "Paving",
-    "Excavation",
-    "Concrete Works",
-  ],
-
-  "Carpentry & Joinery": [
-    "1st Fix Carpentry",
-    "2nd Fix Carpentry",
-    "Joinery",
-    "Shopfitting",
-    "Formwork",
-  ],
-
-  Drylining: ["Drylining", "Partitions", "Tape & Jointing", "Ceilings"],
-
-  "Ceilings & Partitions": [
-    "Suspended Ceilings",
-    "Metal Stud Partitions",
-    "Grid Ceilings",
-  ],
-
-  Bricklaying: ["Bricklaying", "Blockwork", "Repointing", "Stonework"],
-
-  "Concrete & Formwork": [
-    "Formwork",
-    "Shuttering",
-    "Concrete Finishing",
-    "Concrete Repair",
-  ],
-
-  "Steel Fixing": ["Steel Fixing", "Rebar Installation"],
-
-  "Welding & Fabrication": [
-    "Welding",
-    "Fabrication",
-    "Structural Steel",
-    "Architectural Metalwork",
-  ],
-
-  Scaffolding: ["Scaffolding", "Tube & Fitting", "System Scaffold"],
-
-  Roofing: ["Pitched Roofing", "Flat Roofing", "Leadwork", "Roof Repairs"],
-
-  Cladding: [
-    "Cladding",
-    "Rainscreen Cladding",
-    "Curtain Walling",
-    "Facade Installation",
-  ],
-
-  Glazing: ["Glazing", "Curtain Walling", "Windows & Doors"],
-
-  "Painting & Decorating": [
-    "Painting",
-    "Decorating",
-    "Spraying",
-    "Wallpapering",
-  ],
-
-  "Plastering & Rendering": [
-    "Plastering",
-    "Rendering",
-    "Skimming",
-    "External Wall Insulation",
-  ],
-
-  Flooring: [
-    "Flooring",
-    "Vinyl Flooring",
-    "Carpet Fitting",
-    "Resin Flooring",
-    "Raised Access Flooring",
-  ],
-
-  Tiling: ["Wall Tiling", "Floor Tiling", "Ceramic Tiling", "Stone Tiling"],
-
-  Labouring: [
-    "General Labouring",
-    "Skilled Labouring",
-    "Welfare Labouring",
-    "Traffic Marshall",
-  ],
-
-  "Plant Operations": [
-    "Excavator Operator",
-    "Dumper Driver",
-    "Roller Driver",
-    "Telehandler Operator",
-    "Crane Operator",
-    "Hoist Operator",
-  ],
-
-  Logistics: [
-    "Logistics Operative",
-    "Storeman",
-    "Materials Controller",
-    "Traffic Marshall",
-    "Vehicle Banksman",
-  ],
-
-  "Traffic Management": [
-    "Traffic Management Operative",
-    "Lane Closure",
-    "Highways Operative",
-  ],
-
-  "Management & Supervision": [
-    "Site Supervisor",
-    "Site Manager",
-    "Project Manager",
-    "Contracts Manager",
-    "Construction Manager",
-    "Package Manager",
-    "Foreman / Ganger",
-  ],
-
-  "Health & Safety": [
-    "Health & Safety Advisor",
-    "Health & Safety Manager",
-    "Fire Marshal",
-    "First Aider",
-  ],
-
-  Cleaning: ["Builders Clean", "Sparkle Clean", "Welfare Cleaning"],
-
-  Other: ["Other"],
-};
-
 function setupTradeSpecialismDropdowns() {
   const tradeSelect = document.getElementById("jobTrade");
   const specialismSelect = document.getElementById("jobSpecialism");
+  const taxonomy = window.OnSiteTaxonomy;
 
-  if (!tradeSelect || !specialismSelect) return;
+  if (!tradeSelect || !specialismSelect || !taxonomy) return;
+
+  taxonomy.populateTradeSelect(tradeSelect, {
+    selectedValue: tradeSelect.value,
+    preserveUnknown: true,
+  });
+  taxonomy.populateRoleSelect(specialismSelect, tradeSelect.value, {
+    selectedValue: specialismSelect.value,
+    preserveUnknown: true,
+  });
 
   tradeSelect.addEventListener("change", () => {
-    const selectedTrade = tradeSelect.value;
-
-    specialismSelect.innerHTML = "";
-
-    if (!selectedTrade || !TRADE_SPECIALISMS[selectedTrade]) {
-      specialismSelect.innerHTML = `<option value="">Select a trade first</option>`;
-      specialismSelect.disabled = true;
-      return;
-    }
-
-    specialismSelect.disabled = false;
-
-    specialismSelect.innerHTML = `<option value="">Select role / specialism</option>`;
-
-    TRADE_SPECIALISMS[selectedTrade].forEach((specialism) => {
-      const option = document.createElement("option");
-      option.value = specialism;
-      option.textContent = specialism;
-      specialismSelect.appendChild(option);
-    });
+    taxonomy.populateRoleSelect(specialismSelect, tradeSelect.value);
   });
 }
 
@@ -4821,6 +4624,7 @@ const demoData = {
   applications: [],
   notifications: [],
   projectActivities: [],
+  taxonomySuggestions: [],
   preferredWorkers: [],
   projectTransfers: [],
   shiftChangeOffers: [],
@@ -4860,6 +4664,7 @@ function migrateState(s) {
   if (!Array.isArray(s.applications)) s.applications = [];
   if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!Array.isArray(s.projectActivities)) s.projectActivities = [];
+  if (!Array.isArray(s.taxonomySuggestions)) s.taxonomySuggestions = [];
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
   if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
   if (!Array.isArray(s.shiftChangeOffers)) s.shiftChangeOffers = [];
@@ -4869,6 +4674,18 @@ function migrateState(s) {
     s.projectRequirementCompletions = [];
   if (!s.companyBilling || typeof s.companyBilling !== "object")
     s.companyBilling = {};
+  s.taxonomySuggestions = s.taxonomySuggestions
+    .map((suggestion) => ({
+      id: suggestion?.id || createId(),
+      submittedAt: suggestion?.submittedAt || new Date().toISOString(),
+      sourceType: suggestion?.sourceType === "worker" ? "worker" : "company",
+      submittedText: String(suggestion?.submittedText || "").trim(),
+      description: String(suggestion?.description || "").trim(),
+      selectedTradeKey: String(suggestion?.selectedTradeKey || "").trim(),
+      status: suggestion?.status || "new",
+      actorId: String(suggestion?.actorId || "").trim(),
+    }))
+    .filter((suggestion) => suggestion.submittedText);
   (s.preferredWorkers || []).forEach((pref) => {
     if (!pref.id) pref.id = createId();
     if (!pref.addedAt) pref.addedAt = new Date().toISOString();
@@ -5079,6 +4896,112 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (_) {}
 }
+
+let taxonomySuggestionTrigger = null;
+
+function taxonomySuggestionModal() {
+  let modal = document.getElementById("taxonomySuggestionModal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "taxonomySuggestionModal";
+  modal.className = "modal-overlay hidden";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "taxonomySuggestionTitle");
+  modal.innerHTML = `<form class="dispute-sheet taxonomy-suggestion-sheet" data-taxonomy-suggestion-form>
+    <div class="dispute-sheet-header">
+      <div>
+        <h3 class="dispute-sheet-title" id="taxonomySuggestionTitle">Tell us what's missing</h3>
+        <p class="dispute-sheet-sub">Your suggestion will be reviewed before any change is made to OnSite.</p>
+      </div>
+      <button class="modal-close-btn" type="button" aria-label="Close" data-taxonomy-suggestion-close>&times;</button>
+    </div>
+    <div class="dispute-sheet-body taxonomy-suggestion-body">
+      <p class="taxonomy-suggestion-context hidden" data-taxonomy-selected-trade><span>Selected trade</span><strong></strong></p>
+      <label class="field-label">Trade or role name *<input name="submittedText" type="text" autocomplete="off" required /></label>
+      <label class="field-label">Short description<textarea name="description" rows="3" placeholder="Optional context for the OnSite team"></textarea></label>
+      <p class="form-error hidden" data-taxonomy-suggestion-error></p>
+      <div class="taxonomy-suggestion-actions">
+        <button class="secondary-btn" type="button" data-taxonomy-suggestion-close>Cancel</button>
+        <button class="primary-btn" type="submit">Send suggestion</button>
+      </div>
+    </div>
+  </form>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal || event.target.closest("[data-taxonomy-suggestion-close]")) {
+      closeTaxonomySuggestionDialog();
+    }
+  });
+  modal.querySelector("[data-taxonomy-suggestion-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submittedText = String(new FormData(form).get("submittedText") || "").trim();
+    const error = form.querySelector("[data-taxonomy-suggestion-error]");
+    if (!submittedText) {
+      if (error) {
+        error.textContent = "Enter the trade or role that is missing.";
+        error.classList.remove("hidden");
+      }
+      form.elements.submittedText?.focus();
+      return;
+    }
+    const sourceType = modal.dataset.sourceType === "worker" ? "worker" : "company";
+    const actorId = getSessionUser()?.id || "";
+    if (!Array.isArray(state.taxonomySuggestions)) state.taxonomySuggestions = [];
+    state.taxonomySuggestions.push({
+      id: createId(),
+      submittedAt: new Date().toISOString(),
+      sourceType,
+      submittedText,
+      description: String(new FormData(form).get("description") || "").trim(),
+      selectedTradeKey: modal.dataset.selectedTradeKey || "",
+      status: "new",
+      ...(actorId ? { actorId } : {}),
+    });
+    saveState();
+    closeTaxonomySuggestionDialog();
+    showToast("Thanks — we'll review this for OnSite.");
+  });
+  return modal;
+}
+
+function closeTaxonomySuggestionDialog() {
+  const modal = document.getElementById("taxonomySuggestionModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  modal.classList.add("hidden");
+  modal.querySelector("form")?.reset();
+  taxonomySuggestionTrigger?.focus?.();
+  taxonomySuggestionTrigger = null;
+}
+
+function openTaxonomySuggestionDialog(sourceType, trigger) {
+  const modal = taxonomySuggestionModal();
+  const tradeSelect = document.getElementById(
+    sourceType === "worker" ? "regTrade" : "jobTrade",
+  );
+  const trade = window.OnSiteTaxonomy?.findTrade(tradeSelect?.value);
+  taxonomySuggestionTrigger = trigger || null;
+  modal.dataset.sourceType = sourceType === "worker" ? "worker" : "company";
+  modal.dataset.selectedTradeKey = trade?.key || "";
+  const context = modal.querySelector("[data-taxonomy-selected-trade]");
+  context?.classList.toggle("hidden", !trade);
+  const contextValue = context?.querySelector("strong");
+  if (contextValue) contextValue.textContent = trade?.name || "";
+  modal.querySelector("[data-taxonomy-suggestion-error]")?.classList.add("hidden");
+  modal.classList.remove("hidden");
+  requestAnimationFrame(() => modal.querySelector('[name="submittedText"]')?.focus());
+}
+
+document.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-taxonomy-suggestion]");
+  if (!trigger) return;
+  openTaxonomySuggestionDialog(trigger.dataset.taxonomySuggestion, trigger);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeTaxonomySuggestionDialog();
+});
 
 function saveAndRender() {
   saveState();
@@ -6050,6 +5973,16 @@ function ensureWorkerProfileForUser(user) {
     identityId: user.identityId || "",
     name: user.name || "",
     trade: user.trade || "",
+    tradeKey:
+      user.tradeKey || window.OnSiteTaxonomy?.tradeKeyFor(user.trade) || "",
+    specialism: user.specialism || user.grade || "",
+    roleKey:
+      user.roleKey ||
+      window.OnSiteTaxonomy?.roleKeyFor(
+        user.trade,
+        user.specialism || user.grade,
+      ) ||
+      "",
     grade: user.grade || "",
     location: user.location || "",
     qualifications: certNames.filter(Boolean).join(", "),
@@ -9936,11 +9869,14 @@ function readTradeReqInputs() {
     accommodationAllowanceRaw > 0
       ? Math.round(accommodationAllowanceRaw)
       : null;
+  const trade = document.getElementById("jobTrade")?.value || "";
+  const specialism = document.getElementById("jobSpecialism")?.value || "";
   return {
     id: createId(),
-    trade: document.getElementById("jobTrade")?.value || "",
-    specialism: document.getElementById("jobSpecialism")?.value || "",
-    grade: document.getElementById("jobGrade")?.value || "",
+    trade,
+    tradeKey: window.OnSiteTaxonomy?.tradeKeyFor(trade) || "",
+    specialism,
+    roleKey: window.OnSiteTaxonomy?.roleKeyFor(trade, specialism) || "",
     workActivity: document.getElementById("workActivity")?.value.trim() || "",
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
     requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
@@ -9982,8 +9918,8 @@ function labourRequirementKey(req) {
     .map((period) => `${period.startDate}:${period.endDate}:${period.quantity}:${period.phase || ""}`)
     .join(",");
   return [
-    req?.trade || "",
-    req?.specialism || "",
+    req?.tradeKey || req?.trade || "",
+    req?.roleKey || req?.specialism || "",
     req?.grade || "",
     req?.workActivity || "",
     req?.requiredQualifications || "",
@@ -10248,7 +10184,13 @@ function buildLabourRequirementsFromForm(shared = {}) {
     .map((req, index) => ({
       id: req.id || `${createId()}-${index}`,
       trade: req.trade || "",
+      tradeKey:
+        req.tradeKey || window.OnSiteTaxonomy?.tradeKeyFor(req.trade) || "",
       specialism: req.specialism || "",
+      roleKey:
+        req.roleKey ||
+        window.OnSiteTaxonomy?.roleKeyFor(req.trade, req.specialism) ||
+        "",
       grade: req.grade || "",
       requiredQualifications: req.requiredQualifications || "",
       workActivity: req.workActivity || "",
@@ -10284,14 +10226,20 @@ function buildLabourRequirementsFromForm(shared = {}) {
 function applyTradeReqToInputs(req) {
   jobLabourMoreOptionsOpen = labourRequirementHasAdvancedOptions(req);
   const tradeSelect = document.getElementById("jobTrade");
-  if (tradeSelect) {
-    tradeSelect.value = req.trade;
-    tradeSelect.dispatchEvent(new Event("change"));
-  }
   const spec = document.getElementById("jobSpecialism");
-  if (spec) spec.value = req.specialism;
-  const grade = document.getElementById("jobGrade");
-  if (grade) grade.value = req.grade;
+  if (tradeSelect) {
+    window.OnSiteTaxonomy?.populateTradeSelect(tradeSelect, {
+      selectedValue: req.trade || req.tradeKey || "",
+      preserveUnknown: true,
+    });
+  }
+  if (spec) {
+    window.OnSiteTaxonomy?.populateRoleSelect(
+      spec,
+      tradeSelect?.value || req.trade || req.tradeKey || "",
+      { selectedValue: req.specialism || req.roleKey || "", preserveUnknown: true },
+    );
+  }
   const act = document.getElementById("workActivity");
   if (act) act.value = req.workActivity;
   const qty = document.getElementById("jobQuantity");
@@ -10329,7 +10277,6 @@ function clearTradeReqInputs() {
   applyTradeReqToInputs({
     trade: "",
     specialism: "",
-    grade: "",
     workActivity: "",
     quantity: 1,
     requiredQualifications: "",
@@ -10351,7 +10298,6 @@ function tradeRequirementHasMeaningfulInput(req = readTradeReqInputs()) {
   return !!(
     req.trade ||
     req.specialism ||
-    req.grade ||
     req.workActivity ||
     req.requiredQualifications ||
     req.budgetMax ||
@@ -10640,7 +10586,6 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
   "jobAccommodationAllowance",
   "jobTrade",
   "jobSpecialism",
-  "jobGrade",
   "workActivity",
   "jobQuantity",
   "jobReqQuals",
@@ -13573,7 +13518,7 @@ function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
 function companyProjectFilterOptions() {
   return {
     assignments: Object.entries(ASSIGNMENT_TYPES),
-    trades: Object.keys(TRADE_SPECIALISMS),
+    trades: window.OnSiteTaxonomy?.trades.map((trade) => trade.name) || [],
   };
 }
 
@@ -21146,7 +21091,9 @@ jobForm.addEventListener("submit", (e) => {
         ? poster.companyName || poster.name || "Company"
         : "",
     trade,
+    tradeKey: window.OnSiteTaxonomy?.tradeKeyFor(trade) || "",
     specialism,
+    roleKey: window.OnSiteTaxonomy?.roleKeyFor(trade, specialism) || "",
     labourRequirements,
     location,
     locationData: { ...locationData },
@@ -21217,8 +21164,6 @@ jobForm.addEventListener("submit", (e) => {
   }
 
   // Labour requirement details
-  const grade = document.querySelector("#jobGrade")?.value;
-  if (grade) job.grade = grade;
   const workActivity = document.querySelector("#workActivity")?.value.trim();
   if (workActivity) job.workActivity = workActivity;
 
