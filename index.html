@@ -913,10 +913,20 @@
                         Work Activity *
                         <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
                       </label>
-                      <label class="field-label jw-span-2">
-                        Required Qualifications &amp; Tickets *
-                        <input id="jobReqQuals" type="text" required placeholder="e.g. CSCS, ECS, 18th Edition" />
-                      </label>
+                      <div class="field-label jw-span-2">
+                        <label for="jobCredentialSearch">Required cards, tickets &amp; qualifications *</label>
+                        <div class="credential-multiselect" data-job-credential-picker>
+                          <div id="jobCredentialChips" class="credential-chips" aria-live="polite"></div>
+                          <div class="credential-search-control">
+                            <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                            <input id="jobCredentialSearch" type="search" autocomplete="off" placeholder="Search cards, tickets or qualifications..." aria-autocomplete="list" aria-controls="jobCredentialResults" aria-expanded="false" />
+                          </div>
+                          <input id="jobReqQuals" type="hidden" />
+                          <div id="jobCredentialResults" class="credential-results hidden" role="listbox" aria-label="Cards, tickets and qualifications"></div>
+                        </div>
+                        <p id="jobCredentialMessage" class="form-error hidden" aria-live="polite"></p>
+                        <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="credential">Can't find a card, ticket or qualification?</button>
+                      </div>
                     </div>
                     <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
                   </section>
@@ -1806,6 +1816,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="ui.js"></script>
     <script src="taxonomy.js"></script>
+    <script src="credentials.js"></script>
     <script src="data/uk-settlements.js"></script>
     <script src="uk-location-picker.js"></script>
     <script src="app.js"></script>

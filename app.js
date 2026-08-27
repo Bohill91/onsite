@@ -173,6 +173,7 @@ function setupTradeSpecialismDropdowns() {
 
   tradeSelect.addEventListener("change", () => {
     taxonomy.populateRoleSelect(specialismSelect, tradeSelect.value);
+    if (jobCredentialPickerOpen) renderJobCredentialPicker();
   });
 }
 
@@ -180,6 +181,9 @@ document.addEventListener("DOMContentLoaded", setupTradeSpecialismDropdowns);
 
 function closeAppPopovers(except = null) {
   window.OnSiteUI?.closeSelects?.(except);
+  if (!except || !document.querySelector("[data-job-credential-picker]")?.contains(except)) {
+    closeJobCredentialPicker();
+  }
   document.querySelectorAll("details[open]").forEach((details) => {
     if (except && (details === except || details.contains(except))) return;
     details.removeAttribute("open");
@@ -234,14 +238,22 @@ function bindGlobalDropdownBehaviour() {
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    const clickedCredentialPicker = event
+      .composedPath()
+      .some(
+        (node) =>
+          node instanceof Element && node.matches(".credential-multiselect"),
+      );
     if (
+      clickedCredentialPicker ||
       target.closest("details[open]") ||
       target.closest("[data-sidebar-account-toggle]") ||
       target.closest("[data-sidebar-account-menu]") ||
       target.closest("[data-worker-notifications]") ||
       target.closest("#workerNotificationPanel") ||
       target.closest(".os-select") ||
-      target.closest(".os-select-listbox")
+      target.closest(".os-select-listbox") ||
+      target.closest(".credential-multiselect")
     ) {
       return;
     }
@@ -255,7 +267,14 @@ function bindGlobalDropdownBehaviour() {
     const openSidebarMenu = target.closest("[data-sidebar-account-menu]");
     const openWorkerPanel = target.closest("#workerNotificationPanel");
     const openCustomSelect = target.closest(".os-select, .os-select-listbox");
-    if (openDetails || openSidebarMenu || openWorkerPanel || openCustomSelect) return;
+    const openCredentialPicker = target.closest(".credential-multiselect");
+    if (
+      openDetails ||
+      openSidebarMenu ||
+      openWorkerPanel ||
+      openCustomSelect ||
+      openCredentialPicker
+    ) return;
     closeAppPopovers();
   });
 
@@ -4681,7 +4700,9 @@ function migrateState(s) {
       sourceType: suggestion?.sourceType === "worker" ? "worker" : "company",
       submittedText: String(suggestion?.submittedText || "").trim(),
       description: String(suggestion?.description || "").trim(),
+      type: suggestion?.type === "credential" ? "credential" : "trade_or_role",
       selectedTradeKey: String(suggestion?.selectedTradeKey || "").trim(),
+      selectedRoleKey: String(suggestion?.selectedRoleKey || "").trim(),
       status: suggestion?.status || "new",
       actorId: String(suggestion?.actorId || "").trim(),
     }))
@@ -4918,8 +4939,8 @@ function taxonomySuggestionModal() {
     </div>
     <div class="dispute-sheet-body taxonomy-suggestion-body">
       <p class="taxonomy-suggestion-context hidden" data-taxonomy-selected-trade><span>Selected trade</span><strong></strong></p>
-      <label class="field-label">Trade or role name *<input name="submittedText" type="text" autocomplete="off" required /></label>
-      <label class="field-label">Short description<textarea name="description" rows="3" placeholder="Optional context for the OnSite team"></textarea></label>
+      <label class="field-label"><span data-taxonomy-suggestion-field-label>Trade or role name *</span><input name="submittedText" type="text" autocomplete="off" required /></label>
+      <label class="field-label"><span data-taxonomy-suggestion-description-label>Short description</span><textarea name="description" rows="3" placeholder="Optional context for the OnSite team"></textarea></label>
       <p class="form-error hidden" data-taxonomy-suggestion-error></p>
       <div class="taxonomy-suggestion-actions">
         <button class="secondary-btn" type="button" data-taxonomy-suggestion-close>Cancel</button>
@@ -4940,7 +4961,9 @@ function taxonomySuggestionModal() {
     const error = form.querySelector("[data-taxonomy-suggestion-error]");
     if (!submittedText) {
       if (error) {
-        error.textContent = "Enter the trade or role that is missing.";
+        error.textContent = modal.dataset.suggestionType === "credential"
+          ? "Enter the card, ticket or qualification that is missing."
+          : "Enter the trade or role that is missing.";
         error.classList.remove("hidden");
       }
       form.elements.submittedText?.focus();
@@ -4952,10 +4975,12 @@ function taxonomySuggestionModal() {
     state.taxonomySuggestions.push({
       id: createId(),
       submittedAt: new Date().toISOString(),
+      type: modal.dataset.suggestionType === "credential" ? "credential" : "trade_or_role",
       sourceType,
       submittedText,
       description: String(new FormData(form).get("description") || "").trim(),
       selectedTradeKey: modal.dataset.selectedTradeKey || "",
+      selectedRoleKey: modal.dataset.selectedRoleKey || "",
       status: "new",
       ...(actorId ? { actorId } : {}),
     });
@@ -4977,13 +5002,32 @@ function closeTaxonomySuggestionDialog() {
 
 function openTaxonomySuggestionDialog(sourceType, trigger) {
   const modal = taxonomySuggestionModal();
+  const credentialSuggestion = sourceType === "credential";
   const tradeSelect = document.getElementById(
     sourceType === "worker" ? "regTrade" : "jobTrade",
   );
   const trade = window.OnSiteTaxonomy?.findTrade(tradeSelect?.value);
+  const roleSelect = document.getElementById(
+    sourceType === "worker" ? "regSpecialism" : "jobSpecialism",
+  );
+  const role = window.OnSiteTaxonomy?.findRole(trade?.key, roleSelect?.value);
   taxonomySuggestionTrigger = trigger || null;
   modal.dataset.sourceType = sourceType === "worker" ? "worker" : "company";
+  modal.dataset.suggestionType = credentialSuggestion ? "credential" : "trade_or_role";
   modal.dataset.selectedTradeKey = trade?.key || "";
+  modal.dataset.selectedRoleKey = role?.key || "";
+  const title = modal.querySelector("#taxonomySuggestionTitle");
+  if (title) title.textContent = credentialSuggestion
+    ? "Can't find a card, ticket or qualification?"
+    : "Tell us what's missing";
+  const fieldLabel = modal.querySelector("[data-taxonomy-suggestion-field-label]");
+  if (fieldLabel) fieldLabel.textContent = credentialSuggestion
+    ? "Card, ticket or qualification name *"
+    : "Trade or role name *";
+  const descriptionLabel = modal.querySelector("[data-taxonomy-suggestion-description-label]");
+  if (descriptionLabel) descriptionLabel.textContent = credentialSuggestion
+    ? "Additional details"
+    : "Short description";
   const context = modal.querySelector("[data-taxonomy-selected-trade]");
   context?.classList.toggle("hidden", !trade);
   const contextValue = context?.querySelector("strong");
@@ -5205,6 +5249,22 @@ const WORKER_DOCUMENT_STATUSES = ["unverified", "pending", "verified", "rejected
 
 function workerDocumentTypeLabel(type) {
   return WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.label || "Document";
+}
+
+function workerCredentialOptions(selectedId = "") {
+  const catalogue = window.OnSiteCredentials;
+  if (!catalogue) return '<option value="">Canonical catalogue unavailable</option>';
+  return `<option value="">Select a card, ticket or qualification</option>${catalogue.categoryOrder
+    .map((category) => {
+      const options = catalogue.credentials.filter(
+        (credential) => credential.requestable && credential.category === category,
+      );
+      if (!options.length) return "";
+      return `<optgroup label="${escapeHtml(catalogue.categoryLabels[category])}">${options
+        .map((credential) => `<option value="${escapeHtml(credential.id)}" ${credential.id === selectedId ? "selected" : ""}>${escapeHtml(credential.label)}</option>`)
+        .join("")}</optgroup>`;
+    })
+    .join("")}`;
 }
 
 function preStartDocumentTypeLabel(type) {
@@ -5543,11 +5603,14 @@ function normalizeWorkerDocument(doc) {
     : "unverified";
   const fileName = String(doc?.fileName || "").trim();
   if (!fileName) return null;
+  const credentialId = window.OnSiteCredentials?.findById(doc?.credentialId)?.id || "";
   return {
     documentId: doc?.documentId || doc?.id || createId(),
     documentType,
     fileName,
     fileType: doc?.fileType || WORKER_DOCUMENT_TYPES.find((d) => d.value === documentType)?.accepts || "",
+    credentialId,
+    qualificationTitle: String(doc?.qualificationTitle || doc?.certificateTitle || "").trim(),
     uploadedAt: doc?.uploadedAt || new Date().toISOString(),
     expiryDate: formatDateInput(doc?.expiryDate || ""),
     verificationStatus,
@@ -5624,12 +5687,13 @@ function workerDocumentsHTML(worker, opts = {}) {
     ${docs
       .map((doc) => {
         const expiry = workerDocumentExpiryStatus(doc.expiryDate);
+        const credential = window.OnSiteCredentials?.findById(doc.credentialId);
         return `
       <div class="worker-doc-row ${expiry.cls === "expired" ? "expired" : ""}">
         <div class="worker-doc-main">
-          <div class="worker-doc-title">${escapeHtml(workerDocumentTypeLabel(doc.documentType))}</div>
+          <div class="worker-doc-title">${escapeHtml(credential?.label || doc.qualificationTitle || workerDocumentTypeLabel(doc.documentType))}</div>
           <div class="worker-doc-meta">
-            ${escapeHtml(doc.fileName)}
+            ${doc.qualificationTitle && credential ? `${escapeHtml(doc.qualificationTitle)} · ` : ""}${escapeHtml(doc.fileName)}
             ${doc.expiryDate ? ` · expires ${formatDateOnly(doc.expiryDate)}` : " · no expiry"}
           </div>
           ${doc.notes ? `<div class="worker-doc-notes">${escapeHtml(doc.notes)}</div>` : ""}
@@ -5652,10 +5716,11 @@ function workerDocumentsHTML(worker, opts = {}) {
 function requiredDocumentWarnings(worker, job) {
   const docs = workerDocumentsFor(worker);
   const docText = docs
-    .map((d) => `${d.documentType} ${workerDocumentTypeLabel(d.documentType)} ${d.fileName}`)
+    .map((d) => `${d.documentType} ${workerDocumentTypeLabel(d.documentType)} ${window.OnSiteCredentials?.findById(d.credentialId)?.label || ""} ${d.qualificationTitle || ""} ${d.fileName}`)
     .join(" ")
     .toLowerCase();
   const required = [
+    ...(window.OnSiteCredentials?.labelsForIds(job?.requiredCredentialIds) || []),
     ...(job?.requiredQualifications || "").split(","),
     job?.trade || "",
     job?.grade || "",
@@ -8882,12 +8947,13 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
       ? "Worker receives full advertised rate"
       : "Service fee included within advertised rate",
   );
+  const credentialSummary = credentialLabelsForRequirement(requirement).join(" · ");
   return `<article class="jw-review-labour-row">
     <div class="jw-review-labour-identity">
       <strong>${escapeHtml(requirement.trade || "Labour requirement")}</strong>
       ${identity ? `<span>${escapeHtml(identity)}</span>` : ""}
       ${detail ? `<span>${escapeHtml(detail)}</span>` : ""}
-      ${requirement.requiredQualifications ? `<span>${escapeHtml(requirement.requiredQualifications)}</span>` : ""}
+      ${credentialSummary ? `<span>${escapeHtml(credentialSummary)}</span>` : ""}
     </div>
     <div class="jw-review-labour-terms">
       ${requirement.budgetMax ? `<strong>${formatMoney(requirement.budgetMax)}/day</strong>` : ""}
@@ -9435,6 +9501,227 @@ jobForm?.addEventListener("keydown", (event) => {
 
 let pendingTradeRequirements = [];
 let activeTradeRequirementId = "";
+let selectedJobCredentialIds = [];
+let jobCredentialPickerOpen = false;
+let jobCredentialBrowseAll = false;
+let jobCredentialActiveIndex = -1;
+
+function canonicalCredentialIds(ids = []) {
+  const catalogue = window.OnSiteCredentials;
+  if (!catalogue) return [];
+  return [...new Set(Array.isArray(ids) ? ids : [])].filter((id) => catalogue.findById(id));
+}
+
+function credentialIdsForRequirement(requirement = {}) {
+  const explicit = canonicalCredentialIds(requirement.requiredCredentialIds);
+  if (explicit.length) return explicit;
+  return window.OnSiteCredentials?.resolveLegacyIds(requirement.requiredQualifications) || [];
+}
+
+function credentialLabelsForRequirement(requirement = {}) {
+  const labels = window.OnSiteCredentials?.labelsForIds(
+    canonicalCredentialIds(requirement.requiredCredentialIds),
+  ) || [];
+  return labels.length ? labels : String(requirement.requiredQualifications || "")
+    .split(/[,;]+/)
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
+function syncJobCredentialMirror() {
+  const input = document.getElementById("jobReqQuals");
+  if (!input) return;
+  input.value = (window.OnSiteCredentials?.labelsForIds(selectedJobCredentialIds) || []).join(", ");
+}
+
+function jobCredentialOptionsModel() {
+  const catalogue = window.OnSiteCredentials;
+  const query = document.getElementById("jobCredentialSearch")?.value.trim() || "";
+  if (!catalogue) return { groups: [], options: [], query };
+  if (query) {
+    const options = catalogue.search(query);
+    return { groups: [{ label: "Search results", options }], options, query };
+  }
+  if (jobCredentialBrowseAll) {
+    const groups = catalogue.categoryOrder
+      .map((category) => ({
+        label: catalogue.categoryLabels[category],
+        options: catalogue.credentials.filter(
+          (credential) => credential.requestable && credential.category === category,
+        ),
+      }))
+      .filter((group) => group.options.length);
+    return { groups, options: groups.flatMap((group) => group.options), query };
+  }
+  const tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(
+    document.getElementById("jobTrade")?.value,
+  ) || "";
+  const allRelevant = catalogue.relevantToTrade(tradeKey);
+  const relevant = catalogue.categoryOrder.flatMap((category) => {
+    let options = allRelevant.filter((credential) => credential.category === category);
+    if (tradeKey === "plumbing_heating" && category === "plumbing_jib_pmes") {
+      const water = options.filter((credential) =>
+        /water regulations|unvented hot water/i.test(credential.label),
+      );
+      options = [...options.filter((credential) => !water.includes(credential)).slice(0, 4), ...water];
+    }
+    return options.slice(0, 6);
+  });
+  const relevantIds = new Set(relevant.map((credential) => credential.id));
+  const common = catalogue.common()
+    .filter((credential) => !relevantIds.has(credential.id))
+    .slice(0, 10);
+  const tradeName = window.OnSiteTaxonomy?.findTrade(tradeKey)?.name || "selected trade";
+  const groups = [
+    ...(relevant.length ? [{ label: `Relevant to ${tradeName}`, options: relevant }] : []),
+    { label: "Common site requirements", options: common },
+  ].filter((group) => group.options.length);
+  return { groups, options: groups.flatMap((group) => group.options), query };
+}
+
+function jobCredentialOptionHTML(credential, index) {
+  const selected = selectedJobCredentialIds.includes(credential.id);
+  return `<button class="credential-option${selected ? " is-selected" : ""}${index === jobCredentialActiveIndex ? " is-active" : ""}" type="button" role="option" aria-selected="${selected}" data-job-credential-id="${escapeHtml(credential.id)}">
+    <span>${escapeHtml(credential.label)}</span>
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  </button>`;
+}
+
+function renderJobCredentialPicker() {
+  const picker = document.querySelector("[data-job-credential-picker]");
+  const chips = document.getElementById("jobCredentialChips");
+  const results = document.getElementById("jobCredentialResults");
+  const search = document.getElementById("jobCredentialSearch");
+  if (!picker || !chips || !results || !search) return;
+  selectedJobCredentialIds = canonicalCredentialIds(selectedJobCredentialIds);
+  syncJobCredentialMirror();
+  const catalogue = window.OnSiteCredentials;
+  chips.innerHTML = selectedJobCredentialIds
+    .map((id) => catalogue?.findById(id))
+    .filter(Boolean)
+    .map((credential) => `<span class="credential-chip">${escapeHtml(credential.label)}<button type="button" data-remove-job-credential="${escapeHtml(credential.id)}" aria-label="Remove ${escapeHtml(credential.label)}">&times;</button></span>`)
+    .join("");
+  chips.classList.toggle("hidden", !selectedJobCredentialIds.length);
+  search.setAttribute("aria-expanded", String(jobCredentialPickerOpen));
+  results.classList.toggle("hidden", !jobCredentialPickerOpen);
+  if (!jobCredentialPickerOpen) {
+    results.innerHTML = "";
+    picker.classList.remove("is-open");
+    return;
+  }
+  picker.classList.add("is-open");
+  const model = jobCredentialOptionsModel();
+  if (jobCredentialActiveIndex >= model.options.length) jobCredentialActiveIndex = model.options.length - 1;
+  if (!model.options.length) {
+    results.innerHTML = `<div class="credential-empty"><strong>No catalogue matches</strong><span>Try another card, ticket or qualification name.</span></div>`;
+    return;
+  }
+  let optionIndex = 0;
+  results.innerHTML = `${model.groups.map((group) => `<section class="credential-group"><h6>${escapeHtml(group.label)}</h6>${group.options.map((credential) => jobCredentialOptionHTML(credential, optionIndex++)).join("")}</section>`).join("")}
+    ${!model.query ? `<button class="credential-browse-toggle" type="button" data-job-credential-browse>${jobCredentialBrowseAll ? "Show relevant and common" : "Browse all cards, tickets & qualifications"}</button>` : ""}`;
+  results.querySelector(`[data-job-credential-id="${CSS.escape(model.options[jobCredentialActiveIndex]?.id || "")}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
+function openJobCredentialPicker() {
+  if (jobCredentialPickerOpen) return;
+  jobCredentialPickerOpen = true;
+  jobCredentialBrowseAll = false;
+  jobCredentialActiveIndex = -1;
+  closeAppPopovers(document.querySelector("[data-job-credential-picker]"));
+  renderJobCredentialPicker();
+}
+
+function closeJobCredentialPicker() {
+  if (!jobCredentialPickerOpen) return;
+  jobCredentialPickerOpen = false;
+  jobCredentialActiveIndex = -1;
+  renderJobCredentialPicker();
+}
+
+function toggleJobCredential(id) {
+  if (!window.OnSiteCredentials?.findById(id)) return;
+  if (selectedJobCredentialIds.includes(id)) {
+    selectedJobCredentialIds = selectedJobCredentialIds.filter((selectedId) => selectedId !== id);
+  } else {
+    selectedJobCredentialIds = [...selectedJobCredentialIds, id];
+  }
+  const search = document.getElementById("jobCredentialSearch");
+  if (search) search.value = "";
+  jobCredentialBrowseAll = false;
+  jobCredentialActiveIndex = -1;
+  document.getElementById("jobCredentialMessage")?.classList.add("hidden");
+  renderJobCredentialPicker();
+  setTradeRequirementMessage();
+  updateTradeRequirementEditorState();
+}
+
+function setJobCredentialSelection(ids = []) {
+  selectedJobCredentialIds = canonicalCredentialIds(ids);
+  const search = document.getElementById("jobCredentialSearch");
+  if (search) search.value = "";
+  jobCredentialBrowseAll = false;
+  jobCredentialActiveIndex = -1;
+  renderJobCredentialPicker();
+}
+
+const jobCredentialPicker = document.querySelector("[data-job-credential-picker]");
+const jobCredentialSearch = document.getElementById("jobCredentialSearch");
+jobCredentialSearch?.addEventListener("focus", openJobCredentialPicker);
+jobCredentialSearch?.addEventListener("click", openJobCredentialPicker);
+jobCredentialSearch?.addEventListener("input", () => {
+  jobCredentialPickerOpen = true;
+  jobCredentialBrowseAll = false;
+  jobCredentialActiveIndex = jobCredentialOptionsModel().options.length ? 0 : -1;
+  document.getElementById("jobCredentialMessage")?.classList.add("hidden");
+  renderJobCredentialPicker();
+});
+jobCredentialSearch?.addEventListener("keydown", (event) => {
+  const model = jobCredentialOptionsModel();
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    if (!jobCredentialPickerOpen) openJobCredentialPicker();
+    if (!model.options.length) return;
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    jobCredentialActiveIndex = (jobCredentialActiveIndex + direction + model.options.length) % model.options.length;
+    renderJobCredentialPicker();
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    const credential = model.options[jobCredentialActiveIndex];
+    if (credential) toggleJobCredential(credential.id);
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeJobCredentialPicker();
+  }
+});
+jobCredentialPicker?.addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-remove-job-credential]");
+  if (remove) {
+    event.preventDefault();
+    toggleJobCredential(remove.dataset.removeJobCredential);
+    jobCredentialSearch?.focus();
+    return;
+  }
+  const option = event.target.closest("[data-job-credential-id]");
+  if (option) {
+    toggleJobCredential(option.dataset.jobCredentialId);
+    jobCredentialSearch?.focus();
+    return;
+  }
+  if (event.target.closest("[data-job-credential-browse]")) {
+    jobCredentialBrowseAll = !jobCredentialBrowseAll;
+    jobCredentialActiveIndex = -1;
+    renderJobCredentialPicker();
+  }
+});
+document.addEventListener("pointerdown", (event) => {
+  if (jobCredentialPickerOpen && !jobCredentialPicker?.contains(event.target)) {
+    closeJobCredentialPicker();
+  }
+});
 let tradeRequirementEditorOpen = false;
 let pendingJobWizardNavigationStep = null;
 
@@ -9538,10 +9825,10 @@ function savedLabourRequirementValidationIssue() {
     if (!requirement.workActivity) {
       return { requirement, message: "Enter the work activity." };
     }
-    if (!requirement.requiredQualifications) {
+    if (!credentialIdsForRequirement(requirement).length && !requirement.requiredQualifications) {
       return {
         requirement,
-        message: "Enter the required qualifications & tickets.",
+        message: "Select the required cards, tickets & qualifications.",
       };
     }
     if (!Number.isFinite(Number(requirement.quantity)) || Number(requirement.quantity) < 1) {
@@ -9879,7 +10166,9 @@ function readTradeReqInputs() {
     roleKey: window.OnSiteTaxonomy?.roleKeyFor(trade, specialism) || "",
     workActivity: document.getElementById("workActivity")?.value.trim() || "",
     quantity: Math.max(1, Number(document.getElementById("jobQuantity")?.value) || 1),
-    requiredQualifications: document.getElementById("jobReqQuals")?.value.trim() || "",
+    requiredCredentialIds: [...selectedJobCredentialIds],
+    requiredQualifications:
+      (window.OnSiteCredentials?.labelsForIds(selectedJobCredentialIds) || []).join(", "),
     budgetMin: budgetMax,
     budgetMax,
     workerReceivesFullAdvertisedRate,
@@ -9907,7 +10196,7 @@ function tradeReqHasCoreFields(req) {
     req?.trade &&
     req?.specialism &&
     req?.workActivity &&
-    req?.requiredQualifications &&
+    (credentialIdsForRequirement(req).length || req?.requiredQualifications) &&
     req?.budgetMax
   );
 }
@@ -9922,7 +10211,9 @@ function labourRequirementKey(req) {
     req?.roleKey || req?.specialism || "",
     req?.grade || "",
     req?.workActivity || "",
-    req?.requiredQualifications || "",
+    canonicalCredentialIds(req?.requiredCredentialIds).sort().join(",") ||
+      req?.requiredQualifications ||
+      "",
     Number(req?.quantity || 1),
     Number(req?.budgetMax || 0),
     req?.workerReceivesFullAdvertisedRate !== false,
@@ -10193,6 +10484,7 @@ function buildLabourRequirementsFromForm(shared = {}) {
         "",
       grade: req.grade || "",
       requiredQualifications: req.requiredQualifications || "",
+      requiredCredentialIds: canonicalCredentialIds(req.requiredCredentialIds),
       workActivity: req.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
       budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
@@ -10244,8 +10536,7 @@ function applyTradeReqToInputs(req) {
   if (act) act.value = req.workActivity;
   const qty = document.getElementById("jobQuantity");
   if (qty) qty.value = String(req.quantity);
-  const quals = document.getElementById("jobReqQuals");
-  if (quals) quals.value = req.requiredQualifications;
+  setJobCredentialSelection(credentialIdsForRequirement(req));
   const rate = document.getElementById("jobBudgetMax");
   if (rate) rate.value = req.budgetMax || "";
   const fullRate = document.getElementById("jobWorkerReceivesFullRate");
@@ -10280,6 +10571,7 @@ function clearTradeReqInputs() {
     workActivity: "",
     quantity: 1,
     requiredQualifications: "",
+    requiredCredentialIds: [],
     budgetMax: "",
     workerReceivesFullAdvertisedRate: true,
     accommodationPaid: false,
@@ -10299,6 +10591,7 @@ function tradeRequirementHasMeaningfulInput(req = readTradeReqInputs()) {
     req.trade ||
     req.specialism ||
     req.workActivity ||
+    credentialIdsForRequirement(req).length ||
     req.requiredQualifications ||
     req.budgetMax ||
     Number(req.quantity || 1) !== 1 ||
@@ -10415,10 +10708,16 @@ function saveTradeRequirement() {
   if (!Number.isFinite(quantity) || quantity < 1) {
     return failTradeRequirementSave("jobQuantity", "Enter at least one worker");
   }
-  if (!req.requiredQualifications) {
+  if (!req.requiredCredentialIds.length) {
+    const message = "Select the required cards, tickets & qualifications";
+    const error = document.getElementById("jobCredentialMessage");
+    if (error) {
+      error.textContent = message;
+      error.classList.remove("hidden");
+    }
     return failTradeRequirementSave(
-      "jobReqQuals",
-      "Enter the required qualifications & tickets",
+      "jobCredentialSearch",
+      message,
     );
   }
   if (!req.budgetMax) {
@@ -10487,7 +10786,7 @@ function renderTradeReqCards() {
           </div>
         </div>
         ${r.grade || r.workActivity ? `<div class="jw-req-meta">${[r.grade, r.workActivity].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
-        ${r.requiredQualifications ? `<div class="jw-req-quals"><span>Qualifications</span>${escapeHtml(r.requiredQualifications)}</div>` : ""}
+        ${credentialLabelsForRequirement(r).length ? `<div class="jw-req-quals"><span>Cards, tickets & qualifications</span>${escapeHtml(credentialLabelsForRequirement(r).join(" · "))}</div>` : ""}
         <div class="jw-req-summary">
           ${r.budgetMax ? `<span class="jw-req-rate">${formatMoney(r.budgetMax)}/day</span>` : ""}
           <span>${r.workerReceivesFullAdvertisedRate !== false ? "Full advertised rate" : "Service fee within advertised rate"}</span>
@@ -10508,7 +10807,7 @@ function syncTradeReqBuilderState() {
   // While saved requirement cards exist the builder inputs may sit empty,
   // so relax native validation on them; it is restored when the list empties.
   const hasCards = pendingTradeRequirements.length > 0;
-  ["jobTrade", "jobSpecialism", "workActivity", "jobQuantity", "jobReqQuals", "jobBudgetMax"].forEach(
+  ["jobTrade", "jobSpecialism", "workActivity", "jobQuantity", "jobBudgetMax"].forEach(
     (id) => {
       const el = document.getElementById(id);
       if (el) el.required = !hasCards;
@@ -10524,6 +10823,7 @@ function syncTradeReqBuilderState() {
 
 function resetJobTradeRequirements() {
   pendingTradeRequirements = [];
+  selectedJobCredentialIds = [];
   jobRequestedWorkerIds = [];
   specificWorkerPickerDraftIds = new Set();
   activeTradeRequirementId = "";
@@ -10588,7 +10888,7 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
   "jobSpecialism",
   "workActivity",
   "jobQuantity",
-  "jobReqQuals",
+  "jobCredentialSearch",
   "jobWorkerReceivesFullRate",
 ].forEach((id) => {
   document.getElementById(id)?.addEventListener("input", renderJobPricingBreakdown);
@@ -10609,7 +10909,7 @@ function restoreFirstTradeRequirement() {
     !current.trade ||
     !current.specialism ||
     !current.workActivity ||
-    !current.requiredQualifications ||
+    !current.requiredCredentialIds.length ||
     !current.budgetMax;
   if (incomplete) applyTradeReqToInputs(pendingTradeRequirements[0]);
 }
@@ -12218,14 +12518,20 @@ function renderWorkerProfile(user) {
       <p class="prof-section-hint">Document records are saved to this profile so companies can review certification status before confirming work.</p>
       ${workerDocumentsHTML(workerProfile || user, { manage: true })}
       <div class="worker-doc-form">
+        <label class="field-label">Card, ticket or qualification
+          <select id="workerDocCredential">${workerCredentialOptions()}</select>
+        </label>
         <div class="form-grid-2">
           <label class="field-label">Document Type
             <select id="workerDocType">${documentTypeOptions}</select>
           </label>
-          <label class="field-label">File Name / Upload Label
-            <input id="workerDocFileName" type="text" placeholder="e.g. cscs-card-front.jpg" />
+          <label class="field-label">Exact certificate title
+            <input id="workerDocTitle" type="text" placeholder="As shown on the document" />
           </label>
         </div>
+        <label class="field-label">File Name / Upload Label
+            <input id="workerDocFileName" type="text" placeholder="e.g. cscs-card-front.jpg" />
+        </label>
         <div class="form-grid-2">
           <label class="field-label">Expiry Date
             <input id="workerDocExpiry" type="date" />
@@ -12294,6 +12600,8 @@ function renderWorkerProfile(user) {
     const type = el.querySelector("#workerDocType")?.value || "other";
     const res = upsertWorkerDocument(user.id, {
       documentType: type,
+      credentialId: el.querySelector("#workerDocCredential")?.value || "",
+      qualificationTitle: el.querySelector("#workerDocTitle")?.value || "",
       fileName: el.querySelector("#workerDocFileName")?.value || "",
       fileType: WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.accepts || "",
       expiryDate: el.querySelector("#workerDocExpiry")?.value || "",
@@ -12696,6 +13004,9 @@ function labourRequirementsForJob(job) {
       grade: req.grade || job.grade || "",
       requiredQualifications:
         req.requiredQualifications || job.requiredQualifications || "",
+      requiredCredentialIds: canonicalCredentialIds(
+        req.requiredCredentialIds || job.requiredCredentialIds,
+      ),
       workActivity: req.workActivity || job.workActivity || "",
       quantity: Math.max(1, Number(req.quantity) || 1),
       labourSchedule: normalizeLabourSchedule(req.labourSchedule),
@@ -12733,6 +13044,7 @@ function labourRequirementsForJob(job) {
       specialism: job?.specialism || "",
       grade: job?.grade || "",
       requiredQualifications: job?.requiredQualifications || "",
+      requiredCredentialIds: canonicalCredentialIds(job?.requiredCredentialIds),
       workActivity: job?.workActivity || "",
       quantity: Math.max(1, Number(job?.quantity) || 1),
       labourSchedule: normalizeLabourSchedule(job?.labourSchedule),
@@ -15168,6 +15480,7 @@ function companyProjectDirectoryLabourTotals(summary) {
         grade: req.grade || "",
         workActivity: req.workActivity || "",
         requiredQualifications: req.requiredQualifications || "",
+        requiredCredentialIds: canonicalCredentialIds(req.requiredCredentialIds),
         labourSchedule: normalizeLabourSchedule(req.labourSchedule),
         budgetMax: Number(req.budgetMax || 0),
         workerReceivesFullAdvertisedRate:
@@ -16403,7 +16716,7 @@ function companyProjectRequirementsHTML(job, summary) {
           <dl class="company-project-requirement-meta">
             <div><dt>Grade / experience</dt><dd>${escapeHtml(req.grade || "Not specified")}</dd></div>
             <div><dt>Work activity</dt><dd>${escapeHtml(req.workActivity || "Not specified")}</dd></div>
-            <div><dt>Qualifications</dt><dd>${escapeHtml(req.requiredQualifications || "None specified")}</dd></div>
+            <div><dt>Qualifications</dt><dd>${escapeHtml(credentialLabelsForRequirement(req).join(" · ") || "None specified")}</dd></div>
             <div><dt>Daily rate</dt><dd>${req.budgetMax ? `${formatMoney(req.budgetMax)}/day` : "Not specified"}</dd></div>
             <div><dt>Overtime</dt><dd>${escapeHtml(overtime)}</dd></div>
             ${req.accommodationPaid ? `<div><dt>Working away</dt><dd>${escapeHtml(accommodationSummaryFor(req))}</dd></div>` : ""}
@@ -21095,6 +21408,9 @@ jobForm.addEventListener("submit", (e) => {
     specialism,
     roleKey: window.OnSiteTaxonomy?.roleKeyFor(trade, specialism) || "",
     labourRequirements,
+    requiredCredentialIds: canonicalCredentialIds(
+      labourRequirements[0]?.requiredCredentialIds,
+    ),
     location,
     locationData: { ...locationData },
     start: jobStartValue,
@@ -21968,10 +22284,37 @@ function workerSearchText(worker) {
     ...(worker.certifications || []).map((c) =>
       typeof c === "object" ? c.name : c,
     ),
+    ...(window.OnSiteCredentials?.labelsForIds(workerCredentialIds(worker)) || []),
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function workerCredentialIds(worker) {
+  const catalogue = window.OnSiteCredentials;
+  if (!catalogue || !worker) return [];
+  const today = dateOnlyMs(todayDateStr());
+  const isCurrent = (record) => {
+    const expiry = dateOnlyMs(record?.expiryDate || record?.expiry);
+    return expiry === null || today === null || expiry >= today;
+  };
+  const ids = canonicalCredentialIds(worker.credentialIds);
+  (Array.isArray(worker.certifications) ? worker.certifications : []).forEach((record) => {
+    const credentialId = typeof record === "object" ? record.credentialId : "";
+    const status = typeof record === "object" ? record.verificationStatus : "";
+    if (status === "rejected" || !isCurrent(record)) return;
+    if (catalogue.findById(credentialId)) ids.push(credentialId);
+    else ids.push(...catalogue.resolveLegacyIds(record));
+  });
+  workerDocumentsFor(worker).forEach((record) => {
+    if (record.verificationStatus !== "verified" || !isCurrent(record)) return;
+    if (catalogue.findById(record.credentialId)) ids.push(record.credentialId);
+  });
+  if (worker.qualificationVerificationStatus !== "rejected") {
+    ids.push(...catalogue.resolveLegacyIds(worker.qualifications));
+  }
+  return canonicalCredentialIds(ids);
 }
 
 function dateOnlyMs(value) {
@@ -22019,7 +22362,17 @@ function plannedAbsenceImpact(worker, job) {
   };
 }
 
-function matchQualificationScore(job, workerText) {
+function matchQualificationScore(job, worker, workerText) {
+  const requiredCredentialIds = canonicalCredentialIds(job?.requiredCredentialIds);
+  if (requiredCredentialIds.length) {
+    const workerIds = new Set(workerCredentialIds(worker));
+    const matched = requiredCredentialIds.filter((id) => workerIds.has(id)).length;
+    return {
+      score: Math.round((matched / requiredCredentialIds.length) * 15),
+      matched,
+      total: requiredCredentialIds.length,
+    };
+  }
   const required = (job.requiredQualifications || "")
     .split(",")
     .map((q) => q.trim().toLowerCase())
@@ -22154,7 +22507,7 @@ function getMatches(job) {
 
       const rating = buildWorkerRating(w.id);
       const workerText = workerSearchText(w);
-      const qual = matchQualificationScore(job, workerText);
+      const qual = matchQualificationScore(job, w, workerText);
       const specialismScore = tokenFitScore(
         [job.specialism, job.grade].filter(Boolean).join(" "),
         workerText,

@@ -2,7 +2,7 @@
 const AUTH_SESSION_KEY = 'onsite_auth_v1';
 const AUTH_USERS_KEY   = 'onsite_users_v1';
 
-const CERT_OPTIONS = ['CSCS', 'ECS', 'JIB', 'IPAF', 'PASMA', 'SSSTS', 'SMSTS', 'First Aid'];
+const CERT_OPTIONS = window.OnSiteCredentials?.common?.() || [];
 
 // ─── In-progress registration data ─────────────────────────
 let workerRegData = {};
@@ -223,7 +223,13 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
     .map(function(c) {
       const lbl    = c.closest('.cert-checkbox');
       const expiry = lbl ? (lbl.querySelector('.cert-expiry-input')?.value || null) : null;
-      return { name: c.value, expiry: expiry || null };
+      const credential = window.OnSiteCredentials?.findById?.(c.value);
+      return {
+        name: credential?.label || c.value,
+        credentialId: credential?.id || "",
+        expiry: expiry || null,
+        verificationStatus: "pending",
+      };
     });
 
   const user = {
@@ -546,8 +552,8 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
     const certContainer = document.getElementById('certCheckboxes');
     certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
       return '<label class="cert-checkbox">' +
-        '<input type="checkbox" value="' + c + '" />' +
-        '<span class="cert-name">' + c + '</span>' +
+        '<input type="checkbox" value="' + c.id + '" />' +
+        '<span class="cert-name">' + c.label + '</span>' +
         '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
         '</label>';
     }).join('');
