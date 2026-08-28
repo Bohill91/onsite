@@ -1145,20 +1145,26 @@
                     <div class="jw-compact-disclosure-row jw-entrance-pin-row">
                       <div>
                         <h5>Arrival point</h5>
-                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not set</p>
-                        <p class="jw-arrival-point-copy">Workers will use this point when arriving on site.</p>
+                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not confirmed</p>
+                        <p id="jobArrivalPointCopy" class="jw-arrival-point-copy">Site addresses can be approximate. Set the exact gate or entrance workers should use.</p>
                       </div>
-                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set arrival point</button>
+                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set exact entrance</button>
                     </div>
-                    <p id="jobArrivalPointHelper" class="jw-disclosure-helper jw-arrival-point-helper hidden">Click the map to set the exact point workers should arrive.</p>
                     <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
+                      <div id="jobArrivalPointHelper" class="jw-arrival-point-instruction">
+                        <strong>Set the exact site entrance</strong>
+                        <span>Site addresses can be approximate. Move the pin to the gate or entrance workers should use.</span>
+                      </div>
                       <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
                       <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
                         <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
                         <span class="jw-pin-status-copy">
-                          <strong>Arrival point set</strong>
+                          <strong>Pin positioned</strong>
                           <span id="pinCoordsText"></span>
                         </span>
+                      </div>
+                      <div class="jw-entrance-pin-actions">
+                        <button type="button" id="jobEntrancePinConfirm" class="primary-btn">Confirm entrance point</button>
                       </div>
                       <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
                     </div>

@@ -21615,7 +21615,7 @@ button svg,
 
 .jw-entrance-pin-panel {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .jw-disclosure-done {
@@ -21720,16 +21720,31 @@ button svg,
   max-width: 460px;
 }
 
-.jw-arrival-point-helper {
-  color: var(--ink-2);
-  font-weight: 650;
+.jw-arrival-point-instruction {
+  display: grid;
+  gap: 3px;
 }
 
-#formJob.jw-wizard-mode :is(
-  #jobEntrancePinToggle,
-  #jobArrivalPointHelper
-).hidden {
+.jw-arrival-point-instruction strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.jw-arrival-point-instruction span {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+#formJob.jw-wizard-mode #jobEntrancePinToggle.hidden {
   display: none;
+}
+
+.jw-entrance-pin-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .jw-site-subsection-head h5 {
@@ -22860,7 +22875,8 @@ button svg,
   }
 
   .jw-compact-disclosure-row > button,
-  .jw-disclosure-done {
+  .jw-disclosure-done,
+  .jw-entrance-pin-actions .primary-btn {
     justify-content: center;
     width: 100%;
   }
