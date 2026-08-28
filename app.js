@@ -9534,12 +9534,66 @@ function syncJobCredentialMirror() {
   input.value = (window.OnSiteCredentials?.labelsForIds(selectedJobCredentialIds) || []).join(", ");
 }
 
+function normalizeCredentialSearchText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function balancedCredentialSuggestions(credentials, catalogue, limit = 8) {
+  const groups = catalogue.categoryOrder
+    .map((category) => credentials
+      .filter((credential) => credential.category === category)
+      .sort((a, b) => Number(b.common) - Number(a.common)))
+    .filter((group) => group.length);
+  const suggestions = [];
+  let row = 0;
+  while (suggestions.length < limit && groups.some((group) => group[row])) {
+    groups.forEach((group) => {
+      if (suggestions.length < limit && group[row]) suggestions.push(group[row]);
+    });
+    row += 1;
+  }
+  return suggestions;
+}
+
+function rankCredentialSearchResults(credentials, query, tradeKey) {
+  const normalizedQuery = normalizeCredentialSearchText(query);
+  return credentials
+    .map((credential, index) => {
+      const label = normalizeCredentialSearchText(credential.label);
+      const relevant = tradeKey && credential.tradeKeys.includes(tradeKey);
+      const rank = label === normalizedQuery
+        ? 0
+        : label.startsWith(normalizedQuery)
+          ? 1
+          : label.includes(normalizedQuery)
+            ? 2
+            : relevant
+              ? 3
+              : 4;
+      return { credential, index, rank };
+    })
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(({ credential }) => credential);
+}
+
 function jobCredentialOptionsModel() {
   const catalogue = window.OnSiteCredentials;
   const query = document.getElementById("jobCredentialSearch")?.value.trim() || "";
   if (!catalogue) return { groups: [], options: [], query };
+  const tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(
+    document.getElementById("jobTrade")?.value,
+  ) || "";
   if (query) {
-    const options = catalogue.search(query);
+    const options = rankCredentialSearchResults(
+      catalogue.search(query, { limit: catalogue.credentials.length }),
+      query,
+      tradeKey,
+    );
     return { groups: [{ label: "Search results", options }], options, query };
   }
   if (jobCredentialBrowseAll) {
@@ -9553,36 +9607,25 @@ function jobCredentialOptionsModel() {
       .filter((group) => group.options.length);
     return { groups, options: groups.flatMap((group) => group.options), query };
   }
-  const tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(
-    document.getElementById("jobTrade")?.value,
-  ) || "";
   const allRelevant = catalogue.relevantToTrade(tradeKey);
-  const relevant = catalogue.categoryOrder.flatMap((category) => {
-    let options = allRelevant.filter((credential) => credential.category === category);
-    if (tradeKey === "plumbing_heating" && category === "plumbing_jib_pmes") {
-      const water = options.filter((credential) =>
-        /water regulations|unvented hot water/i.test(credential.label),
-      );
-      options = [...options.filter((credential) => !water.includes(credential)).slice(0, 4), ...water];
-    }
-    return options.slice(0, 6);
-  });
-  const relevantIds = new Set(relevant.map((credential) => credential.id));
+  const suggested = balancedCredentialSuggestions(allRelevant, catalogue, 8);
+  const suggestedIds = new Set(suggested.map((credential) => credential.id));
   const common = catalogue.common()
-    .filter((credential) => !relevantIds.has(credential.id))
-    .slice(0, 10);
-  const tradeName = window.OnSiteTaxonomy?.findTrade(tradeKey)?.name || "selected trade";
+    .filter((credential) => !suggestedIds.has(credential.id))
+    .slice(0, tradeKey ? 4 : 6);
+  const tradeName = window.OnSiteTaxonomy?.findTrade(tradeKey)?.name || "";
   const groups = [
-    ...(relevant.length ? [{ label: `Relevant to ${tradeName}`, options: relevant }] : []),
+    ...(suggested.length ? [{ label: `Suggested for ${tradeName}`, options: suggested }] : []),
     { label: "Common site requirements", options: common },
   ].filter((group) => group.options.length);
   return { groups, options: groups.flatMap((group) => group.options), query };
 }
 
-function jobCredentialOptionHTML(credential, index) {
+function jobCredentialOptionHTML(credential, index, { showCategory = false } = {}) {
   const selected = selectedJobCredentialIds.includes(credential.id);
   return `<button class="credential-option${selected ? " is-selected" : ""}${index === jobCredentialActiveIndex ? " is-active" : ""}" type="button" role="option" aria-selected="${selected}" data-job-credential-id="${escapeHtml(credential.id)}">
-    <span>${escapeHtml(credential.label)}</span>
+    <span class="credential-option-label">${escapeHtml(credential.label)}</span>
+    ${showCategory ? `<small>${escapeHtml(window.OnSiteCredentials?.categoryLabels[credential.category] || "")}</small>` : ""}
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
   </button>`;
 }
@@ -9612,13 +9655,15 @@ function renderJobCredentialPicker() {
   picker.classList.add("is-open");
   const model = jobCredentialOptionsModel();
   if (jobCredentialActiveIndex >= model.options.length) jobCredentialActiveIndex = model.options.length - 1;
-  if (!model.options.length) {
-    results.innerHTML = `<div class="credential-empty"><strong>No catalogue matches</strong><span>Try another card, ticket or qualification name.</span></div>`;
-    return;
-  }
   let optionIndex = 0;
-  results.innerHTML = `${model.groups.map((group) => `<section class="credential-group"><h6>${escapeHtml(group.label)}</h6>${group.options.map((credential) => jobCredentialOptionHTML(credential, optionIndex++)).join("")}</section>`).join("")}
-    ${!model.query ? `<button class="credential-browse-toggle" type="button" data-job-credential-browse>${jobCredentialBrowseAll ? "Show relevant and common" : "Browse all cards, tickets & qualifications"}</button>` : ""}`;
+  const optionContent = model.options.length
+    ? model.groups.map((group) => `<section class="credential-group"><h6>${escapeHtml(group.label)}</h6>${group.options.map((credential) => jobCredentialOptionHTML(credential, optionIndex++, { showCategory: Boolean(model.query) })).join("")}</section>`).join("")
+    : `<div class="credential-empty"><strong>No catalogue matches</strong><span>Try another card, ticket or qualification name.</span></div>`;
+  results.innerHTML = `<div class="credential-options-scroll" role="listbox" aria-label="Cards, tickets and qualifications">${optionContent}</div>
+    <div class="credential-panel-actions">
+      ${!model.query ? `<button class="credential-browse-toggle" type="button" data-job-credential-browse>${jobCredentialBrowseAll ? "Show suggestions" : "Browse all cards, tickets & qualifications →"}</button>` : ""}
+      <button class="credential-missing-action" type="button" data-taxonomy-suggestion="credential">Can't find a card, ticket or qualification?</button>
+    </div>`;
   results.querySelector(`[data-job-credential-id="${CSS.escape(model.options[jobCredentialActiveIndex]?.id || "")}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
@@ -9640,6 +9685,7 @@ function closeJobCredentialPicker() {
 
 function toggleJobCredential(id) {
   if (!window.OnSiteCredentials?.findById(id)) return;
+  const keepBrowseAllOpen = jobCredentialBrowseAll;
   if (selectedJobCredentialIds.includes(id)) {
     selectedJobCredentialIds = selectedJobCredentialIds.filter((selectedId) => selectedId !== id);
   } else {
@@ -9647,7 +9693,7 @@ function toggleJobCredential(id) {
   }
   const search = document.getElementById("jobCredentialSearch");
   if (search) search.value = "";
-  jobCredentialBrowseAll = false;
+  jobCredentialBrowseAll = keepBrowseAllOpen;
   jobCredentialActiveIndex = -1;
   document.getElementById("jobCredentialMessage")?.classList.add("hidden");
   renderJobCredentialPicker();

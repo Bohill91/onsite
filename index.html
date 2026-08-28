@@ -905,6 +905,9 @@
                           <option value="">Select a trade first</option>
                         </select>
                       </label>
+                      <div class="jw-taxonomy-action-row jw-span-2">
+                        <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
+                      </div>
                       <label class="field-label">
                         Workers required *
                         <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
@@ -916,19 +919,17 @@
                       <div class="field-label jw-span-2">
                         <label for="jobCredentialSearch">Required cards, tickets &amp; qualifications *</label>
                         <div class="credential-multiselect" data-job-credential-picker>
-                          <div id="jobCredentialChips" class="credential-chips" aria-live="polite"></div>
                           <div class="credential-search-control">
                             <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                            <div id="jobCredentialChips" class="credential-chips" aria-live="polite"></div>
                             <input id="jobCredentialSearch" type="search" autocomplete="off" placeholder="Search cards, tickets or qualifications..." aria-autocomplete="list" aria-controls="jobCredentialResults" aria-expanded="false" />
                           </div>
                           <input id="jobReqQuals" type="hidden" />
-                          <div id="jobCredentialResults" class="credential-results hidden" role="listbox" aria-label="Cards, tickets and qualifications"></div>
+                          <div id="jobCredentialResults" class="credential-results hidden"></div>
                         </div>
                         <p id="jobCredentialMessage" class="form-error hidden" aria-live="polite"></p>
-                        <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="credential">Can't find a card, ticket or qualification?</button>
                       </div>
                     </div>
-                    <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
                   </section>
 
                   <section class="jw-requirement-group jw-rate-group" aria-labelledby="jobPayTermsTitle">
