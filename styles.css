@@ -21115,15 +21115,8 @@ button svg,
   min-height: 44px;
 }
 
-#formJob.jw-wizard-mode .jw-schedule-grid input[type="date"] {
+#formJob.jw-wizard-mode .jw-schedule-grid input:is([type="date"], [type="time"]) {
   cursor: pointer;
-}
-
-#formJob.jw-wizard-mode .jw-schedule-grid .os-select-trigger {
-  background: var(--surface);
-  border-color: var(--card-border);
-  border-radius: var(--radius-sm);
-  min-height: 44px;
 }
 
 .jw-end-date-field {

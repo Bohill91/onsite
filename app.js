@@ -8080,8 +8080,9 @@ function applyRepeatProjectToForm(job) {
   setInputValue("jobStart", jobStartDateOnly(job));
   setInputValue("jobEndDate", "");
   setCheckboxValue("jobNoFixedEndDate", !!job.noFixedEndDate);
-  setJobShiftTimeValue("jobShiftStart", projectShiftStartValue(job));
-  setJobShiftTimeValue("jobShiftFinish", job.shiftFinishTime || "");
+  jobWizardShiftDefaultsInitialized = true;
+  setInputValue("jobShiftStart", projectShiftStartValue(job));
+  setInputValue("jobShiftFinish", job.shiftFinishTime || "");
   const days = new Set(normalizeWorkingDays(job.workingDays));
   document.querySelectorAll('input[name="jobWorkingDays"]').forEach((input) => {
     input.checked = days.has(input.value);
@@ -8130,7 +8131,8 @@ function applyRepeatProjectToForm(job) {
     jobLocationPicker?.clear({ clearInput: true, emit: false });
     resetJobTradeRequirements();
     resetJobPhotos();
-    initializeJobShiftTimeOptions();
+    jobWizardShiftDefaultsInitialized = false;
+    initializeNewRequestShiftDefaults();
     currentJobPin = { lat: null, lng: null };
     jobArrivalPointSource = "";
     jobArrivalPointAddress = "";
@@ -8216,40 +8218,16 @@ let jobArrivalPointSource = "";
 let jobArrivalPointAddress = "";
 let jobSitePhotosOpen = false;
 let jobAttendanceManagerOpen = false;
-function initializeJobShiftTimeOptions() {
-  ["jobShiftStart", "jobShiftFinish"].forEach((id) => {
-    const select = document.getElementById(id);
-    if (!(select instanceof HTMLSelectElement) || select.dataset.timesReady) return;
-    const currentValue = select.value;
-    const fragment = document.createDocumentFragment();
-    for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
-      const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
-      const mins = String(minutes % 60).padStart(2, "0");
-      const value = `${hours}:${mins}`;
-      fragment.appendChild(new Option(value, value));
-    }
-    select.appendChild(fragment);
-    select.value = currentValue;
-    select.dataset.timesReady = "true";
-    window.OnSiteUI?.syncSelect(select, { forceOptions: true });
-  });
-}
+let jobWizardShiftDefaultsInitialized = false;
 
-initializeJobShiftTimeOptions();
-
-function setJobShiftTimeValue(id, value) {
-  initializeJobShiftTimeOptions();
-  const select = document.getElementById(id);
-  if (!(select instanceof HTMLSelectElement)) return;
-  const time = String(value || "").match(/^(\d{2}:\d{2})/)?.[1] || "";
-  if (time && !Array.from(select.options).some((option) => option.value === time)) {
-    const nextOption = Array.from(select.options).find(
-      (option) => option.value && option.value > time,
-    );
-    select.insertBefore(new Option(time, time), nextOption || null);
-  }
-  select.value = time;
-  window.OnSiteUI?.syncSelect(select, { forceOptions: true });
+function initializeNewRequestShiftDefaults() {
+  if (jobWizardShiftDefaultsInitialized) return;
+  const shiftStart = document.getElementById("jobShiftStart");
+  const shiftFinish = document.getElementById("jobShiftFinish");
+  if (!shiftStart || !shiftFinish) return;
+  if (!shiftStart.value) shiftStart.value = "07:00";
+  if (!shiftFinish.value) shiftFinish.value = "17:00";
+  jobWizardShiftDefaultsInitialized = true;
 }
 
 function labourRequirementHasAdvancedOptions(requirement = {}) {
@@ -8856,7 +8834,7 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobSitePhotosOpen = false;
     jobAttendanceManagerOpen = false;
   }
-  initializeJobShiftTimeOptions();
+  initializeNewRequestShiftDefaults();
   syncJobLabourDisclosureState();
   syncJobPreferredWorkersDisclosureState();
   syncJobSiteDisclosureState();
@@ -10127,16 +10105,31 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
   return true;
 }
 
-["jobStart", "jobEndDate"].forEach((id) => {
+function openNativePickerFromField(input, event) {
+  if (
+    event.button !== 0 ||
+    input.disabled ||
+    input.readOnly ||
+    typeof input.showPicker !== "function"
+  ) {
+    return;
+  }
+  input.focus({ preventScroll: true });
+  try {
+    input.showPicker();
+    event.preventDefault();
+  } catch {
+    // Preserve the browser's normal native-input behaviour as the fallback.
+  }
+}
+
+["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
   const input = document.getElementById(id);
-  input?.addEventListener("input", clearSchedulePayValidation);
-  input?.addEventListener("click", () => {
-    if (input.disabled || typeof input.showPicker !== "function") return;
-    try {
-      input.showPicker();
-    } catch {
-      // The normal native click remains available where showPicker is restricted.
-    }
+  if (["jobStart", "jobEndDate"].includes(id)) {
+    input?.addEventListener("input", clearSchedulePayValidation);
+  }
+  input?.addEventListener("click", (event) => {
+    openNativePickerFromField(input, event);
   });
 });
 ["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
@@ -21614,6 +21607,7 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
+  jobWizardShiftDefaultsInitialized = false;
   jobLocationPicker?.clear({ clearInput: true, emit: false });
   resetJobTradeRequirements();
   clearRepeatProjectTemplate();
