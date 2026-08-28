@@ -5,6 +5,17 @@ if (typeof history !== "undefined" && "scrollRestoration" in history) {
   history.scrollRestoration = "manual";
 }
 
+document.addEventListener(
+  "wheel",
+  () => {
+    const activeInput = document.activeElement;
+    if (activeInput instanceof HTMLInputElement && activeInput.type === "number") {
+      activeInput.blur();
+    }
+  },
+  { capture: true, passive: true },
+);
+
 const AVATAR_COLORS = ["av-0", "av-1", "av-2", "av-3", "av-4", "av-5"];
 const ICON_STROKE = 2;
 const ICON_PATHS = {
@@ -10033,7 +10044,14 @@ function updateAccommodationForm() {
     "hidden",
     !paid || arrangement !== "nightly_allowance",
   );
-  if (allowance) allowance.required = paid && arrangement === "nightly_allowance";
+  if (allowance) {
+    const nightlyAllowanceSelected =
+      paid && arrangement === "nightly_allowance";
+    allowance.required = nightlyAllowanceSelected;
+    if (nightlyAllowanceSelected && !allowance.value.trim()) {
+      allowance.value = "0";
+    }
+  }
   renderJobPricingBreakdown();
 }
 
@@ -10056,6 +10074,14 @@ document
 document
   .querySelectorAll('input[name="jobAccommodationArrangement"]')
   .forEach((input) => input.addEventListener("change", updateAccommodationForm));
+document
+  .getElementById("jobAccommodationAllowance")
+  ?.addEventListener("focus", (event) => {
+    const input = event.currentTarget;
+    if (input.value.trim() && Number(input.value) === 0) {
+      requestAnimationFrame(() => input.select());
+    }
+  });
 document
   .getElementById("jobOvertimeAvailable")
   ?.addEventListener("change", updateOvertimeForm);
@@ -10356,6 +10382,7 @@ function buildRequestLabourPricingModel(requirements = []) {
     const vat = Math.round(companyDayRate * vatPct);
     const totalPerWorker = companyDayRate + vat;
     const requirementTotal = totalPerWorker * req.quantity;
+    const accommodationTotal = accommodationAllowance * req.quantity;
     return {
       ...req,
       workerReceivesFullRate,
@@ -10365,6 +10392,7 @@ function buildRequestLabourPricingModel(requirements = []) {
       vat,
       totalPerWorker,
       requirementTotal,
+      accommodationTotal,
     };
   });
   return {
@@ -10379,7 +10407,7 @@ function buildRequestLabourPricingModel(requirements = []) {
       0,
     ),
     totalAccommodation: pricedRequirements.reduce(
-      (sum, req) => sum + req.accommodationAllowance * req.quantity,
+      (sum, req) => sum + req.accommodationTotal,
       0,
     ),
     totalVat: pricedRequirements.reduce(
@@ -10417,6 +10445,7 @@ function renderJobPricingBreakdown() {
       const {
         rate,
         accommodationAllowance,
+        accommodationTotal,
         workerReceivesFullRate,
         workerReceives,
         serviceFee,
@@ -10445,7 +10474,7 @@ function renderJobPricingBreakdown() {
                 <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(totalPerWorker)}/day</span>
                 <strong>${formatMoney(requirementTotal)}/day</strong>
               </div>
-              ${accommodationAllowance > 0 ? `<div class="jw-price-accommodation"><span>Accommodation</span><strong>${formatMoney(accommodationAllowance)}/night per worker</strong></div>` : req.accommodationArrangement === "company_provided" ? `<div class="jw-price-accommodation"><span>Accommodation</span><strong>Company provided</strong></div>` : ""}
+              ${accommodationAllowance > 0 ? `<div class="jw-price-accommodation"><span>Accommodation</span><div><strong>${formatMoney(accommodationAllowance)}/night per worker</strong><small>${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(accommodationAllowance)}/night = ${formatMoney(accommodationTotal)}/night · Added to the company invoice without an OnSite service fee.</small></div></div>` : req.accommodationArrangement === "company_provided" ? `<div class="jw-price-accommodation"><span>Accommodation</span><strong>Company provided</strong></div>` : ""}
             </div>
           </div>`;
       }
@@ -10477,11 +10506,6 @@ function renderJobPricingBreakdown() {
         </div>
       </div>
       <div class="jw-price-list">${rows}</div>
-      ${
-        visibleReqs.some((req) => req.accommodationAllowance > 0)
-          ? `<p class="jw-price-note">Accommodation is added to the company invoice without an OnSite service fee.</p>`
-          : ""
-      }
       <div class="jw-price-total">
         <span>Total workers <strong>${pricing.totalWorkers}</strong></span>
         <span>Labour requirements <strong>${visibleReqs.length}</strong></span>
@@ -10747,7 +10771,7 @@ function saveTradeRequirement() {
   ) {
     return failTradeRequirementSave(
       "jobAccommodationAllowance",
-      "Enter the nightly accommodation allowance",
+      "Enter a nightly allowance greater than £0.",
     );
   }
   const duplicate = pendingTradeRequirements.some(

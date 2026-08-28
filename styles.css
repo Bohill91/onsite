@@ -1552,6 +1552,23 @@ textarea {
     background-color 180ms ease;
 }
 
+.auth-input:-webkit-autofill,
+.field-label input:-webkit-autofill,
+.field-label textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+}
+
+.auth-input:-webkit-autofill:focus,
+.field-label input:-webkit-autofill:focus,
+.field-label textarea:-webkit-autofill:focus {
+  border-color: var(--orange);
+  -webkit-box-shadow:
+    0 0 0 1000px var(--surface) inset,
+    0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
@@ -20430,8 +20447,9 @@ button svg,
   border-radius: var(--radius-sm);
   display: flex;
   min-height: 38px;
+  min-width: 132px;
   padding-left: 10px;
-  width: 94px;
+  width: 132px;
 }
 
 .jw-accommodation-money-input > span {
@@ -20445,9 +20463,10 @@ button svg,
   border: 0;
   box-shadow: none;
   min-height: 36px;
+  outline: none;
   padding: 7px 9px 7px 4px;
   min-width: 0;
-  width: 58px;
+  width: 94px;
 }
 
 .jw-accommodation-night-suffix {
@@ -21378,6 +21397,21 @@ button svg,
   color: var(--ink-2);
   font-size: 0.76rem;
   white-space: nowrap;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation > div {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  min-width: 0;
+  text-align: right;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation small {
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-note {
