@@ -20678,7 +20678,8 @@ button svg,
   padding: 20px 0 0;
 }
 
-.jw-labour-section-head h4 span {
+.jw-labour-section-head h4 span,
+.jw-field-optional {
   color: var(--ink-3);
   font-size: 0.68rem;
   font-weight: 700;

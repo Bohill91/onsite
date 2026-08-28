@@ -9866,12 +9866,6 @@ function savedLabourRequirementValidationIssue() {
     if (!requirement.workActivity) {
       return { requirement, message: "Enter the work activity." };
     }
-    if (!credentialIdsForRequirement(requirement).length && !requirement.requiredQualifications) {
-      return {
-        requirement,
-        message: "Select the required cards, tickets & qualifications.",
-      };
-    }
     if (!Number.isFinite(Number(requirement.quantity)) || Number(requirement.quantity) < 1) {
       return { requirement, message: "Enter at least one worker." };
     }
@@ -10229,7 +10223,6 @@ function tradeReqHasCoreFields(req) {
     req?.trade &&
     req?.specialism &&
     req?.workActivity &&
-    (credentialIdsForRequirement(req).length || req?.requiredQualifications) &&
     req?.budgetMax
   );
 }
@@ -10740,18 +10733,6 @@ function saveTradeRequirement() {
   const quantity = Number(document.getElementById("jobQuantity")?.value);
   if (!Number.isFinite(quantity) || quantity < 1) {
     return failTradeRequirementSave("jobQuantity", "Enter at least one worker");
-  }
-  if (!req.requiredCredentialIds.length) {
-    const message = "Select the required cards, tickets & qualifications";
-    const error = document.getElementById("jobCredentialMessage");
-    if (error) {
-      error.textContent = message;
-      error.classList.remove("hidden");
-    }
-    return failTradeRequirementSave(
-      "jobCredentialSearch",
-      message,
-    );
   }
   if (!req.budgetMax) {
     return failTradeRequirementSave("jobBudgetMax", "Enter the daily labour rate");
