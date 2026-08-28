@@ -19833,7 +19833,7 @@ button svg,
 .taxonomy-missing-action {
   background: transparent;
   border: 0;
-  color: var(--orange-dark);
+  color: var(--ink-2);
   cursor: pointer;
   font: inherit;
   font-size: var(--ui-font-xs);
@@ -19851,6 +19851,7 @@ button svg,
 
 .taxonomy-missing-action:focus-visible {
   border-radius: var(--radius-xs);
+  color: var(--orange);
   outline: 2px solid var(--orange);
   outline-offset: 4px;
 }
@@ -20084,7 +20085,7 @@ button svg,
 .credential-missing-action {
   background: transparent;
   border: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   cursor: pointer;
   font: inherit;
   font-size: var(--ui-font-xs);
@@ -20098,6 +20099,10 @@ button svg,
 .credential-missing-action:focus-visible {
   box-shadow: inset 0 0 0 2px var(--orange);
   outline: none;
+}
+
+.credential-missing-action:focus-visible {
+  color: var(--orange);
 }
 
 .credential-empty {
