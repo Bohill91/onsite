@@ -21288,6 +21288,22 @@ button svg,
   font-size: 0.7rem;
 }
 
+.jw-price-breakdown {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-breakdown-label {
+  color: var(--ink-3);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 0;
+  text-transform: uppercase;
+}
+
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines {
   gap: 0;
 }
@@ -21303,10 +21319,35 @@ button svg,
   padding-top: 0;
 }
 
-#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines .jw-price-requirement-total {
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-lines .jw-price-company-cost {
   color: var(--ink);
   font-weight: 750;
   padding-bottom: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-requirement-total {
+  align-items: center;
+  border-top: 1px solid var(--card-divider);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 3px;
+  padding-top: 9px;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-requirement-total span {
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-requirement-total strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-note {

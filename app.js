@@ -10435,12 +10435,19 @@ function renderJobPricingBreakdown() {
               <span class="jw-price-rate-summary">${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(rate)}/day</span>
               ${req.overtimeAvailable ? `<span class="jw-price-context">Overtime configured; charged only when applicable.</span>` : ""}
             </div>
-            <div class="jw-price-lines">
-              <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
-              ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>` : ""}
-              <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
-              <span>VAT <strong>${formatMoney(vat)}</strong></span>
-              <span class="jw-price-requirement-total">Requirement daily total <strong>${formatMoney(requirementTotal)}</strong></span>
+            <div class="jw-price-breakdown">
+              <span class="jw-price-breakdown-label">Per worker / day</span>
+              <div class="jw-price-lines">
+                <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
+                ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>` : ""}
+                <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
+                <span>VAT <strong>${formatMoney(vat)}</strong></span>
+                <span class="jw-price-company-cost">Company cost / worker <strong>${formatMoney(totalPerWorker)}</strong></span>
+              </div>
+              <div class="jw-price-requirement-total">
+                <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(totalPerWorker)}/day</span>
+                <strong>${formatMoney(requirementTotal)}/day</strong>
+              </div>
             </div>
           </div>`;
       }
