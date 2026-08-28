@@ -1142,6 +1142,15 @@
                         <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
                       </div>
                     </label>
+                    <div class="jw-compact-disclosure-row jw-entrance-pin-row">
+                      <div>
+                        <h5>Arrival point</h5>
+                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not set</p>
+                        <p class="jw-arrival-point-copy">Workers will use this point when arriving on site.</p>
+                      </div>
+                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set arrival point</button>
+                    </div>
+                    <p id="jobArrivalPointHelper" class="jw-disclosure-helper jw-arrival-point-helper hidden">Click the map to set the exact point workers should arrive.</p>
                     <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
                       <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
                       <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
@@ -1153,15 +1162,6 @@
                       </div>
                       <p id="jobEntrancePinMessage" class="jw-site-message hidden" role="alert"></p>
                     </div>
-                    <div class="jw-compact-disclosure-row jw-entrance-pin-row">
-                      <div>
-                        <h5>Arrival point</h5>
-                        <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not set</p>
-                        <p class="jw-arrival-point-copy">Workers will use this point when arriving on site.</p>
-                      </div>
-                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn hidden" aria-expanded="false" aria-controls="jobPickerMap jobArrivalPointHelper">Adjust arrival point</button>
-                    </div>
-                    <p id="jobArrivalPointHelper" class="jw-disclosure-helper jw-arrival-point-helper hidden">Click the map to set the exact point workers should arrive.</p>
                   </div>
                 </section>
 
@@ -1249,19 +1249,25 @@
                     </div>
                     <button type="button" id="jobAttendanceManagerToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobAttendanceManagerPanel">Assign attendance manager</button>
                   </div>
-                  <div id="jobAttendanceManagerPanel" class="jw-grid jw-attendance-manager-grid hidden">
-                    <label class="field-label">
-                      Attendance Manager Name
-                      <input id="attendanceManagerName" type="text" autocomplete="name" placeholder="e.g. Jane Taylor" />
+                  <div id="jobAttendanceManagerPanel" class="jw-attendance-manager-disclosure hidden">
+                    <label class="checkbox-row jw-check jw-use-site-contact">
+                      <input id="jobAttendanceUseSiteContact" type="checkbox" />
+                      <span>Use site contact</span>
                     </label>
-                    <label class="field-label">
-                      Attendance Manager Email
-                      <input id="attendanceManagerEmail" type="email" autocomplete="email" placeholder="e.g. jane@company.co.uk" />
-                    </label>
-                    <label class="field-label">
-                      Attendance Manager Phone
-                      <input id="attendanceManagerPhone" type="tel" autocomplete="tel" placeholder="e.g. 07700 900123" />
-                    </label>
+                    <div class="jw-grid jw-attendance-manager-grid">
+                      <label class="field-label">
+                        Attendance Manager Name
+                        <input id="attendanceManagerName" type="text" autocomplete="name" placeholder="e.g. Jane Taylor" />
+                      </label>
+                      <label class="field-label">
+                        Attendance Manager Email
+                        <input id="attendanceManagerEmail" type="email" autocomplete="email" placeholder="e.g. jane@company.co.uk" />
+                      </label>
+                      <label class="field-label">
+                        Attendance Manager Phone
+                        <input id="attendanceManagerPhone" type="tel" autocomplete="tel" placeholder="e.g. 07700 900123" />
+                      </label>
+                    </div>
                   </div>
                 </section>
               </section>

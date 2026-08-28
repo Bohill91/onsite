@@ -8284,6 +8284,22 @@ function jobAttendanceManagerHasValues() {
   ].some(formFieldHasValue);
 }
 
+function attendanceManagerUsesSiteContact() {
+  return !!document.getElementById("jobAttendanceUseSiteContact")?.checked;
+}
+
+function syncAttendanceManagerFromSiteContact() {
+  if (!attendanceManagerUsesSiteContact()) return;
+  setInputValue(
+    "attendanceManagerName",
+    document.getElementById("jobContactName")?.value || "",
+  );
+  setInputValue(
+    "attendanceManagerPhone",
+    document.getElementById("jobContactPhone")?.value || "",
+  );
+}
+
 function currentJobHasEntrancePin() {
   return !!(
     currentJobPin?.lat != null &&
@@ -8316,7 +8332,9 @@ function syncJobSiteDisclosureState() {
     document.getElementById(panelId)?.classList.toggle("hidden", !expanded);
     document.getElementById(toggleId)?.setAttribute("aria-expanded", String(expanded));
   });
-  document.getElementById("jobEntrancePinPanel")?.classList.remove("hidden");
+  const pinPanel = document.getElementById("jobEntrancePinPanel");
+  if (wizard) pinPanel?.classList.toggle("hidden", !jobEntrancePinOpen);
+  else pinPanel?.classList.remove("hidden");
 
   const arrivalToggle = document.getElementById("jobArrivalDetailsToggle");
   const arrivalSummary = document.getElementById("jobArrivalDetailsSummary");
@@ -8342,19 +8360,17 @@ function syncJobSiteDisclosureState() {
     .getElementById("jobPickerMap")
     ?.classList.toggle("is-adjusting", wizard && jobEntrancePinOpen);
   if (pinSummary) {
-    pinSummary.textContent = hasPin
-      ? jobArrivalPointSource === "manual"
-        ? "Adjusted manually"
-        : jobArrivalPointSource === "address"
-          ? "Set from site address"
-          : "Arrival point set"
-      : "Not set";
+    pinSummary.textContent = hasPin ? "Set" : "Not set";
     pinSummary.classList.toggle("is-set", hasPin);
     pinSummary.classList.toggle("is-unset", !hasPin);
   }
   if (pinToggle) {
-    pinToggle.textContent = jobEntrancePinOpen ? "Done" : "Adjust arrival point";
-    pinToggle.classList.toggle("hidden", wizard && !hasPin);
+    pinToggle.textContent = jobEntrancePinOpen
+      ? "Done"
+      : hasPin
+        ? "Edit arrival point"
+        : "Set arrival point";
+    pinToggle.classList.remove("hidden");
     pinToggle.setAttribute("aria-expanded", String(wizard && jobEntrancePinOpen));
   }
   pinHelper?.classList.toggle("hidden", !wizard || !jobEntrancePinOpen);
@@ -8379,8 +8395,14 @@ function syncJobSiteDisclosureState() {
   const hasManager = jobAttendanceManagerHasValues();
   const managerSummary = document.getElementById("jobAttendanceManagerSummary");
   if (managerSummary) {
+    const managerName = document.getElementById("attendanceManagerName")?.value.trim();
+    const managerEmail = document.getElementById("attendanceManagerEmail")?.value.trim();
+    const managerPhone = document.getElementById("attendanceManagerPhone")?.value.trim();
+    const managerIdentity = [managerName, managerEmail || managerPhone]
+      .filter(Boolean)
+      .join(" · ");
     managerSummary.textContent = hasManager
-      ? "Attendance manager assigned"
+      ? managerIdentity || "Attendance manager assigned"
       : "Company-managed by default";
   }
   if (managerToggle) {
@@ -9314,7 +9336,7 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
   if (jobWizardStep === 4) {
     if (previousStep !== 4) prepareJobSiteDisclosures();
     else syncJobSiteDisclosureState();
-    requestAnimationFrame(() => initPickerMap());
+    if (jobEntrancePinOpen) requestAnimationFrame(() => initPickerMap());
   }
   if (jobWizardStep === 5) renderDraftPreStartStep();
   if (jobWizardStep === 6) {
@@ -9378,6 +9400,7 @@ function validateSiteAttendanceWizardStep({ report = true } = {}) {
     message.classList.toggle("hidden", hasEntrancePin);
   }
   if (report && !hasEntrancePin) {
+    setJobEntrancePinDisclosure(true);
     requestAnimationFrame(() => map?.focus({ preventScroll: true }));
   }
   return hasEntrancePin;
@@ -21699,7 +21722,9 @@ function renderCompanyRequestLabourPage(user) {
   syncJobLabourDisclosureState();
   syncJobPreferredWorkersDisclosureState();
   syncJobSiteDisclosureState();
-  if (jobWizardStep === 4) requestAnimationFrame(() => initPickerMap());
+  if (jobWizardStep === 4 && jobEntrancePinOpen) {
+    requestAnimationFrame(() => initPickerMap());
+  }
 }
 
 // ─── Render ───────────────────────────────────────────────
@@ -22866,6 +22891,15 @@ document.getElementById("jobArrivalDetailsToggle")?.addEventListener("click", ()
 });
 
 document.getElementById("jobEntrancePinToggle")?.addEventListener("click", () => {
+  if (jobWizardActive && jobEntrancePinOpen && !currentJobHasEntrancePin()) {
+    const message = document.getElementById("jobEntrancePinMessage");
+    if (message) {
+      message.textContent = "Set an arrival point before closing the map.";
+      message.classList.remove("hidden");
+    }
+    document.getElementById("jobPickerMap")?.focus({ preventScroll: true });
+    return;
+  }
   setJobEntrancePinDisclosure(!jobEntrancePinOpen);
 });
 
@@ -22879,8 +22913,33 @@ document.getElementById("jobAttendanceManagerToggle")?.addEventListener("click",
   syncJobSiteDisclosureState();
 });
 
+document
+  .getElementById("jobAttendanceUseSiteContact")
+  ?.addEventListener("change", () => {
+    syncAttendanceManagerFromSiteContact();
+    syncJobSiteDisclosureState();
+  });
+
+["jobContactName", "jobContactPhone"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("input", () => {
+    syncAttendanceManagerFromSiteContact();
+    syncJobSiteDisclosureState();
+  });
+});
+
 ["attendanceManagerName", "attendanceManagerEmail", "attendanceManagerPhone"].forEach(
-  (id) => document.getElementById(id)?.addEventListener("input", syncJobSiteDisclosureState),
+  (id) => document.getElementById(id)?.addEventListener("input", () => {
+    if (
+      ["attendanceManagerName", "attendanceManagerPhone"].includes(id) &&
+      attendanceManagerUsesSiteContact()
+    ) {
+      const useSiteContact = document.getElementById(
+        "jobAttendanceUseSiteContact",
+      );
+      if (useSiteContact) useSiteContact.checked = false;
+    }
+    syncJobSiteDisclosureState();
+  }),
 );
 
 // ── Geocode button ─────────────────────────────────────────
@@ -22919,18 +22978,19 @@ document.getElementById("geocodeBtn")?.addEventListener("click", async () => {
     const lat = parseFloat(data[0]?.lat);
     const lng = parseFloat(data[0]?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      if (!pickerMap) initPickerMap();
-      currentJobPin = {
-        lat: parseFloat(lat.toFixed(6)),
-        lng: parseFloat(lng.toFixed(6)),
-      };
-      jobArrivalPointSource = "address";
-      jobArrivalPointAddress = normalizedJobSiteAddress(addr);
-      jobEntrancePinOpen = false;
-      syncPickerMarkerToCurrentPin();
-      pickerMap.setView([lat, lng], 17);
-      updatePinCoords();
-      showToast("Site found and arrival point set");
+      jobEntrancePinOpen = true;
+      syncJobSiteDisclosureState();
+      const message = document.getElementById("jobEntrancePinMessage");
+      if (message) {
+        message.textContent = "";
+        message.classList.add("hidden");
+      }
+      requestAnimationFrame(() => {
+        initPickerMap();
+        pickerMap?.setView([lat, lng], 17);
+        pickerMap?.invalidateSize();
+      });
+      showToast("Site found — confirm the worker arrival point");
     } else {
       const message = document.getElementById("jobEntrancePinMessage");
       if (message) {

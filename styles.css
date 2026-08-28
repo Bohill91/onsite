@@ -21755,9 +21755,9 @@ button svg,
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   box-shadow: none;
-  height: 320px;
+  height: 300px;
   margin-top: 0;
-  min-height: 320px;
+  min-height: 300px;
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map:focus-visible {
@@ -22866,8 +22866,8 @@ button svg,
   }
 
   #formJob.jw-wizard-mode .jw-site-location-surface .picker-map {
-    height: 280px;
-    min-height: 280px;
+    height: 260px;
+    min-height: 260px;
   }
 
   #formJob.jw-wizard-mode .jw-site-photos-group .site-photo-grid {
