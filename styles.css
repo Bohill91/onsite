@@ -21079,6 +21079,18 @@ button svg,
   margin-top: 16px;
 }
 
+#formJob.jw-wizard-mode .jw-schedule-overtime .jw-conditional {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 10px;
+  padding: 2px 0 0 26px;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-overtime .form-helper {
+  margin: 0;
+}
+
 .jw-schedule-group-head {
   display: grid;
   gap: 3px;
@@ -21343,6 +21355,31 @@ button svg,
   white-space: nowrap;
 }
 
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation {
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  margin-top: 5px;
+  padding: 8px 10px;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation span {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation strong {
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-note {
   background: var(--surface-2);
   border-radius: var(--radius-sm);
@@ -21372,6 +21409,11 @@ button svg,
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-grand-total strong {
   font-size: 1.15rem;
   font-weight: 850;
+}
+
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard .jw-price-accommodation-total {
+  color: var(--ink-2);
+  padding-top: 2px;
 }
 
 .jw-estimate-empty {
@@ -22542,6 +22584,23 @@ button svg,
   font-size: 1.08rem;
 }
 
+.jw-review-cost-accommodation {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.jw-review-cost-accommodation span {
+  color: var(--ink-3);
+  font-size: 0.73rem;
+}
+
+.jw-review-cost-accommodation strong {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
 .jw-review-warnings {
   display: grid;
   gap: 10px;
@@ -22737,6 +22796,10 @@ button svg,
     white-space: normal;
   }
 
+  #formJob.jw-wizard-mode .jw-schedule-overtime .jw-conditional {
+    padding-left: 0;
+  }
+
   #formJob.jw-wizard-mode .jw-site-fields-grid,
   #formJob.jw-wizard-mode .jw-attendance-manager-grid {
     grid-template-columns: 1fr;
@@ -22924,6 +22987,12 @@ button svg,
 
   .jw-review-cost-total {
     align-items: flex-start;
+  }
+
+  .jw-review-cost-accommodation {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .jw-wizard-mode .jw-wizard-nav {

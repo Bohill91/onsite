@@ -955,47 +955,6 @@
                       <div class="jw-labour-terms">
                       <div class="jw-labour-term">
                         <label class="checkbox-row jw-check">
-                          <input id="jobOvertimeAvailable" type="checkbox" />
-                          <span>Overtime available</span>
-                        </label>
-                        <div id="jobOvertimeRatesWrap" class="jw-conditional hidden">
-                          <div class="jw-overtime-grid">
-                            <label class="field-label">
-                              After-hours
-                              <select id="jobAfterHoursRateType">
-                                <option value="standard">Standard rate</option>
-                                <option value="time_and_third">Time and a third</option>
-                                <option value="time_and_half">Time and a half</option>
-                                <option value="double_time">Double time</option>
-                                <option value="custom">Custom</option>
-                              </select>
-                            </label>
-                            <label class="field-label">
-                              Saturday rate
-                              <select id="jobSaturdayRateType">
-                                <option value="standard">Standard rate</option>
-                                <option value="time_and_third">Time and a third</option>
-                                <option value="time_and_half">Time and a half</option>
-                                <option value="double_time">Double time</option>
-                                <option value="custom">Custom</option>
-                              </select>
-                            </label>
-                            <label class="field-label">
-                              Sunday rate
-                              <select id="jobSundayRateType">
-                                <option value="standard">Standard rate</option>
-                                <option value="time_and_third">Time and a third</option>
-                                <option value="time_and_half">Time and a half</option>
-                                <option value="double_time">Double time</option>
-                                <option value="custom">Custom</option>
-                              </select>
-                            </label>
-                          </div>
-                          <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
-                        </div>
-                      </div>
-                      <div class="jw-labour-term">
-                        <label class="checkbox-row jw-check">
                           <input id="jobAccommodationPaid" type="checkbox" />
                           <span>Working away / accommodation</span>
                         </label>
@@ -1116,6 +1075,51 @@
                         <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="sunday" /><span>Sunday</span></label>
                       </div>
                       <p id="jobWorkingDaysMessage" class="jw-schedule-message hidden" role="alert"></p>
+                    </div>
+                  </section>
+
+                  <section class="jw-schedule-group jw-schedule-overtime" aria-labelledby="jobOvertimeTitle">
+                    <div class="jw-schedule-group-head">
+                      <h5 id="jobOvertimeTitle">Overtime</h5>
+                    </div>
+                    <label class="checkbox-row jw-check">
+                      <input id="jobOvertimeAvailable" type="checkbox" />
+                      <span>Overtime available</span>
+                    </label>
+                    <div id="jobOvertimeRatesWrap" class="jw-conditional hidden">
+                      <div class="jw-overtime-grid">
+                        <label class="field-label">
+                          After-hours
+                          <select id="jobAfterHoursRateType">
+                            <option value="standard">Standard rate</option>
+                            <option value="time_and_third">Time and a third</option>
+                            <option value="time_and_half">Time and a half</option>
+                            <option value="double_time">Double time</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </label>
+                        <label class="field-label">
+                          Saturday
+                          <select id="jobSaturdayRateType">
+                            <option value="standard">Standard rate</option>
+                            <option value="time_and_third">Time and a third</option>
+                            <option value="time_and_half">Time and a half</option>
+                            <option value="double_time">Double time</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </label>
+                        <label class="field-label">
+                          Sunday
+                          <select id="jobSundayRateType">
+                            <option value="standard">Standard rate</option>
+                            <option value="time_and_third">Time and a third</option>
+                            <option value="time_and_half">Time and a half</option>
+                            <option value="double_time">Double time</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </label>
+                      </div>
+                      <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
                     </div>
                   </section>
                   <p id="jobScheduleStepMessage" class="jw-schedule-message hidden" role="alert"></p>

@@ -7949,6 +7949,8 @@ function cloneRepeatLabourRequirements(job) {
   return uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) => {
     const copied = { ...req, id: createId() };
     delete copied.labourSchedule;
+    delete copied.overtimeAvailable;
+    delete copied.overtimeRates;
     return copied;
   });
 }
@@ -8101,6 +8103,7 @@ function applyRepeatProjectToForm(job) {
   setInputValue("attendanceManagerEmail", job.attendanceManager?.email || "");
   setInputValue("attendanceManagerPhone", job.attendanceManager?.phone || "");
   const firstReq = pendingTradeRequirements[0] || {};
+  const sourceFirstReq = sourceLabourRequirements[0] || {};
   const repeatedAccommodation = normalizedAccommodationState(
     accommodationArrangementFor(firstReq) ? firstReq : job,
   );
@@ -8110,8 +8113,17 @@ function applyRepeatProjectToForm(job) {
     "jobAccommodationAllowance",
     repeatedAccommodation.accommodationAllowancePerNight || "",
   );
-  setCheckboxValue("jobOvertimeAvailable", !!(job.overtimeAvailable || firstReq.overtimeAvailable));
-  const overtimeRates = job.overtimeRates || firstReq.overtimeRates || {};
+  const hasProjectOvertimePolicy = Object.prototype.hasOwnProperty.call(
+    job,
+    "overtimeAvailable",
+  );
+  setCheckboxValue(
+    "jobOvertimeAvailable",
+    hasProjectOvertimePolicy
+      ? !!job.overtimeAvailable
+      : !!sourceFirstReq.overtimeAvailable,
+  );
+  const overtimeRates = job.overtimeRates || sourceFirstReq.overtimeRates || {};
   setSelectValue(document.getElementById("jobAfterHoursRateType"), overtimeRates.afterStandardHours || "standard");
   setSelectValue(document.getElementById("jobSaturdayRateType"), overtimeRates.saturday || "standard");
   setSelectValue(document.getElementById("jobSundayRateType"), overtimeRates.sunday || "standard");
@@ -8231,10 +8243,7 @@ function initializeNewRequestShiftDefaults() {
 }
 
 function labourRequirementHasAdvancedOptions(requirement = {}) {
-  return !!(
-    requirement.overtimeAvailable ||
-    accommodationArrangementFor(requirement)
-  );
+  return !!accommodationArrangementFor(requirement);
 }
 
 function syncJobLabourDisclosureState() {
@@ -8930,12 +8939,6 @@ function jobWizardLabourRequirementReviewHTML(requirement) {
     .filter(Boolean)
     .join(" · ");
   const conditions = [];
-  if (requirement.overtimeAvailable) {
-    const rates = requirement.overtimeRates || {};
-    conditions.push(
-      `Overtime: after-hours ${overtimeRateTypeLabel(rates.afterStandardHours)}, Saturday ${overtimeRateTypeLabel(rates.saturday)}, Sunday ${overtimeRateTypeLabel(rates.sunday)}`,
-    );
-  }
   if (requirement.accommodationPaid) {
     conditions.push(accommodationSummaryFor(requirement));
   }
@@ -9020,22 +9023,40 @@ function jobWizardScheduleReviewHTML() {
     .map((day) => WORKING_DAY_LABELS[day]?.slice(0, 3) || "")
     .filter(Boolean)
     .join(" · ");
+  const overtimeAvailable = !!document.getElementById("jobOvertimeAvailable")?.checked;
+  const overtimeRates = {
+    afterStandardHours:
+      document.getElementById("jobAfterHoursRateType")?.value || "standard",
+    saturday:
+      document.getElementById("jobSaturdayRateType")?.value || "standard",
+    sunday:
+      document.getElementById("jobSundayRateType")?.value || "standard",
+  };
+  const rows = [
+    ["Project start", start ? formatDateOnly(start) : ""],
+    [
+      "Estimated end",
+      noFixedEndDate ? "No fixed end date" : end ? formatDateOnly(end) : "",
+    ],
+    [
+      "Standard shift",
+      [shiftStart, shiftFinish].filter(Boolean).join("–"),
+    ],
+    ["Working days", workingDays],
+    ["Overtime", overtimeAvailable ? "Available" : "Not available"],
+  ];
+  if (overtimeAvailable) {
+    rows.push(
+      ["After-hours", overtimeRateTypeLabel(overtimeRates.afterStandardHours)],
+      ["Saturday", overtimeRateTypeLabel(overtimeRates.saturday)],
+      ["Sunday", overtimeRateTypeLabel(overtimeRates.sunday)],
+    );
+  }
   return jobWizardReviewSectionHTML({
     key: "SCHEDULE & PAY",
     title: "Schedule & pay",
     step: 3,
-    content: jobWizardReviewRowsHTML([
-      ["Project start", start ? formatDateOnly(start) : ""],
-      [
-        "Estimated end",
-        noFixedEndDate ? "No fixed end date" : end ? formatDateOnly(end) : "",
-      ],
-      [
-        "Standard shift",
-        [shiftStart, shiftFinish].filter(Boolean).join("–"),
-      ],
-      ["Working days", workingDays],
-    ]),
+    content: jobWizardReviewRowsHTML(rows),
   });
 }
 
@@ -9157,13 +9178,11 @@ function jobWizardEstimatedCostReviewHTML() {
     ["OnSite service fee", formatMoney(pricing.totalServiceFee)],
     ["VAT", formatMoney(pricing.totalVat)],
   ];
-  if (pricing.totalAccommodation) {
-    rows.splice(4, 0, ["Accommodation allowance", formatMoney(pricing.totalAccommodation)]);
-  }
   return `<section class="jw-review-section jw-review-cost" aria-labelledby="jobReviewCostTitle">
     <header class="jw-review-section-head"><div><p>ESTIMATED COST</p><h4 id="jobReviewCostTitle">Estimated labour cost</h4></div></header>
     ${jobWizardReviewRowsHTML(rows)}
     <div class="jw-review-cost-total"><span>Estimated daily total</span><strong>${formatMoney(pricing.totalDailyCost)}</strong></div>
+    ${pricing.totalAccommodation ? `<div class="jw-review-cost-accommodation"><span>Nightly accommodation allowances</span><strong>${formatMoney(pricing.totalAccommodation)}/night</strong></div>` : ""}
     <p class="jw-review-disclaimer">Final invoices are based on approved attendance and any applicable adjustments.</p>
   </section>`;
 }
@@ -10192,7 +10211,6 @@ function readTradeReqInputs() {
     Number.isFinite(budgetMaxRaw) && budgetMaxRaw > 0
       ? Math.round(budgetMaxRaw)
       : null;
-  const overtimeAvailable = !!document.getElementById("jobOvertimeAvailable")?.checked;
   const workerReceivesFullAdvertisedRate =
     !!document.getElementById("jobWorkerReceivesFullRate")?.checked;
   const accommodationPaid = !!document.getElementById("jobAccommodationPaid")?.checked;
@@ -10228,19 +10246,6 @@ function readTradeReqInputs() {
     accommodationPaid,
     accommodationArrangement,
     accommodationAllowancePerNight,
-    overtimeAvailable,
-    overtimeRates: overtimeAvailable
-      ? {
-          afterStandardHours:
-            document.getElementById("jobAfterHoursRateType")?.value || "standard",
-          saturday: document.getElementById("jobSaturdayRateType")?.value || "standard",
-          sunday: document.getElementById("jobSundayRateType")?.value || "standard",
-        }
-      : {
-          afterStandardHours: "standard",
-          saturday: "standard",
-          sunday: "standard",
-        },
   };
 }
 
@@ -10326,10 +10331,11 @@ function buildRequestLabourPricingModel(requirements = []) {
     quantity: Math.max(1, Number(req.quantity) || 1),
     rate: Math.max(0, Number(req.budgetMax) || 0),
     workerReceivesFullAdvertisedRate: req.workerReceivesFullAdvertisedRate !== false,
-    overtimeAvailable: !!req.overtimeAvailable,
-    accommodationAllowance: req.accommodationPaid
-      ? Math.max(0, Number(req.accommodationAllowancePerNight) || 0)
-      : 0,
+    accommodationArrangement: accommodationArrangementFor(req),
+    accommodationAllowance:
+      accommodationArrangementFor(req) === "nightly_allowance"
+        ? Math.max(0, Number(req.accommodationAllowancePerNight) || 0)
+        : 0,
   }));
 
   // TODO: Replace these provisional display-only percentages with configured
@@ -10348,7 +10354,7 @@ function buildRequestLabourPricingModel(requirements = []) {
       : Math.max(0, rate - workerReceives);
     const companyDayRate = workerReceivesFullRate ? rate + serviceFee : rate;
     const vat = Math.round(companyDayRate * vatPct);
-    const totalPerWorker = companyDayRate + accommodationAllowance + vat;
+    const totalPerWorker = companyDayRate + vat;
     const requirementTotal = totalPerWorker * req.quantity;
     return {
       ...req,
@@ -10426,13 +10432,11 @@ function renderJobPricingBreakdown() {
               <strong>${escapeHtml(req.trade || req.label)}</strong>
               ${roleDetails ? `<span>${escapeHtml(roleDetails)}</span>` : ""}
               <span class="jw-price-rate-summary">${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(rate)}/day</span>
-              ${req.overtimeAvailable ? `<span class="jw-price-context">Overtime configured; charged only when applicable.</span>` : ""}
             </div>
             <div class="jw-price-breakdown">
               <span class="jw-price-breakdown-label">Per worker / day</span>
               <div class="jw-price-lines">
                 <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
-                ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>` : ""}
                 <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
                 <span>VAT <strong>${formatMoney(vat)}</strong></span>
                 <span class="jw-price-company-cost">Company cost / worker <strong>${formatMoney(totalPerWorker)}</strong></span>
@@ -10441,6 +10445,7 @@ function renderJobPricingBreakdown() {
                 <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"} &times; ${formatMoney(totalPerWorker)}/day</span>
                 <strong>${formatMoney(requirementTotal)}/day</strong>
               </div>
+              ${accommodationAllowance > 0 ? `<div class="jw-price-accommodation"><span>Accommodation</span><strong>${formatMoney(accommodationAllowance)}/night per worker</strong></div>` : req.accommodationArrangement === "company_provided" ? `<div class="jw-price-accommodation"><span>Accommodation</span><strong>Company provided</strong></div>` : ""}
             </div>
           </div>`;
       }
@@ -10449,16 +10454,15 @@ function renderJobPricingBreakdown() {
           <div>
             <strong>${escapeHtml(req.label)}</strong>
             <span>${req.quantity} worker${req.quantity === 1 ? "" : "s"}</span>
-            ${req.overtimeAvailable ? `<span>Overtime available</span>` : ""}
           </div>
           <div class="jw-price-lines">
             <span>Daily labour rate <strong>${formatMoney(rate)}</strong></span>
             <span>Worker receives <strong>${formatMoney(workerReceives)}</strong></span>
-            <span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}</strong></span>
             <span>OnSite service fee ${workerReceivesFullRate ? "(added separately)" : "(deducted from rate)"} <strong>${formatMoney(serviceFee)}</strong></span>
             <span>VAT <strong>${formatMoney(vat)}</strong></span>
             <span>Total per worker <strong>${formatMoney(totalPerWorker)}</strong></span>
             <span>Total daily cost <strong>${formatMoney(requirementTotal)}</strong></span>
+            ${accommodationAllowance > 0 ? `<span>Accommodation allowance <strong>${formatMoney(accommodationAllowance)}/night per worker</strong></span>` : req.accommodationArrangement === "company_provided" ? `<span>Accommodation <strong>Company provided</strong></span>` : ""}
           </div>
         </div>`;
     })
@@ -10482,6 +10486,7 @@ function renderJobPricingBreakdown() {
         <span>Total workers <strong>${pricing.totalWorkers}</strong></span>
         <span>Labour requirements <strong>${visibleReqs.length}</strong></span>
         <span class="jw-price-grand-total">Estimated daily labour cost <strong>${formatMoney(pricing.totalDailyCost)}</strong></span>
+        ${pricing.totalAccommodation ? `<span class="jw-price-accommodation-total">Nightly accommodation allowances <strong>${formatMoney(pricing.totalAccommodation)}/night</strong></span>` : ""}
       </div>`;
     return;
   }
@@ -10503,6 +10508,7 @@ function renderJobPricingBreakdown() {
       <span>Total workers: <strong>${pricing.totalWorkers}</strong></span>
       <span>Total trades / labour requirements: <strong>${visibleReqs.length}</strong></span>
       <span>Total daily cost for all workers: <strong>${formatMoney(pricing.totalDailyCost)}</strong></span>
+      ${pricing.totalAccommodation ? `<span>Nightly accommodation allowances: <strong>${formatMoney(pricing.totalAccommodation)}/night</strong></span>` : ""}
     </div>`;
 }
 
@@ -10549,12 +10555,6 @@ function buildLabourRequirementsFromForm(shared = {}) {
           req.accommodationAllowancePerNight ??
           shared.accommodationAllowancePerNight,
       }),
-      overtimeAvailable: !!req.overtimeAvailable,
-      overtimeRates: req.overtimeRates || {
-        afterStandardHours: "standard",
-        saturday: "standard",
-        sunday: "standard",
-      },
       workingDays: normalizeWorkingDays(shared.workingDays),
       shiftStartTime: shared.shiftStartTime || "",
       shiftFinishTime: shared.shiftFinishTime || "",
@@ -10587,15 +10587,6 @@ function applyTradeReqToInputs(req) {
   if (rate) rate.value = req.budgetMax || "";
   const fullRate = document.getElementById("jobWorkerReceivesFullRate");
   if (fullRate) fullRate.checked = req.workerReceivesFullAdvertisedRate !== false;
-  const overtime = document.getElementById("jobOvertimeAvailable");
-  if (overtime) overtime.checked = !!req.overtimeAvailable;
-  const overtimeRates = req.overtimeRates || {};
-  const after = document.getElementById("jobAfterHoursRateType");
-  if (after) after.value = overtimeRates.afterStandardHours || "standard";
-  const saturday = document.getElementById("jobSaturdayRateType");
-  if (saturday) saturday.value = overtimeRates.saturday || "standard";
-  const sunday = document.getElementById("jobSundayRateType");
-  if (sunday) sunday.value = overtimeRates.sunday || "standard";
   const accommodationState = normalizedAccommodationState(req);
   const accommodation = document.getElementById("jobAccommodationPaid");
   if (accommodation) accommodation.checked = accommodationState.accommodationPaid;
@@ -10605,7 +10596,6 @@ function applyTradeReqToInputs(req) {
     accommodationAllowance.value =
       accommodationState.accommodationAllowancePerNight || "";
   }
-  updateOvertimeForm();
   updateAccommodationForm();
   syncJobLabourDisclosureState();
 }
@@ -10623,12 +10613,6 @@ function clearTradeReqInputs() {
     accommodationPaid: false,
     accommodationArrangement: "",
     accommodationAllowancePerNight: null,
-    overtimeAvailable: false,
-    overtimeRates: {
-      afterStandardHours: "standard",
-      saturday: "standard",
-      sunday: "standard",
-    },
   });
 }
 
@@ -10642,7 +10626,6 @@ function tradeRequirementHasMeaningfulInput(req = readTradeReqInputs()) {
     req.budgetMax ||
     Number(req.quantity || 1) !== 1 ||
     req.workerReceivesFullAdvertisedRate === false ||
-    req.overtimeAvailable ||
     req.accommodationPaid
   );
 }
@@ -10806,7 +10789,6 @@ function renderTradeReqCards() {
   list.innerHTML = pendingTradeRequirements
     .map((r, i) => {
       const advanced = [
-        r.overtimeAvailable ? "Overtime" : "",
         accommodationSummaryFor(r),
       ].filter(Boolean);
       const quantity = Math.max(1, Number(r.quantity) || 1);
