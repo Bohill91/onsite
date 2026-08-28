@@ -20326,8 +20326,11 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-labour-more-options {
+  border-top: 1px solid var(--card-divider);
   display: grid;
   gap: 0;
+  margin-top: var(--jw-form-section-space, 20px);
+  padding-top: var(--jw-form-section-space, 20px);
 }
 
 #formJob.jw-wizard-mode .jw-labour-more-options.hidden {

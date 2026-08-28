@@ -8237,12 +8237,7 @@ function labourRequirementHasAdvancedOptions(requirement = {}) {
 
 function syncJobLabourDisclosureState() {
   const panel = document.getElementById("jobLabourMoreOptionsPanel");
-  const toggle = document.getElementById("jobLabourMoreOptionsToggle");
-  const expanded = !jobWizardActive || jobLabourMoreOptionsOpen;
-  panel?.classList.toggle("hidden", !expanded);
-  toggle?.setAttribute("aria-expanded", String(expanded));
-  const label = toggle?.querySelector("[data-job-labour-options-label]");
-  if (label) label.textContent = expanded && jobWizardActive ? "Hide options" : "Show options";
+  panel?.classList.remove("hidden");
 }
 
 function syncJobPreferredWorkersDisclosureState() {
@@ -10031,14 +10026,6 @@ function updateOvertimeForm() {
   const available = !!document.getElementById("jobOvertimeAvailable")?.checked;
   const wrap = document.getElementById("jobOvertimeRatesWrap");
   if (wrap) wrap.classList.toggle("hidden", !available);
-  if (!available) {
-    ["jobAfterHoursRateType", "jobSaturdayRateType", "jobSundayRateType"].forEach(
-      (id) => {
-        const select = document.getElementById(id);
-        if (select) select.value = "standard";
-      },
-    );
-  }
   renderJobPricingBreakdown();
 }
 
@@ -10893,11 +10880,6 @@ document.getElementById("jobAddAnotherRequirement")?.addEventListener("click", (
 
 document.getElementById("jobDiscardTradeRequirement")?.addEventListener("click", () => {
   discardTradeRequirementEditorChanges();
-});
-
-document.getElementById("jobLabourMoreOptionsToggle")?.addEventListener("click", () => {
-  jobLabourMoreOptionsOpen = !jobLabourMoreOptionsOpen;
-  syncJobLabourDisclosureState();
 });
 
 document.getElementById("jobTradeReqList")?.addEventListener("click", (event) => {
