@@ -8077,12 +8077,11 @@ function applyRepeatProjectToForm(job) {
   activeTradeRequirementId = "";
   tradeRequirementEditorOpen = !pendingTradeRequirements.length;
   clearTradeReqInputs();
-  jobWizardShiftStartInitialized = true;
   setInputValue("jobStart", jobStartDateOnly(job));
   setInputValue("jobEndDate", "");
   setCheckboxValue("jobNoFixedEndDate", !!job.noFixedEndDate);
-  setInputValue("jobShiftStart", projectShiftStartValue(job));
-  setInputValue("jobShiftFinish", job.shiftFinishTime || "");
+  setJobShiftTimeValue("jobShiftStart", projectShiftStartValue(job));
+  setJobShiftTimeValue("jobShiftFinish", job.shiftFinishTime || "");
   const days = new Set(normalizeWorkingDays(job.workingDays));
   document.querySelectorAll('input[name="jobWorkingDays"]').forEach((input) => {
     input.checked = days.has(input.value);
@@ -8131,8 +8130,7 @@ function applyRepeatProjectToForm(job) {
     jobLocationPicker?.clear({ clearInput: true, emit: false });
     resetJobTradeRequirements();
     resetJobPhotos();
-    jobWizardShiftStartInitialized = false;
-    initializeNewRequestShiftStart();
+    initializeJobShiftTimeOptions();
     currentJobPin = { lat: null, lng: null };
     jobArrivalPointSource = "";
     jobArrivalPointAddress = "";
@@ -8195,7 +8193,7 @@ document.addEventListener("keydown", (event) => {
 const JOB_WIZARD_STEPS = [
   "Project",
   "Labour",
-  "Schedule & Pay",
+  "Schedule",
   "Site & Attendance",
   "Pre-start",
   "Review",
@@ -8218,14 +8216,40 @@ let jobArrivalPointSource = "";
 let jobArrivalPointAddress = "";
 let jobSitePhotosOpen = false;
 let jobAttendanceManagerOpen = false;
-let jobWizardShiftStartInitialized = false;
+function initializeJobShiftTimeOptions() {
+  ["jobShiftStart", "jobShiftFinish"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!(select instanceof HTMLSelectElement) || select.dataset.timesReady) return;
+    const currentValue = select.value;
+    const fragment = document.createDocumentFragment();
+    for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+      const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
+      const mins = String(minutes % 60).padStart(2, "0");
+      const value = `${hours}:${mins}`;
+      fragment.appendChild(new Option(value, value));
+    }
+    select.appendChild(fragment);
+    select.value = currentValue;
+    select.dataset.timesReady = "true";
+    window.OnSiteUI?.syncSelect(select, { forceOptions: true });
+  });
+}
 
-function initializeNewRequestShiftStart() {
-  if (jobWizardShiftStartInitialized) return;
-  const shiftStart = document.getElementById("jobShiftStart");
-  if (!shiftStart) return;
-  if (!shiftStart.value) shiftStart.value = "07:00";
-  jobWizardShiftStartInitialized = true;
+initializeJobShiftTimeOptions();
+
+function setJobShiftTimeValue(id, value) {
+  initializeJobShiftTimeOptions();
+  const select = document.getElementById(id);
+  if (!(select instanceof HTMLSelectElement)) return;
+  const time = String(value || "").match(/^(\d{2}:\d{2})/)?.[1] || "";
+  if (time && !Array.from(select.options).some((option) => option.value === time)) {
+    const nextOption = Array.from(select.options).find(
+      (option) => option.value && option.value > time,
+    );
+    select.insertBefore(new Option(time, time), nextOption || null);
+  }
+  select.value = time;
+  window.OnSiteUI?.syncSelect(select, { forceOptions: true });
 }
 
 function labourRequirementHasAdvancedOptions(requirement = {}) {
@@ -8832,7 +8856,7 @@ function enterJobWizardMode({ reset = false } = {}) {
     jobSitePhotosOpen = false;
     jobAttendanceManagerOpen = false;
   }
-  initializeNewRequestShiftStart();
+  initializeJobShiftTimeOptions();
   syncJobLabourDisclosureState();
   syncJobPreferredWorkersDisclosureState();
   syncJobSiteDisclosureState();
@@ -9277,7 +9301,7 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
       "jw-has-unsaved-requirement",
     );
   }
-  if (jobWizardStep === 3) renderJobPricingBreakdown();
+  if (jobWizardStep === 2) renderJobPricingBreakdown();
   if (jobWizardStep === 4) {
     if (previousStep !== 4) prepareJobSiteDisclosures();
     else syncJobSiteDisclosureState();
@@ -10104,7 +10128,16 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
 }
 
 ["jobStart", "jobEndDate"].forEach((id) => {
-  document.getElementById(id)?.addEventListener("input", clearSchedulePayValidation);
+  const input = document.getElementById(id);
+  input?.addEventListener("input", clearSchedulePayValidation);
+  input?.addEventListener("click", () => {
+    if (input.disabled || typeof input.showPicker !== "function") return;
+    try {
+      input.showPicker();
+    } catch {
+      // The normal native click remains available where showPicker is restricted.
+    }
+  });
 });
 ["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
   document.getElementById(id)?.addEventListener("change", (event) => {
@@ -10369,22 +10402,15 @@ function renderJobPricingBreakdown() {
   const requirements = wizardPricing
     ? [...pendingTradeRequirements]
     : requestLabourEstimateRequirements();
+  const wizardMount = document.getElementById("jobPricingBreakdownWizardMount");
   panel.classList.toggle("jw-pricing-panel--wizard", wizardPricing);
+  wizardMount?.classList.toggle("hidden", wizardPricing && !requirements.length);
   if (wizardPricing && !requirements.length) {
-    panel.innerHTML = `
-      <div class="jw-estimate-head">
-        <div>
-          <h4>Estimated labour cost</h4>
-          <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
-        </div>
-      </div>
-      <div class="jw-estimate-empty">
-        <strong>No labour requirements have been added.</strong>
-        <span>Add and save at least one requirement before reviewing costs.</span>
-        <button type="button" class="jw-inline-link" data-edit-labour-requirements>Return to Labour &rarr;</button>
-      </div>`;
+    panel.classList.add("hidden");
+    panel.replaceChildren();
     return;
   }
+  panel.classList.remove("hidden");
   const pricing = buildRequestLabourPricingModel(requirements);
   const visibleReqs = pricing.requirements;
   const rows = visibleReqs
@@ -10445,7 +10471,6 @@ function renderJobPricingBreakdown() {
           <h4>Estimated labour cost</h4>
           <p>Based on your saved labour requirements. Final invoices are based on approved attendance and any applicable adjustments.</p>
         </div>
-        <button type="button" class="jw-inline-link" data-edit-labour-requirements>Edit labour requirements &rarr;</button>
       </div>
       <div class="jw-price-list">${rows}</div>
       ${
@@ -10480,11 +10505,6 @@ function renderJobPricingBreakdown() {
       <span>Total daily cost for all workers: <strong>${formatMoney(pricing.totalDailyCost)}</strong></span>
     </div>`;
 }
-
-document.getElementById("jobPricingBreakdown")?.addEventListener("click", (event) => {
-  if (!event.target.closest("[data-edit-labour-requirements]")) return;
-  if (jobWizardActive) goToJobWizardStep(2);
-});
 
 function buildLabourRequirementsFromForm(shared = {}) {
   const current = readTradeReqInputs();
@@ -21587,7 +21607,6 @@ jobForm.addEventListener("submit", (e) => {
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
   jobForm.reset();
-  jobWizardShiftStartInitialized = false;
   jobLocationPicker?.clear({ clearInput: true, emit: false });
   resetJobTradeRequirements();
   clearRepeatProjectTemplate();

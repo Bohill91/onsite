@@ -366,9 +366,18 @@
         listbox.hidden = false;
         document.body.appendChild(listbox);
         this.position();
+        const preferredOpenIndex = select.value
+          ? -1
+          : options.findIndex(
+              (option) =>
+                isCustomSelectChoice(option) &&
+                option.value === select.dataset.openValue,
+            );
         const selectedIndex = isCustomSelectChoice(options[select.selectedIndex])
           ? select.selectedIndex
-          : firstChoiceIndex;
+          : preferredOpenIndex >= 0
+            ? preferredOpenIndex
+            : firstChoiceIndex;
         this.highlight(selectedIndex, { scroll: false });
         requestAnimationFrame(() => {
           this.position();

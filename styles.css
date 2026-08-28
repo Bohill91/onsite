@@ -20980,6 +20980,11 @@ button svg,
   padding-top: 20px;
 }
 
+#formJob.jw-wizard-mode .jw-pricing-wizard-mount.hidden,
+#formJob.jw-wizard-mode .jw-pricing-panel--wizard.hidden {
+  display: none;
+}
+
 .jw-schedule-step-intro {
   display: none;
 }
@@ -21110,6 +21115,17 @@ button svg,
   min-height: 44px;
 }
 
+#formJob.jw-wizard-mode .jw-schedule-grid input[type="date"] {
+  cursor: pointer;
+}
+
+#formJob.jw-wizard-mode .jw-schedule-grid .os-select-trigger {
+  background: var(--surface);
+  border-color: var(--card-border);
+  border-radius: var(--radius-sm);
+  min-height: 44px;
+}
+
 .jw-end-date-field {
   display: grid;
   gap: 9px;
@@ -21182,11 +21198,6 @@ button svg,
 
 .jw-schedule-message.hidden {
   display: none;
-}
-
-#formJob.jw-wizard-mode .jw-schedule-step-card .jw-pricing-wizard-mount {
-  border-top: 0;
-  padding-top: 0;
 }
 
 #formJob.jw-wizard-mode .jw-pricing-panel--wizard {

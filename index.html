@@ -813,7 +813,7 @@
               <div class="jw-wizard-stepper" data-wizard-stepper role="group" aria-label="Request labour steps">
                 <button type="button" class="jw-wizard-step" data-wizard-goto="1"><span class="jw-wizard-dot">1</span><span class="jw-wizard-step-label">Project</span></button>
                 <button type="button" class="jw-wizard-step" data-wizard-goto="2"><span class="jw-wizard-dot">2</span><span class="jw-wizard-step-label">Labour</span></button>
-                <button type="button" class="jw-wizard-step" data-wizard-goto="3"><span class="jw-wizard-dot">3</span><span class="jw-wizard-step-label">Schedule &amp; Pay</span></button>
+                <button type="button" class="jw-wizard-step" data-wizard-goto="3"><span class="jw-wizard-dot">3</span><span class="jw-wizard-step-label">Schedule</span></button>
                 <button type="button" class="jw-wizard-step" data-wizard-goto="4"><span class="jw-wizard-dot">4</span><span class="jw-wizard-step-label">Site &amp; Attendance</span></button>
                 <button type="button" class="jw-wizard-step" data-wizard-goto="5"><span class="jw-wizard-dot">5</span><span class="jw-wizard-step-label">Pre-start</span></button>
                 <button type="button" class="jw-wizard-step" data-wizard-goto="6"><span class="jw-wizard-dot">6</span><span class="jw-wizard-step-label">Review</span></button>
@@ -1049,6 +1049,8 @@
                   </div>
                   <div id="jobSpecificWorkersSummary" class="jw-specific-workers-summary hidden" aria-live="polite"></div>
                 </section>
+
+                <div id="jobPricingBreakdownWizardMount" class="jw-pricing-wizard-mount"></div>
               </section>
               </div>
 
@@ -1089,11 +1091,15 @@
                     <div class="jw-grid jw-schedule-grid">
                       <label class="field-label">
                         Start time *
-                        <input id="jobShiftStart" type="time" required />
+                        <select id="jobShiftStart" data-open-value="07:00" required>
+                          <option value="">Select time</option>
+                        </select>
                       </label>
                       <label class="field-label">
                         Finish time *
-                        <input id="jobShiftFinish" type="time" required />
+                        <select id="jobShiftFinish" data-open-value="17:00" required>
+                          <option value="">Select time</option>
+                        </select>
                       </label>
                     </div>
                   </section>
@@ -1118,8 +1124,6 @@
                   </section>
                   <p id="jobScheduleStepMessage" class="jw-schedule-message hidden" role="alert"></p>
                 </section>
-
-                <div id="jobPricingBreakdownWizardMount" class="jw-pricing-wizard-mount"></div>
               </section>
               </div>
 
