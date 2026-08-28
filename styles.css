@@ -5590,19 +5590,48 @@ margin-bottom: 12px;
   margin-top: 2px;
 }
 
-.picker-map .leaflet-control-zoom {
-  border: 0;
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
   overflow: hidden;
 }
 
-.picker-map .leaflet-control-zoom a {
+#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a {
+  background: var(--surface);
   border: 0;
-  color: var(--ink);
+  color: var(--ink-2);
   width: 32px;
   height: 32px;
   line-height: 32px;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a + a {
+  border-top: 1px solid var(--card-divider);
+}
+
+#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a:hover,
+#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a:focus-visible {
+  background: var(--surface-2);
+  color: var(--orange);
+  outline: none;
+}
+
+#jobPickerMap.picker-map .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink-3);
+  font-size: 9px;
+  line-height: 1.35;
+  padding: 2px 5px;
+}
+
+#jobPickerMap.picker-map .leaflet-control-attribution a {
+  color: var(--ink-2);
+}
+
+#jobPickerMap.picker-map .leaflet-tile-pane {
+  filter: saturate(0.72) brightness(1.035) contrast(0.93) sepia(0.025);
 }
 
 .pin-coords-display {
@@ -5663,6 +5692,36 @@ margin-bottom: 12px;
 .site-drop-pin {
   color: var(--orange);
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+.onsite-entrance-pin {
+  background: var(--orange);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.28);
+  display: block;
+  height: 24px;
+  left: 3px;
+  position: relative;
+  top: 2px;
+  transform: rotate(-45deg);
+  transition: opacity 180ms ease, transform 180ms ease;
+  width: 24px;
+}
+
+.onsite-entrance-pin > span {
+  background: #fff;
+  border-radius: 50%;
+  height: 7px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+}
+
+.onsite-entrance-pin.is-provisional {
+  opacity: 0.72;
 }
 
 .site-view-pin {
@@ -21766,11 +21825,12 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map {
-  background: #eef2f5;
+  background: #f4f1ea;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   box-shadow: none;
   height: 300px;
+  isolation: isolate;
   margin-top: 0;
   min-height: 300px;
 }

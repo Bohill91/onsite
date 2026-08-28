@@ -22832,11 +22832,14 @@ let currentJobPin = { lat: null, lng: null };
 const siteMapModal = document.getElementById("siteMapModal");
 
 function createPickerPinIcon() {
+  const stateClass = jobArrivalPointConfirmed
+    ? "is-confirmed"
+    : "is-provisional";
   return L.divIcon({
     className: "",
-    html: `<div class="site-drop-pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
+    html: `<span class="onsite-entrance-pin ${stateClass}" aria-hidden="true"><span></span></span>`,
+    iconSize: [30, 34],
+    iconAnchor: [15, 32],
   });
 }
 
@@ -22855,6 +22858,7 @@ function syncPickerMarkerToCurrentPin() {
 
   const latLng = L.latLng(Number(currentJobPin.lat), Number(currentJobPin.lng));
   if (pickerMarker) {
+    pickerMarker.setIcon(createPickerPinIcon());
     pickerMarker.setLatLng(latLng);
   } else {
     pickerMarker = L.marker(latLng, {
@@ -22870,6 +22874,7 @@ function syncPickerMarkerToCurrentPin() {
       jobArrivalPointConfirmed = false;
       jobArrivalPointSource = "manual";
       jobArrivalPointAddress = normalizedJobSiteAddress();
+      pickerMarker.setIcon(createPickerPinIcon());
       updatePinCoords();
     });
   }
@@ -23055,11 +23060,10 @@ function initPickerMap() {
     [52.4862, -1.8904],
     11,
   );
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 20,
-    subdomains: "abcd",
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
   }).addTo(pickerMap);
 
   if (currentJobPin.lat != null && currentJobPin.lng != null) {
