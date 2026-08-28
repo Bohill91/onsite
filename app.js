@@ -9310,6 +9310,7 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
     );
   }
   if (jobWizardStep === 2) renderJobPricingBreakdown();
+  if (jobWizardStep === 3) bindScheduleNativePickers();
   if (jobWizardStep === 4) {
     if (previousStep !== 4) prepareJobSiteDisclosures();
     else syncJobSiteDisclosureState();
@@ -10150,9 +10151,17 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
   return true;
 }
 
+const JOB_SCHEDULE_PICKER_IDS = [
+  "jobStart",
+  "jobEndDate",
+  "jobShiftStart",
+  "jobShiftFinish",
+];
+
 function openNativePickerFromField(input, event) {
   if (
     event.button !== 0 ||
+    event.isPrimary === false ||
     input.disabled ||
     input.readOnly ||
     typeof input.showPicker !== "function"
@@ -10168,16 +10177,29 @@ function openNativePickerFromField(input, event) {
   }
 }
 
-["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
+function bindNativePickerField(input) {
+  if (!input || input.dataset.nativePickerBound === "true") return;
+  input.dataset.nativePickerBound = "true";
+  input.addEventListener("pointerdown", (event) => {
+    openNativePickerFromField(input, event);
+  });
+}
+
+function bindScheduleNativePickers() {
+  JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
+    bindNativePickerField(document.getElementById(id));
+  });
+}
+
+bindScheduleNativePickers();
+
+JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
   const input = document.getElementById(id);
   if (["jobStart", "jobEndDate"].includes(id)) {
     input?.addEventListener("input", clearSchedulePayValidation);
   }
-  input?.addEventListener("click", (event) => {
-    openNativePickerFromField(input, event);
-  });
 });
-["jobStart", "jobEndDate", "jobShiftStart", "jobShiftFinish"].forEach((id) => {
+JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
   document.getElementById(id)?.addEventListener("change", (event) => {
     const control = event.currentTarget;
     if (control.value) {
