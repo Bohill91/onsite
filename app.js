@@ -22831,26 +22831,53 @@ function updateJobPhotoPreviews() {
 // ─── Site Location & Map System ───────────────────────────
 let pickerMap = null;
 let pickerMarker = null;
+let pickerMapLibre = null;
+let pickerMapInitPromise = null;
+let pickerMapLoadTimeout = null;
+let pickerMapReady = false;
+let pickerMapLastError = null;
 let siteViewMap = null;
 let siteViewMarker = null;
 let currentJobPin = { lat: null, lng: null };
 
+const MAPLIBRE_MODULE_URL =
+  "https://unpkg.com/maplibre-gl@6.6.0/dist/maplibre-gl.mjs";
+const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
+let mapLibreModulePromise = null;
+
 const siteMapModal = document.getElementById("siteMapModal");
 
-function createPickerPinIcon() {
+function loadMapLibreModule() {
+  if (!mapLibreModulePromise) {
+    mapLibreModulePromise = import(MAPLIBRE_MODULE_URL).catch((error) => {
+      mapLibreModulePromise = null;
+      throw error;
+    });
+  }
+  return mapLibreModulePromise;
+}
+
+function createPickerMarkerElement() {
+  const marker = document.createElement("span");
+  marker.className = "onsite-entrance-marker";
+  marker.setAttribute("aria-label", "Exact site entrance marker");
+  marker.setAttribute("role", "img");
+  marker.innerHTML = '<span class="onsite-entrance-pin" aria-hidden="true"><span></span></span>';
+  return marker;
+}
+
+function updatePickerMarkerVisualState() {
+  const pin = pickerMarker?.getElement()?.querySelector(".onsite-entrance-pin");
+  if (!pin) return;
   const stateClass = jobArrivalPointConfirmed
     ? "is-confirmed"
     : "is-provisional";
-  return L.divIcon({
-    className: "",
-    html: `<span class="onsite-entrance-pin ${stateClass}" aria-hidden="true"><span></span></span>`,
-    iconSize: [30, 34],
-    iconAnchor: [15, 32],
-  });
+  pin.classList.toggle("is-confirmed", stateClass === "is-confirmed");
+  pin.classList.toggle("is-provisional", stateClass === "is-provisional");
 }
 
 function syncPickerMarkerToCurrentPin() {
-  if (!pickerMap) return;
+  if (!pickerMap || !pickerMapLibre) return;
   const hasPin =
     currentJobPin.lat != null &&
     currentJobPin.lng != null &&
@@ -22862,17 +22889,19 @@ function syncPickerMarkerToCurrentPin() {
     return;
   }
 
-  const latLng = L.latLng(Number(currentJobPin.lat), Number(currentJobPin.lng));
+  const lngLat = [Number(currentJobPin.lng), Number(currentJobPin.lat)];
   if (pickerMarker) {
-    pickerMarker.setIcon(createPickerPinIcon());
-    pickerMarker.setLatLng(latLng);
+    pickerMarker.setLngLat(lngLat);
   } else {
-    pickerMarker = L.marker(latLng, {
-      icon: createPickerPinIcon(),
+    pickerMarker = new pickerMapLibre.Marker({
+      element: createPickerMarkerElement(),
+      anchor: "bottom",
       draggable: true,
-    }).addTo(pickerMap);
-    pickerMarker.on("dragend", (event) => {
-      const point = event.target.getLatLng();
+    })
+      .setLngLat(lngLat)
+      .addTo(pickerMap);
+    pickerMarker.on("dragend", () => {
+      const point = pickerMarker.getLngLat();
       currentJobPin = {
         lat: parseFloat(point.lat.toFixed(6)),
         lng: parseFloat(point.lng.toFixed(6)),
@@ -22880,14 +22909,12 @@ function syncPickerMarkerToCurrentPin() {
       jobArrivalPointConfirmed = false;
       jobArrivalPointSource = "manual";
       jobArrivalPointAddress = normalizedJobSiteAddress();
-      pickerMarker.setIcon(createPickerPinIcon());
+      updatePickerMarkerVisualState();
       updatePinCoords();
     });
   }
-  if (pickerMarker.dragging) {
-    if (!jobWizardActive || jobEntrancePinOpen) pickerMarker.dragging.enable();
-    else pickerMarker.dragging.disable();
-  }
+  updatePickerMarkerVisualState();
+  pickerMarker.setDraggable(!jobWizardActive || jobEntrancePinOpen);
 }
 
 // ── Toggle location section in job form ────────────────────
@@ -22948,6 +22975,10 @@ document.getElementById("jobEntrancePinConfirm")?.addEventListener("click", () =
   }
   setJobEntrancePinDisclosure(false);
   updatePinCoords();
+});
+
+document.getElementById("jobPickerMapRetry")?.addEventListener("click", async () => {
+  await initPickerMap({ reset: true });
 });
 
 document.getElementById("jobSitePhotosToggle")?.addEventListener("click", () => {
@@ -23019,6 +23050,21 @@ document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
   }
 });
 
+function pickerZoomForGeocodeResult(result = {}) {
+  const preciseTypes = new Set([
+    "house",
+    "building",
+    "residential",
+    "commercial",
+    "industrial",
+    "construction",
+  ]);
+  const broadTypes = new Set(["city", "town", "village", "administrative"]);
+  if (preciseTypes.has(result.type)) return 17;
+  if (broadTypes.has(result.type)) return 14.5;
+  return 16.5;
+}
+
 async function geocodeJobSiteAddress(trigger) {
   const addr = document.getElementById("jobSiteAddress")?.value.trim();
   if (!addr) {
@@ -23033,8 +23079,9 @@ async function geocodeJobSiteAddress(trigger) {
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1&countrycodes=gb`,
     );
     const data = await res.json();
-    const lat = parseFloat(data[0]?.lat);
-    const lng = parseFloat(data[0]?.lon);
+    const result = data[0];
+    const lat = parseFloat(result?.lat);
+    const lng = parseFloat(result?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
       currentJobPin = {
         lat: parseFloat(lat.toFixed(6)),
@@ -23051,11 +23098,17 @@ async function geocodeJobSiteAddress(trigger) {
         message.textContent = "";
         message.classList.add("hidden");
       }
-      requestAnimationFrame(() => {
-        initPickerMap();
+      requestAnimationFrame(async () => {
+        await initPickerMap();
         syncPickerMarkerToCurrentPin();
-        pickerMap?.setView([lat, lng], 17);
-        pickerMap?.invalidateSize();
+        pickerMap?.easeTo({
+          center: [lng, lat],
+          zoom: pickerZoomForGeocodeResult(result),
+          bearing: 0,
+          pitch: 0,
+          duration: 350,
+        });
+        pickerMap?.resize();
       });
       showToast("Site found — confirm the exact entrance point");
       return true;
@@ -23073,59 +23126,149 @@ async function geocodeJobSiteAddress(trigger) {
   }
 }
 
-function initPickerMap() {
+function setPickerMapFailureState(failed, error = null) {
+  const map = document.getElementById("jobPickerMap");
+  const failure = document.getElementById("jobPickerMapFailure");
+  map?.classList.toggle("is-unavailable", failed);
+  failure?.classList.toggle("hidden", !failed);
+  if (failure) {
+    failure.hidden = !failed;
+    if (failed && error) failure.dataset.mapError = error.message || String(error);
+    else delete failure.dataset.mapError;
+  }
+  if (failed && error) {
+    console.error("[OnSite entrance map] MapLibre failed to load", error);
+  }
+}
+
+function destroyPickerMapRenderer() {
+  clearTimeout(pickerMapLoadTimeout);
+  pickerMapLoadTimeout = null;
+  pickerMarker?.remove();
+  pickerMarker = null;
+  pickerMap?.remove();
+  pickerMap = null;
+  pickerMapReady = false;
+  pickerMapLastError = null;
+}
+
+async function initPickerMap({ reset = false } = {}) {
+  if (reset) destroyPickerMapRenderer();
   if (pickerMap) {
     syncPickerMarkerToCurrentPin();
-    if (currentJobPin.lat != null && currentJobPin.lng != null) {
-      pickerMap.setView(
-        [Number(currentJobPin.lat), Number(currentJobPin.lng)],
-        Math.max(pickerMap.getZoom(), 16),
-      );
+    if (currentJobHasEntrancePin()) {
+      pickerMap.jumpTo({
+        center: [Number(currentJobPin.lng), Number(currentJobPin.lat)],
+        zoom: Math.max(pickerMap.getZoom(), 16),
+        bearing: 0,
+        pitch: 0,
+      });
     }
-    pickerMap.invalidateSize();
-    return;
+    pickerMap.resize();
+    return pickerMap;
   }
-  pickerMap = L.map("jobPickerMap", { zoomControl: true }).setView(
-    [52.4862, -1.8904],
-    11,
-  );
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  }).addTo(pickerMap);
+  if (pickerMapInitPromise) return pickerMapInitPromise;
 
-  if (currentJobPin.lat != null && currentJobPin.lng != null) {
-    pickerMap.setView(
-      [Number(currentJobPin.lat), Number(currentJobPin.lng)],
-      17,
+  pickerMapInitPromise = (async () => {
+    setPickerMapFailureState(false);
+    pickerMapLibre = await loadMapLibreModule();
+    const container = document.getElementById("jobPickerMap");
+    if (!container) return null;
+
+    const hasPin = currentJobHasEntrancePin();
+    const center = hasPin
+      ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
+      : [-1.8904, 52.4862];
+    pickerMap = new pickerMapLibre.Map({
+      container,
+      style: ONSITE_ENTRANCE_MAP_STYLE_URL,
+      center,
+      zoom: hasPin ? 17 : 11,
+      bearing: 0,
+      pitch: 0,
+      minZoom: 5,
+      maxZoom: 19.5,
+      attributionControl: false,
+      dragRotate: false,
+      pitchWithRotate: false,
+      scrollZoom: false,
+      renderWorldCopies: false,
+      fadeDuration: 0,
+    });
+    pickerMap.dragRotate.disable();
+    pickerMap.touchZoomRotate.disableRotation();
+    pickerMap.addControl(
+      new pickerMapLibre.NavigationControl({
+        showCompass: false,
+        showZoom: true,
+      }),
+      "top-right",
     );
-    syncPickerMarkerToCurrentPin();
-  }
+    pickerMap.addControl(
+      new pickerMapLibre.AttributionControl({
+        compact: true,
+      }),
+      "bottom-right",
+    );
 
-  pickerMap.on("click", (e) => {
-    if (
-      jobWizardActive &&
-      currentJobHasEntrancePin() &&
-      !jobEntrancePinOpen
-    ) {
-      return;
-    }
-    const { lat, lng } = e.latlng;
-    currentJobPin = {
-      lat: parseFloat(lat.toFixed(6)),
-      lng: parseFloat(lng.toFixed(6)),
-    };
-    jobArrivalPointConfirmed = false;
-    jobArrivalPointSource = "manual";
-    jobArrivalPointAddress = normalizedJobSiteAddress();
-    syncPickerMarkerToCurrentPin();
-    updatePinCoords();
-  });
+    pickerMap.on("click", (event) => {
+      if (
+        jobWizardActive &&
+        currentJobHasEntrancePin() &&
+        !jobEntrancePinOpen
+      ) {
+        return;
+      }
+      const { lat, lng } = event.lngLat;
+      currentJobPin = {
+        lat: parseFloat(lat.toFixed(6)),
+        lng: parseFloat(lng.toFixed(6)),
+      };
+      jobArrivalPointConfirmed = false;
+      jobArrivalPointSource = "manual";
+      jobArrivalPointAddress = normalizedJobSiteAddress();
+      syncPickerMarkerToCurrentPin();
+      updatePinCoords();
+    });
 
-  setTimeout(() => {
-    pickerMap.invalidateSize();
-  }, 300);
+    pickerMap.on("load", () => {
+      pickerMapReady = true;
+      pickerMapLastError = null;
+      clearTimeout(pickerMapLoadTimeout);
+      pickerMapLoadTimeout = null;
+      setPickerMapFailureState(false);
+      syncPickerMarkerToCurrentPin();
+      pickerMap.resize();
+    });
+    pickerMap.on("error", (event) => {
+      pickerMapLastError = event?.error || event;
+      console.warn("[OnSite entrance map] Map resource warning", pickerMapLastError);
+    });
+
+    syncPickerMarkerToCurrentPin();
+    pickerMapLoadTimeout = setTimeout(() => {
+      if (!pickerMapReady) {
+        setPickerMapFailureState(
+          true,
+          pickerMapLastError ||
+            new Error("The entrance map did not become ready in time."),
+        );
+      }
+    }, 12000);
+    requestAnimationFrame(() => pickerMap?.resize());
+    setTimeout(() => pickerMap?.resize(), 300);
+    return pickerMap;
+  })()
+    .catch((error) => {
+      destroyPickerMapRenderer();
+      setPickerMapFailureState(true, error);
+      return null;
+    })
+    .finally(() => {
+      pickerMapInitPromise = null;
+    });
+
+  return pickerMapInitPromise;
 }
 
 function updatePinCoords() {

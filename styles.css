@@ -5581,44 +5581,52 @@ margin-bottom: 12px;
 
 .picker-map {
   height: 280px;
-  border-radius: 20px;
-  border: 1px solid rgba(148, 163, 184, 0.32);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
   overflow: hidden;
   cursor: crosshair;
-  background: #eef2f5;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65), 0 18px 40px rgba(15, 23, 42, 0.1);
+  background: #f7f7f5;
+  box-shadow: none;
   margin-top: 2px;
 }
 
-#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom {
+#jobPickerMap.picker-map .maplibregl-ctrl-group {
+  background: var(--surface);
   border: 1px solid var(--card-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
   overflow: hidden;
 }
 
-#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a {
+#jobPickerMap.picker-map .maplibregl-ctrl-group button {
   background: var(--surface);
   border: 0;
   color: var(--ink-2);
   width: 32px;
   height: 32px;
-  line-height: 32px;
-  transition: background-color 180ms ease, color 180ms ease;
+  transition: background-color 180ms ease;
 }
 
-#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a + a {
+#jobPickerMap.picker-map .maplibregl-ctrl-group button + button {
   border-top: 1px solid var(--card-divider);
 }
 
-#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a:hover,
-#jobPickerMap.picker-map .leaflet-bar.leaflet-control-zoom a:focus-visible {
+#jobPickerMap.picker-map .maplibregl-ctrl-group button:hover,
+#jobPickerMap.picker-map .maplibregl-ctrl-group button:focus-visible {
   background: var(--surface-2);
-  color: var(--orange);
   outline: none;
 }
 
-#jobPickerMap.picker-map .leaflet-control-attribution {
+#jobPickerMap.picker-map .maplibregl-ctrl-group button:hover .maplibregl-ctrl-icon,
+#jobPickerMap.picker-map .maplibregl-ctrl-group button:focus-visible .maplibregl-ctrl-icon {
+  filter: invert(52%) sepia(95%) saturate(2085%) hue-rotate(349deg) brightness(101%) contrast(95%);
+}
+
+#jobPickerMap.picker-map .maplibregl-ctrl-group button:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(249, 115, 22, 0.58);
+}
+
+#jobPickerMap.picker-map .maplibregl-ctrl-attrib {
   background: rgba(255, 255, 255, 0.88);
   color: var(--ink-3);
   font-size: 9px;
@@ -5626,12 +5634,48 @@ margin-bottom: 12px;
   padding: 2px 5px;
 }
 
-#jobPickerMap.picker-map .leaflet-control-attribution a {
+#jobPickerMap.picker-map .maplibregl-ctrl-attrib a {
   color: var(--ink-2);
 }
 
-#jobPickerMap.picker-map .leaflet-tile-pane {
-  filter: saturate(0.72) brightness(1.035) contrast(0.93) sepia(0.025);
+#jobPickerMap.picker-map .maplibregl-canvas {
+  cursor: crosshair;
+  outline: none;
+}
+
+.picker-map-shell {
+  position: relative;
+}
+
+.picker-map.is-unavailable {
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+.picker-map-failure {
+  align-items: center;
+  background: rgba(247, 247, 245, 0.94);
+  border-radius: var(--radius-md);
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: absolute;
+  text-align: center;
+  z-index: 3;
+}
+
+.picker-map-failure.hidden,
+.picker-map-failure[hidden] {
+  display: none;
+}
+
+.picker-map-failure strong {
+  font-size: 0.85rem;
+  font-weight: 750;
 }
 
 .pin-coords-display {
@@ -5694,6 +5738,19 @@ margin-bottom: 12px;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
 
+.onsite-entrance-marker {
+  align-items: flex-start;
+  cursor: grab;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 30px;
+}
+
+.onsite-entrance-marker:active {
+  cursor: grabbing;
+}
+
 .onsite-entrance-pin {
   background: var(--orange);
   border: 2px solid #fff;
@@ -5701,9 +5758,7 @@ margin-bottom: 12px;
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.28);
   display: block;
   height: 24px;
-  left: 3px;
   position: relative;
-  top: 2px;
   transform: rotate(-45deg);
   transition: opacity 180ms ease, transform 180ms ease;
   width: 24px;

@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="auth.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.6.0/dist/maplibre-gl.css" />
   </head>
   <body>
 
@@ -1153,7 +1154,13 @@
                         <strong>Set the exact site entrance</strong>
                         <span>Move the pin to the gate or entrance workers should use.</span>
                       </div>
-                      <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
+                      <div class="picker-map-shell">
+                        <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
+                        <div id="jobPickerMapFailure" class="picker-map-failure hidden" role="status" aria-live="polite" hidden>
+                          <strong>Map temporarily unavailable.</strong>
+                          <button id="jobPickerMapRetry" class="secondary-btn" type="button">Try again</button>
+                        </div>
+                      </div>
                       <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
                         <span class="jw-pin-status-mark" aria-hidden="true">✓</span>
                         <span class="jw-pin-status-copy">
