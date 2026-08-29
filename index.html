@@ -1137,23 +1137,21 @@
                   <div class="jw-site-section-content">
                     <label class="field-label">
                       Site Address *
-                      <div class="geocode-row">
-                        <input id="jobSiteAddress" type="text" required placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" />
-                        <button type="button" id="geocodeBtn" class="geocode-btn">Find on Map</button>
-                      </div>
+                      <input id="jobSiteAddress" type="text" required placeholder="e.g. 14 Industrial Way, Birmingham, B1 1AA" aria-describedby="jobSiteAddressMessage" />
+                      <p id="jobSiteAddressMessage" class="jw-site-message hidden" role="alert"></p>
                     </label>
                     <div class="jw-compact-disclosure-row jw-entrance-pin-row">
                       <div>
                         <h5>Arrival point</h5>
                         <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not confirmed</p>
-                        <p id="jobArrivalPointCopy" class="jw-arrival-point-copy">Site addresses can be approximate. Set the exact gate or entrance workers should use.</p>
+                        <p id="jobArrivalPointCopy" class="jw-arrival-point-copy">Set the exact gate or entrance workers should use.</p>
                       </div>
-                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set exact entrance</button>
+                      <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set entrance on map</button>
                     </div>
                     <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
                       <div id="jobArrivalPointHelper" class="jw-arrival-point-instruction">
                         <strong>Set the exact site entrance</strong>
-                        <span>Site addresses can be approximate. Move the pin to the gate or entrance workers should use.</span>
+                        <span>Move the pin to the gate or entrance workers should use.</span>
                       </div>
                       <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
                       <div id="pinCoordsDisplay" class="pin-coords-display hidden" role="status">
