@@ -8350,10 +8350,12 @@ function syncJobSiteDisclosureState() {
   }
   if (arrivalToggle) {
     arrivalToggle.textContent = jobArrivalDetailsOpen
-      ? "Done"
-      : hasArrivalDetails
-        ? "Edit"
-        : "Add details";
+      ? "Hide details"
+      : "Add details";
+    arrivalToggle.setAttribute(
+      "aria-label",
+      jobArrivalDetailsOpen ? "Hide arrival details" : "Add arrival details",
+    );
   }
 
   const hasPin = currentJobHasEntrancePin();
@@ -8390,10 +8392,18 @@ function syncJobSiteDisclosureState() {
   }
   if (photoToggle) {
     photoToggle.textContent = jobSitePhotosOpen
-      ? "Done"
+      ? "Hide photos"
       : photoCount
         ? "Manage photos"
         : "Add photos";
+    photoToggle.setAttribute(
+      "aria-label",
+      jobSitePhotosOpen
+        ? "Hide site photos"
+        : photoCount
+          ? "Manage site photos"
+          : "Add site photos",
+    );
   }
 
   const managerToggle = document.getElementById("jobAttendanceManagerToggle");
@@ -8412,10 +8422,14 @@ function syncJobSiteDisclosureState() {
   }
   if (managerToggle) {
     managerToggle.textContent = jobAttendanceManagerOpen
-      ? "Done"
-      : hasManager
-        ? "Edit manager"
-        : "Assign attendance manager";
+      ? "Hide manager"
+      : "Assign attendance manager";
+    managerToggle.setAttribute(
+      "aria-label",
+      jobAttendanceManagerOpen
+        ? "Hide attendance manager"
+        : "Assign attendance manager",
+    );
   }
 }
 
