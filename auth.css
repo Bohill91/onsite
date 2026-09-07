@@ -335,9 +335,8 @@
 .auth-field-group select:focus-visible,
 .auth-field-group textarea:focus-visible {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
-  outline: 2px solid rgba(249, 115, 22, 0.55);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  outline: none;
 }
 
 .auth-input[type="date"],

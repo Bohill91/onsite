@@ -1360,9 +1360,8 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
 
 .os-select-trigger:focus-visible {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
-  outline: 2px solid rgba(249, 115, 22, 0.55);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  outline: none;
 }
 
 .os-select-trigger:disabled {
@@ -1581,9 +1580,8 @@ input:not([type="checkbox"]):not([type="radio"]):focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.16);
-  outline: 2px solid rgba(249, 115, 22, 0.55);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  outline: none;
 }
 
 input[type="date"],
@@ -19780,7 +19778,6 @@ button svg,
 #formJob.jw-wizard-mode .jw-project-step-grid input,
 #formJob.jw-wizard-mode .jw-project-step-grid select {
   background-color: var(--surface);
-  border-color: var(--card-border);
   border-radius: var(--radius-sm);
   min-height: 44px;
 }
@@ -20325,7 +20322,6 @@ button svg,
 #formJob.jw-wizard-mode .jw-labour-term input,
 #formJob.jw-wizard-mode .jw-labour-term select {
   background-color: var(--surface);
-  border-color: var(--card-border);
   border-radius: var(--radius-sm);
   min-height: var(--jw-form-control-height);
 }
@@ -21256,7 +21252,6 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-schedule-grid input {
   background-color: var(--surface);
-  border-color: var(--card-border);
   border-radius: var(--radius-sm);
   min-height: 44px;
 }
@@ -21752,7 +21747,6 @@ button svg,
 
 #formJob.jw-wizard-mode .jw-site-step-card :is(input, textarea) {
   background-color: var(--surface);
-  border-color: var(--card-border);
   border-radius: var(--radius-sm);
   min-height: 44px;
 }
