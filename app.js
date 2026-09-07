@@ -8350,7 +8350,7 @@ function syncJobSiteDisclosureState() {
   }
   if (arrivalToggle) {
     arrivalToggle.textContent = jobArrivalDetailsOpen
-      ? "Hide details"
+      ? "Hide"
       : "Add details";
     arrivalToggle.setAttribute(
       "aria-label",
@@ -8392,10 +8392,8 @@ function syncJobSiteDisclosureState() {
   }
   if (photoToggle) {
     photoToggle.textContent = jobSitePhotosOpen
-      ? "Hide photos"
-      : photoCount
-        ? "Manage photos"
-        : "Add photos";
+      ? "Hide"
+      : "Add photos";
     photoToggle.setAttribute(
       "aria-label",
       jobSitePhotosOpen
@@ -8422,7 +8420,7 @@ function syncJobSiteDisclosureState() {
   }
   if (managerToggle) {
     managerToggle.textContent = jobAttendanceManagerOpen
-      ? "Hide manager"
+      ? "Hide"
       : "Assign attendance manager";
     managerToggle.setAttribute(
       "aria-label",
