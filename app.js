@@ -8361,9 +8361,6 @@ function syncJobSiteDisclosureState() {
   const pinSummary = document.getElementById("jobEntrancePinSummary");
   const pinToggle = document.getElementById("jobEntrancePinToggle");
   const pinCopy = document.getElementById("jobArrivalPointCopy");
-  document
-    .getElementById("jobPickerMap")
-    ?.classList.toggle("is-adjusting", wizard && jobEntrancePinOpen);
   if (pinSummary) {
     pinSummary.textContent = entranceConfirmed ? "Confirmed" : "Not confirmed";
     pinSummary.classList.toggle("is-set", entranceConfirmed);
@@ -8373,6 +8370,7 @@ function syncJobSiteDisclosureState() {
     pinCopy.textContent = entranceConfirmed
       ? "Exact worker arrival point set."
       : "Set the exact gate or entrance workers should use.";
+    pinCopy.classList.toggle("hidden", wizard && jobEntrancePinOpen);
   }
   if (pinToggle) {
     pinToggle.textContent = entranceConfirmed
@@ -23051,18 +23049,55 @@ document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
 });
 
 function pickerZoomForGeocodeResult(result = {}) {
+  const resultType = String(result.addresstype || result.type || "").toLowerCase();
+  const category = String(result.category || result.class || "").toLowerCase();
+  const placeRank = Number(result.place_rank);
   const preciseTypes = new Set([
     "house",
     "building",
+    "office",
+    "amenity",
+    "shop",
     "residential",
     "commercial",
     "industrial",
     "construction",
   ]);
-  const broadTypes = new Set(["city", "town", "village", "administrative"]);
-  if (preciseTypes.has(result.type)) return 17;
-  if (broadTypes.has(result.type)) return 14.5;
-  return 16.5;
+  const streetTypes = new Set([
+    "road",
+    "street",
+    "pedestrian",
+    "service",
+    "residential",
+    "tertiary",
+    "secondary",
+    "primary",
+  ]);
+  const broadTypes = new Set([
+    "city",
+    "town",
+    "village",
+    "hamlet",
+    "administrative",
+    "county",
+    "state",
+  ]);
+
+  if (
+    preciseTypes.has(resultType) ||
+    (Number.isFinite(placeRank) && placeRank >= 30 && category !== "highway")
+  ) {
+    return 18;
+  }
+  if (streetTypes.has(resultType) || category === "highway") return 16.75;
+  if (resultType === "postcode") {
+    const postcode = String(result.name || result.display_name || "").trim();
+    return /\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b/i.test(postcode)
+      ? 16
+      : 14.75;
+  }
+  if (broadTypes.has(resultType)) return 14;
+  return 15.5;
 }
 
 async function geocodeJobSiteAddress(trigger) {

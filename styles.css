@@ -21834,6 +21834,10 @@ button svg,
   max-width: 460px;
 }
 
+#formJob.jw-wizard-mode .jw-arrival-point-copy.hidden {
+  display: none;
+}
+
 .jw-arrival-point-instruction {
   display: grid;
   gap: 3px;
@@ -21894,11 +21898,6 @@ button svg,
   border-color: var(--orange);
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
   outline: none;
-}
-
-#formJob.jw-wizard-mode .jw-site-location-surface .picker-map.is-adjusting {
-  border-color: rgba(249, 115, 22, 0.72);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map[aria-invalid="true"] {
