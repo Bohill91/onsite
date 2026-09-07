@@ -101,6 +101,7 @@
 
   --form-control-background: var(--surface);
   --form-control-border: var(--card-border);
+  --form-control-border-width: 1px;
   --form-control-radius: var(--radius-sm);
   --form-control-focus-border: var(--orange);
   --form-control-focus-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
@@ -1321,7 +1322,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   align-items: center;
   appearance: none;
   background: var(--form-control-background);
-  border: 1px solid var(--form-control-border);
+  border: var(--form-control-border-width) solid var(--form-control-border);
   border-radius: var(--os-select-radius);
   color: var(--ink);
   cursor: pointer;
@@ -1343,14 +1344,7 @@ html.app-booting body > :not(#app-launch-screen):not(script) {
   border-color: var(--border-light);
 }
 
-.os-select-trigger:focus,
 .os-select.is-open .os-select-trigger {
-  border-color: var(--form-control-focus-border);
-  box-shadow: var(--form-control-focus-shadow);
-  outline: none;
-}
-
-.os-select-trigger:focus-visible {
   border-color: var(--form-control-focus-border);
   box-shadow: var(--form-control-focus-shadow);
   outline: none;
@@ -15314,7 +15308,7 @@ label.secondary-btn,
   border-color: var(--form-control-border);
   border-radius: var(--form-control-radius);
   border-style: solid;
-  border-width: 1px;
+  border-width: var(--form-control-border-width);
   font-size: 0.9rem;
   line-height: 1.25;
   min-height: 44px;
@@ -15337,10 +15331,9 @@ label.secondary-btn,
 input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus,
-input:not([type="checkbox"]):not([type="radio"]):focus-visible,
-select:focus-visible,
-textarea:focus-visible {
+.os-select-trigger:focus {
   border-color: var(--form-control-focus-border);
+  border-width: var(--form-control-border-width);
   box-shadow: var(--form-control-focus-shadow);
   outline: none;
   outline-offset: 0;
