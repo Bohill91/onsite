@@ -21962,17 +21962,27 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-site-photos-group .site-photo-grid {
-  gap: 10px;
-  grid-template-columns: repeat(4, 136px);
-  justify-content: start;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
 }
 
 #formJob.jw-wizard-mode .jw-site-photos-group .photo-card {
-  aspect-ratio: 1;
-  background: var(--surface-2);
-  border-color: var(--card-border);
+  aspect-ratio: auto;
+  background: var(--surface);
+  border: 1px dashed var(--card-border);
   border-radius: var(--radius-sm);
-  min-height: 0;
+  box-shadow: none;
+  height: 124px;
+  min-height: 124px;
+  transform: none;
+}
+
+#formJob.jw-wizard-mode .jw-site-photos-group .photo-card:hover {
+  background: rgba(249, 115, 22, 0.035);
+  border-color: var(--orange);
+  box-shadow: none;
+  transform: none;
 }
 
 #formJob.jw-wizard-mode .jw-site-photos-group .photo-card:focus-visible {
@@ -21984,6 +21994,25 @@ button svg,
 #formJob.jw-wizard-mode .jw-site-photos-group .photo-placeholder {
   font-size: 0.72rem;
   padding: 8px;
+}
+
+#formJob.jw-wizard-mode .jw-site-photos-group .photo-card.has-photo {
+  background: var(--surface);
+  border-style: solid;
+}
+
+#formJob.jw-wizard-mode .jw-site-photos-group .photo-card.has-photo:not(.is-loading)::after {
+  background: rgba(24, 24, 27, 0.7);
+  content: attr(data-photo-label) " · Replace";
+  opacity: 1;
+  padding: 6px 9px;
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  #formJob.jw-wizard-mode .jw-site-photos-group .site-photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .jw-attendance-default {
@@ -23001,7 +23030,12 @@ button svg,
   }
 
   #formJob.jw-wizard-mode .jw-site-photos-group .site-photo-grid {
-    grid-template-columns: repeat(2, minmax(0, 138px));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #formJob.jw-wizard-mode .jw-site-photos-group .photo-card {
+    height: 112px;
+    min-height: 112px;
   }
 
   #formJob.jw-wizard-mode .jw-req-card {
