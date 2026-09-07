@@ -307,14 +307,14 @@
 }
 
 .auth-input {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--form-control-background);
+  border: 1px solid var(--form-control-border);
   border-radius: var(--radius-sm);
   color: var(--ink);
   font-size: 0.95rem;
   min-height: 48px;
   padding: 12px 14px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: var(--form-control-transition);
   width: 100%;
   font-family: inherit;
   appearance: none;
@@ -322,21 +322,6 @@
 
 .auth-input::placeholder {
   color: var(--ink-3);
-}
-
-.auth-input:focus {
-  border-color: var(--orange);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
-}
-
-.auth-input:focus-visible,
-.auth-field-group input:focus-visible,
-.auth-field-group select:focus-visible,
-.auth-field-group textarea:focus-visible {
-  border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
-  outline: none;
 }
 
 .auth-input[type="date"],
