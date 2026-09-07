@@ -21900,10 +21900,6 @@ button svg,
   outline: none;
 }
 
-#formJob.jw-wizard-mode .jw-site-location-surface .picker-map[aria-invalid="true"] {
-  border-color: var(--red);
-}
-
 #formJob.jw-wizard-mode .pin-coords-display {
   display: none;
   align-items: center;
@@ -21973,8 +21969,8 @@ button svg,
   border: 1px dashed var(--card-border);
   border-radius: var(--radius-sm);
   box-shadow: none;
-  height: 124px;
-  min-height: 124px;
+  height: 110px;
+  min-height: 110px;
   transform: none;
 }
 
@@ -21992,6 +21988,7 @@ button svg,
 }
 
 #formJob.jw-wizard-mode .jw-site-photos-group .photo-placeholder {
+  color: var(--ink-2);
   font-size: 0.72rem;
   padding: 8px;
 }
