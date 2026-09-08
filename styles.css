@@ -18528,6 +18528,13 @@ button.project-requirement-step-control:focus-visible {
 .project-requirement-level-choices {
   display: grid;
   gap: 10px;
+}
+
+.project-requirement-type-choices {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.project-requirement-level-choices {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -18596,6 +18603,16 @@ button.project-requirement-step-control:focus-visible {
 
 .project-requirement-form-span {
   grid-column: 1 / -1;
+}
+
+.project-requirement-guidance {
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 10px 12px;
 }
 
 .project-requirement-resources {
@@ -19507,12 +19524,15 @@ button.project-requirement-step-control:focus-visible {
     grid-column: 1;
   }
 
-  .project-requirement-type-choices,
   .project-requirement-level-choices,
   .project-requirement-completion-grid,
   .project-requirement-advanced-body,
   .project-requirement-resource-form {
     grid-template-columns: 1fr;
+  }
+
+  .project-requirement-type-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -19582,6 +19602,10 @@ button.project-requirement-step-control:focus-visible {
 
   .project-requirement-step-control {
     gap: 5px;
+  }
+
+  .project-requirement-type-choices {
+    grid-template-columns: 1fr;
   }
 
   .project-requirement-resource-row {

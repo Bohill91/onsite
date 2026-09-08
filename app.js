@@ -4129,6 +4129,18 @@ const PROJECT_REQUIREMENT_TYPES = [
     description: "A form workers need to complete and sign.",
   },
   {
+    value: "external_training",
+    label: "External training",
+    shortLabel: "External training",
+    description: "Training completed through a third-party platform.",
+  },
+  {
+    value: "background_check",
+    label: "Background check",
+    shortLabel: "Background check",
+    description: "A DBS or other approved worker-vetting requirement.",
+  },
+  {
     value: "onsite_induction",
     label: "On-site induction",
     shortLabel: "On-site induction",
@@ -4158,8 +4170,44 @@ const PROJECT_REQUIREMENT_ACTIONS = {
     { value: "watch_comprehension", label: "Watch + comprehension check" },
   ],
   form_signature: [{ value: "complete_sign", label: "Complete & sign" }],
+  external_training: [
+    { value: "worker_confirmation", label: "Worker confirms completion" },
+    { value: "upload_evidence", label: "Upload evidence" },
+    { value: "company_verification", label: "Company verifies completion" },
+  ],
+  background_check: [
+    { value: "company_verification", label: "Company verifies completion" },
+    { value: "upload_evidence", label: "Upload evidence" },
+    {
+      value: "provider_verification",
+      label: "Provider verification / future integration",
+    },
+    { value: "worker_confirmation", label: "Worker confirms completion" },
+  ],
   onsite_induction: [{ value: "supervisor_signoff", label: "Supervisor sign-off" }],
 };
+
+const PROJECT_BACKGROUND_CHECK_TYPES = [
+  { value: "dbs", label: "DBS check" },
+];
+
+const PROJECT_DBS_LEVELS = [
+  { value: "basic", label: "Basic" },
+  { value: "standard", label: "Standard" },
+  { value: "enhanced", label: "Enhanced" },
+  { value: "enhanced_barred", label: "Enhanced + barred list" },
+];
+
+const PROJECT_BACKGROUND_CHECK_INITIATION = [
+  {
+    value: "worker_external",
+    label: "Worker applies / completes externally",
+  },
+  {
+    value: "company_provider_link",
+    label: "Company/provider sends worker a link",
+  },
+];
 
 const PROJECT_REQUIREMENT_RESOURCE_TYPES = [
   { value: "file", label: "File" },
@@ -4171,6 +4219,7 @@ const PROJECT_REQUIREMENT_COMPLETION_EVIDENCE = [
   { value: "worker_confirmation", label: "Worker confirmation" },
   { value: "upload_evidence", label: "Upload evidence" },
   { value: "company_verification", label: "Company verification" },
+  { value: "provider_verification", label: "Provider verification" },
   { value: "supervisor_signoff", label: "Supervisor sign-off" },
 ];
 
@@ -4302,14 +4351,36 @@ function projectRequirementResourceSummary(resources) {
 }
 
 function projectRequirementHasExternalLink(requirement) {
-  return (requirement?.resources || []).some(
-    (resource) => resource.type === "external_link",
+  return !!(
+    requirement?.externalTraining?.url ||
+    requirement?.backgroundCheck?.applicationUrl ||
+    (requirement?.resources || []).some(
+      (resource) => resource.type === "external_link",
+    )
   );
 }
 
 function projectRequirementEvidenceOptions(requirement) {
+  const type = requirement?.requirementType;
+  if (type === "external_training") {
+    return PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.filter((option) =>
+      ["worker_confirmation", "upload_evidence", "company_verification"].includes(
+        option.value,
+      ),
+    );
+  }
+  if (type === "background_check") {
+    return PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.filter((option) =>
+      [
+        "company_verification",
+        "upload_evidence",
+        "provider_verification",
+        "worker_confirmation",
+      ].includes(option.value),
+    );
+  }
   if (!projectRequirementHasExternalLink(requirement)) return [];
-  const values = requirement.requirementType === "onsite_induction"
+  const values = type === "onsite_induction"
     ? ["supervisor_signoff", "upload_evidence", "company_verification"]
     : ["worker_confirmation", "upload_evidence", "company_verification"];
   return PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.filter((option) =>
@@ -4321,11 +4392,22 @@ function normalizeProjectRequirementCompletionEvidence(requirement) {
   const options = projectRequirementEvidenceOptions(requirement);
   if (!options.length) return [];
   const allowed = new Set(options.map((option) => option.value));
+  if (
+    ["external_training", "background_check"].includes(
+      requirement?.requirementType,
+    ) &&
+    allowed.has(requirement?.completionAction)
+  ) {
+    return [requirement.completionAction];
+  }
   const configured = (Array.isArray(requirement?.completionEvidence)
     ? requirement.completionEvidence
     : []
   ).filter((value) => allowed.has(value));
   if (configured.length) return [...new Set(configured)];
+  if (allowed.has(requirement?.completionAction)) {
+    return [requirement.completionAction];
+  }
   return [
     requirement.requirementType === "onsite_induction"
       ? "supervisor_signoff"
@@ -4340,6 +4422,24 @@ function projectRequirementTypeLabel(type) {
   );
 }
 
+function projectRequirementOptionLabel(options, value, fallback = "Not set") {
+  return options.find((option) => option.value === value)?.label || fallback;
+}
+
+function projectRequirementContentSummary(requirement) {
+  if (requirement?.requirementType === "external_training") {
+    const training = normalizeProjectRequirementExternalTraining(requirement);
+    return training.provider
+      ? `${training.provider} · External training link`
+      : "External training link";
+  }
+  if (requirement?.requirementType === "background_check") {
+    const check = normalizeProjectRequirementBackgroundCheck(requirement);
+    return `DBS · ${projectRequirementOptionLabel(PROJECT_DBS_LEVELS, check.level)}`;
+  }
+  return projectRequirementResourceSummary(requirement?.resources);
+}
+
 function projectRequirementTimingLabel(timing) {
   return (
     PROJECT_REQUIREMENT_TIMINGS.find((item) => item.value === timing)?.label ||
@@ -4351,15 +4451,15 @@ function projectRequirementActionLabel(action) {
   if (action === "worker_acknowledgement_signature") {
     return "Worker acknowledgement / signature";
   }
+  const actionLabel = Object.values(PROJECT_REQUIREMENT_ACTIONS)
+    .flat()
+    .find((item) => item.value === action)?.label;
+  if (actionLabel) return actionLabel;
   const evidenceLabel = PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.find(
     (item) => item.value === action,
   )?.label;
   if (evidenceLabel) return evidenceLabel;
-  return (
-    Object.values(PROJECT_REQUIREMENT_ACTIONS)
-      .flat()
-      .find((item) => item.value === action)?.label || "Read & acknowledge"
-  );
+  return "Read & acknowledge";
 }
 
 function projectRequirementConfiguredActionLabel(requirement) {
@@ -4386,9 +4486,55 @@ function normalizeProjectRequirementAudience(audience) {
   return { type: "all_project_workers", labourRequirementId: "" };
 }
 
+function normalizeProjectRequirementExternalTraining(requirement) {
+  const source = requirement?.externalTraining || {};
+  return {
+    provider: String(source.provider || "").trim(),
+    url: String(source.url || "").trim(),
+  };
+}
+
+function normalizeProjectRequirementBackgroundCheck(requirement) {
+  const source = requirement?.backgroundCheck || {};
+  const checkType = PROJECT_BACKGROUND_CHECK_TYPES.some(
+    (option) => option.value === source.checkType,
+  )
+    ? source.checkType
+    : "dbs";
+  const level = PROJECT_DBS_LEVELS.some(
+    (option) => option.value === source.level,
+  )
+    ? source.level
+    : "basic";
+  const initiation = PROJECT_BACKGROUND_CHECK_INITIATION.some(
+    (option) => option.value === source.initiation,
+  )
+    ? source.initiation
+    : "worker_external";
+  return {
+    checkType,
+    level,
+    initiation,
+    provider: String(source.provider || "").trim(),
+    applicationUrl: String(source.applicationUrl || source.url || "").trim(),
+    // Background-check evidence must remain restricted to authorised workflows.
+    evidenceVisibility: "restricted",
+  };
+}
+
 function normalizePreStartDocument(doc) {
+  const requirementType = PROJECT_REQUIREMENT_TYPES.some(
+    (type) => type.value === doc?.requirementType,
+  )
+    ? doc.requirementType
+    : "document";
+  const defaultTitle = requirementType === "onsite_induction"
+    ? "Site induction"
+    : requirementType === "background_check"
+      ? "DBS check"
+      : "";
   const documentName = String(
-    doc?.documentName || doc?.name || doc?.title || "",
+    doc?.documentName || doc?.name || doc?.title || defaultTitle,
   ).trim();
   if (!documentName) return null;
   const documentType = PRE_START_DOCUMENT_TYPES.some(
@@ -4396,11 +4542,6 @@ function normalizePreStartDocument(doc) {
   )
     ? doc.documentType
     : "other";
-  const requirementType = PROJECT_REQUIREMENT_TYPES.some(
-    (type) => type.value === doc?.requirementType,
-  )
-    ? doc.requirementType
-    : "document";
   const hasCanonicalTiming = PROJECT_REQUIREMENT_TIMINGS.some(
     (item) => item.value === doc?.timing,
   );
@@ -4441,9 +4582,12 @@ function normalizePreStartDocument(doc) {
     : validActions.some((item) => item.value === legacyAction)
       ? legacyAction
       : projectRequirementDefaultAction(requirementType);
-  const documentId = doc?.documentId || doc?.id || createId();
+  const documentId = doc?.requirementId || doc?.documentId || doc?.id || createId();
+  const projectId = String(doc?.projectId || "").trim();
   const resources = normalizeProjectRequirementResources(doc, documentId);
   const version = String(doc?.version || doc?.revision || "1").trim() || "1";
+  const externalTraining = normalizeProjectRequirementExternalTraining(doc);
+  const backgroundCheck = normalizeProjectRequirementBackgroundCheck(doc);
   const comprehensionCheck = {
     enabled:
       requirementType === "video_induction" &&
@@ -4460,10 +4604,17 @@ function normalizePreStartDocument(doc) {
   const completionEvidence = normalizeProjectRequirementCompletionEvidence({
     requirementType,
     resources,
+    completionAction,
+    externalTraining:
+      requirementType === "external_training" ? externalTraining : null,
+    backgroundCheck:
+      requirementType === "background_check" ? backgroundCheck : null,
     completionEvidence: doc?.completionEvidence,
   });
   return {
     documentId,
+    requirementId: documentId,
+    projectId,
     documentType,
     documentName,
     uploadedAt: doc?.uploadedAt || new Date().toISOString(),
@@ -4485,6 +4636,8 @@ function normalizePreStartDocument(doc) {
     requireWorkerAcknowledgementSignature:
       requirementType === "onsite_induction" &&
       !!doc?.requireWorkerAcknowledgementSignature,
+    externalTraining,
+    backgroundCheck,
     comprehensionCheck,
     versionHistory: Array.isArray(doc?.versionHistory)
       ? doc.versionHistory.filter((entry) => entry && typeof entry === "object")
@@ -4520,6 +4673,7 @@ function normalizeProjectRequirementCompletion(record) {
     projectId,
     workerId,
     assignmentId: record?.assignmentId || "",
+    labourRequirementId: record?.labourRequirementId || "",
     requirementId,
     requirementVersion: String(record?.requirementVersion || "1"),
     status: record?.status || "completed",
@@ -4847,7 +5001,9 @@ function migrateState(s) {
       ? j.preStartDocuments
       : []
     )
-      .map(normalizePreStartDocument)
+      .map((requirement) =>
+        normalizePreStartDocument({ ...requirement, projectId: j.id }),
+      )
       .filter(Boolean);
     j.assignmentType = normalizeAssignmentType(j.assignmentType || j.jobType);
     j.jobType = j.assignmentType;
@@ -5287,7 +5443,12 @@ function preStartDocumentTypeLabel(type) {
 
 function preStartDocumentsForJob(job, { includeArchived = false } = {}) {
   return (Array.isArray(job?.preStartDocuments) ? job.preStartDocuments : [])
-    .map(normalizePreStartDocument)
+    .map((requirement) =>
+      normalizePreStartDocument({
+        ...requirement,
+        projectId: job?.id || "",
+      }),
+    )
     .filter(Boolean)
     .filter((document) => includeArchived || !document.archivedAt)
     .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
@@ -5308,6 +5469,7 @@ function upsertProjectRequirement(jobId, input) {
   const record = normalizePreStartDocument({
     ...existing,
     ...input,
+    projectId: jobId,
     documentId: input?.documentId || existing?.documentId,
     createdAt: existing?.createdAt || input?.createdAt,
     uploadedAt: existing?.uploadedAt || input?.uploadedAt,
@@ -5466,6 +5628,8 @@ function projectRequirementCompletionsForJob(jobId) {
           (item) =>
             item.projectId === record.projectId &&
             item.workerId === record.workerId &&
+            item.assignmentId === record.assignmentId &&
+            item.labourRequirementId === record.labourRequirementId &&
             item.requirementId === record.requirementId &&
             item.requirementVersion === record.requirementVersion &&
             item.completionMethod === record.completionMethod &&
@@ -5489,6 +5653,8 @@ function recordProjectRequirementCompletion(input) {
     (item) =>
       item.projectId === record.projectId &&
       item.workerId === record.workerId &&
+      item.assignmentId === record.assignmentId &&
+      item.labourRequirementId === record.labourRequirementId &&
       item.requirementId === record.requirementId &&
       String(item.requirementVersion || "1") === record.requirementVersion &&
       item.completionMethod === record.completionMethod &&
@@ -5513,7 +5679,13 @@ function workerCompletedProjectRequirement(job, workerId, requirement) {
   const completionEvidence = normalizeProjectRequirementCompletionEvidence(
     requirement,
   );
-  if (projectRequirementHasExternalLink(requirement) && completionEvidence.length) {
+  if (
+    (projectRequirementHasExternalLink(requirement) ||
+      ["external_training", "background_check"].includes(
+        requirement.requirementType,
+      )) &&
+    completionEvidence.length
+  ) {
     const evidenceComplete = completionEvidence.every((method) => {
       if (method === "worker_confirmation") {
         return validCompletions.some(
@@ -5534,6 +5706,13 @@ function workerCompletedProjectRequirement(job, workerId, requirement) {
         return validCompletions.some(
           (record) =>
             record.verifiedAt && record.verifiedByCompanyUserId,
+        );
+      }
+      if (method === "provider_verification") {
+        return validCompletions.some(
+          (record) =>
+            record.completionMethod === "provider_verification" &&
+            record.verificationStatus === "verified",
         );
       }
       return validCompletions.some(
@@ -7995,6 +8174,8 @@ function applyRepeatProjectPreStartDraft(
       return normalizeDraftPreStartRequirement({
         ...requirement,
         documentId: createId(),
+        requirementId: "",
+        projectId: "",
         audience: copiedAudience,
         createdAt: new Date().toISOString(),
         uploadedAt: new Date().toISOString(),
@@ -8049,6 +8230,8 @@ function applyRepeatProjectToForm(job) {
     (doc) => ({
       ...doc,
       documentId: createId(),
+      requirementId: "",
+      projectId: "",
       uploadedAt: new Date().toISOString(),
     }),
   );
@@ -8465,8 +8648,12 @@ function resetDraftPreStartConfiguration({ renderStep = false } = {}) {
 function normalizeDraftPreStartRequirement(requirement, existing = null) {
   return normalizePreStartDocument({
     ...requirement,
+    projectId: "",
     documentId:
-      requirement?.documentId || existing?.documentId || createId(),
+      requirement?.documentId ||
+      requirement?.requirementId ||
+      existing?.documentId ||
+      createId(),
     createdAt:
       existing?.createdAt || requirement?.createdAt || new Date().toISOString(),
     uploadedAt:
@@ -8596,9 +8783,7 @@ function draftPreStartRequirementReadiness(requirement) {
 
 function draftPreStartRequirementRowHTML(requirement) {
   const readiness = draftPreStartRequirementReadiness(requirement);
-  const resourceSummary = projectRequirementResourceSummary(
-    requirement.resources,
-  );
+  const resourceSummary = projectRequirementContentSummary(requirement);
   return `<article class="jw-prestart-requirement-row">
     <div class="jw-prestart-requirement-main">
       <strong>${escapeHtml(requirement.documentName)}</strong>
@@ -17196,7 +17381,7 @@ function companyProjectRequirementRowHTML(job, requirement, summary) {
     <div class="company-project-requirement-record-meta">
       <span>${escapeHtml(requirement.requirementLevel === "optional" ? "Optional" : "Required")} · ${escapeHtml(projectRequirementConfiguredActionLabel(requirement))}</span>
       <span>${escapeHtml(projectRequirementAudienceLabel(job, requirement))}</span>
-      <span>${escapeHtml(projectRequirementResourceSummary(requirement.resources))}</span>
+      <span>${escapeHtml(projectRequirementContentSummary(requirement))}</span>
       <span>${escapeHtml(projectRequirementVersionLabel(requirement))}</span>
     </div>
     <div class="company-project-requirement-record-status">
@@ -17667,6 +17852,8 @@ function projectRequirementContentDraft(draft = {}) {
     description: String(draft.description || ""),
     contentToFollow: !!draft.contentToFollow,
     resources: structuredClone(Array.isArray(draft.resources) ? draft.resources : []),
+    externalTraining: normalizeProjectRequirementExternalTraining(draft),
+    backgroundCheck: normalizeProjectRequirementBackgroundCheck(draft),
   };
 }
 
@@ -17675,43 +17862,117 @@ function applyProjectRequirementContentDraft(draft, content = {}) {
   draft.description = String(content.description || "");
   draft.contentToFollow = !!content.contentToFollow;
   draft.resources = structuredClone(Array.isArray(content.resources) ? content.resources : []);
+  draft.externalTraining = normalizeProjectRequirementExternalTraining(content);
+  draft.backgroundCheck = normalizeProjectRequirementBackgroundCheck(content);
 }
 
 function projectRequirementDefaultContentDraft(editor, requirementType) {
-  if (requirementType !== "onsite_induction") {
-    return projectRequirementContentDraft();
-  }
-  const persistedTitle =
-    editor.original?.requirementType === "onsite_induction"
-      ? String(editor.original.documentName || "").trim()
+  const persistedTitle = editor.original?.requirementType === requirementType
+    ? String(editor.original.documentName || "").trim()
+    : "";
+  const defaultTitle = requirementType === "onsite_induction"
+    ? "Site induction"
+    : requirementType === "background_check"
+      ? "DBS check"
       : "";
-  return {
-    documentName: persistedTitle || "Site induction",
+  return projectRequirementContentDraft({
+    documentName: persistedTitle || defaultTitle,
     description: "",
     contentToFollow: false,
     resources: [],
-  };
+    externalTraining: {},
+    backgroundCheck: {},
+  });
+}
+
+function projectRequirementSelectOptions(options, selected) {
+  return options
+    .map(
+      (option) =>
+        `<option value="${escapeHtml(option.value)}"${option.value === selected ? " selected" : ""}>${escapeHtml(option.label)}</option>`,
+    )
+    .join("");
+}
+
+function projectRequirementExternalTrainingContentHTML(draft) {
+  const training = normalizeProjectRequirementExternalTraining(draft);
+  return `<div class="project-requirement-form-grid">
+    <label class="field-label">Training provider <span class="jw-field-optional">Optional</span>
+      <input data-project-requirement-training-provider type="text" value="${escapeHtml(training.provider)}" placeholder="Training provider" autocomplete="organization" />
+    </label>
+    <label class="field-label">Training title *
+      <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Training title" />
+    </label>
+    <label class="field-label project-requirement-form-span">External training URL *
+      <input data-project-requirement-training-url type="url" required value="${escapeHtml(training.url)}" placeholder="https://" inputmode="url" />
+    </label>
+    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+      <textarea data-project-requirement-description rows="2" placeholder="Explain how the worker should complete this training.">${escapeHtml(draft.description || "")}</textarea>
+    </label>
+    <p class="project-requirement-guidance project-requirement-form-span">Store only the training destination and permitted instructions. Never include passwords, access tokens or third-party login credentials.</p>
+  </div>`;
+}
+
+function projectRequirementBackgroundCheckContentHTML(draft) {
+  const check = normalizeProjectRequirementBackgroundCheck(draft);
+  const urlRequired = check.initiation === "company_provider_link";
+  const eligibilityGuidance = check.level === "basic"
+    ? ""
+    : `<p class="project-requirement-guidance project-requirement-form-span">Eligibility for Standard, Enhanced and barred-list DBS checks depends on the worker's role and applicable DBS rules. Confirm eligibility before requesting this level.</p>`;
+  return `<div class="project-requirement-form-grid">
+    <label class="field-label">Check type
+      <select data-project-requirement-background-type>${projectRequirementSelectOptions(PROJECT_BACKGROUND_CHECK_TYPES, check.checkType)}</select>
+    </label>
+    <label class="field-label">DBS level / requirement
+      <select data-project-requirement-background-level>${projectRequirementSelectOptions(PROJECT_DBS_LEVELS, check.level)}</select>
+    </label>
+    ${eligibilityGuidance}
+    <label class="field-label project-requirement-form-span">How the check is initiated
+      <select data-project-requirement-background-initiation>${projectRequirementSelectOptions(PROJECT_BACKGROUND_CHECK_INITIATION, check.initiation)}</select>
+    </label>
+    <label class="field-label">Provider <span class="jw-field-optional">Optional</span>
+      <input data-project-requirement-background-provider type="text" value="${escapeHtml(check.provider)}" placeholder="Verification provider" autocomplete="organization" />
+    </label>
+    <label class="field-label">Application / provider URL${urlRequired ? " *" : ' <span class="jw-field-optional">Optional</span>'}
+      <input data-project-requirement-background-url type="url"${urlRequired ? " required" : ""} value="${escapeHtml(check.applicationUrl)}" placeholder="https://" inputmode="url" />
+    </label>
+    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+      <textarea data-project-requirement-description rows="2" placeholder="Add permitted instructions for completing the check.">${escapeHtml(draft.description || "")}</textarea>
+    </label>
+    <p class="project-requirement-guidance project-requirement-form-span">Do not enter criminal-history details or certificate contents. OnSite stores only the check configuration and restricted verification metadata needed for the requirement.</p>
+  </div>`;
+}
+
+function projectRequirementStandardContentHTML(editor) {
+  const draft = editor.draft;
+  return `<div class="project-requirement-form-grid">
+    <label class="field-label project-requirement-form-span">Title *
+      <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
+    </label>
+    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+      <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need to complete this requirement.">${escapeHtml(draft.description || "")}</textarea>
+    </label>
+    <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
+      <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
+      <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
+    </label>
+    ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
+  </div>`;
 }
 
 function projectRequirementStepOneHTML(editor) {
   const draft = editor.draft;
-  const onsiteInduction = draft.requirementType === "onsite_induction";
+  const content = draft.requirementType === "onsite_induction"
+    ? ""
+    : draft.requirementType === "external_training"
+      ? projectRequirementExternalTrainingContentHTML(draft)
+      : draft.requirementType === "background_check"
+        ? projectRequirementBackgroundCheckContentHTML(draft)
+        : projectRequirementStandardContentHTML(editor);
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
     ${editor.mode === "draft" ? `<h3 class="app-launch-visually-hidden" id="projectRequirementStepTitle" tabindex="-1">Requirement content</h3>` : `<div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>`}
     ${projectRequirementTypeChoicesHTML(draft)}
-    ${onsiteInduction ? "" : `<div class="project-requirement-form-grid">
-      <label class="field-label project-requirement-form-span">Title *
-        <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
-      </label>
-      <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
-        <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need to complete this requirement.">${escapeHtml(draft.description || "")}</textarea>
-      </label>
-      <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
-        <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
-        <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
-      </label>
-      ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
-    </div>`}
+    ${content}
   </section>`;
 }
 
@@ -17729,6 +17990,11 @@ function projectRequirementLevelChoicesHTML(draft) {
 
 function projectRequirementActionFieldHTML(draft) {
   const actions = PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [];
+  const fieldLabel = ["external_training", "background_check"].includes(
+    draft.requirementType,
+  )
+    ? "Completion method"
+    : "Required worker action";
   if (actions.length === 1) {
     const workerConfirmation = draft.requirementType === "onsite_induction"
       ? `<label class="checkbox-row project-requirement-worker-confirmation">
@@ -17737,16 +18003,19 @@ function projectRequirementActionFieldHTML(draft) {
         </label>`
       : "";
     return `<div class="project-requirement-action-config">
-      <div class="project-requirement-fixed-value"><span>Required worker action</span><strong>${escapeHtml(actions[0].label)}</strong></div>
+      <div class="project-requirement-fixed-value"><span>${escapeHtml(fieldLabel)}</span><strong>${escapeHtml(actions[0].label)}</strong></div>
       ${workerConfirmation}
     </div>`;
   }
-  return `<label class="field-label">Required worker action
+  return `<label class="field-label">${escapeHtml(fieldLabel)}
     <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
   </label>`;
 }
 
 function projectRequirementCompletionEvidenceHTML(draft) {
+  if (["external_training", "background_check"].includes(draft.requirementType)) {
+    return "";
+  }
   const options = projectRequirementEvidenceOptions(draft);
   if (!options.length) return "";
   const configured = new Set(
@@ -17759,6 +18028,8 @@ function projectRequirementCompletionEvidenceHTML(draft) {
       "The worker provides a completion document, certificate or image.",
     company_verification:
       "A company user checks the external system or supplied evidence.",
+    provider_verification:
+      "A future provider integration confirms the check or training status.",
     supervisor_signoff:
       "An authorised site or company user confirms completion.",
   };
@@ -17835,13 +18106,48 @@ function projectRequirementReviewHTML(editor, draft) {
   const rows = [
     ["Type", projectRequirementTypeLabel(draft.requirementType)],
     ["Content", draft.contentToFollow ? "Content to follow" : "Configured"],
-    ["Resources", projectRequirementResourceSummary(draft.resources)],
+    ["Resources", projectRequirementContentSummary(draft)],
     ["Requirement level", draft.requirementLevel === "optional" ? "Optional" : "Required"],
     ["Worker action", action],
     ["Completion timing", projectRequirementTimingLabel(draft.timing)],
     ["Audience", projectRequirementEditorAudienceLabel(editor, draft)],
     ["Version", version || "Not set"],
   ];
+  if (draft.requirementType === "external_training") {
+    const training = normalizeProjectRequirementExternalTraining(draft);
+    rows.splice(
+      1,
+      0,
+      ["Training provider", training.provider || "Not specified"],
+      ["Training URL", training.url || "Not set"],
+    );
+  }
+  if (draft.requirementType === "background_check") {
+    const check = normalizeProjectRequirementBackgroundCheck(draft);
+    rows.splice(
+      1,
+      0,
+      [
+        "Check type",
+        projectRequirementOptionLabel(
+          PROJECT_BACKGROUND_CHECK_TYPES,
+          check.checkType,
+        ),
+      ],
+      ["DBS level", projectRequirementOptionLabel(PROJECT_DBS_LEVELS, check.level)],
+      [
+        "Initiated by",
+        projectRequirementOptionLabel(
+          PROJECT_BACKGROUND_CHECK_INITIATION,
+          check.initiation,
+        ),
+      ],
+      ["Provider", check.provider || "Not specified"],
+      ...(check.applicationUrl
+        ? [["Application URL", check.applicationUrl]]
+        : []),
+    );
+  }
   const evidence = normalizeProjectRequirementCompletionEvidence(draft)
     .map(
       (value) =>
@@ -17851,7 +18157,14 @@ function projectRequirementReviewHTML(editor, draft) {
     )
     .filter(Boolean)
     .join(" + ");
-  if (evidence) rows.splice(4, 0, ["External evidence", evidence]);
+  if (evidence) {
+    const evidenceLabel = ["external_training", "background_check"].includes(
+      draft.requirementType,
+    )
+      ? "Completion evidence"
+      : "External evidence";
+    rows.splice(4, 0, [evidenceLabel, evidence]);
+  }
   return `<section class="project-requirement-review" data-project-requirement-review aria-labelledby="projectRequirementReviewTitle">
     <div class="project-requirement-review-head">
       <p>Review</p>
@@ -17916,6 +18229,39 @@ function syncProjectRequirementEditorDraft(modal) {
   if (type) draft.requirementType = type;
   if (value("[data-project-requirement-title]") != null) draft.documentName = value("[data-project-requirement-title]");
   if (value("[data-project-requirement-description]") != null) draft.description = value("[data-project-requirement-description]");
+  if (value("[data-project-requirement-training-provider]") != null) {
+    draft.externalTraining.provider = value(
+      "[data-project-requirement-training-provider]",
+    );
+  }
+  if (value("[data-project-requirement-training-url]") != null) {
+    draft.externalTraining.url = value("[data-project-requirement-training-url]");
+  }
+  if (value("[data-project-requirement-background-type]") != null) {
+    draft.backgroundCheck.checkType = value(
+      "[data-project-requirement-background-type]",
+    );
+  }
+  if (value("[data-project-requirement-background-level]") != null) {
+    draft.backgroundCheck.level = value(
+      "[data-project-requirement-background-level]",
+    );
+  }
+  if (value("[data-project-requirement-background-initiation]") != null) {
+    draft.backgroundCheck.initiation = value(
+      "[data-project-requirement-background-initiation]",
+    );
+  }
+  if (value("[data-project-requirement-background-provider]") != null) {
+    draft.backgroundCheck.provider = value(
+      "[data-project-requirement-background-provider]",
+    );
+  }
+  if (value("[data-project-requirement-background-url]") != null) {
+    draft.backgroundCheck.applicationUrl = value(
+      "[data-project-requirement-background-url]",
+    );
+  }
   const contentToFollow = modal.querySelector(
     "[data-project-requirement-content-follow]",
   );
@@ -18016,7 +18362,9 @@ function projectRequirementDraftValidationIssue(editor) {
     };
   }
   if (
-    draft.requirementType !== "onsite_induction" &&
+    !["onsite_induction", "background_check"].includes(
+      draft.requirementType,
+    ) &&
     !String(draft.documentName || "").trim()
   ) {
     return {
@@ -18024,6 +18372,68 @@ function projectRequirementDraftValidationIssue(editor) {
       selector: "[data-project-requirement-title]",
       message: "Enter a requirement title.",
     };
+  }
+  if (
+    draft.requirementType === "external_training" &&
+    !validProjectRequirementExternalUrl(draft.externalTraining?.url)
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-training-url]",
+      message: "Enter a valid external training URL.",
+    };
+  }
+  if (draft.requirementType === "background_check") {
+    const check = draft.backgroundCheck || {};
+    if (
+      !PROJECT_BACKGROUND_CHECK_TYPES.some(
+        (option) => option.value === check.checkType,
+      )
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-type]",
+        message: "Choose a valid background check type.",
+      };
+    }
+    if (!PROJECT_DBS_LEVELS.some((option) => option.value === check.level)) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-level]",
+        message: "Choose a valid DBS level.",
+      };
+    }
+    if (
+      !PROJECT_BACKGROUND_CHECK_INITIATION.some(
+        (option) => option.value === check.initiation,
+      )
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-initiation]",
+        message: "Choose how the background check is initiated.",
+      };
+    }
+    if (
+      check.applicationUrl &&
+      !validProjectRequirementExternalUrl(check.applicationUrl)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-url]",
+        message: "Enter a valid application or provider URL.",
+      };
+    }
+    if (
+      check.initiation === "company_provider_link" &&
+      !validProjectRequirementExternalUrl(check.applicationUrl)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-url]",
+        message: "Add the application or provider URL sent to workers.",
+      };
+    }
   }
   const hasFileOrExternal = (draft.resources || []).some((resource) =>
     ["file", "external_link"].includes(resource.type),
@@ -18289,6 +18699,14 @@ function saveProjectRequirementEditor({ afterSave = null } = {}) {
     requireWorkerAcknowledgementSignature:
       draft.requirementType === "onsite_induction" &&
       draft.requireWorkerAcknowledgementSignature,
+    externalTraining:
+      draft.requirementType === "external_training"
+        ? normalizeProjectRequirementExternalTraining(draft)
+        : null,
+    backgroundCheck:
+      draft.requirementType === "background_check"
+        ? normalizeProjectRequirementBackgroundCheck(draft)
+        : null,
     comprehensionCheck: {
       enabled: draft.requirementType === "video_induction" && draft.completionAction === "watch_comprehension",
       passThreshold: draft.comprehensionCheck?.passThreshold || 80,
@@ -18624,6 +19042,16 @@ function bindProjectRequirementEditorControls(modal) {
     syncProjectRequirementEditorDraft(modal);
     renderProjectRequirementEditor({ focusHeading: false });
   });
+  modal
+    .querySelectorAll(
+      "[data-project-requirement-background-level], [data-project-requirement-background-initiation]",
+    )
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        syncProjectRequirementEditorDraft(modal);
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
   modal.querySelector("[data-project-requirement-content-follow]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
     if (projectRequirementEditorState.draft.contentToFollow) {
@@ -18795,13 +19223,16 @@ function openProjectRequirementEditor({
         version: "1",
         requireRecompletionOnUpdate: false,
         requireWorkerAcknowledgementSignature: false,
+        externalTraining: normalizeProjectRequirementExternalTraining(),
+        backgroundCheck: normalizeProjectRequirementBackgroundCheck(),
         comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
       };
-  if (
-    draft.requirementType === "onsite_induction" &&
-    !String(draft.documentName || "").trim()
-  ) {
-    draft.documentName = "Site induction";
+  if (!String(draft.documentName || "").trim()) {
+    if (draft.requirementType === "onsite_induction") {
+      draft.documentName = "Site induction";
+    } else if (draft.requirementType === "background_check") {
+      draft.documentName = "DBS check";
+    }
   }
   projectRequirementEditorState = {
     mode,
@@ -21818,6 +22249,12 @@ jobForm.addEventListener("submit", (e) => {
   });
   if (Object.keys(photos).length) job.sitePhotos = photos;
   if (Object.keys(photoMeta).length) job.sitePhotoMeta = photoMeta;
+
+  job.preStartDocuments = (job.preStartDocuments || [])
+    .map((requirement) =>
+      normalizePreStartDocument({ ...requirement, projectId: job.id }),
+    )
+    .filter(Boolean);
 
   state.jobs.push(job);
   addProjectActivity(job, {
