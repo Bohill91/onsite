@@ -17661,12 +17661,45 @@ function projectRequirementTypeChoicesHTML(draft) {
   </fieldset>`;
 }
 
+function projectRequirementContentDraft(draft = {}) {
+  return {
+    documentName: String(draft.documentName || ""),
+    description: String(draft.description || ""),
+    contentToFollow: !!draft.contentToFollow,
+    resources: structuredClone(Array.isArray(draft.resources) ? draft.resources : []),
+  };
+}
+
+function applyProjectRequirementContentDraft(draft, content = {}) {
+  draft.documentName = String(content.documentName || "");
+  draft.description = String(content.description || "");
+  draft.contentToFollow = !!content.contentToFollow;
+  draft.resources = structuredClone(Array.isArray(content.resources) ? content.resources : []);
+}
+
+function projectRequirementDefaultContentDraft(editor, requirementType) {
+  if (requirementType !== "onsite_induction") {
+    return projectRequirementContentDraft();
+  }
+  const persistedTitle =
+    editor.original?.requirementType === "onsite_induction"
+      ? String(editor.original.documentName || "").trim()
+      : "";
+  return {
+    documentName: persistedTitle || "Site induction",
+    description: "",
+    contentToFollow: false,
+    resources: [],
+  };
+}
+
 function projectRequirementStepOneHTML(editor) {
   const draft = editor.draft;
+  const onsiteInduction = draft.requirementType === "onsite_induction";
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
     ${editor.mode === "draft" ? `<h3 class="app-launch-visually-hidden" id="projectRequirementStepTitle" tabindex="-1">Requirement content</h3>` : `<div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>`}
     ${projectRequirementTypeChoicesHTML(draft)}
-    <div class="project-requirement-form-grid">
+    ${onsiteInduction ? "" : `<div class="project-requirement-form-grid">
       <label class="field-label project-requirement-form-span">Title *
         <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
       </label>
@@ -17678,7 +17711,7 @@ function projectRequirementStepOneHTML(editor) {
         <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
       </label>
       ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
-    </div>
+    </div>`}
   </section>`;
 }
 
@@ -17982,7 +18015,10 @@ function projectRequirementDraftValidationIssue(editor) {
       message: "Choose a requirement type.",
     };
   }
-  if (!String(draft.documentName || "").trim()) {
+  if (
+    draft.requirementType !== "onsite_induction" &&
+    !String(draft.documentName || "").trim()
+  ) {
     return {
       step: 1,
       selector: "[data-project-requirement-title]",
@@ -18560,10 +18596,20 @@ function bindProjectRequirementEditorControls(modal) {
     });
   modal.querySelectorAll('input[name="projectRequirementType"]').forEach((input) => {
     input.addEventListener("change", () => {
-      const previousType = projectRequirementEditorState.draft.requirementType;
+      const editor = projectRequirementEditorState;
+      const previousType = editor.draft.requirementType;
       syncProjectRequirementEditorDraft(modal);
-      const draft = projectRequirementEditorState.draft;
+      const draft = editor.draft;
       if (draft.requirementType !== previousType) {
+        editor.contentDrafts[previousType] = projectRequirementContentDraft(draft);
+        applyProjectRequirementContentDraft(
+          draft,
+          editor.contentDrafts[draft.requirementType] ||
+            projectRequirementDefaultContentDraft(editor, draft.requirementType),
+        );
+        editor.contentDrafts[draft.requirementType] =
+          projectRequirementContentDraft(draft);
+        editor.resourceEditor = null;
         draft.completionAction = projectRequirementDefaultAction(draft.requirementType);
         draft.requireWorkerAcknowledgementSignature = false;
         draft.timing = draft.requirementType === "onsite_induction"
@@ -18751,6 +18797,12 @@ function openProjectRequirementEditor({
         requireWorkerAcknowledgementSignature: false,
         comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
       };
+  if (
+    draft.requirementType === "onsite_induction" &&
+    !String(draft.documentName || "").trim()
+  ) {
+    draft.documentName = "Site induction";
+  }
   projectRequirementEditorState = {
     mode,
     jobId,
@@ -18760,6 +18812,9 @@ function openProjectRequirementEditor({
     draft,
     initialDraftSnapshot: JSON.stringify(draft),
     resourceEditor: null,
+    contentDrafts: {
+      [draft.requirementType]: projectRequirementContentDraft(draft),
+    },
   };
   const modal = document.createElement("div");
   modal.id = "projectRequirementModal";
