@@ -4522,6 +4522,119 @@ function normalizeProjectRequirementBackgroundCheck(requirement) {
   };
 }
 
+const PROJECT_REQUIREMENT_FORM_FIELD_TYPES = [
+  "short_text",
+  "long_text",
+  "date",
+  "checkbox",
+  "single_choice",
+  "multiple_choice",
+];
+
+const PROJECT_REQUIREMENT_COMPLETION_STATUSES = new Set([
+  "not_started",
+  "in_progress",
+  "awaiting_verification",
+  "complete",
+  "failed",
+  "needs_attention",
+]);
+
+// Video completion uses watched coverage, rather than the playhead position.
+// 95% tolerates media timing precision while still preventing seek-to-end bypass.
+const PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD = 0.95;
+
+function normalizeProjectRequirementFormDefinition(requirement) {
+  const source = requirement?.formDefinition || {};
+  const fields = (Array.isArray(source.fields) ? source.fields : [])
+    .map((field, index) => {
+      const type = PROJECT_REQUIREMENT_FORM_FIELD_TYPES.includes(field?.type)
+        ? field.type
+        : "short_text";
+      const label = String(field?.label || "").trim();
+      if (!label) return null;
+      const options = ["single_choice", "multiple_choice"].includes(type)
+        ? (Array.isArray(field?.options) ? field.options : [])
+            .map((option) => String(option || "").trim())
+            .filter(Boolean)
+        : [];
+      if (["single_choice", "multiple_choice"].includes(type) && !options.length) {
+        return null;
+      }
+      return {
+        id: String(field?.id || `field-${index + 1}`),
+        type,
+        label,
+        required: field?.required !== false,
+        options: [...new Set(options)],
+      };
+    })
+    .filter(Boolean);
+  return { fields };
+}
+
+function normalizeProjectRequirementQuizQuestion(question, index = 0) {
+  const prompt = String(question?.prompt || question?.question || "").trim();
+  const options = (Array.isArray(question?.options) ? question.options : [])
+    .map((option) => String(option || "").trim())
+    .filter(Boolean);
+  if (!prompt || options.length < 2) return null;
+  const correctOptionIndexes = (Array.isArray(question?.correctOptionIndexes)
+    ? question.correctOptionIndexes
+    : [question?.correctOptionIndex ?? question?.correctAnswerIndex]
+  )
+    .map(Number)
+    .filter(
+      (optionIndex, answerIndex, answers) =>
+        Number.isInteger(optionIndex) &&
+        optionIndex >= 0 &&
+        optionIndex < options.length &&
+        answers.indexOf(optionIndex) === answerIndex,
+    );
+  if (!correctOptionIndexes.length) return null;
+  return {
+    id: String(question?.id || `question-${index + 1}`),
+    prompt,
+    options,
+    multiple: !!question?.multiple || correctOptionIndexes.length > 1,
+    correctOptionIndexes,
+  };
+}
+
+function normalizeProjectRequirementVideoProgress(progress) {
+  const duration = Math.max(0, Number(progress?.duration) || 0);
+  const watchedRanges = (Array.isArray(progress?.watchedRanges)
+    ? progress.watchedRanges
+    : []
+  )
+    .map((range) => [Math.max(0, Number(range?.[0]) || 0), Math.max(0, Number(range?.[1]) || 0)])
+    .filter(([start, end]) => end > start)
+    .sort((a, b) => a[0] - b[0]);
+  const mergedRanges = watchedRanges.reduce((merged, range) => {
+    const previous = merged.at(-1);
+    if (previous && range[0] <= previous[1] + 0.35) {
+      previous[1] = Math.max(previous[1], range[1]);
+    } else {
+      merged.push([...range]);
+    }
+    return merged;
+  }, []);
+  const watchedSeconds = mergedRanges.reduce(
+    (total, [start, end]) => total + Math.max(0, end - start),
+    0,
+  );
+  return {
+    resourceId: String(progress?.resourceId || ""),
+    duration,
+    watchedRanges: mergedRanges,
+    watchedSeconds,
+    coverage: duration ? Math.min(1, watchedSeconds / duration) : 0,
+    lastPosition: Math.max(0, Number(progress?.lastPosition) || 0),
+    updatedAt: progress?.updatedAt || "",
+    loadError: String(progress?.loadError || ""),
+  };
+}
+
 function normalizePreStartDocument(doc) {
   const requirementType = PROJECT_REQUIREMENT_TYPES.some(
     (type) => type.value === doc?.requirementType,
@@ -4597,9 +4710,11 @@ function normalizePreStartDocument(doc) {
       100,
       Math.max(1, Number(doc?.comprehensionCheck?.passThreshold) || 80),
     ),
-    questions: Array.isArray(doc?.comprehensionCheck?.questions)
+    questions: (Array.isArray(doc?.comprehensionCheck?.questions)
       ? doc.comprehensionCheck.questions
-      : [],
+      : [])
+      .map(normalizeProjectRequirementQuizQuestion)
+      .filter(Boolean),
   };
   const completionEvidence = normalizeProjectRequirementCompletionEvidence({
     requirementType,
@@ -4638,6 +4753,7 @@ function normalizePreStartDocument(doc) {
       !!doc?.requireWorkerAcknowledgementSignature,
     externalTraining,
     backgroundCheck,
+    formDefinition: normalizeProjectRequirementFormDefinition(doc),
     comprehensionCheck,
     versionHistory: Array.isArray(doc?.versionHistory)
       ? doc.versionHistory.filter((entry) => entry && typeof entry === "object")
@@ -4651,21 +4767,36 @@ function normalizePreStartDocument(doc) {
 
 function normalizeProjectRequirementCompletion(record) {
   const requirementId = String(
-    record?.requirementId || record?.documentId || "",
+    record?.preStartRequirementId || record?.requirementId || record?.documentId || "",
   ).trim();
   const projectId = String(record?.projectId || record?.jobId || "").trim();
   const workerId = String(record?.workerId || "").trim();
   if (!requirementId || !projectId || !workerId) return null;
   const completedAt = record?.completedAt || record?.acknowledgedAt || "";
+  const rawStatus = record?.status === "completed" ? "complete" : record?.status;
+  const status = PROJECT_REQUIREMENT_COMPLETION_STATUSES.has(rawStatus)
+    ? rawStatus
+    : completedAt
+      ? "complete"
+      : "not_started";
   const evidenceAttachments = (
     Array.isArray(record?.evidenceAttachments) ? record.evidenceAttachments : []
   )
-    .map((attachment, index) =>
-      normalizeProjectRequirementResource(
+    .map((attachment, index) => {
+      const normalized = normalizeProjectRequirementResource(
         { ...attachment, type: "file" },
         `${record?.id || requirementId}-evidence-${index + 1}`,
-      ),
-    )
+      );
+      return normalized
+        ? {
+            ...normalized,
+            accessScope:
+              attachment?.accessScope === "restricted"
+                ? "restricted"
+                : "company_project",
+          }
+        : null;
+    })
     .filter(Boolean);
   return {
     id: record?.id || createId(),
@@ -4674,20 +4805,48 @@ function normalizeProjectRequirementCompletion(record) {
     workerId,
     assignmentId: record?.assignmentId || "",
     labourRequirementId: record?.labourRequirementId || "",
+    preStartRequirementId: requirementId,
     requirementId,
     requirementVersion: String(record?.requirementVersion || "1"),
-    status: record?.status || "completed",
+    status,
     startedAt: record?.startedAt || "",
+    updatedAt: record?.updatedAt || completedAt || record?.startedAt || "",
     completedAt,
     completionMethod: record?.completionMethod || "read_acknowledge",
     acknowledgedAt: record?.acknowledgedAt || "",
     workerConfirmedAt: record?.workerConfirmedAt || "",
+    signedAt: record?.signedAt || "",
     evidenceAttachments,
-    signatureReference: record?.signatureReference || "",
+    signatureReference:
+      record?.signatureReference && typeof record.signatureReference === "object"
+        ? structuredClone(record.signatureReference)
+        : record?.signatureReference || "",
+    documentProgress:
+      record?.documentProgress && typeof record.documentProgress === "object"
+        ? structuredClone(record.documentProgress)
+        : null,
+    videoProgress: normalizeProjectRequirementVideoProgress(record?.videoProgress),
+    formDraft:
+      record?.formDraft && typeof record.formDraft === "object"
+        ? structuredClone(record.formDraft)
+        : null,
+    formSubmission:
+      record?.formSubmission && typeof record.formSubmission === "object"
+        ? structuredClone(record.formSubmission)
+        : null,
+    formSubmissionReference:
+      record?.formSubmissionReference || record?.completedArtifactReference || "",
     quizResult:
       record?.quizResult && typeof record.quizResult === "object"
         ? record.quizResult
         : null,
+    quizAttempts: Array.isArray(record?.quizAttempts)
+      ? structuredClone(record.quizAttempts)
+      : [],
+    participantActions:
+      record?.participantActions && typeof record.participantActions === "object"
+        ? structuredClone(record.participantActions)
+        : {},
     supervisorUserId: record?.supervisorUserId || "",
     verificationStatus:
       record?.verificationStatus || (record?.verifiedAt ? "verified" : ""),
@@ -4695,6 +4854,7 @@ function normalizeProjectRequirementCompletion(record) {
     verifiedByCompanyUserId: record?.verifiedByCompanyUserId || "",
     completedArtifactReference: record?.completedArtifactReference || "",
     source: record?.source || "project_requirement",
+    revision: Math.max(0, Number(record?.revision) || 0),
   };
 }
 
@@ -5048,6 +5208,34 @@ function migrateState(s) {
       if (r) j.budgetMax = r;
     }
   });
+  // Historic completion records pre-date assignment identity. Backfill only
+  // when the worker is still unambiguously assigned to this same project.
+  s.projectRequirementCompletions = (s.projectRequirementCompletions || []).map(
+    (record) => {
+      const job = (s.jobs || []).find((item) => item.id === record.projectId);
+      if (record.assignmentId) {
+        return { ...record, companyId: record.companyId || job?.companyId || "" };
+      }
+      const application = (s.applications || []).find(
+        (item) =>
+          item.jobId === record.projectId &&
+          item.workerId === record.workerId &&
+          item.status === "confirmed",
+      );
+      const directlyAssigned = !!job &&
+        (job.assignedWorkerId === record.workerId ||
+          (Array.isArray(job.assignedWorkerIds) &&
+            job.assignedWorkerIds.includes(record.workerId)));
+      if (!application && !directlyAssigned) return record;
+      return {
+        ...record,
+        companyId: record.companyId || job?.companyId || "",
+        assignmentId:
+          application?.id ||
+          `legacy-assignment:${record.projectId}:${record.workerId}`,
+      };
+    },
+  );
   (s.jobs || []).forEach((j) => {
     if (j.assignedWorkerId && !j.bookingStatus) {
       j.bookingStatus = "confirmed";
@@ -5082,8 +5270,22 @@ function saveState() {
   try {
     syncCommercialInvoiceArchitecture(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== STORAGE_KEY || !event.newValue) return;
+  syncProjectRequirementCompletionsFromPersistence();
+  if (document.getElementById("workerPreStartCompletionModal")) {
+    renderWorkerPreStartCompletion();
+  }
+  if (document.getElementById("companyPreStartVerificationModal")) {
+    renderCompanyPreStartVerification();
+  }
+});
 
 let taxonomySuggestionTrigger = null;
 
@@ -5535,91 +5737,370 @@ function preStartAcknowledgementsForWorker(workerId, jobId) {
   );
 }
 
+function projectRequirementAssignmentContext(job, workerId, requirement) {
+  if (!job || !workerId || !requirement) return null;
+  const applications = (state.applications || []).filter(
+    (item) => item.jobId === job.id && item.workerId === workerId,
+  );
+  const application = applications.find((item) => item.status === "confirmed");
+  const directlyAssigned =
+    job.assignedWorkerId === workerId ||
+    (Array.isArray(job.assignedWorkerIds) &&
+      job.assignedWorkerIds.includes(workerId));
+  if (!application && !directlyAssigned) return null;
+  const worker = findWorker(workerId);
+  const labourRequirements = labourRequirementsForJob(job);
+  const workerRequirement = worker
+    ? companyProjectWorkerRequirement(worker, {
+        apps: applications,
+        labourRequirements,
+      })
+    : null;
+  if (
+    requirement.audience?.type === "labour_requirement" &&
+    workerRequirement?.id !== requirement.audience.labourRequirementId
+  ) {
+    return null;
+  }
+  return {
+    companyId: String(job.companyId || ""),
+    projectId: String(job.id),
+    workerId: String(workerId),
+    assignmentId: String(
+      application?.id || `legacy-assignment:${job.id}:${workerId}`,
+    ),
+    labourRequirementId: String(
+      requirement.audience?.type === "labour_requirement"
+        ? requirement.audience.labourRequirementId
+        : workerRequirement?.id || "",
+    ),
+    preStartRequirementId: String(requirement.documentId),
+    requirementId: String(requirement.documentId),
+    requirementVersion: String(requirement.version || "1"),
+  };
+}
+
+function projectRequirementCompletionIdentityKey(record) {
+  return [
+    record?.companyId || "",
+    record?.projectId || "",
+    record?.workerId || "",
+    record?.assignmentId || "",
+    record?.labourRequirementId || "",
+    record?.preStartRequirementId || record?.requirementId || "",
+    String(record?.requirementVersion || "1"),
+  ].join("::");
+}
+
+function projectRequirementCompletionFor(job, workerId, requirement) {
+  const identity = projectRequirementAssignmentContext(job, workerId, requirement);
+  if (!identity) return null;
+  const key = projectRequirementCompletionIdentityKey(identity);
+  return projectRequirementCompletionsForJob(job.id)
+    .find((record) => projectRequirementCompletionIdentityKey(record) === key) || null;
+}
+
+function mergeProjectRequirementCompletionRecords(left, right) {
+  const first = normalizeProjectRequirementCompletion(left);
+  const second = normalizeProjectRequirementCompletion(right);
+  if (!first) return second;
+  if (!second) return first;
+  const newer = String(second.updatedAt || "") >= String(first.updatedAt || "")
+    ? second
+    : first;
+  const older = newer === second ? first : second;
+  const evidence = [...(older.evidenceAttachments || []), ...(newer.evidenceAttachments || [])]
+    .filter(
+      (attachment, index, attachments) =>
+        attachments.findIndex((item) => item.id === attachment.id) === index,
+    );
+  const quizAttempts = [...(older.quizAttempts || []), ...(newer.quizAttempts || [])]
+    .filter(
+      (attempt, index, attempts) =>
+        attempts.findIndex((item) => item.id === attempt.id) === index,
+    );
+  return normalizeProjectRequirementCompletion({
+    ...older,
+    ...newer,
+    startedAt: older.startedAt || newer.startedAt,
+    completedAt: newer.completedAt || older.completedAt,
+    acknowledgedAt: newer.acknowledgedAt || older.acknowledgedAt,
+    signedAt: newer.signedAt || older.signedAt,
+    workerConfirmedAt: newer.workerConfirmedAt || older.workerConfirmedAt,
+    verifiedAt: newer.verifiedAt || older.verifiedAt,
+    verifiedByCompanyUserId:
+      newer.verifiedByCompanyUserId || older.verifiedByCompanyUserId,
+    signatureReference: newer.signatureReference || older.signatureReference,
+    formSubmission: newer.formSubmission || older.formSubmission,
+    formSubmissionReference:
+      newer.formSubmissionReference || older.formSubmissionReference,
+    documentProgress: {
+      ...(older.documentProgress || {}),
+      ...(newer.documentProgress || {}),
+    },
+    videoProgress: normalizeProjectRequirementVideoProgress({
+      ...(older.videoProgress || {}),
+      ...(newer.videoProgress || {}),
+      watchedRanges: [
+        ...(older.videoProgress?.watchedRanges || []),
+        ...(newer.videoProgress?.watchedRanges || []),
+      ],
+    }),
+    evidenceAttachments: evidence,
+    quizAttempts,
+    participantActions: {
+      ...(older.participantActions || {}),
+      ...(newer.participantActions || {}),
+    },
+    revision: Math.max(Number(first.revision || 0), Number(second.revision || 0)),
+  });
+}
+
+function syncProjectRequirementCompletionsFromPersistence() {
+  try {
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    if (!Array.isArray(persisted?.projectRequirementCompletions)) return;
+    const current = (state.projectRequirementCompletions || [])
+      .map(normalizeProjectRequirementCompletion)
+      .filter(Boolean);
+    const records = new Map();
+    [...persisted.projectRequirementCompletions, ...current]
+      .map(normalizeProjectRequirementCompletion)
+      .filter(Boolean)
+      .forEach((record) => {
+        const key = projectRequirementCompletionIdentityKey(record);
+        const previous = records.get(key);
+        records.set(
+          key,
+          previous
+            ? mergeProjectRequirementCompletionRecords(previous, record)
+            : record,
+        );
+      });
+    state.projectRequirementCompletions = [...records.values()].sort(
+      (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0),
+    );
+  } catch (_) {
+    // The in-memory canonical state remains unchanged if persisted data is invalid.
+  }
+}
+
+function projectRequirementCompletionDerivedStatus(requirement, record) {
+  if (!requirement || !record) return "not_started";
+  if (
+    record.source !== "pre_start_completion_engine" &&
+    record.status === "complete" &&
+    record.completedAt
+  ) {
+    return "complete";
+  }
+  const actions = record.participantActions || {};
+  if (requirement.requirementType === "document") {
+    if (requirement.completionAction === "view_only") {
+      return actions.documentViewedAt ? "complete" : record.startedAt ? "in_progress" : "not_started";
+    }
+    const reachedEnd =
+      !!record.documentProgress?.bottomReachedAt &&
+      record.documentProgress?.presentationMode === "onsite_trackable_v1";
+    if (requirement.completionAction === "read_sign") {
+      return reachedEnd && record.signedAt && record.signatureReference
+        ? "complete"
+        : record.startedAt
+          ? "in_progress"
+          : "not_started";
+    }
+    return reachedEnd && record.acknowledgedAt
+      ? "complete"
+      : record.startedAt
+        ? "in_progress"
+        : "not_started";
+  }
+  if (requirement.requirementType === "video_induction") {
+    const watched =
+      Number(record.videoProgress?.coverage || 0) >=
+      PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD;
+    if (requirement.completionAction === "watch_comprehension") {
+      if (watched && record.quizResult?.passed) return "complete";
+      if (record.quizResult && !record.quizResult.passed) return "needs_attention";
+      return record.startedAt ? "in_progress" : "not_started";
+    }
+    return watched && record.acknowledgedAt
+      ? "complete"
+      : record.startedAt
+        ? "in_progress"
+        : "not_started";
+  }
+  if (requirement.requirementType === "form_signature") {
+    return record.formSubmission && record.signedAt && record.signatureReference
+      ? "complete"
+      : record.startedAt
+        ? "in_progress"
+        : "not_started";
+  }
+  if (requirement.requirementType === "onsite_induction") {
+    const supervisorComplete = !!actions.supervisorSignoff?.completedAt;
+    const workerComplete = !requirement.requireWorkerAcknowledgementSignature ||
+      !!actions.workerAcknowledgementSignature?.completedAt;
+    if (supervisorComplete && workerComplete) return "complete";
+    if (supervisorComplete || actions.workerAcknowledgementSignature) {
+      return "awaiting_verification";
+    }
+    return record.startedAt ? "in_progress" : "not_started";
+  }
+  const methods = normalizeProjectRequirementCompletionEvidence(requirement);
+  const workerConfirmed = !!record.workerConfirmedAt;
+  const hasEvidence = !!record.evidenceAttachments?.length;
+  const companyVerified = !!record.verifiedAt && !!record.verifiedByCompanyUserId;
+  const providerVerified =
+    record.verificationStatus === "verified" &&
+    record.completionMethod === "provider_verification";
+  const complete = methods.every((method) => {
+    if (method === "worker_confirmation") return workerConfirmed;
+    if (method === "upload_evidence") return hasEvidence && companyVerified;
+    if (method === "company_verification") return companyVerified;
+    if (method === "provider_verification") return providerVerified;
+    return false;
+  });
+  if (complete) return "complete";
+  if (
+    record.verificationStatus === "awaiting_verification" ||
+    hasEvidence ||
+    actions.workerSubmittedForVerificationAt
+  ) {
+    return "awaiting_verification";
+  }
+  return record.startedAt ? "in_progress" : "not_started";
+}
+
+function updateProjectRequirementCompletion({
+  job,
+  workerId,
+  requirement,
+  mutate,
+}) {
+  const identity = projectRequirementAssignmentContext(job, workerId, requirement);
+  if (!identity) {
+    return { ok: false, reason: "This worker is not assigned to this requirement." };
+  }
+  syncProjectRequirementCompletionsFromPersistence();
+  const snapshot = structuredClone(state.projectRequirementCompletions || []);
+  const key = projectRequirementCompletionIdentityKey(identity);
+  const index = (state.projectRequirementCompletions || []).findIndex(
+    (item) => projectRequirementCompletionIdentityKey(item) === key,
+  );
+  const timestamp = new Date().toISOString();
+  const base = normalizeProjectRequirementCompletion(
+    index >= 0
+      ? state.projectRequirementCompletions[index]
+      : {
+          id: `prestart-completion:${key}`,
+          ...identity,
+          status: "not_started",
+          startedAt: timestamp,
+          completionMethod: requirement.completionAction,
+          source: "pre_start_completion_engine",
+        },
+  );
+  if (projectRequirementCompletionDerivedStatus(requirement, base) === "complete") {
+    return { ok: true, record: base };
+  }
+  const draft = structuredClone(base);
+  try {
+    mutate(draft, timestamp);
+  } catch (error) {
+    return { ok: false, reason: error?.message || "Completion could not be updated." };
+  }
+  draft.startedAt ||= timestamp;
+  draft.updatedAt = timestamp;
+  draft.revision = Number(base.revision || 0) + 1;
+  draft.status = projectRequirementCompletionDerivedStatus(requirement, draft);
+  if (draft.status === "complete") draft.completedAt ||= timestamp;
+  else draft.completedAt = "";
+  const normalized = normalizeProjectRequirementCompletion(draft);
+  if (index >= 0) state.projectRequirementCompletions[index] = normalized;
+  else state.projectRequirementCompletions.unshift(normalized);
+  if (!saveState()) {
+    state.projectRequirementCompletions = snapshot;
+    return {
+      ok: false,
+      reason: "Progress could not be saved. This requirement remains outstanding; please retry.",
+    };
+  }
+  return { ok: true, record: normalized };
+}
+
+function recordProjectRequirementCompletion(input) {
+  const record = normalizeProjectRequirementCompletion(input);
+  if (!record) return null;
+  if (!Array.isArray(state.projectRequirementCompletions)) {
+    state.projectRequirementCompletions = [];
+  }
+  const key = projectRequirementCompletionIdentityKey(record);
+  const existingIndex = state.projectRequirementCompletions.findIndex(
+    (item) => projectRequirementCompletionIdentityKey(item) === key,
+  );
+  if (existingIndex >= 0) return null;
+  state.projectRequirementCompletions.unshift(record);
+  return record;
+}
+
 function acknowledgePreStartDocument(workerId, projectId, documentId) {
   const job = findJob(projectId);
   const document = preStartDocumentsForJob(job).find(
-    (doc) => doc.documentId === documentId,
+    (item) => item.documentId === documentId,
   );
-  if (!workerId || !job || !document)
-    return { ok: false, reason: "Document not found" };
+  if (!job || !document) return { ok: false, reason: "Requirement not found" };
+  const current = projectRequirementCompletionFor(job, workerId, document);
+  if (!current?.documentProgress?.bottomReachedAt) {
+    return { ok: false, reason: "Reach the end of the document before acknowledging it." };
+  }
   if (document.completionAction !== "read_acknowledge") {
-    return {
-      ok: false,
-      reason: `${projectRequirementActionLabel(document.completionAction)} must be completed in its dedicated workflow`,
-    };
+    return { ok: false, reason: "Use the requirement's configured completion action." };
   }
-  const externalEvidence = normalizeProjectRequirementCompletionEvidence(document);
-  if (
-    projectRequirementHasExternalLink(document) &&
-    !externalEvidence.includes("worker_confirmation")
-  ) {
-    return {
-      ok: false,
-      reason: "This external requirement must be completed through its configured verification workflow",
-    };
-  }
-  if (!Array.isArray(state.preStartAcknowledgements))
-    state.preStartAcknowledgements = [];
-  const existing = state.preStartAcknowledgements.find(
-    (ack) =>
-      ack.workerId === workerId &&
-      ack.projectId === projectId &&
-      ack.documentId === documentId &&
-      (!document.requireRecompletionOnUpdate ||
-        String(ack.requirementVersion || "1") === document.version),
-  );
-  if (existing) return { ok: true, acknowledgement: existing, duplicate: true };
-  const acknowledgedAt = new Date().toISOString();
-  const completionMethod = projectRequirementHasExternalLink(document)
-    ? "worker_confirmation"
-    : document.completionAction;
-  const acknowledgement = {
-    id: createId(),
+  return updateProjectRequirementCompletion({
+    job,
     workerId,
-    projectId,
-    documentId,
-    requirementVersion: document.version,
-    completionMethod,
-    acknowledgedAt,
-  };
-  state.preStartAcknowledgements.unshift(acknowledgement);
-  recordProjectRequirementCompletion({
-    projectId,
-    workerId,
-    requirementId: documentId,
-    requirementVersion: document.version,
-    status: "completed",
-    completedAt: acknowledgedAt,
-    acknowledgedAt,
-    workerConfirmedAt: projectRequirementHasExternalLink(document)
-      ? acknowledgedAt
-      : "",
-    completionMethod,
-    source: "worker_acknowledgement",
+    requirement: document,
+    mutate(record, timestamp) {
+      record.acknowledgedAt = timestamp;
+      record.completionMethod = "read_acknowledge";
+      record.participantActions = {
+        ...(record.participantActions || {}),
+        workerAcknowledgement: { workerId, completedAt: timestamp },
+      };
+    },
   });
-  saveState();
-  return { ok: true, acknowledgement };
 }
 
 function projectRequirementCompletionsForJob(jobId) {
+  const job = findJob(jobId);
+  const requirements = preStartDocumentsForJob(job, { includeArchived: true });
   const explicit = (state.projectRequirementCompletions || [])
     .map(normalizeProjectRequirementCompletion)
     .filter((record) => record && record.projectId === jobId);
   const legacy = preStartAcknowledgementsForJob(jobId)
-    .map((ack) =>
-      normalizeProjectRequirementCompletion({
+    .map((ack) => {
+      const requirement = requirements.find(
+        (item) => item.documentId === ack.documentId,
+      );
+      const identity = projectRequirementAssignmentContext(
+        job,
+        ack.workerId,
+        requirement,
+      );
+      if (!identity) return null;
+      return normalizeProjectRequirementCompletion({
         id: ack.id || `legacy-${ack.projectId}-${ack.workerId}-${ack.documentId}`,
-        projectId: ack.projectId,
-        workerId: ack.workerId,
-        requirementId: ack.documentId,
+        companyId: job?.companyId || "",
+        ...identity,
         requirementVersion: ack.requirementVersion || "1",
-        status: "completed",
+        status: "complete",
         completedAt: ack.acknowledgedAt,
         acknowledgedAt: ack.acknowledgedAt,
         completionMethod: ack.completionMethod || "read_acknowledge",
         source: "legacy_acknowledgement",
-      }),
-    )
+      });
+    })
     .filter(Boolean);
   return [...explicit, ...legacy]
     .filter(
@@ -5631,9 +6112,7 @@ function projectRequirementCompletionsForJob(jobId) {
             item.assignmentId === record.assignmentId &&
             item.labourRequirementId === record.labourRequirementId &&
             item.requirementId === record.requirementId &&
-            item.requirementVersion === record.requirementVersion &&
-            item.completionMethod === record.completionMethod &&
-            item.status === record.status,
+            item.requirementVersion === record.requirementVersion,
         ) === index,
     )
     .sort(
@@ -5643,103 +6122,49 @@ function projectRequirementCompletionsForJob(jobId) {
     );
 }
 
-function recordProjectRequirementCompletion(input) {
-  const record = normalizeProjectRequirementCompletion(input);
-  if (!record) return null;
-  if (!Array.isArray(state.projectRequirementCompletions)) {
-    state.projectRequirementCompletions = [];
-  }
-  const duplicate = state.projectRequirementCompletions.some(
-    (item) =>
-      item.projectId === record.projectId &&
-      item.workerId === record.workerId &&
-      item.assignmentId === record.assignmentId &&
-      item.labourRequirementId === record.labourRequirementId &&
-      item.requirementId === record.requirementId &&
-      String(item.requirementVersion || "1") === record.requirementVersion &&
-      item.completionMethod === record.completionMethod &&
-      item.status === record.status,
+function workerCompletedProjectRequirement(job, workerId, requirement) {
+  const identity = projectRequirementAssignmentContext(job, workerId, requirement);
+  if (!identity) return false;
+  const key = projectRequirementCompletionIdentityKey(identity);
+  return projectRequirementCompletionsForJob(job.id).some(
+    (record) =>
+      projectRequirementCompletionIdentityKey(record) === key &&
+      record.requirementVersion === String(requirement.version || "1") &&
+      projectRequirementCompletionDerivedStatus(requirement, record) === "complete",
   );
-  if (!duplicate) state.projectRequirementCompletions.unshift(record);
-  return duplicate ? null : record;
 }
 
-function workerCompletedProjectRequirement(job, workerId, requirement) {
-  const completions = projectRequirementCompletionsForJob(job?.id).filter(
-    (record) =>
-      record.workerId === workerId &&
-      record.requirementId === requirement.documentId &&
-      record.status === "completed",
-  );
-  const validCompletions = requirement.requireRecompletionOnUpdate
-    ? completions.filter(
-        (record) => record.requirementVersion === requirement.version,
-      )
-    : completions;
-  const completionEvidence = normalizeProjectRequirementCompletionEvidence(
-    requirement,
-  );
-  if (
-    (projectRequirementHasExternalLink(requirement) ||
-      ["external_training", "background_check"].includes(
-        requirement.requirementType,
-      )) &&
-    completionEvidence.length
-  ) {
-    const evidenceComplete = completionEvidence.every((method) => {
-      if (method === "worker_confirmation") {
-        return validCompletions.some(
-          (record) =>
-            record.completionMethod === "worker_confirmation" ||
-            !!record.workerConfirmedAt ||
-            !!record.acknowledgedAt,
-        );
-      }
-      if (method === "upload_evidence") {
-        return validCompletions.some(
-          (record) =>
-            record.evidenceAttachments?.length ||
-            record.completedArtifactReference,
-        );
-      }
-      if (method === "company_verification") {
-        return validCompletions.some(
-          (record) =>
-            record.verifiedAt && record.verifiedByCompanyUserId,
-        );
-      }
-      if (method === "provider_verification") {
-        return validCompletions.some(
-          (record) =>
-            record.completionMethod === "provider_verification" &&
-            record.verificationStatus === "verified",
-        );
-      }
-      return validCompletions.some(
-        (record) => record.completionMethod === "supervisor_signoff",
-      );
-    });
-    if (!evidenceComplete) return false;
-  }
-  if (
-    requirement.requirementType === "onsite_induction" &&
-    requirement.requireWorkerAcknowledgementSignature
-  ) {
-    return (
-      validCompletions.some(
-        (record) => record.completionMethod === "supervisor_signoff",
-      ) &&
-      validCompletions.some(
-        (record) =>
-          record.completionMethod === "worker_acknowledgement_signature",
-      )
-    );
-  }
-  return validCompletions.length > 0;
-}
+window.OnSitePreStartCompletion = Object.freeze({
+  statusFor: projectRequirementCompletionDerivedStatus,
+  normalizeRecord: normalizeProjectRequirementCompletion,
+  normalizeVideoProgress: normalizeProjectRequirementVideoProgress,
+  normalizeFormDefinition: normalizeProjectRequirementFormDefinition,
+  identityKey: projectRequirementCompletionIdentityKey,
+  videoCoverageThreshold: PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD,
+});
 
 function preStartRequirementSummary(job, workerId) {
-  const documents = preStartDocumentsForJob(job);
+  const allDocuments = preStartDocumentsForJob(job);
+  const worker = workerId ? findWorker(workerId) : null;
+  const applications = workerId
+    ? (state.applications || []).filter(
+        (application) =>
+          application.jobId === job?.id && application.workerId === workerId,
+      )
+    : [];
+  const workerRequirement = worker
+    ? companyProjectWorkerRequirement(worker, {
+        apps: applications,
+        labourRequirements: labourRequirementsForJob(job),
+      })
+    : null;
+  const documents = workerId
+    ? allDocuments.filter(
+        (document) =>
+          document.audience?.type !== "labour_requirement" ||
+          document.audience.labourRequirementId === workerRequirement?.id,
+      )
+    : allDocuments;
   const acknowledgements = preStartAcknowledgementsForWorker(workerId, job?.id);
   const required = documents.filter(
     (document) =>
@@ -5758,7 +6183,8 @@ function preStartRequirementSummary(job, workerId) {
     : [];
   const completedIds = new Set(completed.map((document) => document.documentId));
   const outstanding = required.filter(
-    (document) => !completedIds.has(document.documentId),
+    (document) =>
+      document.contentToFollow || !completedIds.has(document.documentId),
   );
   const onArrivalOutstanding = onArrival.filter(
     (document) => !completedIds.has(document.documentId),
@@ -5771,6 +6197,8 @@ function preStartRequirementSummary(job, workerId) {
     outstanding,
     onArrivalOutstanding,
     completed,
+    preStartComplete: required.length - outstanding.length,
+    preStartOutstanding: outstanding.length,
   };
 }
 
@@ -5969,6 +6397,743 @@ function companyWorkerVerificationHTML(worker) {
   </div>`;
 }
 
+function projectRequirementCompletionStatusMeta(status) {
+  return {
+    not_started: { label: "Not started", tone: "" },
+    in_progress: { label: "In progress", tone: "in-progress" },
+    awaiting_verification: {
+      label: "Awaiting verification",
+      tone: "awaiting-verification",
+    },
+    complete: { label: "Complete", tone: "complete" },
+    failed: { label: "Failed", tone: "needs-attention" },
+    needs_attention: { label: "Needs attention", tone: "needs-attention" },
+  }[status] || { label: "Not started", tone: "" };
+}
+
+function workerProjectRequirementRecord(job, workerId, requirement) {
+  const record = projectRequirementCompletionFor(job, workerId, requirement);
+  if (!record) return null;
+  record.status = projectRequirementCompletionDerivedStatus(requirement, record);
+  return record;
+}
+
+function workerProjectRequirementStatusHTML(job, workerId, requirement) {
+  const record = workerProjectRequirementRecord(job, workerId, requirement);
+  const meta = projectRequirementCompletionStatusMeta(record?.status || "not_started");
+  return `<span class="prestart-status ${meta.tone}">${escapeHtml(meta.label)}</span>`;
+}
+
+function projectRequirementPrimaryExternalUrl(requirement) {
+  if (requirement?.requirementType === "external_training") {
+    return normalizeProjectRequirementExternalTraining(requirement).url;
+  }
+  if (requirement?.requirementType === "background_check") {
+    return normalizeProjectRequirementBackgroundCheck(requirement).applicationUrl;
+  }
+  return (
+    (requirement?.resources || []).find(
+      (resource) => resource.type === "external_link",
+    )?.url || ""
+  );
+}
+
+function projectRequirementDirectVideoResource(requirement) {
+  const resource = (requirement?.resources || []).find((item) => {
+    if (item.type === "file") return /^video\//i.test(item.mimeType || "");
+    if (item.type !== "external_link") return false;
+    try {
+      return /\.(mp4|webm|ogg|mov)(?:$|[?#])/i.test(new URL(item.url).pathname);
+    } catch (_) {
+      return false;
+    }
+  });
+  if (!resource) return null;
+  return {
+    id: resource.id,
+    label: resource.label || "Induction video",
+    url: resource.type === "file" ? resource.dataUrl : resource.url,
+  };
+}
+
+function projectRequirementPresentationResourceHTML(resource) {
+  if (resource.type === "reference") {
+    return `<section class="prestart-completion-resource"><h4>${escapeHtml(resource.label)}</h4><p>${escapeHtml(resource.details).replace(/\n/g, "<br>")}</p></section>`;
+  }
+  if (resource.type === "file") {
+    const isImage = /^image\//i.test(resource.mimeType || "");
+    const isPdf = /pdf/i.test(resource.mimeType || "") || /\.pdf$/i.test(resource.fileName || "");
+    return `<section class="prestart-completion-resource">
+      <h4>${escapeHtml(resource.label || resource.fileName)}</h4>
+      ${isImage ? `<img src="${escapeHtml(resource.dataUrl)}" alt="${escapeHtml(resource.label || resource.fileName)}" />` : isPdf ? `<object data="${escapeHtml(resource.dataUrl)}" type="application/pdf"><a href="${escapeHtml(resource.dataUrl)}" target="_blank" rel="noopener">Open ${escapeHtml(resource.fileName)}</a></object>` : `<a href="${escapeHtml(resource.dataUrl)}" download="${escapeHtml(resource.fileName)}">Open ${escapeHtml(resource.fileName)}</a>`}
+    </section>`;
+  }
+  return `<section class="prestart-completion-resource">
+    <h4>${escapeHtml(resource.label)}</h4>
+    ${resource.instructions ? `<p>${escapeHtml(resource.instructions)}</p>` : ""}
+    <a href="${escapeHtml(resource.url)}" target="_blank" rel="noopener noreferrer">Open supporting resource</a>
+  </section>`;
+}
+
+function projectRequirementDocumentCanTrackEnd(requirement) {
+  const resources = requirement?.resources || [];
+  return resources.length > 0 && resources.every(
+    (resource) =>
+      resource.type === "reference" ||
+      (resource.type === "file" && /^image\//i.test(resource.mimeType || "")),
+  );
+}
+
+function projectRequirementDocumentPresentationHTML(requirement) {
+  const resources = requirement.resources || [];
+  const canTrackEnd = projectRequirementDocumentCanTrackEnd(requirement);
+  return `<div class="prestart-document-scroll" data-prestart-document-scroll tabindex="0" aria-label="${escapeHtml(requirement.documentName)} document content">
+    <header><h3>${escapeHtml(requirement.documentName)}</h3>${requirement.description ? `<p>${escapeHtml(requirement.description)}</p>` : ""}<span>${escapeHtml(projectRequirementVersionLabel(requirement))}</span></header>
+    ${resources.length ? resources.map(projectRequirementPresentationResourceHTML).join("") : `<p class="prestart-completion-error">The document content is not available yet. Completion remains outstanding.</p>`}
+    ${resources.length && !canTrackEnd ? `<p class="prestart-completion-error">OnSite cannot verify end-of-document progress for this file type in the local prototype. Ask the company to provide an OnSite note or image-based document.</p>` : ""}
+    <p class="prestart-document-evidence-note">OnSite records that this content was presented, you reached the end, and you completed the configured action. It does not claim to prove every word was read.</p>
+  </div>`;
+}
+
+function projectRequirementSignatureHTML(label = "Signature") {
+  return `<div class="prestart-signature" data-prestart-signature>
+    <div><strong>${escapeHtml(label)}</strong><span>Draw your signature in the box.</span></div>
+    <canvas width="680" height="180" data-prestart-signature-canvas aria-label="${escapeHtml(label)}"></canvas>
+    <button class="company-project-inline-action" type="button" data-prestart-signature-clear>Clear signature</button>
+  </div>`;
+}
+
+function projectRequirementFormFieldHTML(field, answers = {}) {
+  const value = answers[field.id];
+  const required = field.required ? " *" : "";
+  if (field.type === "long_text") {
+    return `<label class="field-label">${escapeHtml(field.label)}${required}<textarea rows="3" data-prestart-form-field="${escapeHtml(field.id)}">${escapeHtml(value || "")}</textarea><span class="prestart-field-error" data-prestart-form-error="${escapeHtml(field.id)}"></span></label>`;
+  }
+  if (field.type === "date") {
+    return `<label class="field-label">${escapeHtml(field.label)}${required}<input type="date" value="${escapeHtml(value || "")}" data-prestart-form-field="${escapeHtml(field.id)}" /><span class="prestart-field-error" data-prestart-form-error="${escapeHtml(field.id)}"></span></label>`;
+  }
+  if (field.type === "checkbox") {
+    return `<label class="checkbox-row prestart-form-checkbox"><input type="checkbox" data-prestart-form-field="${escapeHtml(field.id)}"${value === true ? " checked" : ""} /><span>${escapeHtml(field.label)}${required}</span></label><span class="prestart-field-error" data-prestart-form-error="${escapeHtml(field.id)}"></span>`;
+  }
+  if (["single_choice", "multiple_choice"].includes(field.type)) {
+    const selected = new Set(Array.isArray(value) ? value : value ? [value] : []);
+    const inputType = field.type === "multiple_choice" ? "checkbox" : "radio";
+    return `<fieldset class="prestart-form-choice"><legend>${escapeHtml(field.label)}${required}</legend>${field.options.map((option, index) => `<label class="checkbox-row"><input type="${inputType}" name="prestart-form-${escapeHtml(field.id)}" value="${index}" data-prestart-form-choice="${escapeHtml(field.id)}"${selected.has(index) || selected.has(String(index)) ? " checked" : ""} /><span>${escapeHtml(option)}</span></label>`).join("")}<span class="prestart-field-error" data-prestart-form-error="${escapeHtml(field.id)}"></span></fieldset>`;
+  }
+  return `<label class="field-label">${escapeHtml(field.label)}${required}<input type="text" value="${escapeHtml(value || "")}" data-prestart-form-field="${escapeHtml(field.id)}" /><span class="prestart-field-error" data-prestart-form-error="${escapeHtml(field.id)}"></span></label>`;
+}
+
+function projectRequirementQuizHTML(requirement, record) {
+  const questions = requirement.comprehensionCheck?.questions || [];
+  if (!questions.length) {
+    return `<p class="prestart-completion-error">A comprehension check has not been configured. Ask the company to update this requirement.</p>`;
+  }
+  return `<form class="prestart-quiz" data-prestart-quiz>
+    <h3>Comprehension check</h3>
+    ${questions.map((question) => `<fieldset><legend>${escapeHtml(question.prompt)}</legend>${question.options.map((option, index) => `<label class="checkbox-row"><input type="${question.multiple ? "checkbox" : "radio"}" name="quiz-${escapeHtml(question.id)}" value="${index}" /><span>${escapeHtml(option)}</span></label>`).join("")}</fieldset>`).join("")}
+    ${record?.quizResult && !record.quizResult.passed ? `<p class="prestart-completion-error">The last attempt did not meet the ${requirement.comprehensionCheck.passThreshold}% pass threshold. Review the video and try again.</p>` : ""}
+    <button class="primary-btn" type="submit">Submit answers</button>
+  </form>`;
+}
+
+function workerPreStartCompletionBodyHTML(job, workerId, requirement, record) {
+  const status = record?.status || "not_started";
+  if (status === "complete") {
+    return `<div class="prestart-completion-success"><strong>Requirement complete</strong><span>Recorded for ${escapeHtml(projectRequirementVersionLabel(requirement))}${record.completedAt ? ` on ${escapeHtml(formatDate(record.completedAt))}` : ""}.</span></div>`;
+  }
+  if (requirement.contentToFollow) {
+    return `<p class="prestart-completion-error">Content has not been added yet. This requirement cannot be completed.</p>`;
+  }
+  if (requirement.requirementType === "document") {
+    const canTrackEnd = projectRequirementDocumentCanTrackEnd(requirement);
+    const reachedEnd =
+      canTrackEnd &&
+      !!record?.documentProgress?.bottomReachedAt &&
+      record?.documentProgress?.presentationMode === "onsite_trackable_v1";
+    const actionLabel = requirement.completionAction === "view_only"
+      ? "Confirm viewed"
+      : requirement.completionAction === "read_sign"
+        ? "Sign document"
+        : "Acknowledge";
+    return `${projectRequirementDocumentPresentationHTML(requirement)}
+      <p class="prestart-completion-guidance" data-prestart-document-guidance>${reachedEnd ? "End reached. Complete the action below." : canTrackEnd ? "Reach the end of the document to continue." : "Completion remains outstanding until the document can be presented in a trackable format."}</p>
+      ${requirement.completionAction === "read_sign" ? `<div data-prestart-document-signature${reachedEnd ? "" : " hidden"}>${projectRequirementSignatureHTML("Worker signature")}</div>` : ""}
+      <button class="primary-btn" type="button" data-prestart-document-complete${reachedEnd ? "" : " disabled"}>${escapeHtml(actionLabel)}</button>`;
+  }
+  if (requirement.requirementType === "video_induction") {
+    const video = projectRequirementDirectVideoResource(requirement);
+    if (!video) {
+      const externalUrl = projectRequirementPrimaryExternalUrl(requirement);
+      return `<p class="prestart-completion-error">This video is not available as a directly playable media file, so OnSite cannot verify watched coverage. Ask the company to provide a supported MP4, WebM or Ogg URL.</p>${externalUrl ? `<a class="secondary-btn" href="${escapeHtml(externalUrl)}" target="_blank" rel="noopener noreferrer" data-prestart-external-open>Open video provider</a>` : ""}`;
+    }
+    const progress = normalizeProjectRequirementVideoProgress(record?.videoProgress);
+    const watched = progress.coverage >= PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD;
+    return `<div class="prestart-video-wrap">
+      <video controls preload="metadata" src="${escapeHtml(video.url)}" data-prestart-video data-resource-id="${escapeHtml(video.id)}"></video>
+      <div class="prestart-video-progress"><span>Watched coverage</span><strong data-prestart-video-percent>${Math.floor(progress.coverage * 100)}%</strong><div><span data-prestart-video-bar style="width:${Math.min(100, progress.coverage * 100)}%"></span></div></div>
+      <p class="prestart-completion-error hidden" data-prestart-video-error></p>
+    </div>
+    ${requirement.completionAction === "watch_comprehension" ? `<div data-prestart-quiz-wrap${watched ? "" : " hidden"}>${projectRequirementQuizHTML(requirement, record)}</div>` : `<button class="primary-btn" type="button" data-prestart-video-ack${watched ? "" : " disabled"}>Acknowledge</button>`}`;
+  }
+  if (requirement.requirementType === "form_signature") {
+    const definition = normalizeProjectRequirementFormDefinition(requirement);
+    if (!definition.fields.length) {
+      return `<p class="prestart-completion-error">This form has no configured fields. Ask the company to update the requirement.</p>`;
+    }
+    const answers = record?.formDraft?.answers || {};
+    return `<form class="prestart-worker-form" data-prestart-worker-form novalidate>
+      <div class="prestart-worker-form-fields">${definition.fields.map((field) => projectRequirementFormFieldHTML(field, answers)).join("")}</div>
+      ${projectRequirementSignatureHTML("Worker signature")}
+      <p class="prestart-completion-error hidden" data-prestart-form-summary></p>
+      <button class="primary-btn" type="submit" data-prestart-form-submit>Submit signed form</button>
+    </form>`;
+  }
+  if (["external_training", "background_check"].includes(requirement.requirementType)) {
+    const url = projectRequirementPrimaryExternalUrl(requirement);
+    const method = requirement.completionAction;
+    const evidence = record?.evidenceAttachments || [];
+    return `<div class="prestart-external-completion">
+      ${requirement.description ? `<p>${escapeHtml(requirement.description)}</p>` : ""}
+      ${url ? `<a class="secondary-btn" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" data-prestart-external-open>${requirement.requirementType === "background_check" ? "Open provider" : "Open training"}</a>` : `<p class="prestart-completion-error">No provider link is available.</p>`}
+      <p class="prestart-completion-guidance">Opening the external provider does not complete this requirement.</p>
+      ${method === "worker_confirmation" ? `<button class="primary-btn" type="button" data-prestart-worker-confirm>Confirm completion</button>` : ""}
+      ${method === "upload_evidence" ? `<label class="secondary-btn prestart-evidence-upload">${evidence.length ? "Replace evidence" : "Upload evidence"}<input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" data-prestart-evidence-file /></label>${evidence.length ? `<span class="prestart-evidence-name">${escapeHtml(evidence[0].fileName)}</span>` : ""}` : ""}
+      ${["company_verification", "provider_verification"].includes(method) ? `<button class="primary-btn" type="button" data-prestart-submit-verification${record?.verificationStatus === "awaiting_verification" ? " disabled" : ""}>${record?.verificationStatus === "awaiting_verification" ? "Awaiting verification" : "Submit for verification"}</button>` : ""}
+    </div>`;
+  }
+  const workerActionComplete = !!record?.participantActions?.workerAcknowledgementSignature;
+  return `<div class="prestart-onsite-completion">
+    <p>Completion requires an authorised supervisor to record the on-site induction.</p>
+    <span class="prestart-status ${record?.participantActions?.supervisorSignoff ? "complete" : "awaiting-verification"}">${record?.participantActions?.supervisorSignoff ? "Supervisor signed off" : "Awaiting supervisor sign-off"}</span>
+    ${requirement.requireWorkerAcknowledgementSignature && !workerActionComplete ? `${projectRequirementSignatureHTML("Worker acknowledgement signature")}<button class="primary-btn" type="button" data-prestart-induction-sign>Sign acknowledgement</button>` : requirement.requireWorkerAcknowledgementSignature ? `<span class="prestart-status complete">Worker acknowledgement signed</span>` : ""}
+  </div>`;
+}
+
+let workerPreStartCompletionState = null;
+let preStartFormSaveTimer = null;
+
+function closeWorkerPreStartCompletion() {
+  const modal = document.getElementById("workerPreStartCompletionModal");
+  workerPreStartCompletionState = null;
+  clearTimeout(preStartFormSaveTimer);
+  if (modal) hideWithMotion(modal, () => {
+    modal.remove();
+    render();
+  });
+}
+
+function renderWorkerPreStartCompletion() {
+  const context = workerPreStartCompletionState;
+  const modal = document.getElementById("workerPreStartCompletionModal");
+  const job = findJob(context?.jobId);
+  const requirement = preStartDocumentsForJob(job).find(
+    (item) => item.documentId === context?.requirementId,
+  );
+  if (!context || !modal || !job || !requirement) return;
+  const record = workerProjectRequirementRecord(job, context.workerId, requirement);
+  const statusMeta = projectRequirementCompletionStatusMeta(record?.status || "not_started");
+  modal.innerHTML = `<div class="prestart-completion-sheet" role="dialog" aria-modal="true" aria-labelledby="prestartCompletionTitle">
+    <header class="prestart-completion-head"><div><p>Pre-start requirement</p><h2 id="prestartCompletionTitle">${escapeHtml(requirement.documentName)}</h2><span>${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))} · ${escapeHtml(projectRequirementVersionLabel(requirement))}</span></div><button class="modal-close-btn" type="button" data-prestart-completion-close aria-label="Close">${onsiteIcon("x", 18)}</button></header>
+    <div class="prestart-completion-status"><span>Current status</span><strong class="${statusMeta.tone}">${escapeHtml(statusMeta.label)}</strong></div>
+    <div class="prestart-completion-body">${workerPreStartCompletionBodyHTML(job, context.workerId, requirement, record)}</div>
+  </div>`;
+  bindWorkerPreStartCompletion(modal, job, requirement, record);
+}
+
+function openWorkerPreStartCompletion(jobId, requirementId, workerId, trigger = null) {
+  const job = findJob(jobId);
+  const requirement = preStartDocumentsForJob(job).find(
+    (item) => item.documentId === requirementId,
+  );
+  if (!projectRequirementAssignmentContext(job, workerId, requirement)) {
+    showToast("This requirement is not assigned to this worker");
+    return;
+  }
+  document.getElementById("workerPreStartCompletionModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "workerPreStartCompletionModal";
+  modal.className = "modal-overlay";
+  document.body.appendChild(modal);
+  workerPreStartCompletionState = { jobId, requirementId, workerId, trigger };
+  if (!workerCompletedProjectRequirement(job, workerId, requirement)) {
+    updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(record, timestamp) {
+        if (requirement.requirementType === "document") {
+          record.documentProgress = {
+            ...(record.documentProgress || {}),
+            presentedAt: record.documentProgress?.presentedAt || timestamp,
+          };
+        }
+      },
+    });
+  }
+  renderWorkerPreStartCompletion();
+  requestAnimationFrame(() =>
+    modal.querySelector("[data-prestart-completion-close]")?.focus(),
+  );
+}
+
+function setupPreStartSignaturePad(root) {
+  const canvas = root.querySelector("[data-prestart-signature-canvas]");
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  let drawing = false;
+  let hasInk = false;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = 3;
+  context.strokeStyle = "#18181b";
+  const point = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+  canvas.addEventListener("pointerdown", (event) => {
+    drawing = true;
+    const p = point(event);
+    context.beginPath();
+    context.moveTo(p.x, p.y);
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!drawing) return;
+    const p = point(event);
+    context.lineTo(p.x, p.y);
+    context.stroke();
+    hasInk = true;
+  });
+  const finish = () => {
+    drawing = false;
+    workerPreStartCompletionState.signatureDataUrl = hasInk
+      ? canvas.toDataURL("image/png")
+      : "";
+  };
+  canvas.addEventListener("pointerup", finish);
+  canvas.addEventListener("pointercancel", finish);
+  root.querySelector("[data-prestart-signature-clear]")?.addEventListener("click", () => {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk = false;
+    workerPreStartCompletionState.signatureDataUrl = "";
+  });
+}
+
+function preStartSignatureReference(workerId) {
+  const dataUrl = workerPreStartCompletionState?.signatureDataUrl || "";
+  if (!dataUrl.startsWith("data:image/png")) return null;
+  return {
+    id: createId(),
+    kind: "drawn_signature",
+    dataUrl,
+    signerWorkerId: workerId,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+function workerPreStartFormAnswers(form, definition) {
+  const answers = {};
+  definition.fields.forEach((field) => {
+    if (["single_choice", "multiple_choice"].includes(field.type)) {
+      const selected = Array.from(
+        form.querySelectorAll(`[data-prestart-form-choice="${CSS.escape(field.id)}"]:checked`),
+      ).map((input) => Number(input.value));
+      answers[field.id] = field.type === "single_choice" ? selected[0] ?? "" : selected;
+      return;
+    }
+    const input = form.querySelector(
+      `[data-prestart-form-field="${CSS.escape(field.id)}"]`,
+    );
+    answers[field.id] = field.type === "checkbox" ? !!input?.checked : input?.value || "";
+  });
+  return answers;
+}
+
+function validateWorkerPreStartForm(form, definition, answers) {
+  let valid = true;
+  definition.fields.forEach((field) => {
+    const value = answers[field.id];
+    const complete = !field.required ||
+      (field.type === "checkbox" ? value === true : Array.isArray(value) ? value.length > 0 : String(value || "").trim());
+    const error = form.querySelector(
+      `[data-prestart-form-error="${CSS.escape(field.id)}"]`,
+    );
+    if (error) error.textContent = complete ? "" : "This field is required.";
+    if (!complete) valid = false;
+  });
+  return valid;
+}
+
+function bindWorkerPreStartVideo(root, job, workerId, requirement, record) {
+  const video = root.querySelector("[data-prestart-video]");
+  if (!video) return;
+  let lastMediaTime = null;
+  let lastWallTime = null;
+  let pendingRanges = structuredClone(record?.videoProgress?.watchedRanges || []);
+  let lastPersistedAt = 0;
+  const persist = (force = false) => {
+    if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+    const now = Date.now();
+    if (!force && now - lastPersistedAt < 1500) return;
+    lastPersistedAt = now;
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        draft.videoProgress = normalizeProjectRequirementVideoProgress({
+          ...draft.videoProgress,
+          resourceId: video.dataset.resourceId,
+          duration: video.duration,
+          watchedRanges: [...(draft.videoProgress?.watchedRanges || []), ...pendingRanges],
+          lastPosition: video.currentTime,
+          updatedAt: timestamp,
+          loadError: "",
+        });
+      },
+    });
+    if (!result.ok) {
+      const error = root.querySelector("[data-prestart-video-error]");
+      if (error) {
+        error.textContent = result.reason;
+        error.classList.remove("hidden");
+      }
+      return;
+    }
+    pendingRanges = [];
+    const progress = result.record.videoProgress;
+    const percent = root.querySelector("[data-prestart-video-percent]");
+    const bar = root.querySelector("[data-prestart-video-bar]");
+    if (percent) percent.textContent = `${Math.floor(progress.coverage * 100)}%`;
+    if (bar) bar.style.width = `${Math.min(100, progress.coverage * 100)}%`;
+    const eligible = progress.coverage >= PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD;
+    const acknowledge = root.querySelector("[data-prestart-video-ack]");
+    if (acknowledge) acknowledge.disabled = !eligible;
+    const quiz = root.querySelector("[data-prestart-quiz-wrap]");
+    if (quiz) quiz.hidden = !eligible;
+  };
+  video.addEventListener("loadedmetadata", () => {
+    const resume = Math.min(
+      Math.max(0, Number(record?.videoProgress?.lastPosition) || 0),
+      Math.max(0, video.duration - 0.5),
+    );
+    if (resume) video.currentTime = resume;
+  });
+  video.addEventListener("play", () => {
+    lastMediaTime = video.currentTime;
+    lastWallTime = performance.now();
+  });
+  video.addEventListener("ratechange", () => {
+    if (video.playbackRate > 2) video.playbackRate = 2;
+  });
+  video.addEventListener("timeupdate", () => {
+    if (video.paused || video.seeking) return;
+    const now = performance.now();
+    if (lastMediaTime !== null && lastWallTime !== null) {
+      const mediaDelta = video.currentTime - lastMediaTime;
+      const wallDelta = (now - lastWallTime) / 1000;
+      const allowedDelta = Math.max(1.25, wallDelta * Math.max(1, video.playbackRate) + 0.75);
+      if (mediaDelta > 0 && mediaDelta <= allowedDelta) {
+        pendingRanges.push([lastMediaTime, video.currentTime]);
+      }
+    }
+    lastMediaTime = video.currentTime;
+    lastWallTime = now;
+    persist(false);
+  });
+  video.addEventListener("seeking", () => {
+    lastMediaTime = null;
+    lastWallTime = null;
+  });
+  video.addEventListener("seeked", () => {
+    lastMediaTime = video.currentTime;
+    lastWallTime = performance.now();
+  });
+  video.addEventListener("pause", () => persist(true));
+  video.addEventListener("ended", () => persist(true));
+  video.addEventListener("error", () => {
+    updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        draft.videoProgress = normalizeProjectRequirementVideoProgress({
+          ...draft.videoProgress,
+          updatedAt: timestamp,
+          loadError: "The video could not be loaded. Ask the company to check the resource.",
+        });
+      },
+    });
+    const error = root.querySelector("[data-prestart-video-error]");
+    if (error) {
+      error.textContent = "The video could not be loaded. Ask the company to check the resource.";
+      error.classList.remove("hidden");
+    }
+  });
+}
+
+function bindWorkerPreStartCompletion(root, job, requirement, record) {
+  const workerId = workerPreStartCompletionState.workerId;
+  root.querySelector("[data-prestart-completion-close]")?.addEventListener("click", closeWorkerPreStartCompletion);
+  root.addEventListener("click", (event) => {
+    if (event.target === root) closeWorkerPreStartCompletion();
+  });
+  root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeWorkerPreStartCompletion();
+      return;
+    }
+    trapProjectRequirementModalFocus(root, event);
+  });
+  const scroll = root.querySelector("[data-prestart-document-scroll]");
+  if (scroll) {
+    const markEnd = () => {
+      if (!projectRequirementDocumentCanTrackEnd(requirement)) return;
+      const atEnd = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 3;
+      if (!atEnd || record?.documentProgress?.bottomReachedAt) return;
+      const result = updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          draft.documentProgress = {
+            ...(draft.documentProgress || {}),
+            presentedAt: draft.documentProgress?.presentedAt || timestamp,
+            bottomReachedAt: timestamp,
+            presentationMode: "onsite_trackable_v1",
+          };
+        },
+      });
+      if (!result.ok) return showToast(result.reason);
+      const button = root.querySelector("[data-prestart-document-complete]");
+      if (button) button.disabled = false;
+      const guidance = root.querySelector("[data-prestart-document-guidance]");
+      if (guidance) guidance.textContent = "End reached. Complete the action below.";
+      const signature = root.querySelector("[data-prestart-document-signature]");
+      if (signature) signature.hidden = false;
+    };
+    scroll.addEventListener("scroll", markEnd, { passive: true });
+    requestAnimationFrame(markEnd);
+  }
+  setupPreStartSignaturePad(root);
+  root.querySelector("[data-prestart-document-complete]")?.addEventListener("click", (event) => {
+    let result;
+    if (requirement.completionAction === "read_sign") {
+      const signature = preStartSignatureReference(workerId);
+      if (!signature) return showToast("Draw your signature before signing");
+      result = updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          if (!draft.documentProgress?.bottomReachedAt) throw new Error("Reach the end of the document first.");
+          draft.signedAt = timestamp;
+          draft.signatureReference = signature;
+          draft.completionMethod = "read_sign";
+          draft.participantActions = { ...(draft.participantActions || {}), workerSignature: { workerId, completedAt: timestamp, signatureId: signature.id } };
+        },
+      });
+    } else if (requirement.completionAction === "view_only") {
+      result = updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          if (!draft.documentProgress?.bottomReachedAt) throw new Error("Reach the end of the document first.");
+          draft.completionMethod = "view_only";
+          draft.participantActions = { ...(draft.participantActions || {}), documentViewedAt: timestamp };
+        },
+      });
+    } else {
+      result = acknowledgePreStartDocument(workerId, job.id, requirement.documentId);
+    }
+    if (!result?.ok) return showToast(result?.reason || "Completion could not be saved");
+    renderWorkerPreStartCompletion();
+  });
+  bindWorkerPreStartVideo(root, job, workerId, requirement, record);
+  root.querySelector("[data-prestart-video-ack]")?.addEventListener("click", () => {
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        if (Number(draft.videoProgress?.coverage || 0) < PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD) throw new Error("Watch the video before acknowledging it.");
+        draft.acknowledgedAt = timestamp;
+        draft.completionMethod = "watch_acknowledge";
+      },
+    });
+    if (!result.ok) return showToast(result.reason);
+    renderWorkerPreStartCompletion();
+  });
+  root.querySelector("[data-prestart-quiz]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const questions = requirement.comprehensionCheck?.questions || [];
+    const answers = questions.map((question) =>
+      Array.from(event.currentTarget.querySelectorAll(`[name="quiz-${CSS.escape(question.id)}"]:checked`)).map((input) => Number(input.value)),
+    );
+    if (answers.some((answer) => !answer.length)) return showToast("Answer every question before submitting");
+    const correct = questions.filter((question, index) => {
+      const expected = [...question.correctOptionIndexes].sort().join(",");
+      return [...answers[index]].sort().join(",") === expected;
+    }).length;
+    const score = questions.length ? Math.round((correct / questions.length) * 100) : 0;
+    const passed = score >= Number(requirement.comprehensionCheck.passThreshold || 80);
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        if (Number(draft.videoProgress?.coverage || 0) < PROJECT_REQUIREMENT_VIDEO_COVERAGE_THRESHOLD) throw new Error("Watch the video before taking the check.");
+        const attempt = { id: createId(), attemptedAt: timestamp, score, passed, answers: structuredClone(answers) };
+        draft.quizAttempts = [...(draft.quizAttempts || []), attempt];
+        draft.quizResult = { attemptId: attempt.id, attemptedAt: timestamp, score, passed };
+        draft.completionMethod = "watch_comprehension";
+      },
+    });
+    if (!result.ok) return showToast(result.reason);
+    renderWorkerPreStartCompletion();
+  });
+  const workerForm = root.querySelector("[data-prestart-worker-form]");
+  if (workerForm) {
+    const definition = normalizeProjectRequirementFormDefinition(requirement);
+    const saveDraft = () => {
+      const answers = workerPreStartFormAnswers(workerForm, definition);
+      updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          if (draft.formSubmission) return;
+          draft.formDraft = { answers: structuredClone(answers), updatedAt: timestamp };
+        },
+      });
+    };
+    workerForm.addEventListener("input", () => {
+      clearTimeout(preStartFormSaveTimer);
+      preStartFormSaveTimer = setTimeout(saveDraft, 350);
+    });
+    workerForm.addEventListener("change", saveDraft);
+    workerForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const submit = workerForm.querySelector("[data-prestart-form-submit]");
+      if (submit?.disabled) return;
+      const answers = workerPreStartFormAnswers(workerForm, definition);
+      const valid = validateWorkerPreStartForm(workerForm, definition, answers);
+      const signature = preStartSignatureReference(workerId);
+      const summary = workerForm.querySelector("[data-prestart-form-summary]");
+      if (!valid || !signature) {
+        if (summary) {
+          summary.textContent = !signature ? "Complete the required fields and draw your signature." : "Complete every required field.";
+          summary.classList.remove("hidden");
+        }
+        return;
+      }
+      submit.disabled = true;
+      const result = updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          if (draft.formSubmission) throw new Error("This signed form has already been submitted.");
+          const submissionId = createId();
+          draft.formSubmission = Object.freeze({ id: submissionId, answers: structuredClone(answers), workerId, projectId: job.id, requirementId: requirement.documentId, requirementVersion: requirement.version, submittedAt: timestamp, signatureId: signature.id });
+          draft.formSubmissionReference = submissionId;
+          draft.formDraft = null;
+          draft.signedAt = timestamp;
+          draft.signatureReference = signature;
+          draft.completionMethod = "complete_sign";
+        },
+      });
+      if (!result.ok) {
+        submit.disabled = false;
+        return showToast(result.reason);
+      }
+      renderWorkerPreStartCompletion();
+    });
+  }
+  root.querySelector("[data-prestart-external-open]")?.addEventListener("click", () => {
+    updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        draft.participantActions = { ...(draft.participantActions || {}), externalOpenedAt: timestamp };
+      },
+    });
+  });
+  root.querySelector("[data-prestart-worker-confirm]")?.addEventListener("click", () => {
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        if (requirement.completionAction !== "worker_confirmation") throw new Error("Worker confirmation is not configured for this requirement.");
+        draft.workerConfirmedAt = timestamp;
+        draft.completionMethod = "worker_confirmation";
+      },
+    });
+    if (!result.ok) return showToast(result.reason);
+    renderWorkerPreStartCompletion();
+  });
+  root.querySelector("[data-prestart-submit-verification]")?.addEventListener("click", () => {
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        draft.verificationStatus = "awaiting_verification";
+        draft.participantActions = { ...(draft.participantActions || {}), workerSubmittedForVerificationAt: timestamp };
+      },
+    });
+    if (!result.ok) return showToast(result.reason);
+    renderWorkerPreStartCompletion();
+  });
+  root.querySelector("[data-prestart-evidence-file]")?.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (file.size > PROJECT_REQUIREMENT_FILE_MAX_BYTES) return showToast("Evidence must be 1 MB or smaller in this local prototype");
+    try {
+      const dataUrl = await readProjectRequirementFile(file);
+      const result = updateProjectRequirementCompletion({
+        job,
+        workerId,
+        requirement,
+        mutate(draft, timestamp) {
+          draft.evidenceAttachments = [{ id: createId(), type: "file", label: file.name, fileName: file.name, mimeType: file.type || "application/octet-stream", size: file.size, dataUrl, createdAt: timestamp, accessScope: requirement.requirementType === "background_check" ? "restricted" : "company_project" }];
+          draft.verificationStatus = "awaiting_verification";
+          draft.completionMethod = "upload_evidence";
+          draft.participantActions = { ...(draft.participantActions || {}), workerSubmittedForVerificationAt: timestamp };
+        },
+      });
+      if (!result.ok) return showToast(result.reason);
+      renderWorkerPreStartCompletion();
+    } catch (error) {
+      showToast(error?.message || "Evidence could not be read");
+    }
+  });
+  root.querySelector("[data-prestart-induction-sign]")?.addEventListener("click", () => {
+    const signature = preStartSignatureReference(workerId);
+    if (!signature) return showToast("Draw your acknowledgement signature first");
+    const result = updateProjectRequirementCompletion({
+      job,
+      workerId,
+      requirement,
+      mutate(draft, timestamp) {
+        draft.signatureReference = signature;
+        draft.signedAt = timestamp;
+        draft.completionMethod = "worker_acknowledgement_signature";
+        draft.participantActions = { ...(draft.participantActions || {}), workerAcknowledgementSignature: { workerId, completedAt: timestamp, signatureId: signature.id } };
+      },
+    });
+    if (!result.ok) return showToast(result.reason);
+    renderWorkerPreStartCompletion();
+  });
+}
+
 function workerPreStartPanelHTML(job, workerId) {
   if (!job) return "";
   const summary = preStartRequirementSummary(job, workerId);
@@ -5980,7 +7145,6 @@ function workerPreStartPanelHTML(job, workerId) {
     const completed = summary.completed.some(
       (item) => item.documentId === doc.documentId,
     );
-    const canAcknowledge = doc.completionAction === "read_acknowledge";
     return `
       <div class="prestart-doc-row ${completed ? "complete" : doc.required ? "outstanding" : ""}">
         <div class="prestart-doc-main">
@@ -5991,14 +7155,8 @@ function workerPreStartPanelHTML(job, workerId) {
           </div>
         </div>
         <div class="prestart-doc-actions">
-          <button class="secondary-btn" type="button" data-prestart-view="${doc.documentId}">View details</button>
-          ${
-            completed
-              ? `<span class="prestart-status complete">Complete</span>`
-              : canAcknowledge
-                ? `<button class="primary-btn" type="button" data-prestart-ack="${doc.documentId}" data-prestart-job="${job.id}">Acknowledge</button>`
-                : `<span class="prestart-status">${escapeHtml(projectRequirementActionLabel(doc.completionAction))}</span>`
-          }
+          ${workerProjectRequirementStatusHTML(job, workerId, doc)}
+          <button class="${completed ? "secondary-btn" : "primary-btn"}" type="button" data-prestart-complete="${doc.documentId}" data-prestart-job="${job.id}">${completed ? "View record" : "Open requirement"}</button>
         </div>
       </div>`;
   };
@@ -6007,8 +7165,8 @@ function workerPreStartPanelHTML(job, workerId) {
     <div class="prestart-panel">
       ${
         summary.outstanding.length
-          ? `<div class="prestart-banner outstanding">${summary.outstanding.length} required document${summary.outstanding.length === 1 ? "" : "s"} outstanding before start.</div>`
-          : `<div class="prestart-banner complete">All required pre-start documents acknowledged.</div>`
+          ? `<div class="prestart-banner outstanding">${summary.outstanding.length} required pre-start requirement${summary.outstanding.length === 1 ? "" : "s"} outstanding before start.</div>`
+          : `<div class="prestart-banner complete">All required pre-start requirements are complete.</div>`
       }
       <div class="prestart-subtitle">Outstanding</div>
       ${incomplete.length ? incomplete.map(docRow).join("") : guidedEmptyStateHTML({
@@ -6016,7 +7174,7 @@ function workerPreStartPanelHTML(job, workerId) {
         title: "No outstanding documents",
         body: "You are up to date. Any RAMS, inductions or site rules that need acknowledgement will appear here.",
       })}
-      <div class="prestart-subtitle">Completed Acknowledgements</div>
+      <div class="prestart-subtitle">Completed records</div>
       ${summary.completed.length ? summary.completed.map(docRow).join("") : guidedEmptyStateHTML({
         kicker: "Acknowledgements",
         title: "No completed acknowledgements yet",
@@ -6032,11 +7190,9 @@ function companyPreStartJobPanelHTML(job) {
   const rows = docs.length
     ? docs
         .map((doc) => {
-          const ack = worker
-            ? summary.acknowledgements.find(
-                (item) => item.documentId === doc.documentId,
-              )
-            : null;
+          const completed = worker
+            ? workerCompletedProjectRequirement(job, worker.id, doc)
+            : false;
           return `
         <div class="prestart-doc-row">
           <div class="prestart-doc-main">
@@ -6044,12 +7200,12 @@ function companyPreStartJobPanelHTML(job) {
             <div class="prestart-doc-meta">
               ${escapeHtml(preStartDocumentTypeLabel(doc.documentType))}
               ${doc.required ? " · required" : " · optional"}
-              ${worker ? ` · ${ack ? `acknowledged by ${escapeHtml(worker.name)}` : `outstanding for ${escapeHtml(worker.name)}`}` : " · no worker assigned"}
+              ${worker ? ` · ${completed ? `complete for ${escapeHtml(worker.name)}` : `outstanding for ${escapeHtml(worker.name)}`}` : " · no worker assigned"}
             </div>
           </div>
           <div class="prestart-doc-actions">
-            <span class="prestart-status ${ack ? "complete" : doc.required && worker ? "outstanding" : ""}">
-              ${ack ? "Acknowledged" : doc.required ? "Required" : "Optional"}
+            <span class="prestart-status ${completed ? "complete" : doc.required && worker ? "outstanding" : ""}">
+              ${completed ? "Complete" : doc.required ? "Required" : "Optional"}
             </span>
             <button class="doc-del-btn" type="button" data-prestart-remove="${doc.documentId}" data-prestart-job="${job.id}">Remove</button>
           </div>
@@ -6113,6 +7269,25 @@ function companyPreStartPanelHTML(user) {
 
 function bindPreStartDocumentButtons(container, workerId = "") {
   const root = container || document;
+  root.querySelectorAll("[data-company-prestart-worker]").forEach((button) => {
+    button.addEventListener("click", () =>
+      openCompanyPreStartVerification(
+        button.dataset.prestartJob,
+        button.dataset.companyPrestartWorker,
+        button,
+      ),
+    );
+  });
+  root.querySelectorAll("[data-prestart-complete]").forEach((button) => {
+    button.addEventListener("click", () =>
+      openWorkerPreStartCompletion(
+        button.dataset.prestartJob,
+        button.dataset.prestartComplete,
+        workerId || getSessionUser()?.id || "",
+        button,
+      ),
+    );
+  });
   root.querySelectorAll("[data-project-requirement-view]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCompanyProjectDocumentsView = normalizeCompanyProjectDocumentsView(
@@ -17437,32 +18612,13 @@ function companyProjectRequirementsViewHTML(job, summary, requirements) {
 }
 
 function projectWorkerRequirementReadiness(job, worker, summary, requirements) {
-  const workerRequirement = companyProjectWorkerRequirement(worker, summary);
-  const applicable = requirements.filter(
-    (requirement) =>
-      requirement.audience.type !== "labour_requirement" ||
-      requirement.audience.labourRequirementId === workerRequirement?.id,
-  );
-  const beforeStart = applicable.filter(
-    (requirement) =>
-      requirement.requirementLevel === "required" &&
-      requirement.timing === "before_first_shift",
-  );
-  const onArrival = applicable.filter(
-    (requirement) =>
-      requirement.requirementLevel === "required" &&
-      requirement.timing === "on_arrival",
-  );
-  const preStartComplete = beforeStart.filter((requirement) =>
-    !requirement.contentToFollow &&
-    workerCompletedProjectRequirement(job, worker.id, requirement),
-  ).length;
-  const preStartOutstanding = beforeStart.length - preStartComplete;
-  const onArrivalOutstanding = onArrival.filter(
-    (requirement) =>
-      requirement.contentToFollow ||
-      !workerCompletedProjectRequirement(job, worker.id, requirement),
-  ).length;
+  const readiness = preStartRequirementSummary(job, worker.id);
+  const applicable = readiness.documents;
+  const beforeStart = readiness.required;
+  const onArrival = readiness.onArrival;
+  const preStartComplete = readiness.preStartComplete;
+  const preStartOutstanding = readiness.preStartOutstanding;
+  const onArrivalOutstanding = readiness.onArrivalOutstanding.length;
   if (!applicable.length) {
     return {
       label: "Not applicable",
@@ -17503,6 +18659,208 @@ function projectWorkerRequirementReadiness(job, worker, summary, requirements) {
   };
 }
 
+function companyUserCanVerifyProjectRequirement(user, job) {
+  if (!user || user.type !== "company" || !companyOwnsJob(job, user.id)) {
+    return false;
+  }
+  // TODO: replace the role allow-list with granular verification permissions
+  // when the company permission model exposes them.
+  return ["Administrator", "Manager", "Supervisor"].includes(
+    companySidebarUserRole(user),
+  );
+}
+
+function projectRequirementCompanyAction(requirement, record) {
+  if (requirement.requirementType === "onsite_induction") {
+    return record?.participantActions?.supervisorSignoff?.completedAt
+      ? null
+      : { action: "supervisor_signoff", label: "Record supervisor sign-off" };
+  }
+  const method = requirement.completionAction;
+  if (!["company_verification", "upload_evidence", "provider_verification"].includes(method)) {
+    return null;
+  }
+  if (record?.verifiedAt && record?.verifiedByCompanyUserId) return null;
+  const submitted =
+    record?.verificationStatus === "awaiting_verification" ||
+    !!record?.participantActions?.workerSubmittedForVerificationAt ||
+    (method === "upload_evidence" && !!record?.evidenceAttachments?.length);
+  if (!submitted) return null;
+  return {
+    action: "company_verify",
+    label:
+      method === "provider_verification"
+        ? "Record provider verification"
+        : "Verify completion",
+  };
+}
+
+function verifyProjectRequirementForWorker({
+  job,
+  workerId,
+  requirement,
+  action,
+  companyUser,
+}) {
+  if (!companyUserCanVerifyProjectRequirement(companyUser, job)) {
+    return { ok: false, reason: "You do not have permission to verify this requirement." };
+  }
+  const current = projectRequirementCompletionFor(job, workerId, requirement);
+  if (action === "company_verify") {
+    const allowed = [
+      "company_verification",
+      "upload_evidence",
+      "provider_verification",
+    ].includes(requirement.completionAction);
+    if (!allowed) {
+      return { ok: false, reason: "Company verification is not configured for this requirement." };
+    }
+    const submitted =
+      current?.verificationStatus === "awaiting_verification" ||
+      !!current?.participantActions?.workerSubmittedForVerificationAt ||
+      (requirement.completionAction === "upload_evidence" &&
+        !!current?.evidenceAttachments?.length);
+    if (!submitted) {
+      return { ok: false, reason: "The worker has not submitted this requirement for verification." };
+    }
+  }
+  if (
+    action === "supervisor_signoff" &&
+    requirement.requirementType !== "onsite_induction"
+  ) {
+    return { ok: false, reason: "Supervisor sign-off is not configured for this requirement." };
+  }
+  return updateProjectRequirementCompletion({
+    job,
+    workerId,
+    requirement,
+    mutate(record, timestamp) {
+      if (action === "supervisor_signoff") {
+        record.supervisorUserId = companyUser.id;
+        record.completionMethod = "supervisor_signoff";
+        record.participantActions = {
+          ...(record.participantActions || {}),
+          supervisorSignoff: {
+            completedAt: timestamp,
+            companyId: job.companyId || companyUser.id,
+            supervisorUserId: companyUser.id,
+          },
+        };
+        return;
+      }
+      record.verifiedAt = timestamp;
+      record.verifiedByCompanyUserId = companyUser.id;
+      record.verificationStatus = "verified";
+      record.completionMethod =
+        requirement.completionAction === "provider_verification"
+          ? "provider_verification"
+          : requirement.completionAction;
+      record.participantActions = {
+        ...(record.participantActions || {}),
+        companyVerification: {
+          completedAt: timestamp,
+          companyId: job.companyId || companyUser.id,
+          verifiedByCompanyUserId: companyUser.id,
+        },
+      };
+    },
+  });
+}
+
+let companyPreStartVerificationState = null;
+
+function closeCompanyPreStartVerification() {
+  const modal = document.getElementById("companyPreStartVerificationModal");
+  companyPreStartVerificationState = null;
+  if (modal) hideWithMotion(modal, () => {
+    modal.remove();
+    render();
+  });
+}
+
+function companyPreStartEvidenceHTML(requirement, record) {
+  if (!record?.evidenceAttachments?.length) return "";
+  return `<div class="prestart-company-evidence"><span>Submitted evidence</span>${record.evidenceAttachments.map((attachment) => `<a href="${escapeHtml(attachment.dataUrl)}" target="_blank" rel="noopener">${escapeHtml(attachment.fileName)}</a>`).join("")}${requirement.requirementType === "background_check" ? `<small>Restricted to authorised company verification in this local prototype. Do not copy criminal-record details into OnSite.</small>` : ""}</div>`;
+}
+
+function renderCompanyPreStartVerification() {
+  const context = companyPreStartVerificationState;
+  const modal = document.getElementById("companyPreStartVerificationModal");
+  const job = findJob(context?.jobId);
+  const worker = findWorker(context?.workerId);
+  if (!context || !modal || !job || !worker) return;
+  const summary = companyProjectSummary(job, getSessionUser());
+  const workerRequirement = companyProjectWorkerRequirement(worker, summary);
+  const requirements = preStartDocumentsForJob(job).filter(
+    (requirement) =>
+      requirement.audience.type !== "labour_requirement" ||
+      requirement.audience.labourRequirementId === workerRequirement?.id,
+  );
+  modal.innerHTML = `<div class="prestart-verification-sheet" role="dialog" aria-modal="true" aria-labelledby="prestartVerificationTitle">
+    <header class="prestart-completion-head"><div><p>Worker completion</p><h2 id="prestartVerificationTitle">${escapeHtml(worker.name || "Worker")}</h2><span>${escapeHtml(companyProjectTitle(job))}</span></div><button class="modal-close-btn" type="button" data-company-prestart-close aria-label="Close">${onsiteIcon("x", 18)}</button></header>
+    <div class="prestart-verification-list">${requirements.map((requirement) => {
+      const record = workerProjectRequirementRecord(job, worker.id, requirement);
+      const status = projectRequirementCompletionStatusMeta(record?.status || "not_started");
+      const companyAction = projectRequirementCompanyAction(requirement, record);
+      return `<article class="prestart-verification-row">
+        <div><strong>${escapeHtml(requirement.documentName)}</strong><span>${escapeHtml(projectRequirementTypeLabel(requirement.requirementType))} · ${escapeHtml(projectRequirementVersionLabel(requirement))}</span></div>
+        <span class="prestart-status ${status.tone}">${escapeHtml(status.label)}</span>
+        ${companyPreStartEvidenceHTML(requirement, record)}
+        ${companyAction ? `<button class="primary-btn" type="button" data-company-prestart-action="${companyAction.action}" data-company-prestart-requirement="${escapeHtml(requirement.documentId)}">${escapeHtml(companyAction.label)}</button>` : ""}
+      </article>`;
+    }).join("")}</div>
+  </div>`;
+  modal.querySelector("[data-company-prestart-close]")?.addEventListener("click", closeCompanyPreStartVerification);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeCompanyPreStartVerification();
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeCompanyPreStartVerification();
+      return;
+    }
+    trapProjectRequirementModalFocus(modal, event);
+  });
+  modal.querySelectorAll("[data-company-prestart-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const requirement = requirements.find(
+        (item) => item.documentId === button.dataset.companyPrestartRequirement,
+      );
+      if (!requirement) return;
+      const result = verifyProjectRequirementForWorker({
+        job,
+        workerId: worker.id,
+        requirement,
+        action: button.dataset.companyPrestartAction,
+        companyUser: getSessionUser(),
+      });
+      if (!result.ok) return showToast(result.reason);
+      renderCompanyPreStartVerification();
+      showToast(result.record.status === "complete" ? "Requirement completed" : "Sign-off recorded");
+    });
+  });
+}
+
+function openCompanyPreStartVerification(jobId, workerId, trigger = null) {
+  const job = findJob(jobId);
+  const worker = findWorker(workerId);
+  if (!job || !worker || !companyUserCanVerifyProjectRequirement(getSessionUser(), job)) {
+    showToast("You do not have permission to review this worker's requirements");
+    return;
+  }
+  document.getElementById("companyPreStartVerificationModal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "companyPreStartVerificationModal";
+  modal.className = "modal-overlay";
+  document.body.appendChild(modal);
+  companyPreStartVerificationState = { jobId, workerId, trigger };
+  renderCompanyPreStartVerification();
+  requestAnimationFrame(() =>
+    modal.querySelector("[data-company-prestart-close]")?.focus(),
+  );
+}
+
 function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
   if (!summary.assignedWorkers.length) {
     return `<div class="company-project-requirements-empty is-compact">
@@ -17530,7 +18888,7 @@ function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
           <div class="company-project-worker-completion-person"><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml([worker.trade, worker.grade || worker.specialism].filter(Boolean).join(" · ") || "Role not set")}</span></div>
           <span data-label="Pre-start">${readiness.preStartComplete} / ${readiness.beforeStart.length} complete</span>
           <span data-label="On arrival">${readiness.onArrivalOutstanding ? `${readiness.onArrivalOutstanding} required` : "None outstanding"}</span>
-          <span class="company-project-requirement-state ${readiness.tone}" data-label="Status">${escapeHtml(readiness.label)}</span>
+          <div class="company-project-worker-completion-action" data-label="Status"><span class="company-project-requirement-state ${readiness.tone}">${escapeHtml(readiness.label)}</span><button class="company-project-inline-action" type="button" data-company-prestart-worker="${escapeHtml(worker.id)}" data-prestart-job="${escapeHtml(job.id)}">Review &rarr;</button></div>
         </article>`;
       })
       .join("")}
@@ -17552,8 +18910,14 @@ function projectRequirementRecordState(record) {
 }
 
 function companyProjectRequirementRecordsViewHTML(job) {
-  const records = projectRequirementCompletionsForJob(job.id);
   const requirements = preStartDocumentsForJob(job, { includeArchived: true });
+  const records = projectRequirementCompletionsForJob(job.id).filter((record) => {
+    const requirement = requirements.find(
+      (item) => item.documentId === record.requirementId,
+    );
+    return requirement &&
+      projectRequirementCompletionDerivedStatus(requirement, record) === "complete";
+  });
   if (!records.length) {
     return `<div class="company-project-requirements-empty is-compact">
       <strong>No completed records yet.</strong>
@@ -17854,6 +19218,7 @@ function projectRequirementContentDraft(draft = {}) {
     resources: structuredClone(Array.isArray(draft.resources) ? draft.resources : []),
     externalTraining: normalizeProjectRequirementExternalTraining(draft),
     backgroundCheck: normalizeProjectRequirementBackgroundCheck(draft),
+    formDefinition: normalizeProjectRequirementFormDefinition(draft),
   };
 }
 
@@ -17864,6 +19229,7 @@ function applyProjectRequirementContentDraft(draft, content = {}) {
   draft.resources = structuredClone(Array.isArray(content.resources) ? content.resources : []);
   draft.externalTraining = normalizeProjectRequirementExternalTraining(content);
   draft.backgroundCheck = normalizeProjectRequirementBackgroundCheck(content);
+  draft.formDefinition = normalizeProjectRequirementFormDefinition(content);
 }
 
 function projectRequirementDefaultContentDraft(editor, requirementType) {
@@ -17882,6 +19248,7 @@ function projectRequirementDefaultContentDraft(editor, requirementType) {
     resources: [],
     externalTraining: {},
     backgroundCheck: {},
+    formDefinition: { fields: [] },
   });
 }
 
@@ -17943,6 +19310,32 @@ function projectRequirementBackgroundCheckContentHTML(draft) {
   </div>`;
 }
 
+function projectRequirementFormFieldTypeLabel(type) {
+  return {
+    short_text: "Short text",
+    long_text: "Long text",
+    date: "Date",
+    checkbox: "Checkbox / confirmation",
+    single_choice: "Single choice",
+    multiple_choice: "Multiple choice",
+  }[type] || "Short text";
+}
+
+function projectRequirementFormDefinitionHTML(draft) {
+  const fields = normalizeProjectRequirementFormDefinition(draft).fields;
+  return `<section class="project-requirement-form-builder project-requirement-form-span" aria-labelledby="projectRequirementFormBuilderTitle">
+    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Form fields</p><span>Build the fields the worker must complete inside OnSite.</span></div>
+    ${fields.length ? `<div class="project-requirement-form-field-list">${fields.map((field) => `<div class="project-requirement-form-field-row"><div><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(projectRequirementFormFieldTypeLabel(field.type))}${field.required ? " · required" : " · optional"}</span></div><button type="button" data-project-requirement-form-field-remove="${escapeHtml(field.id)}">Remove</button></div>`).join("")}</div>` : `<p class="project-requirement-resources-empty">No form fields added.</p>`}
+    <div class="project-requirement-form-field-composer">
+      <label class="field-label">Field label<input type="text" data-project-requirement-form-field-label placeholder="e.g. Emergency contact name" /></label>
+      <label class="field-label">Field type<select data-project-requirement-form-field-type>${PROJECT_REQUIREMENT_FORM_FIELD_TYPES.map((type) => `<option value="${type}">${escapeHtml(projectRequirementFormFieldTypeLabel(type))}</option>`).join("")}</select></label>
+      <label class="field-label project-requirement-form-field-options hidden" data-project-requirement-form-field-options-wrap>Choices<input type="text" data-project-requirement-form-field-options placeholder="Option one, Option two" /><span class="form-helper">Separate choices with commas.</span></label>
+      <label class="checkbox-row"><input type="checkbox" data-project-requirement-form-field-required checked /><span>Required field</span></label>
+      <button class="secondary-btn" type="button" data-project-requirement-form-field-add>Add field</button>
+    </div>
+  </section>`;
+}
+
 function projectRequirementStandardContentHTML(editor) {
   const draft = editor.draft;
   return `<div class="project-requirement-form-grid">
@@ -17957,6 +19350,7 @@ function projectRequirementStandardContentHTML(editor) {
       <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
     </label>
     ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
+    ${draft.requirementType === "form_signature" && !draft.contentToFollow ? projectRequirementFormDefinitionHTML(draft) : ""}
   </div>`;
 }
 
@@ -18073,6 +19467,13 @@ function projectRequirementStepTwoHTML(draft) {
           <label class="field-label">Pass threshold
             <div class="project-requirement-percentage"><input data-project-requirement-pass type="number" min="1" max="100" required value="${draft.comprehensionCheck?.passThreshold || 80}" /><span>%</span></div>
           </label>
+          <div class="project-requirement-quiz-question-list">${(draft.comprehensionCheck?.questions || []).map((question) => `<div class="project-requirement-form-field-row"><div><strong>${escapeHtml(question.prompt)}</strong><span>${question.options.length} choices · answer configured</span></div><button type="button" data-project-requirement-quiz-remove="${escapeHtml(question.id)}">Remove</button></div>`).join("") || `<p class="project-requirement-resources-empty">No questions added.</p>`}</div>
+          <div class="project-requirement-quiz-composer">
+            <label class="field-label">Question<input type="text" data-project-requirement-quiz-prompt placeholder="Question shown after the video" /></label>
+            <label class="field-label">Choices<input type="text" data-project-requirement-quiz-options placeholder="Option one, Option two" /><span class="form-helper">Separate choices with commas.</span></label>
+            <label class="field-label">Correct choice<select data-project-requirement-quiz-answer><option value="0">First choice</option><option value="1">Second choice</option><option value="2">Third choice</option><option value="3">Fourth choice</option></select></label>
+            <button class="secondary-btn" type="button" data-project-requirement-quiz-add>Add question</button>
+          </div>
         </div>`
       : "";
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
@@ -18435,9 +19836,6 @@ function projectRequirementDraftValidationIssue(editor) {
       };
     }
   }
-  const hasFileOrExternal = (draft.resources || []).some((resource) =>
-    ["file", "external_link"].includes(resource.type),
-  );
   if (
     !draft.contentToFollow &&
     draft.requirementType === "video_induction" &&
@@ -18454,12 +19852,12 @@ function projectRequirementDraftValidationIssue(editor) {
   if (
     !draft.contentToFollow &&
     draft.requirementType === "form_signature" &&
-    !hasFileOrExternal
+    !normalizeProjectRequirementFormDefinition(draft).fields.length
   ) {
     return {
       step: 1,
-      selector: "[data-project-requirement-resource-add]",
-      message: "Add a form file or external form link.",
+      selector: "[data-project-requirement-form-field-label]",
+      message: "Add at least one form field.",
     };
   }
   const validAction = (PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [])
@@ -18491,6 +19889,17 @@ function projectRequirementDraftValidationIssue(editor) {
       step: 2,
       selector: "[data-project-requirement-pass]",
       message: "Enter a pass threshold between 1 and 100.",
+    };
+  }
+  if (
+    draft.requirementType === "video_induction" &&
+    draft.completionAction === "watch_comprehension" &&
+    !(draft.comprehensionCheck?.questions || []).length
+  ) {
+    return {
+      step: 2,
+      selector: "[data-project-requirement-quiz-prompt]",
+      message: "Add at least one comprehension question.",
     };
   }
   if (!String(draft.version || "").trim()) {
@@ -18707,10 +20116,16 @@ function saveProjectRequirementEditor({ afterSave = null } = {}) {
       draft.requirementType === "background_check"
         ? normalizeProjectRequirementBackgroundCheck(draft)
         : null,
+    formDefinition:
+      draft.requirementType === "form_signature"
+        ? normalizeProjectRequirementFormDefinition(draft)
+        : { fields: [] },
     comprehensionCheck: {
       enabled: draft.requirementType === "video_induction" && draft.completionAction === "watch_comprehension",
       passThreshold: draft.comprehensionCheck?.passThreshold || 80,
-      questions: editor.original?.comprehensionCheck?.questions || [],
+      questions: (draft.comprehensionCheck?.questions || [])
+        .map(normalizeProjectRequirementQuizQuestion)
+        .filter(Boolean),
     },
   };
   const result = editor.mode === "draft"
@@ -19042,6 +20457,104 @@ function bindProjectRequirementEditorControls(modal) {
     syncProjectRequirementEditorDraft(modal);
     renderProjectRequirementEditor({ focusHeading: false });
   });
+  modal.querySelector("[data-project-requirement-form-field-type]")?.addEventListener("change", (event) => {
+    const optionsWrap = modal.querySelector(
+      "[data-project-requirement-form-field-options-wrap]",
+    );
+    optionsWrap?.classList.toggle(
+      "hidden",
+      !["single_choice", "multiple_choice"].includes(event.currentTarget.value),
+    );
+  });
+  modal.querySelector("[data-project-requirement-form-field-add]")?.addEventListener("click", () => {
+    syncProjectRequirementEditorDraft(modal);
+    const labelInput = modal.querySelector(
+      "[data-project-requirement-form-field-label]",
+    );
+    const type = modal.querySelector(
+      "[data-project-requirement-form-field-type]",
+    )?.value || "short_text";
+    const label = labelInput?.value.trim() || "";
+    const options = (modal.querySelector(
+      "[data-project-requirement-form-field-options]",
+    )?.value || "")
+      .split(",")
+      .map((option) => option.trim())
+      .filter(Boolean);
+    if (!label) {
+      labelInput?.setCustomValidity("Enter a field label.");
+      labelInput?.reportValidity();
+      labelInput?.setCustomValidity("");
+      return;
+    }
+    if (["single_choice", "multiple_choice"].includes(type) && options.length < 2) {
+      showToast("Add at least two choices separated by commas");
+      return;
+    }
+    const fields = normalizeProjectRequirementFormDefinition(
+      projectRequirementEditorState.draft,
+    ).fields;
+    fields.push({
+      id: createId(),
+      type,
+      label,
+      required: !!modal.querySelector(
+        "[data-project-requirement-form-field-required]",
+      )?.checked,
+      options,
+    });
+    projectRequirementEditorState.draft.formDefinition = { fields };
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
+  modal.querySelectorAll("[data-project-requirement-form-field-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      projectRequirementEditorState.draft.formDefinition = {
+        fields: normalizeProjectRequirementFormDefinition(
+          projectRequirementEditorState.draft,
+        ).fields.filter(
+          (field) => field.id !== button.dataset.projectRequirementFormFieldRemove,
+        ),
+      };
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  });
+  modal.querySelector("[data-project-requirement-quiz-add]")?.addEventListener("click", () => {
+    syncProjectRequirementEditorDraft(modal);
+    const prompt = modal.querySelector("[data-project-requirement-quiz-prompt]")?.value.trim() || "";
+    const options = (modal.querySelector("[data-project-requirement-quiz-options]")?.value || "")
+      .split(",")
+      .map((option) => option.trim())
+      .filter(Boolean);
+    const correctOptionIndex = Number(
+      modal.querySelector("[data-project-requirement-quiz-answer]")?.value || 0,
+    );
+    if (!prompt || options.length < 2 || correctOptionIndex >= options.length) {
+      showToast("Add a question, at least two choices and a valid correct choice");
+      return;
+    }
+    const question = normalizeProjectRequirementQuizQuestion({
+      id: createId(),
+      prompt,
+      options,
+      correctOptionIndexes: [correctOptionIndex],
+    });
+    projectRequirementEditorState.draft.comprehensionCheck.questions = [
+      ...(projectRequirementEditorState.draft.comprehensionCheck.questions || []),
+      question,
+    ].filter(Boolean);
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
+  modal.querySelectorAll("[data-project-requirement-quiz-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      projectRequirementEditorState.draft.comprehensionCheck.questions =
+        (projectRequirementEditorState.draft.comprehensionCheck.questions || []).filter(
+          (question) => question.id !== button.dataset.projectRequirementQuizRemove,
+        );
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  });
   modal
     .querySelectorAll(
       "[data-project-requirement-background-level], [data-project-requirement-background-initiation]",
@@ -19225,6 +20738,7 @@ function openProjectRequirementEditor({
         requireWorkerAcknowledgementSignature: false,
         externalTraining: normalizeProjectRequirementExternalTraining(),
         backgroundCheck: normalizeProjectRequirementBackgroundCheck(),
+        formDefinition: { fields: [] },
         comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
       };
   if (!String(draft.documentName || "").trim()) {
