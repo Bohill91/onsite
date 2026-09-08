@@ -4114,7 +4114,7 @@ const PROJECT_REQUIREMENT_TYPES = [
     value: "document",
     label: "Document",
     shortLabel: "Document",
-    description: "A file or information workers need to read or acknowledge.",
+    description: "A document or information workers need to read or acknowledge.",
   },
   {
     value: "video_induction",
@@ -4164,7 +4164,7 @@ const PROJECT_REQUIREMENT_ACTIONS = {
 const PROJECT_REQUIREMENT_RESOURCE_TYPES = [
   { value: "file", label: "File" },
   { value: "external_link", label: "External link" },
-  { value: "reference", label: "Reference / note" },
+  { value: "reference", label: "Note" },
 ];
 
 const PROJECT_REQUIREMENT_COMPLETION_EVIDENCE = [
@@ -8589,7 +8589,7 @@ function draftPreStartRequirementReadiness(requirement) {
     return { label: "Needs assignment review", tone: "is-review" };
   }
   if (requirement.contentToFollow) {
-    return { label: "Content to follow", tone: "is-pending" };
+    return { label: "Awaiting content", tone: "is-pending" };
   }
   return { label: "Ready", tone: "is-ready" };
 }
@@ -8636,7 +8636,7 @@ function draftPreStartRequirementListHTML() {
 function draftPreStartConfiguredHTML() {
   return `<section class="jw-prestart-configured" aria-labelledby="jobPreStartConfiguredTitle">
     <div class="jw-prestart-state-head">
-      <div><h4 id="jobPreStartConfiguredTitle">Project requirements</h4><p>Add each action workers need to complete for this project.</p></div>
+      <div><h4 id="jobPreStartConfiguredTitle">Requirements</h4><p>Add each action workers need to complete before starting.</p></div>
       <button class="secondary-btn" type="button" data-draft-prestart-add>+ Add requirement</button>
     </div>
     ${draftPreStartRequirements.length
@@ -8673,6 +8673,7 @@ function renderDraftPreStartStep() {
     });
   const body = document.getElementById("jobPreStartStateBody");
   if (body) body.innerHTML = draftPreStartStateHTML();
+  syncJobWizardContinueState();
 }
 
 function validateDraftPreStartStep({ report = true } = {}) {
@@ -9267,6 +9268,16 @@ function renderJobWizardReview() {
   ].join("");
 }
 
+function syncJobWizardContinueState() {
+  const continueButton = document.getElementById("jobWizardContinue");
+  if (!continueButton) return;
+  const blocked =
+    (jobWizardStep === 2 && pendingTradeRequirements.length === 0) ||
+    (jobWizardStep === 5 && !validateDraftPreStartStep({ report: false }));
+  continueButton.disabled = blocked;
+  continueButton.setAttribute("aria-disabled", String(blocked));
+}
+
 function renderJobWizardChrome() {
   document.querySelectorAll("#formJob .jw-step").forEach((el) => {
     el.classList.toggle(
@@ -9314,10 +9325,7 @@ function renderJobWizardChrome() {
       jobWizardEnteredFromReview && jobWizardStep < JOB_WIZARD_STEPS.length
         ? "Return to review"
         : "Continue";
-    const labourStepBlocked =
-      jobWizardStep === 2 && pendingTradeRequirements.length === 0;
-    continueButton.disabled = labourStepBlocked;
-    continueButton.setAttribute("aria-disabled", String(labourStepBlocked));
+    syncJobWizardContinueState();
   }
   document
     .getElementById("jobWizardSubmit")
@@ -17523,6 +17531,29 @@ function projectRequirementResourceRowHTML(resource) {
   </article>`;
 }
 
+function projectRequirementResourceMenuHTML(editor) {
+  if (editor.mode !== "draft" || editor.resourceEditor?.type !== "choose") {
+    return "";
+  }
+  const resourceOrder =
+    editor.draft.requirementType === "onsite_induction"
+      ? ["reference", "file", "external_link"]
+      : ["file", "external_link", "reference"];
+  const resourceTypes = resourceOrder
+    .map((value) =>
+      PROJECT_REQUIREMENT_RESOURCE_TYPES.find((type) => type.value === value),
+    )
+    .filter(Boolean);
+  const iconByType = {
+    file: "fileText",
+    external_link: "externalLink",
+    reference: "tag",
+  };
+  return `<div class="project-requirement-resource-menu" id="projectRequirementResourceMenu" role="group" aria-label="Choose resource type">
+    ${resourceTypes.map((type) => `<button type="button" data-project-requirement-resource-type="${type.value}"><span>${onsiteIcon(iconByType[type.value], 16)}</span><strong>${escapeHtml(type.label)}</strong></button>`).join("")}
+  </div>`;
+}
+
 function projectRequirementResourceComposerHTML(editor) {
   const resourceEditor = editor.resourceEditor;
   if (!resourceEditor) return "";
@@ -17570,13 +17601,13 @@ function projectRequirementResourceComposerHTML(editor) {
     </div>`;
   }
   return `<div class="project-requirement-resource-composer">
-    <div><p>${existing ? "Edit reference / note" : "Reference / note"}</p><span>Add supporting information that does not require a file or URL.</span></div>
+    <div><p>${existing ? "Edit note" : "Note"}</p><span>Add supporting information that does not require a file or URL.</span></div>
     <div class="project-requirement-resource-form">
-      <label class="field-label">Reference name *
-        <input type="text" required data-project-requirement-resource-label value="${escapeHtml(existing?.label || "")}" placeholder="Access code or reference name" />
+      <label class="field-label">Note title *
+        <input type="text" required data-project-requirement-resource-label value="${escapeHtml(existing?.label || "")}" placeholder="Note title" />
       </label>
-      <label class="field-label">Reference details *
-        <textarea rows="2" required data-project-requirement-resource-details placeholder="Reference number or supporting detail">${escapeHtml(existing?.details || "")}</textarea>
+      <label class="field-label">Note *
+        <textarea rows="2" required data-project-requirement-resource-details placeholder="Add supporting information">${escapeHtml(existing?.details || "")}</textarea>
       </label>
     </div>
     <div class="project-requirement-resource-composer-actions">
@@ -17588,14 +17619,31 @@ function projectRequirementResourceComposerHTML(editor) {
 
 function projectRequirementResourcesHTML(editor) {
   const resources = editor.draft.resources || [];
+  const resourceList = resources.length
+    ? `<div class="project-requirement-resource-list">${resources.map(projectRequirementResourceRowHTML).join("")}</div>`
+    : `<p class="project-requirement-resources-empty">No resources added.</p>`;
+  if (editor.mode === "draft") {
+    const choosing = editor.resourceEditor?.type === "choose";
+    const editingResource = editor.resourceEditor && !choosing;
+    return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementResourcesTitle">
+      <div class="project-requirement-resources-head">
+        <p id="projectRequirementResourcesTitle">Resources</p>
+        <span>Attach files, links or supporting information.</span>
+      </div>
+      ${resourceList}
+      ${editingResource ? "" : `<div class="project-requirement-resource-add-wrap">
+        <button class="secondary-btn project-requirement-add-resource" type="button" data-project-requirement-resource-add aria-expanded="${String(choosing)}" aria-controls="projectRequirementResourceMenu">+ Add resource</button>
+        ${projectRequirementResourceMenuHTML(editor)}
+      </div>`}
+      ${editingResource ? projectRequirementResourceComposerHTML(editor) : ""}
+    </section>`;
+  }
   return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementResourcesTitle">
     <div class="project-requirement-resources-head">
       <p id="projectRequirementResourcesTitle">Resources</p>
       <span>Attach files, external links or supporting references to this requirement.</span>
     </div>
-    ${resources.length
-      ? `<div class="project-requirement-resource-list">${resources.map(projectRequirementResourceRowHTML).join("")}</div>`
-      : `<p class="project-requirement-resources-empty">No resources added.</p>`}
+    ${resourceList}
     ${projectRequirementResourceComposerHTML(editor)}
     ${editor.resourceEditor ? "" : `<button class="project-requirement-add-resource" type="button" data-project-requirement-resource-add>+ Add resource</button>`}
   </section>`;
@@ -17616,20 +17664,20 @@ function projectRequirementTypeChoicesHTML(draft) {
 function projectRequirementStepOneHTML(editor) {
   const draft = editor.draft;
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
-    <div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>
+    ${editor.mode === "draft" ? `<h3 class="app-launch-visually-hidden" id="projectRequirementStepTitle" tabindex="-1">Requirement content</h3>` : `<div class="project-requirement-step-intro"><p>Content</p><h3 id="projectRequirementStepTitle" tabindex="-1">What is this requirement?</h3></div>`}
     ${projectRequirementTypeChoicesHTML(draft)}
     <div class="project-requirement-form-grid">
       <label class="field-label project-requirement-form-span">Title *
         <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
       </label>
-      <label class="field-label project-requirement-form-span">Worker instructions
-        <textarea data-project-requirement-description rows="3" placeholder="Provide clear instructions for completing this requirement.">${escapeHtml(draft.description || "")}</textarea>
+      <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+        <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need to complete this requirement.">${escapeHtml(draft.description || "")}</textarea>
       </label>
       <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
         <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
-        <span><strong>Content to follow</strong><small>Save the requirement now and add its final resources before workers need to complete it.</small></span>
+        <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
       </label>
-      ${projectRequirementResourcesHTML(editor)}
+      ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
     </div>
   </section>`;
 }
@@ -17882,6 +17930,14 @@ function refreshProjectRequirementReview(modal) {
 }
 
 function validateProjectRequirementEditorStep(modal) {
+  if (
+    projectRequirementEditorState?.mode === "draft" &&
+    projectRequirementEditorState.step === 1 &&
+    projectRequirementEditorState.resourceEditor
+  ) {
+    showToast("Finish adding the resource or cancel it before continuing");
+    return false;
+  }
   const form = modal.querySelector("[data-project-requirement-form]");
   if (!form?.reportValidity()) return false;
   if (
@@ -17915,6 +17971,17 @@ function validateProjectRequirementEditorStep(modal) {
 function projectRequirementDraftValidationIssue(editor) {
   const draft = editor?.draft;
   if (!draft) return null;
+  if (
+    !PROJECT_REQUIREMENT_TYPES.some(
+      (type) => type.value === draft.requirementType,
+    )
+  ) {
+    return {
+      step: 1,
+      selector: 'input[name="projectRequirementType"]',
+      message: "Choose a requirement type.",
+    };
+  }
   if (!String(draft.documentName || "").trim()) {
     return {
       step: 1,
@@ -18018,6 +18085,10 @@ function showProjectRequirementValidationIssue(issue) {
     }
     const field = modal?.querySelector(issue.selector);
     if (!field) return;
+    if (projectRequirementEditorState?.mode === "draft") {
+      field.focus();
+      return;
+    }
     if (typeof field.setCustomValidity === "function") {
       field.setCustomValidity(issue.message);
       field.reportValidity();
@@ -18028,17 +18099,31 @@ function showProjectRequirementValidationIssue(issue) {
   });
 }
 
+function projectRequirementStepperHTML(editor) {
+  return [[1, "Content"], [2, "Completion"], [3, "Assignment"]]
+    .map(([step, label]) => {
+      const active = editor.step === step;
+      const complete = editor.step > step;
+      const marker = complete ? onsiteIcon("check", 12) : step;
+      const content = `<span>${marker}</span><strong>${escapeHtml(label)}</strong>`;
+      return `<li class="${active ? "active" : complete ? "complete" : ""}"${active ? ` aria-current="step"` : ""}>${complete
+        ? `<button class="project-requirement-step-control" type="button" data-project-requirement-step="${step}" aria-label="Return to ${escapeHtml(label)}">${content}</button>`
+        : `<span class="project-requirement-step-control">${content}</span>`}</li>`;
+    })
+    .join("");
+}
+
 function renderProjectRequirementEditor({ focusHeading = true } = {}) {
   const editor = projectRequirementEditorState;
   const modal = document.getElementById("projectRequirementModal");
   const job = findJob(editor?.jobId);
   if (!editor || !modal || (editor.mode !== "draft" && !job)) return;
-  modal.innerHTML = `<form class="project-requirement-sheet" data-project-requirement-form="${escapeHtml(job?.id || "request-labour-draft")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
+  modal.innerHTML = `<form class="project-requirement-sheet${editor.mode === "draft" ? " is-draft-prestart" : ""}" data-project-requirement-form="${escapeHtml(job?.id || "request-labour-draft")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
     <header class="project-requirement-sheet-head">
-      <div class="project-requirement-sheet-heading"><p class="company-project-workspace-kicker">Pre-start Requirement</p><h2 id="projectRequirementModalTitle">${editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
+      <div class="project-requirement-sheet-heading">${editor.mode === "draft" ? "" : `<p class="company-project-workspace-kicker">Pre-start Requirement</p>`}<h2 id="projectRequirementModalTitle">${editor.mode === "draft" ? "Add requirement" : editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
       <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
       <ol class="project-requirement-steps" aria-label="Requirement creation progress">
-        ${[[1, "Content"], [2, "Completion"], [3, "Assignment"]].map(([step, label]) => `<li class="${editor.step === step ? "active" : editor.step > step ? "complete" : ""}"${editor.step === step ? ` aria-current="step"` : ""}><span>${editor.step > step ? onsiteIcon("check", 12) : step}</span>${escapeHtml(label)}</li>`).join("")}
+        ${projectRequirementStepperHTML(editor)}
       </ol>
     </header>
     <div class="project-requirement-sheet-body">${projectRequirementEditorStepHTML(editor)}</div>
@@ -18336,17 +18421,42 @@ function saveProjectRequirementResource(modal) {
 }
 
 function bindProjectRequirementEditorControls(modal) {
+  modal
+    .querySelectorAll("[data-project-requirement-step]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        const step = Number(button.dataset.projectRequirementStep);
+        if (!Number.isInteger(step) || step >= projectRequirementEditorState.step) {
+          return;
+        }
+        projectRequirementEditorState.step = step;
+        projectRequirementEditorState.resourceEditor = null;
+        renderProjectRequirementEditor();
+      });
+    });
   modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
     button.addEventListener("click", () => requestProjectRequirementEditorExit()),
   );
+  modal.querySelector(".project-requirement-sheet")?.addEventListener("click", (event) => {
+    if (
+      projectRequirementEditorState?.resourceEditor?.type !== "choose" ||
+      event.target.closest(".project-requirement-resource-add-wrap")
+    ) {
+      return;
+    }
+    syncProjectRequirementEditorDraft(modal);
+    projectRequirementEditorState.resourceEditor = null;
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
   modal
     .querySelector("[data-project-requirement-resource-add]")
     ?.addEventListener("click", () => {
       syncProjectRequirementEditorDraft(modal);
-      projectRequirementEditorState.resourceEditor = {
-        type: "choose",
-        resourceId: "",
-      };
+      projectRequirementEditorState.resourceEditor =
+        projectRequirementEditorState.resourceEditor?.type === "choose"
+          ? null
+          : { type: "choose", resourceId: "" };
       renderProjectRequirementEditor({ focusHeading: false });
     });
   modal
@@ -18470,6 +18580,13 @@ function bindProjectRequirementEditorControls(modal) {
   });
   modal.querySelector("[data-project-requirement-content-follow]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
+    if (projectRequirementEditorState.draft.contentToFollow) {
+      projectRequirementEditorState.resourceEditor = null;
+    }
+    renderProjectRequirementEditor({ focusHeading: false });
+    requestAnimationFrame(() =>
+      modal.querySelector("[data-project-requirement-content-follow]")?.focus(),
+    );
   });
   modal.querySelectorAll('input[name="projectRequirementLevel"]').forEach((input) => {
     input.addEventListener("change", () => {
@@ -18511,7 +18628,6 @@ function bindProjectRequirementEditorControls(modal) {
   });
   modal.querySelector("[data-project-requirement-next]")?.addEventListener("click", () => {
     syncProjectRequirementEditorDraft(modal);
-    if (!validateProjectRequirementEditorStep(modal)) return;
     const issue = projectRequirementDraftValidationIssue(
       projectRequirementEditorState,
     );
@@ -18519,6 +18635,7 @@ function bindProjectRequirementEditorControls(modal) {
       showProjectRequirementValidationIssue(issue);
       return;
     }
+    if (!validateProjectRequirementEditorStep(modal)) return;
     projectRequirementEditorState.step += 1;
     renderProjectRequirementEditor();
   });
@@ -18531,7 +18648,6 @@ function bindProjectRequirementEditorControls(modal) {
     event.preventDefault();
     if (projectRequirementEditorState.step < 3) {
       syncProjectRequirementEditorDraft(modal);
-      if (!validateProjectRequirementEditorStep(modal)) return;
       const issue = projectRequirementDraftValidationIssue(
         projectRequirementEditorState,
       );
@@ -18539,6 +18655,7 @@ function bindProjectRequirementEditorControls(modal) {
         showProjectRequirementValidationIssue(issue);
         return;
       }
+      if (!validateProjectRequirementEditorStep(modal)) return;
       projectRequirementEditorState.step += 1;
       renderProjectRequirementEditor();
       return;
@@ -18653,6 +18770,15 @@ function openProjectRequirementEditor({
   modal.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (projectRequirementEditorState?.resourceEditor) {
+        syncProjectRequirementEditorDraft(modal);
+        projectRequirementEditorState.resourceEditor = null;
+        renderProjectRequirementEditor({ focusHeading: false });
+        requestAnimationFrame(() =>
+          modal.querySelector("[data-project-requirement-resource-add]")?.focus(),
+        );
+        return;
+      }
       requestProjectRequirementEditorExit();
       return;
     }
