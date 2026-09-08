@@ -4161,8 +4161,8 @@ const PROJECT_REQUIREMENT_LEVELS = [
 
 const PROJECT_REQUIREMENT_ACTIONS = {
   document: [
-    { value: "view_only", label: "View only" },
     { value: "read_acknowledge", label: "Read & acknowledge" },
+    { value: "view_only", label: "View only" },
     { value: "read_sign", label: "Read & sign" },
   ],
   video_induction: [
@@ -4171,17 +4171,14 @@ const PROJECT_REQUIREMENT_ACTIONS = {
   ],
   form_signature: [{ value: "complete_sign", label: "Complete & sign" }],
   external_training: [
+    { value: "company_verification", label: "External verification" },
     { value: "worker_confirmation", label: "Worker confirms completion" },
     { value: "upload_evidence", label: "Upload evidence" },
-    { value: "company_verification", label: "Company verifies completion" },
   ],
   background_check: [
-    { value: "company_verification", label: "Company verifies completion" },
+    { value: "company_verification", label: "Verification" },
     { value: "upload_evidence", label: "Upload evidence" },
-    {
-      value: "provider_verification",
-      label: "Provider verification / future integration",
-    },
+    { value: "provider_verification", label: "Provider verification" },
     { value: "worker_confirmation", label: "Worker confirms completion" },
   ],
   onsite_induction: [{ value: "supervisor_signoff", label: "Supervisor sign-off" }],
@@ -4189,13 +4186,14 @@ const PROJECT_REQUIREMENT_ACTIONS = {
 
 const PROJECT_BACKGROUND_CHECK_TYPES = [
   { value: "dbs", label: "DBS check" },
+  { value: "other_approved", label: "Other approved vetting requirement" },
 ];
 
 const PROJECT_DBS_LEVELS = [
   { value: "basic", label: "Basic" },
   { value: "standard", label: "Standard" },
   { value: "enhanced", label: "Enhanced" },
-  { value: "enhanced_barred", label: "Enhanced + barred list" },
+  { value: "enhanced_barred", label: "Enhanced + barred list", legacy: true },
 ];
 
 const PROJECT_BACKGROUND_CHECK_INITIATION = [
@@ -4227,6 +4225,42 @@ const PROJECT_REQUIREMENT_FILE_ACCEPT =
   ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.png,.jpg,.jpeg,.webp";
 const PROJECT_REQUIREMENT_FILE_MAX_BYTES = 1024 * 1024;
 const PROJECT_REQUIREMENT_FILES_TOTAL_MAX_BYTES = 2 * 1024 * 1024;
+
+const PROJECT_REQUIREMENT_CANONICAL_COMPLETION = Object.freeze({
+  document: "read_and_acknowledge",
+  video_induction: "watch_and_acknowledge",
+  form_signature: "complete_required_fields_and_sign",
+  external_training: "external_verification",
+  background_check: "verification",
+  onsite_induction: "supervisor_signoff",
+});
+
+function normalizeProjectRequirementPdfTemplate(requirement) {
+  const source = requirement?.pdfTemplate || requirement?.content?.pdfTemplate || {};
+  const sourceResourceId = String(source.sourceResourceId || "").trim();
+  const fields = (Array.isArray(source.fields) ? source.fields : [])
+    .map((field) => {
+      const type = ["text", "date", "checkbox", "initials", "signature"].includes(field?.type)
+        ? field.type
+        : "";
+      const page = Math.max(1, Math.floor(Number(field?.page) || 1));
+      const clamp = (value) => Math.min(1, Math.max(0, Number(value) || 0));
+      if (!field?.id || !type) return null;
+      return {
+        id: String(field.id),
+        type,
+        page,
+        x: clamp(field.x),
+        y: clamp(field.y),
+        width: clamp(field.width),
+        height: clamp(field.height),
+        required: field.required !== false,
+        label: String(field.label || "").trim(),
+      };
+    })
+    .filter(Boolean);
+  return { sourceResourceId, fields };
+}
 
 function projectRequirementResourceTypeLabel(type) {
   return (
@@ -4295,7 +4329,12 @@ function normalizeProjectRequirementResource(resource, fallbackId = "") {
 }
 
 function normalizeProjectRequirementResources(doc, documentId) {
-  const resources = (Array.isArray(doc?.resources) ? doc.resources : [])
+  const sourceResources = Array.isArray(doc?.resources)
+    ? doc.resources
+    : Array.isArray(doc?.content?.resources)
+      ? doc.content.resources
+      : [];
+  const resources = sourceResources
     .map((resource, index) =>
       normalizeProjectRequirementResource(
         resource,
@@ -4477,6 +4516,22 @@ function projectRequirementDefaultAction(type) {
 }
 
 function normalizeProjectRequirementAudience(audience) {
+  if (audience?.type === "labour_requirements") {
+    const labourRequirementIds = [...new Set(
+      (Array.isArray(audience.labourRequirementIds)
+        ? audience.labourRequirementIds
+        : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+    )];
+    if (labourRequirementIds.length) {
+      return {
+        type: "labour_requirements",
+        labourRequirementIds,
+        labourRequirementId: labourRequirementIds[0],
+      };
+    }
+  }
   if (audience?.type === "labour_requirement" && audience.labourRequirementId) {
     return {
       type: "labour_requirement",
@@ -4484,6 +4539,18 @@ function normalizeProjectRequirementAudience(audience) {
     };
   }
   return { type: "all_project_workers", labourRequirementId: "" };
+}
+
+function projectRequirementAudienceIds(requirementOrAudience) {
+  const audience = normalizeProjectRequirementAudience(
+    requirementOrAudience?.audience || requirementOrAudience,
+  );
+  if (audience.type === "labour_requirements") {
+    return audience.labourRequirementIds;
+  }
+  return audience.type === "labour_requirement"
+    ? [audience.labourRequirementId]
+    : [];
 }
 
 function normalizeProjectRequirementExternalTraining(requirement) {
@@ -4636,10 +4703,11 @@ function normalizeProjectRequirementVideoProgress(progress) {
 }
 
 function normalizePreStartDocument(doc) {
+  const requestedType = doc?.requirementType || doc?.type;
   const requirementType = PROJECT_REQUIREMENT_TYPES.some(
-    (type) => type.value === doc?.requirementType,
+    (type) => type.value === requestedType,
   )
-    ? doc.requirementType
+    ? requestedType
     : "document";
   const defaultTitle = requirementType === "onsite_induction"
     ? "Site induction"
@@ -4688,10 +4756,20 @@ function normalizePreStartDocument(doc) {
   const legacyAction = requirementLevel === "optional"
     ? "view_only"
     : "read_acknowledge";
+  const canonicalMethod = String(doc?.completion?.method || "");
+  const canonicalLegacyAction = {
+    read_and_acknowledge: "read_acknowledge",
+    watch_and_acknowledge: "watch_acknowledge",
+    complete_required_fields_and_sign: "complete_sign",
+    external_verification: "company_verification",
+    verification: "company_verification",
+    supervisor_signoff: "supervisor_signoff",
+  }[canonicalMethod];
+  const requestedCompletionAction = doc?.completionAction || canonicalLegacyAction;
   const completionAction = validActions.some(
-    (item) => item.value === doc?.completionAction,
+    (item) => item.value === requestedCompletionAction,
   )
-    ? doc.completionAction
+    ? requestedCompletionAction
     : validActions.some((item) => item.value === legacyAction)
       ? legacyAction
       : projectRequirementDefaultAction(requirementType);
@@ -4701,6 +4779,7 @@ function normalizePreStartDocument(doc) {
   const version = String(doc?.version || doc?.revision || "1").trim() || "1";
   const externalTraining = normalizeProjectRequirementExternalTraining(doc);
   const backgroundCheck = normalizeProjectRequirementBackgroundCheck(doc);
+  const pdfTemplate = normalizeProjectRequirementPdfTemplate(doc);
   const comprehensionCheck = {
     enabled:
       requirementType === "video_induction" &&
@@ -4726,6 +4805,16 @@ function normalizePreStartDocument(doc) {
       requirementType === "background_check" ? backgroundCheck : null,
     completionEvidence: doc?.completionEvidence,
   });
+  const contentToFollow =
+    !!doc?.contentToFollow || doc?.content?.status === "pending";
+  const readinessStatus = contentToFollow
+    ? "content_pending"
+    : doc?.readiness?.status || doc?.readinessStatus || "ready";
+  const canonicalCompletionAction =
+    PROJECT_REQUIREMENT_CANONICAL_COMPLETION[requirementType];
+  const audience = normalizeProjectRequirementAudience(
+    doc?.assignment || doc?.audience,
+  );
   return {
     documentId,
     requirementId: documentId,
@@ -4737,16 +4826,33 @@ function normalizePreStartDocument(doc) {
     updatedAt: doc?.updatedAt || doc?.uploadedAt || new Date().toISOString(),
     archivedAt: doc?.archivedAt || "",
     requirementType,
+    id: documentId,
+    type: requirementType,
+    title: documentName,
     description: String(doc?.description || doc?.instructions || "").trim(),
-    contentToFollow: !!doc?.contentToFollow,
+    instructions: String(doc?.description || doc?.instructions || "").trim(),
+    contentToFollow,
     sourceReference: String(doc?.sourceReference || "").trim(),
     resources,
     completionAction,
     completionEvidence,
     timing,
     requirementLevel,
-    audience: normalizeProjectRequirementAudience(doc?.audience),
+    audience,
+    assignment: audience,
     version,
+    sortOrder: Number.isFinite(Number(doc?.sortOrder))
+      ? Math.max(0, Number(doc.sortOrder))
+      : null,
+    content: {
+      status: readinessStatus === "content_pending" ? "pending" : "configured",
+      resources,
+      pdfTemplate,
+    },
+    completion: { method: canonicalCompletionAction },
+    readiness: { status: readinessStatus },
+    readinessStatus,
+    pdfTemplate,
     requireRecompletionOnUpdate: !!doc?.requireRecompletionOnUpdate,
     requireWorkerAcknowledgementSignature:
       requirementType === "onsite_induction" &&
@@ -5653,7 +5759,13 @@ function preStartDocumentsForJob(job, { includeArchived = false } = {}) {
     )
     .filter(Boolean)
     .filter((document) => includeArchived || !document.archivedAt)
-    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    .sort((a, b) => {
+      if (a.sortOrder != null || b.sortOrder != null) {
+        return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+          (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
+      }
+      return (a.createdAt || "").localeCompare(b.createdAt || "");
+    });
 }
 
 function addPreStartDocument(jobId, doc) {
@@ -5677,6 +5789,7 @@ function upsertProjectRequirement(jobId, input) {
     uploadedAt: existing?.uploadedAt || input?.uploadedAt,
     updatedAt: new Date().toISOString(),
     archivedAt: "",
+    sortOrder: existing?.sortOrder ?? input?.sortOrder ?? existingDocuments.length,
   });
   if (!job || !record)
     return { ok: false, reason: "Add a requirement title" };
@@ -5756,9 +5869,10 @@ function projectRequirementAssignmentContext(job, workerId, requirement) {
         labourRequirements,
       })
     : null;
+  const assignedRequirementIds = projectRequirementAudienceIds(requirement);
   if (
-    requirement.audience?.type === "labour_requirement" &&
-    workerRequirement?.id !== requirement.audience.labourRequirementId
+    assignedRequirementIds.length &&
+    !assignedRequirementIds.includes(workerRequirement?.id)
   ) {
     return null;
   }
@@ -5770,8 +5884,8 @@ function projectRequirementAssignmentContext(job, workerId, requirement) {
       application?.id || `legacy-assignment:${job.id}:${workerId}`,
     ),
     labourRequirementId: String(
-      requirement.audience?.type === "labour_requirement"
-        ? requirement.audience.labourRequirementId
+      assignedRequirementIds.length
+        ? workerRequirement?.id || assignedRequirementIds[0]
         : workerRequirement?.id || "",
     ),
     preStartRequirementId: String(requirement.documentId),
@@ -9337,15 +9451,17 @@ function applyRepeatProjectPreStartDraft(
       const audience = normalizeProjectRequirementAudience(
         requirement.audience,
       );
-      const copiedAudience =
-        audience.type === "labour_requirement"
-          ? {
-              ...audience,
-              labourRequirementId:
-                labourRequirementIds.get(audience.labourRequirementId) ||
-                audience.labourRequirementId,
-            }
-          : audience;
+      const assignedIds = projectRequirementAudienceIds(audience);
+      const copiedIds = assignedIds.map(
+        (id) => labourRequirementIds.get(id) || id,
+      );
+      const copiedAudience = copiedIds.length
+        ? {
+            type: copiedIds.length > 1 ? "labour_requirements" : "labour_requirement",
+            labourRequirementIds: copiedIds,
+            labourRequirementId: copiedIds[0],
+          }
+        : audience;
       return normalizeDraftPreStartRequirement({
         ...requirement,
         documentId: createId(),
@@ -9847,7 +9963,13 @@ function upsertDraftPreStartRequirement(requirement) {
     : -1;
   const existing =
     existingIndex >= 0 ? draftPreStartRequirements[existingIndex] : null;
-  const normalized = normalizeDraftPreStartRequirement(requirement, existing);
+  const normalized = normalizeDraftPreStartRequirement(
+    {
+      ...requirement,
+      sortOrder: existing?.sortOrder ?? requirement?.sortOrder ?? draftPreStartRequirements.length,
+    },
+    existing,
+  );
   if (!normalized) {
     return { ok: false, reason: "Enter a requirement title." };
   }
@@ -9911,11 +10033,10 @@ function finalizeDraftPreStartConfiguration(finalLabourRequirements) {
 
   const requirements = payload.requirements.map((requirement) => {
     const audience = normalizeProjectRequirementAudience(requirement.audience);
-    if (audience.type !== "labour_requirement") return requirement;
-    const finalRequirementId = draftToFinalId.get(
-      audience.labourRequirementId,
-    );
-    if (!finalRequirementId) {
+    const assignedIds = projectRequirementAudienceIds(audience);
+    if (!assignedIds.length) return requirement;
+    const finalRequirementIds = assignedIds.map((id) => draftToFinalId.get(id));
+    if (finalRequirementIds.some((id) => !id)) {
       throw new Error(
         `Review the labour assignment for ${requirement.documentName}.`,
       );
@@ -9924,8 +10045,11 @@ function finalizeDraftPreStartConfiguration(finalLabourRequirements) {
       {
         ...requirement,
         audience: {
-          type: "labour_requirement",
-          labourRequirementId: finalRequirementId,
+          type: finalRequirementIds.length > 1
+            ? "labour_requirements"
+            : "labour_requirement",
+          labourRequirementIds: finalRequirementIds,
+          labourRequirementId: finalRequirementIds[0],
         },
       },
       requirement,
@@ -9939,10 +10063,9 @@ function finalizeDraftPreStartConfiguration(finalLabourRequirements) {
 }
 
 function draftPreStartRequirementAssignmentIssue(requirement) {
-  if (requirement?.audience?.type !== "labour_requirement") return false;
-  return !pendingTradeRequirements.some(
-    (labourRequirement) =>
-      labourRequirement.id === requirement.audience.labourRequirementId,
+  const assignedIds = projectRequirementAudienceIds(requirement);
+  return assignedIds.some(
+    (id) => !pendingTradeRequirements.some((requirement) => requirement.id === id),
   );
 }
 
@@ -9996,12 +10119,12 @@ function draftPreStartRequirementListHTML() {
 function draftPreStartConfiguredHTML() {
   return `<section class="jw-prestart-configured" aria-labelledby="jobPreStartConfiguredTitle">
     <div class="jw-prestart-state-head">
-      <div><h4 id="jobPreStartConfiguredTitle">Requirements</h4><p>Add each action workers need to complete before starting.</p></div>
+      <div><h4 id="jobPreStartConfiguredTitle">Requirements</h4><p>Add each pre-start action separately. You can add as many requirements as needed.</p></div>
       <button class="secondary-btn" type="button" data-draft-prestart-add>+ Add requirement</button>
     </div>
     ${draftPreStartRequirements.length
       ? `<div class="jw-prestart-requirement-list">${draftPreStartRequirementListHTML()}</div>`
-      : `<div class="jw-prestart-empty"><strong>No requirements added.</strong><span>Add the first pre-start requirement to continue.</span></div>`}
+      : `<div class="jw-prestart-empty"><strong>No requirements added yet.</strong><span>Add the first pre-start requirement to continue.</span></div>`}
   </section>`;
 }
 
@@ -10010,10 +10133,10 @@ function draftPreStartStateHTML() {
     return draftPreStartConfiguredHTML();
   }
   if (draftPreStartSetupStatus === "pending") {
-    return `<div class="jw-prestart-message is-pending"><strong>Pre-start setup pending</strong><span>You can finish the requirements from the project after it is created.</span></div>`;
+    return `<div class="jw-prestart-message is-pending"><strong>Setup pending</strong><span>Complete pre-start requirements from the project before workers begin.</span></div>`;
   }
   if (draftPreStartSetupStatus === "none") {
-    return `<div class="jw-prestart-message"><strong>No pre-start requirements</strong><span>No pre-start requirements will be added to this project.</span></div>`;
+    return "";
   }
   return "";
 }
@@ -10153,27 +10276,6 @@ function openDraftPreStartConfirmDialog({
 
 function requestDraftPreStartSetupStatus(status, trigger) {
   if (!DRAFT_PRE_START_SETUP_STATUSES.has(status)) return;
-  if (
-    draftPreStartSetupStatus === "configured" &&
-    status !== "configured" &&
-    draftPreStartRequirements.length
-  ) {
-    renderDraftPreStartStep();
-    openDraftPreStartConfirmDialog({
-      title: "Discard configured requirements?",
-      description:
-        "Switching setup option will remove only the pre-start requirements configured in this request.",
-      confirmLabel: "Discard requirements and switch",
-      trigger,
-      onConfirm: () => {
-        draftPreStartRequirements = [];
-        draftPreStartSetupStatus = status;
-        setDraftPreStartValidation();
-        renderDraftPreStartStep();
-      },
-    });
-    return;
-  }
   draftPreStartSetupStatus = status;
   setDraftPreStartValidation();
   renderDraftPreStartStep();
@@ -18481,22 +18583,17 @@ function projectRequirementAudienceLabelFromRequirements(
   labourRequirements,
   requirement,
 ) {
-  if (requirement?.audience?.type !== "labour_requirement") {
+  const assignedIds = projectRequirementAudienceIds(requirement);
+  if (!assignedIds.length) {
     return "All project workers";
   }
-  const labourRequirement = (labourRequirements || []).find(
-    (item) => item.id === requirement.audience.labourRequirementId,
+  const assigned = assignedIds.map((id) =>
+    (labourRequirements || []).find((item) => item.id === id),
   );
-  if (!labourRequirement) return "Assignment needs review";
-  const workerCount = Math.max(1, Number(labourRequirement.quantity) || 1);
-  return [
-    labourRequirement.trade,
-    labourRequirement.specialism || labourRequirement.grade,
-    `${workerCount} ${workerCount === 1 ? "worker" : "workers"}`,
-  ]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
-    .join(" · ");
+  if (assigned.some((item) => !item)) return "Assignment needs review";
+  return assigned
+    .map((item) => [item.trade, item.specialism || item.grade].filter(Boolean).join(" · "))
+    .join(", ");
 }
 
 function projectRequirementAudienceLabel(job, requirement) {
@@ -18508,11 +18605,11 @@ function projectRequirementAudienceLabel(job, requirement) {
 
 function projectRequirementEligibleWorkers(job, requirement, summary) {
   const workers = summary?.assignedWorkers || [];
-  if (requirement?.audience?.type !== "labour_requirement") return workers;
+  const assignedIds = projectRequirementAudienceIds(requirement);
+  if (!assignedIds.length) return workers;
   return workers.filter(
     (worker) =>
-      companyProjectWorkerRequirement(worker, summary)?.id ===
-      requirement.audience.labourRequirementId,
+      assignedIds.includes(companyProjectWorkerRequirement(worker, summary)?.id),
   );
 }
 
@@ -18792,9 +18889,10 @@ function renderCompanyPreStartVerification() {
   const summary = companyProjectSummary(job, getSessionUser());
   const workerRequirement = companyProjectWorkerRequirement(worker, summary);
   const requirements = preStartDocumentsForJob(job).filter(
-    (requirement) =>
-      requirement.audience.type !== "labour_requirement" ||
-      requirement.audience.labourRequirementId === workerRequirement?.id,
+    (requirement) => {
+      const assignedIds = projectRequirementAudienceIds(requirement);
+      return !assignedIds.length || assignedIds.includes(workerRequirement?.id);
+    },
   );
   modal.innerHTML = `<div class="prestart-verification-sheet" role="dialog" aria-modal="true" aria-labelledby="prestartVerificationTitle">
     <header class="prestart-completion-head"><div><p>Worker completion</p><h2 id="prestartVerificationTitle">${escapeHtml(worker.name || "Worker")}</h2><span>${escapeHtml(companyProjectTitle(job))}</span></div><button class="modal-close-btn" type="button" data-company-prestart-close aria-label="Close">${onsiteIcon("x", 18)}</button></header>
@@ -18990,18 +19088,15 @@ function projectRequirementAudienceOptionsForRequirements(
   labourRequirements,
   selectedAudience,
 ) {
-  const selectedId =
-    selectedAudience?.type === "labour_requirement"
-      ? selectedAudience.labourRequirementId
-      : "";
+  const selectedIds = new Set(projectRequirementAudienceIds(selectedAudience));
   const requirements = Array.isArray(labourRequirements)
     ? labourRequirements
     : [];
-  const selectedRequirementExists = requirements.some(
-    (requirement) => requirement.id === selectedId,
+  const missingIds = [...selectedIds].filter(
+    (id) => !requirements.some((requirement) => requirement.id === id),
   );
-  return `<option value=""${selectedId ? "" : " selected"}>All project workers</option>
-    ${selectedId && !selectedRequirementExists ? `<option value="${escapeHtml(selectedId)}" selected>Previously selected labour requirement · needs review</option>` : ""}
+  return `<option value=""${selectedIds.size ? "" : " selected"}>All project workers</option>
+    ${missingIds.map((id) => `<option value="${escapeHtml(id)}" selected>Previously selected labour requirement · needs review</option>`).join("")}
     ${requirements
       .map((requirement) => {
         const workerCount = Math.max(1, Number(requirement.quantity) || 1);
@@ -19013,7 +19108,7 @@ function projectRequirementAudienceOptionsForRequirements(
           .map((value) => String(value || "").trim())
           .filter(Boolean)
           .join(" · ");
-        return `<option value="${escapeHtml(requirement.id)}"${selectedId === requirement.id ? " selected" : ""}>${escapeHtml(label || "Labour requirement")}</option>`;
+        return `<option value="${escapeHtml(requirement.id)}"${selectedIds.has(requirement.id) ? " selected" : ""}>${escapeHtml(label || "Labour requirement")}</option>`;
       })
       .join("")}`;
 }
@@ -19219,6 +19314,7 @@ function projectRequirementContentDraft(draft = {}) {
     externalTraining: normalizeProjectRequirementExternalTraining(draft),
     backgroundCheck: normalizeProjectRequirementBackgroundCheck(draft),
     formDefinition: normalizeProjectRequirementFormDefinition(draft),
+    pdfTemplate: normalizeProjectRequirementPdfTemplate(draft),
   };
 }
 
@@ -19230,6 +19326,7 @@ function applyProjectRequirementContentDraft(draft, content = {}) {
   draft.externalTraining = normalizeProjectRequirementExternalTraining(content);
   draft.backgroundCheck = normalizeProjectRequirementBackgroundCheck(content);
   draft.formDefinition = normalizeProjectRequirementFormDefinition(content);
+  draft.pdfTemplate = normalizeProjectRequirementPdfTemplate(content);
 }
 
 function projectRequirementDefaultContentDraft(editor, requirementType) {
@@ -19249,6 +19346,7 @@ function projectRequirementDefaultContentDraft(editor, requirementType) {
     externalTraining: {},
     backgroundCheck: {},
     formDefinition: { fields: [] },
+    pdfTemplate: { sourceResourceId: "", fields: [] },
   });
 }
 
@@ -19282,17 +19380,20 @@ function projectRequirementExternalTrainingContentHTML(draft) {
 
 function projectRequirementBackgroundCheckContentHTML(draft) {
   const check = normalizeProjectRequirementBackgroundCheck(draft);
+  const levelOptions = PROJECT_DBS_LEVELS.filter(
+    (option) => !option.legacy || check.level === option.value,
+  );
   const urlRequired = check.initiation === "company_provider_link";
-  const eligibilityGuidance = check.level === "basic"
+  const eligibilityGuidance = check.checkType !== "dbs" || check.level === "basic"
     ? ""
     : `<p class="project-requirement-guidance project-requirement-form-span">Eligibility for Standard, Enhanced and barred-list DBS checks depends on the worker's role and applicable DBS rules. Confirm eligibility before requesting this level.</p>`;
   return `<div class="project-requirement-form-grid">
     <label class="field-label">Check type
       <select data-project-requirement-background-type>${projectRequirementSelectOptions(PROJECT_BACKGROUND_CHECK_TYPES, check.checkType)}</select>
     </label>
-    <label class="field-label">DBS level / requirement
-      <select data-project-requirement-background-level>${projectRequirementSelectOptions(PROJECT_DBS_LEVELS, check.level)}</select>
-    </label>
+    ${check.checkType === "dbs" ? `<label class="field-label">DBS level
+      <select data-project-requirement-background-level>${projectRequirementSelectOptions(levelOptions, check.level)}</select>
+    </label>` : ""}
     ${eligibilityGuidance}
     <label class="field-label project-requirement-form-span">How the check is initiated
       <select data-project-requirement-background-initiation>${projectRequirementSelectOptions(PROJECT_BACKGROUND_CHECK_INITIATION, check.initiation)}</select>
@@ -19322,22 +19423,32 @@ function projectRequirementFormFieldTypeLabel(type) {
 }
 
 function projectRequirementFormDefinitionHTML(draft) {
-  const fields = normalizeProjectRequirementFormDefinition(draft).fields;
+  const pdf = (draft.resources || []).find(
+    (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
+  );
   return `<section class="project-requirement-form-builder project-requirement-form-span" aria-labelledby="projectRequirementFormBuilderTitle">
-    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Form fields</p><span>Build the fields the worker must complete inside OnSite.</span></div>
-    ${fields.length ? `<div class="project-requirement-form-field-list">${fields.map((field) => `<div class="project-requirement-form-field-row"><div><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(projectRequirementFormFieldTypeLabel(field.type))}${field.required ? " · required" : " · optional"}</span></div><button type="button" data-project-requirement-form-field-remove="${escapeHtml(field.id)}">Remove</button></div>`).join("")}</div>` : `<p class="project-requirement-resources-empty">No form fields added.</p>`}
-    <div class="project-requirement-form-field-composer">
-      <label class="field-label">Field label<input type="text" data-project-requirement-form-field-label placeholder="e.g. Emergency contact name" /></label>
-      <label class="field-label">Field type<select data-project-requirement-form-field-type>${PROJECT_REQUIREMENT_FORM_FIELD_TYPES.map((type) => `<option value="${type}">${escapeHtml(projectRequirementFormFieldTypeLabel(type))}</option>`).join("")}</select></label>
-      <label class="field-label project-requirement-form-field-options hidden" data-project-requirement-form-field-options-wrap>Choices<input type="text" data-project-requirement-form-field-options placeholder="Option one, Option two" /><span class="form-helper">Separate choices with commas.</span></label>
-      <label class="checkbox-row"><input type="checkbox" data-project-requirement-form-field-required checked /><span>Required field</span></label>
-      <button class="secondary-btn" type="button" data-project-requirement-form-field-add>Add field</button>
-    </div>
+    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Source document</p><span>PDF is the canonical source format for form and signature requirements.</span></div>
+    ${pdf ? projectRequirementResourceRowHTML(pdf) : `<p class="project-requirement-resources-empty">No PDF uploaded.</p>`}
+    <label class="secondary-btn project-requirement-resource-file-action">${pdf ? "Replace PDF" : "Upload PDF"}<input type="file" accept="application/pdf,.pdf" data-project-requirement-pdf-upload aria-label="${pdf ? "Replace source PDF" : "Upload source PDF"}" /></label>
+    <p class="project-requirement-guidance">PDF field placement is not available in this build because the application has no reliable PDF page renderer or durable file-storage service. Save this requirement as content pending; no worker signing or completed PDF is simulated.</p>
+  </section>`;
+}
+
+function projectRequirementDocumentUploadHTML(draft) {
+  const documents = (draft.resources || []).filter(
+    (resource) => resource.type === "file",
+  );
+  return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementDocumentTitle">
+    <div class="project-requirement-resources-head"><p id="projectRequirementDocumentTitle">Document upload *</p><span>Upload the document workers must read and acknowledge.</span></div>
+    ${documents.length ? `<div class="project-requirement-resource-list">${documents.map(projectRequirementResourceRowHTML).join("")}</div>` : `<p class="project-requirement-resources-empty">No document uploaded.</p>`}
+    <label class="secondary-btn project-requirement-resource-file-action">${documents.length ? "Replace document" : "Upload document"}<input type="file" accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-document-upload aria-label="${documents.length ? "Replace document" : "Upload document"}" /></label>
   </section>`;
 }
 
 function projectRequirementStandardContentHTML(editor) {
   const draft = editor.draft;
+  const isForm = draft.requirementType === "form_signature";
+  const isDocument = draft.requirementType === "document";
   return `<div class="project-requirement-form-grid">
     <label class="field-label project-requirement-form-span">Title *
       <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
@@ -19349,8 +19460,12 @@ function projectRequirementStandardContentHTML(editor) {
       <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
       <span><strong>Add content later</strong><small>Save the requirement now and add its final content before workers need to complete it.</small></span>
     </label>
-    ${draft.contentToFollow ? "" : projectRequirementResourcesHTML(editor)}
-    ${draft.requirementType === "form_signature" && !draft.contentToFollow ? projectRequirementFormDefinitionHTML(draft) : ""}
+    ${draft.contentToFollow ? "" : isForm
+      ? projectRequirementFormDefinitionHTML(draft)
+      : isDocument
+        ? projectRequirementDocumentUploadHTML(draft)
+        : projectRequirementResourcesHTML(editor)}
+    ${isDocument && !draft.contentToFollow ? `<p class="project-requirement-guidance project-requirement-form-span">Workers must read the full document and acknowledge it.</p>` : ""}
   </div>`;
 }
 
@@ -19384,26 +19499,17 @@ function projectRequirementLevelChoicesHTML(draft) {
 
 function projectRequirementActionFieldHTML(draft) {
   const actions = PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [];
-  const fieldLabel = ["external_training", "background_check"].includes(
-    draft.requirementType,
-  )
-    ? "Completion method"
-    : "Required worker action";
-  if (actions.length === 1) {
-    const workerConfirmation = draft.requirementType === "onsite_induction"
-      ? `<label class="checkbox-row project-requirement-worker-confirmation">
-          <input data-project-requirement-worker-confirmation type="checkbox"${draft.requireWorkerAcknowledgementSignature ? " checked" : ""} />
-          <span><strong>Require worker acknowledgement/signature</strong><small>Completion will require both supervisor sign-off and worker confirmation.</small></span>
-        </label>`
-      : "";
-    return `<div class="project-requirement-action-config">
-      <div class="project-requirement-fixed-value"><span>${escapeHtml(fieldLabel)}</span><strong>${escapeHtml(actions[0].label)}</strong></div>
-      ${workerConfirmation}
-    </div>`;
-  }
-  return `<label class="field-label">${escapeHtml(fieldLabel)}
-    <select data-project-requirement-action>${projectRequirementActionOptions(draft.requirementType, draft.completionAction)}</select>
-  </label>`;
+  const explanations = {
+    document: "Workers must read the full document and acknowledge it.",
+    video_induction: "Workers must watch the full video and acknowledge it.",
+    form_signature: "Workers must complete the required fields and sign the document.",
+    external_training: "Completion must be verified after the worker completes the external training.",
+    background_check: "The requested check must be verified before the requirement is complete.",
+    onsite_induction: "A supervisor confirms completion when the worker arrives.",
+  };
+  return `<div class="project-requirement-action-config">
+    <div class="project-requirement-fixed-value"><span>Completion</span><strong>${escapeHtml(actions[0]?.label || "Completion required")}</strong><small>${escapeHtml(explanations[draft.requirementType] || "")}</small></div>
+  </div>`;
 }
 
 function projectRequirementCompletionEvidenceHTML(draft) {
@@ -19580,9 +19686,9 @@ function projectRequirementReviewHTML(editor, draft) {
 function projectRequirementStepThreeHTML(editor, draft) {
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
     <div class="project-requirement-step-intro"><p>Assignment</p><h3 id="projectRequirementStepTitle" tabindex="-1">Who does this apply to?</h3></div>
-    <label class="field-label">Audience
-      <select data-project-requirement-audience>${projectRequirementEditorAudienceOptions(editor, draft.audience)}</select>
-      <span class="form-helper">Applies to existing and future workers assigned to the selected project roles.</span>
+    <label class="field-label">Worker scope
+      <select data-project-requirement-audience multiple size="${Math.min(5, projectRequirementEditorLabourRequirements(editor).length + 1)}">${projectRequirementEditorAudienceOptions(editor, draft.audience)}</select>
+      <span class="form-helper">Choose All project workers, or select one or more saved labour requirements.</span>
     </label>
     ${editor.mode === "draft" ? "" : `<details class="project-requirement-advanced">
       <summary>Advanced settings</summary>
@@ -19676,9 +19782,16 @@ function syncProjectRequirementEditorDraft(modal) {
     draft.comprehensionCheck.passThreshold = Number(value("[data-project-requirement-pass]"));
   }
   if (value("[data-project-requirement-audience]") != null) {
-    const audienceId = value("[data-project-requirement-audience]");
-    draft.audience = audienceId
-      ? { type: "labour_requirement", labourRequirementId: audienceId }
+    const audienceControl = modal.querySelector("[data-project-requirement-audience]");
+    const audienceIds = Array.from(audienceControl?.selectedOptions || [])
+      .map((option) => option.value)
+      .filter(Boolean);
+    draft.audience = audienceIds.length
+      ? {
+          type: "labour_requirements",
+          labourRequirementIds: audienceIds,
+          labourRequirementId: audienceIds[0],
+        }
       : { type: "all_project_workers", labourRequirementId: "" };
   }
   if (value("[data-project-requirement-version]") != null) {
@@ -19797,7 +19910,10 @@ function projectRequirementDraftValidationIssue(editor) {
         message: "Choose a valid background check type.",
       };
     }
-    if (!PROJECT_DBS_LEVELS.some((option) => option.value === check.level)) {
+    if (
+      check.checkType === "dbs" &&
+      !PROJECT_DBS_LEVELS.some((option) => option.value === check.level)
+    ) {
       return {
         step: 1,
         selector: "[data-project-requirement-background-level]",
@@ -19838,6 +19954,17 @@ function projectRequirementDraftValidationIssue(editor) {
   }
   if (
     !draft.contentToFollow &&
+    draft.requirementType === "document" &&
+    !(draft.resources || []).some((resource) => resource.type === "file")
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-document-upload]",
+      message: "Upload the document workers must read, or choose Add content later.",
+    };
+  }
+  if (
+    !draft.contentToFollow &&
     draft.requirementType === "video_induction" &&
     !(draft.resources || []).some(
       (resource) => resource.type === "external_link",
@@ -19852,12 +19979,28 @@ function projectRequirementDraftValidationIssue(editor) {
   if (
     !draft.contentToFollow &&
     draft.requirementType === "form_signature" &&
-    !normalizeProjectRequirementFormDefinition(draft).fields.length
+    !(draft.resources || []).some(
+      (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
+    )
   ) {
     return {
       step: 1,
-      selector: "[data-project-requirement-form-field-label]",
-      message: "Add at least one form field.",
+      selector: "[data-project-requirement-pdf-upload]",
+      message: "Upload the source PDF, or choose Add content later.",
+    };
+  }
+  if (
+    !draft.contentToFollow &&
+    draft.requirementType === "form_signature" &&
+    (!normalizeProjectRequirementPdfTemplate(draft).fields.length ||
+      !normalizeProjectRequirementPdfTemplate(draft).fields.some(
+        (field) => field.type === "signature",
+      ))
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-content-follow]",
+      message: "Field placement requires PDF rendering infrastructure. Choose Add content later to save this requirement safely.",
     };
   }
   const validAction = (PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [])
@@ -19912,10 +20055,10 @@ function projectRequirementDraftValidationIssue(editor) {
   }
   if (
     editor.mode === "draft" &&
-    draft.audience?.type === "labour_requirement" &&
-    !projectRequirementEditorLabourRequirements(editor).some(
-      (requirement) =>
-        requirement.id === draft.audience.labourRequirementId,
+    projectRequirementAudienceIds(draft).some(
+      (id) => !projectRequirementEditorLabourRequirements(editor).some(
+        (requirement) => requirement.id === id,
+      ),
     )
   ) {
     return {
@@ -19975,7 +20118,7 @@ function renderProjectRequirementEditor({ focusHeading = true } = {}) {
   if (!editor || !modal || (editor.mode !== "draft" && !job)) return;
   modal.innerHTML = `<form class="project-requirement-sheet${editor.mode === "draft" ? " is-draft-prestart" : ""}" data-project-requirement-form="${escapeHtml(job?.id || "request-labour-draft")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
     <header class="project-requirement-sheet-head">
-      <div class="project-requirement-sheet-heading">${editor.mode === "draft" ? "" : `<p class="company-project-workspace-kicker">Pre-start Requirement</p>`}<h2 id="projectRequirementModalTitle">${editor.mode === "draft" ? "Add requirement" : editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
+      <div class="project-requirement-sheet-heading"><h2 id="projectRequirementModalTitle">${editor.mode === "draft" ? "Add requirement" : editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
       <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
       <ol class="project-requirement-steps" aria-label="Requirement creation progress">
         ${projectRequirementStepperHTML(editor)}
@@ -20098,7 +20241,7 @@ function saveProjectRequirementEditor({ afterSave = null } = {}) {
     contentToFollow: draft.contentToFollow,
     sourceReference: "",
     resources: draft.resources,
-    completionAction: draft.completionAction,
+    completionAction: projectRequirementDefaultAction(draft.requirementType),
     completionEvidence: normalizeProjectRequirementCompletionEvidence(draft),
     requirementLevel: draft.requirementLevel,
     timing: draft.timing,
@@ -20120,6 +20263,10 @@ function saveProjectRequirementEditor({ afterSave = null } = {}) {
       draft.requirementType === "form_signature"
         ? normalizeProjectRequirementFormDefinition(draft)
         : { fields: [] },
+    pdfTemplate:
+      draft.requirementType === "form_signature"
+        ? normalizeProjectRequirementPdfTemplate(draft)
+        : { sourceResourceId: "", fields: [] },
     comprehensionCheck: {
       enabled: draft.requirementType === "video_induction" && draft.completionAction === "watch_comprehension",
       passThreshold: draft.comprehensionCheck?.passThreshold || 80,
@@ -20290,6 +20437,72 @@ function saveProjectRequirementResource(modal) {
 }
 
 function bindProjectRequirementEditorControls(modal) {
+  modal
+    .querySelector("[data-project-requirement-document-upload]")
+    ?.addEventListener("change", async (event) => {
+      syncProjectRequirementEditorDraft(modal);
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      const existingFile = projectRequirementEditorState.draft.resources.find(
+        (resource) => resource.type === "file",
+      );
+      try {
+        const [resource] = await createProjectRequirementFileResources(
+          [file],
+          projectRequirementEditorState.draft.resources,
+          existingFile || null,
+        );
+        if (!resource) return;
+        projectRequirementEditorState.draft.resources = [
+          ...projectRequirementEditorState.draft.resources.filter(
+            (item) => item.id !== existingFile?.id,
+          ),
+          resource,
+        ];
+        renderProjectRequirementEditor({ focusHeading: false });
+      } catch (error) {
+        showToast(error.message || "The document could not be added");
+      }
+    });
+  modal
+    .querySelector("[data-project-requirement-pdf-upload]")
+    ?.addEventListener("change", async (event) => {
+      syncProjectRequirementEditorDraft(modal);
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        showToast("Choose a PDF source document");
+        return;
+      }
+      const existingPdf = projectRequirementEditorState.draft.resources.find(
+        (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
+      );
+      try {
+        const [resource] = await createProjectRequirementFileResources(
+          [file],
+          projectRequirementEditorState.draft.resources,
+          existingPdf || null,
+        );
+        if (!resource) return;
+        projectRequirementEditorState.draft.resources = [
+          ...projectRequirementEditorState.draft.resources.filter(
+            (item) => item.id !== existingPdf?.id,
+          ),
+          resource,
+        ];
+        projectRequirementEditorState.draft.pdfTemplate = {
+          sourceResourceId: resource.id,
+          fields: existingPdf?.id === resource.id
+            ? normalizeProjectRequirementPdfTemplate(
+                projectRequirementEditorState.draft,
+              ).fields
+            : [],
+        };
+        renderProjectRequirementEditor({ focusHeading: false });
+      } catch (error) {
+        showToast(error.message || "The PDF could not be added");
+      }
+    });
   modal
     .querySelectorAll("[data-project-requirement-step]")
     .forEach((button) => {
@@ -20557,7 +20770,7 @@ function bindProjectRequirementEditorControls(modal) {
   });
   modal
     .querySelectorAll(
-      "[data-project-requirement-background-level], [data-project-requirement-background-initiation]",
+      "[data-project-requirement-background-type], [data-project-requirement-background-level], [data-project-requirement-background-initiation]",
     )
     .forEach((input) => {
       input.addEventListener("change", () => {
@@ -20739,6 +20952,7 @@ function openProjectRequirementEditor({
         externalTraining: normalizeProjectRequirementExternalTraining(),
         backgroundCheck: normalizeProjectRequirementBackgroundCheck(),
         formDefinition: { fields: [] },
+        pdfTemplate: { sourceResourceId: "", fields: [] },
         comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
       };
   if (!String(draft.documentName || "").trim()) {
