@@ -11666,12 +11666,12 @@ function openNativePickerFromField(input, event) {
     event.button !== 0 ||
     event.isPrimary === false ||
     input.disabled ||
-    input.readOnly ||
-    typeof input.showPicker !== "function"
+    input.readOnly
   ) {
     return;
   }
   input.focus({ preventScroll: true });
+  if (typeof input.showPicker !== "function") return;
   try {
     input.showPicker();
     event.preventDefault();
@@ -11683,7 +11683,7 @@ function openNativePickerFromField(input, event) {
 function bindNativePickerField(input) {
   if (!input || input.dataset.nativePickerBound === "true") return;
   input.dataset.nativePickerBound = "true";
-  input.addEventListener("pointerdown", (event) => {
+  input.addEventListener("click", (event) => {
     openNativePickerFromField(input, event);
   });
 }
