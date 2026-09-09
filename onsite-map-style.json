@@ -215,7 +215,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#cbbd9c",
+        "line-color": "#c5c9c6",
         "line-width": ["interpolate", ["exponential", 1.2], ["zoom"], 6, 0.8, 12, 3, 20, 20]
       }
     },
@@ -231,7 +231,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#f5dda0",
+        "line-color": "#f8f9f8",
         "line-width": ["interpolate", ["exponential", 1.2], ["zoom"], 6, 0.4, 12, 2, 20, 18]
       }
     },
@@ -247,7 +247,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#bfae88",
+        "line-color": "#bcc2bf",
         "line-width": ["interpolate", ["exponential", 1.2], ["zoom"], 5, 1, 12, 3.5, 20, 22]
       }
     },
@@ -263,7 +263,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#efcf84",
+        "line-color": "#f1f4f2",
         "line-width": ["interpolate", ["exponential", 1.2], ["zoom"], 5, 0.6, 12, 2.4, 20, 20]
       }
     },
@@ -405,24 +405,6 @@
         "text-color": "#707274",
         "text-halo-color": "rgba(245, 246, 244, 0.94)",
         "text-halo-width": 1
-      }
-    },
-    {
-      "id": "house-numbers",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "housenumber",
-      "minzoom": 18,
-      "layout": {
-        "text-field": ["get", "housenumber"],
-        "text-font": ["Noto Sans Regular"],
-        "text-size": 10,
-        "text-padding": 3
-      },
-      "paint": {
-        "text-color": "#737477",
-        "text-halo-color": "rgba(245, 246, 244, 0.92)",
-        "text-halo-width": 0.8
       }
     },
     {

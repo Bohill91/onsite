@@ -9536,6 +9536,9 @@ function applyRepeatProjectToForm(job) {
   resetJobTradeRequirements();
   resetJobPhotos();
   currentJobPin = job.sitePin ? { ...job.sitePin } : { lat: null, lng: null };
+  pickerMapSiteCenter = currentJobHasEntrancePin()
+    ? { center: [Number(currentJobPin.lng), Number(currentJobPin.lat)], zoom: 17 }
+    : null;
   jobArrivalPointConfirmed =
     currentJobHasEntrancePin() && job.arrivalPointConfirmed !== false;
   jobArrivalPointSource = currentJobHasEntrancePin() ? "existing" : "";
@@ -9633,6 +9636,7 @@ function applyRepeatProjectToForm(job) {
     jobWizardShiftDefaultsInitialized = false;
     initializeNewRequestShiftDefaults();
     currentJobPin = { lat: null, lng: null };
+    pickerMapSiteCenter = null;
     jobArrivalPointConfirmed = false;
     jobArrivalPointSource = "";
     jobArrivalPointAddress = "";
@@ -24030,6 +24034,7 @@ jobForm.addEventListener("submit", (e) => {
 
   // Reset location section
   currentJobPin = { lat: null, lng: null };
+  pickerMapSiteCenter = null;
   jobArrivalPointConfirmed = false;
   jobArrivalPointSource = "";
   jobArrivalPointAddress = "";
@@ -25187,11 +25192,12 @@ let pickerMapInitPromise = null;
 let pickerMapLoadTimeout = null;
 let pickerMapReady = false;
 let pickerMapLastError = null;
+let pickerMapSiteCenter = null;
 let siteViewMap = null;
 let siteViewMarker = null;
 let currentJobPin = { lat: null, lng: null };
 
-const MAPLIBRE_MODULE_URL = "/vendor/maplibre-gl.mjs";
+const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -25222,9 +25228,18 @@ function createLeafletPickerMarkerIcon() {
   return L.divIcon({
     className: "onsite-entrance-marker",
     html: '<span class="onsite-entrance-pin" aria-hidden="true"><span></span></span>',
-    iconAnchor: [15, 34],
-    iconSize: [30, 34],
+    iconAnchor: [21, 42],
+    iconSize: [42, 42],
   });
+}
+
+function updateEntrancePinActionHint() {
+  const hint = document.getElementById("jobEntrancePinActionHint");
+  if (!hint) return;
+  hint.textContent =
+    jobArrivalPointSource === "manual" && !jobArrivalPointConfirmed
+      ? "Entrance point ready to confirm."
+      : "Position the pin on the exact gate or entrance.";
 }
 
 function setCurrentJobPinFromMapPoint(lat, lng) {
@@ -25413,6 +25428,7 @@ function setJobSiteAddressMessage(message = "") {
 
 document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
   setJobSiteAddressMessage("");
+  pickerMapSiteCenter = null;
   if (!currentJobHasEntrancePin()) return;
   const nextAddress = normalizedJobSiteAddress();
   if (nextAddress === jobArrivalPointAddress) return;
@@ -25522,10 +25538,12 @@ async function geocodeJobSiteAddress(trigger) {
     const lat = parseFloat(result?.lat);
     const lng = parseFloat(result?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      const zoom = pickerZoomForGeocodeResult(result);
       currentJobPin = {
         lat: parseFloat(lat.toFixed(6)),
         lng: parseFloat(lng.toFixed(6)),
       };
+      pickerMapSiteCenter = { center: [lng, lat], zoom };
       jobArrivalPointConfirmed = false;
       jobArrivalPointSource = "address";
       jobArrivalPointAddress = normalizedJobSiteAddress(addr);
@@ -25542,7 +25560,7 @@ async function geocodeJobSiteAddress(trigger) {
         syncPickerMarkerToCurrentPin();
         movePickerMap(
           [lng, lat],
-          pickerZoomForGeocodeResult(result),
+          zoom,
           { animate: true },
         );
         resizePickerMap();
@@ -25608,6 +25626,69 @@ function bindPickerMapClick(handler) {
   pickerMap.on("click", handler);
 }
 
+function recenterPickerMapToSiteAddress() {
+  const fallbackCenter = currentJobHasEntrancePin()
+    ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
+    : null;
+  const center = pickerMapSiteCenter?.center || fallbackCenter;
+  if (!center) return;
+  movePickerMap(center, pickerMapSiteCenter?.zoom || 17, { animate: true });
+}
+
+function createPickerMapControlGroup() {
+  const container = document.createElement("div");
+  container.className = "onsite-picker-map-controls";
+  const controls = [
+    ["Zoom in", "+", () => pickerMap?.zoomIn()],
+    ["Zoom out", "−", () => pickerMap?.zoomOut()],
+    ["Re-centre on site address", onsiteIcon("locate", 17), recenterPickerMapToSiteAddress],
+  ];
+  controls.forEach(([label, content, action], index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `onsite-map-control-button${index === 2 ? " is-recenter" : ""}`;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.innerHTML = content;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    container.appendChild(button);
+  });
+  return container;
+}
+
+function addVectorPickerMapControls() {
+  pickerMap.addControl(
+    {
+      onAdd() {
+        const container = createPickerMapControlGroup();
+        container.classList.add("maplibregl-ctrl", "maplibregl-ctrl-group");
+        this.container = container;
+        return container;
+      },
+      onRemove() {
+        this.container?.remove();
+      },
+    },
+    "top-right",
+  );
+}
+
+function addRasterPickerMapControls() {
+  const control = L.control({ position: "topright" });
+  control.onAdd = () => {
+    const container = createPickerMapControlGroup();
+    container.classList.add("leaflet-bar");
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    return container;
+  };
+  control.addTo(pickerMap);
+}
+
 function initVectorPickerMap(container, center, zoom) {
   pickerMap = new pickerMapLibre.Map({
     container,
@@ -25629,13 +25710,7 @@ function initVectorPickerMap(container, center, zoom) {
   container.dataset.mapRenderer = pickerMapRenderer;
   pickerMap.dragRotate.disable();
   pickerMap.touchZoomRotate.disableRotation();
-  pickerMap.addControl(
-    new pickerMapLibre.NavigationControl({
-      showCompass: false,
-      showZoom: true,
-    }),
-    "top-right",
-  );
+  addVectorPickerMapControls();
   pickerMap.addControl(
     new pickerMapLibre.AttributionControl({ compact: true }),
     "bottom-right",
@@ -25699,7 +25774,7 @@ function initRasterPickerMap(container, center, zoom) {
     attribution: "&copy; OpenStreetMap contributors",
     maxZoom: 19,
   }).addTo(pickerMap);
-  L.control.zoom({ position: "topright" }).addTo(pickerMap);
+  addRasterPickerMapControls();
   bindPickerMapClick((event) => {
     if (jobWizardActive && currentJobHasEntrancePin() && !jobEntrancePinOpen) {
       return;
@@ -25768,6 +25843,7 @@ function updatePinCoords() {
   const txt = document.getElementById("pinCoordsText");
   const map = document.getElementById("jobPickerMap");
   const message = document.getElementById("jobEntrancePinMessage");
+  updateEntrancePinActionHint();
   syncJobSiteDisclosureState();
   if (!el || !txt) return;
   if (currentJobHasEntrancePin()) {
