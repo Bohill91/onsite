@@ -25214,8 +25214,8 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const PICKER_DEFAULT_SITE_ZOOM = 17.2;
-const PICKER_SAVED_ENTRANCE_ZOOM = 17.4;
+const PICKER_DEFAULT_SITE_ZOOM = 16.2;
+const PICKER_SAVED_ENTRANCE_ZOOM = 16.2;
 let mapLibreModulePromise = null;
 
 const siteMapModal = document.getElementById("siteMapModal");
@@ -25503,12 +25503,14 @@ function pickerZoomForGeocodeResult(result = {}) {
   ) {
     return PICKER_DEFAULT_SITE_ZOOM;
   }
-  if (streetTypes.has(resultType) || category === "highway") return 17.2;
+  if (streetTypes.has(resultType) || category === "highway") {
+    return PICKER_DEFAULT_SITE_ZOOM;
+  }
   if (resultType === "postcode") {
     const postcode = String(result.name || result.display_name || "").trim();
     return /\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b/i.test(postcode)
-      ? 17
-      : 16.75;
+      ? 16
+      : 15.75;
   }
   if (broadTypes.has(resultType)) return 14;
   return 15.5;
