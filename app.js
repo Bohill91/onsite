@@ -25483,14 +25483,14 @@ function pickerZoomForGeocodeResult(result = {}) {
     preciseTypes.has(resultType) ||
     (Number.isFinite(placeRank) && placeRank >= 30 && category !== "highway")
   ) {
-    return 17;
+    return 17.6;
   }
-  if (streetTypes.has(resultType) || category === "highway") return 16.75;
+  if (streetTypes.has(resultType) || category === "highway") return 17.2;
   if (resultType === "postcode") {
     const postcode = String(result.name || result.display_name || "").trim();
     return /\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b/i.test(postcode)
-      ? 16
-      : 14.75;
+      ? 17
+      : 16.75;
   }
   if (broadTypes.has(resultType)) return 14;
   return 15.5;
@@ -25629,7 +25629,7 @@ function recenterPickerMapToSiteAddress() {
     : null;
   const center = pickerMapSiteCenter?.center || fallbackCenter;
   if (!center) return;
-  movePickerMap(center, pickerMapSiteCenter?.zoom || 17, { animate: true });
+  movePickerMap(center, pickerMapSiteCenter?.zoom || 17.6, { animate: true });
 }
 
 function createPickerMapControlGroup() {
@@ -25810,7 +25810,7 @@ async function initPickerMap({ reset = false } = {}) {
     const center = hasPin
       ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
       : [-1.8904, 52.4862];
-    const zoom = hasPin ? 17 : 11;
+    const zoom = hasPin ? 17.6 : 11;
     try {
       pickerMapLibre = await loadMapLibreModule();
       const map = await initVectorPickerMap(container, center, zoom);
