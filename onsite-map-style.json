@@ -17,7 +17,7 @@
       "id": "background",
       "type": "background",
       "paint": {
-        "background-color": "#f7f7f5"
+        "background-color": "#f5f6f3"
       }
     },
     {
@@ -27,7 +27,7 @@
       "source-layer": "landuse",
       "filter": ["==", ["get", "class"], "residential"],
       "paint": {
-        "fill-color": "#f2f1ee",
+        "fill-color": "#f0f1ed",
         "fill-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.55, 15, 0.82]
       }
     },
@@ -38,8 +38,8 @@
       "source-layer": "landuse",
       "filter": ["match", ["get", "class"], ["industrial", "commercial"], true, false],
       "paint": {
-        "fill-color": "#eeece7",
-        "fill-opacity": 0.72
+        "fill-color": "#ebe9e3",
+        "fill-opacity": 0.84
       }
     },
     {
@@ -48,9 +48,9 @@
       "source": "openmaptiles",
       "source-layer": "park",
       "paint": {
-        "fill-color": "#dfeadb",
-        "fill-opacity": 0.72,
-        "fill-outline-color": "#d2e0ce"
+        "fill-color": "#d6e8d1",
+        "fill-opacity": 0.86,
+        "fill-outline-color": "#c7ddc1"
       }
     },
     {
@@ -93,7 +93,7 @@
       "source-layer": "water",
       "filter": ["!=", ["get", "brunnel"], "tunnel"],
       "paint": {
-        "fill-color": "#cfe5f1"
+        "fill-color": "#bcdff1"
       }
     },
     {
@@ -107,7 +107,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#bddbe9",
+        "line-color": "#9dcee6",
         "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 16, 2.2]
       }
     },
@@ -151,7 +151,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#dddcd8",
+        "line-color": "#d0d0cc",
         "line-width": ["interpolate", ["exponential", 1.3], ["zoom"], 13, 0.8, 15, 3, 20, 16]
       }
     },
@@ -183,7 +183,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#d9d4c9",
+        "line-color": "#ccc9c0",
         "line-width": ["interpolate", ["exponential", 1.25], ["zoom"], 8, 0.8, 13, 2.4, 20, 18]
       }
     },
@@ -215,7 +215,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#d8cfba",
+        "line-color": "#c9c0ab",
         "line-width": ["interpolate", ["exponential", 1.2], ["zoom"], 6, 0.8, 12, 3, 20, 20]
       }
     },
@@ -299,9 +299,9 @@
       "source-layer": "building",
       "minzoom": 13,
       "paint": {
-        "fill-color": "#dedbd4",
-        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.45, 15, 0.78],
-        "fill-outline-color": "#ccc8c0"
+        "fill-color": "#ddd9d1",
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.58, 15, 0.9],
+        "fill-outline-color": "#c5c0b7"
       }
     },
     {
@@ -339,9 +339,9 @@
         "text-padding": 4
       },
       "paint": {
-        "text-color": "#575b60",
+        "text-color": "#454b52",
         "text-halo-color": "rgba(255, 255, 255, 0.92)",
-        "text-halo-width": 1.2,
+        "text-halo-width": 1.5,
         "text-halo-blur": 0.3
       }
     },
@@ -361,7 +361,7 @@
         "text-padding": 6
       },
       "paint": {
-        "text-color": "#686b70",
+        "text-color": "#535960",
         "text-halo-color": "rgba(255, 255, 255, 0.92)",
         "text-halo-width": 1.1,
         "text-halo-blur": 0.25

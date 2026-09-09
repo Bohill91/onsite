@@ -5683,9 +5683,9 @@ margin-bottom: 12px;
   align-items: flex-start;
   cursor: grab;
   display: flex;
-  height: 34px;
+  height: 42px;
   justify-content: center;
-  width: 30px;
+  width: 40px;
 }
 
 .onsite-entrance-marker:active {
@@ -5696,13 +5696,13 @@ margin-bottom: 12px;
   background: var(--orange);
   border: 2px solid #fff;
   border-radius: 50% 50% 50% 0;
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.24);
   display: block;
-  height: 24px;
+  height: 28px;
   position: relative;
   transform: rotate(-45deg);
   transition: opacity 180ms ease, transform 180ms ease;
-  width: 24px;
+  width: 28px;
 }
 
 .onsite-entrance-pin > span {
@@ -5717,7 +5717,7 @@ margin-bottom: 12px;
 }
 
 .onsite-entrance-pin.is-provisional {
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .site-view-pin {
@@ -22479,8 +22479,64 @@ button.project-requirement-step-control:focus-visible {
 }
 
 .jw-entrance-pin-actions {
+  align-items: center;
   display: flex;
-  justify-content: flex-end;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.jw-entrance-pin-actions p {
+  color: var(--ink-3);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+#jobPickerMap .onsite-map-recenter svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  width: 18px;
+}
+
+#jobPickerMap .onsite-leaflet-recenter button {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+#jobPickerMap .onsite-leaflet-recenter button:hover,
+#jobPickerMap .onsite-leaflet-recenter button:focus-visible {
+  background: var(--surface-2);
+  color: var(--orange);
+  outline: none;
+}
+
+#jobPickerMap .onsite-leaflet-recenter button:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(249, 115, 22, 0.58);
+}
+
+#jobPickerMap .onsite-leaflet-recenter svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  width: 18px;
+}
+
+.onsite-entrance-leaflet-icon {
+  background: transparent;
+  border: 0;
 }
 
 .jw-site-subsection-head h5 {
@@ -22502,14 +22558,14 @@ button.project-requirement-step-control:focus-visible {
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map {
-  background: #f4f1ea;
+  background: #f5f6f3;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-md);
   box-shadow: none;
-  height: 300px;
+  height: 320px;
   isolation: isolate;
   margin-top: 0;
-  min-height: 300px;
+  min-height: 320px;
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map:focus-visible {
@@ -23645,6 +23701,11 @@ button.project-requirement-step-control:focus-visible {
   .jw-entrance-pin-actions .primary-btn {
     justify-content: center;
     width: 100%;
+  }
+
+  .jw-entrance-pin-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   #formJob.jw-wizard-mode .jw-site-location-surface .picker-map {

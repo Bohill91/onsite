@@ -6,3 +6,4 @@
 - [Digital Job Agreement lifecycle](agreement-lifecycle.md) — only the job's CURRENT agreement may toggle bookingActive; detached agreements must be terminalized (kept as history); legacy/no-agreementId stays active; backfill runs on local state.
 - [Rate Structure & Payments System](rate-payments-system.md) — private worker min rate never shown to companies; 15% margin floor; role-gated money visibility; posting+booking both gate on isCompanyRestricted; invoices from approved attendance; payouts only after funds received; formatDateOnly for date-only strings.
 - [Labour Request form conventions](labour-request-form.md) — multi-trade builder is UI-only (first card restored at submit); jobForm listener order matters; map inits on modal open; Sat/Sun rate inputs removed by design.
+- [Entrance map renderer compatibility](entrance-map-renderer.md) — keep a non-WebGL fallback because browser previews may disable GPU contexts even when MapLibre loads.
