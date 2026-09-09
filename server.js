@@ -16,6 +16,7 @@ const mimeTypes = {
   '.html': 'text/html',
   '.css':  'text/css',
   '.js':   'application/javascript',
+  '.mjs':  'application/javascript',
   '.json': 'application/json',
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
@@ -162,7 +163,14 @@ const server = http.createServer((req, res) => {
   }
 
   // Static files
-  let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
+  const requestPath = req.url.split('?')[0];
+  const staticAliases = {
+    '/vendor/maplibre-gl.mjs': path.join(__dirname, 'node_modules', 'maplibre-gl', 'dist', 'maplibre-gl.mjs'),
+    '/vendor/maplibre-gl-shared.mjs': path.join(__dirname, 'node_modules', 'maplibre-gl', 'dist', 'maplibre-gl-shared.mjs'),
+    '/vendor/maplibre-gl-worker.mjs': path.join(__dirname, 'node_modules', 'maplibre-gl', 'dist', 'maplibre-gl-worker.mjs'),
+    '/vendor/maplibre-gl.css': path.join(__dirname, 'node_modules', 'maplibre-gl', 'dist', 'maplibre-gl.css'),
+  };
+  let filePath = staticAliases[requestPath] || path.join(__dirname, requestPath === '/' ? 'index.html' : requestPath);
   const ext = path.extname(filePath);
   const contentType = mimeTypes[ext] || 'text/plain';
 

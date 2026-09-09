@@ -25182,6 +25182,7 @@ function updateJobPhotoPreviews() {
 let pickerMap = null;
 let pickerMarker = null;
 let pickerMapLibre = null;
+let pickerMapRenderer = "";
 let pickerMapInitPromise = null;
 let pickerMapLoadTimeout = null;
 let pickerMapReady = false;
@@ -25190,9 +25191,10 @@ let siteViewMap = null;
 let siteViewMarker = null;
 let currentJobPin = { lat: null, lng: null };
 
-const MAPLIBRE_MODULE_URL =
-  "https://unpkg.com/maplibre-gl@6.6.0/dist/maplibre-gl.mjs";
+const MAPLIBRE_MODULE_URL = "/vendor/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
+const ONSITE_ENTRANCE_RASTER_TILES =
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 let mapLibreModulePromise = null;
 
 const siteMapModal = document.getElementById("siteMapModal");
@@ -25216,6 +25218,27 @@ function createPickerMarkerElement() {
   return marker;
 }
 
+function createLeafletPickerMarkerIcon() {
+  return L.divIcon({
+    className: "onsite-entrance-marker",
+    html: '<span class="onsite-entrance-pin" aria-hidden="true"><span></span></span>',
+    iconAnchor: [15, 34],
+    iconSize: [30, 34],
+  });
+}
+
+function setCurrentJobPinFromMapPoint(lat, lng) {
+  currentJobPin = {
+    lat: parseFloat(Number(lat).toFixed(6)),
+    lng: parseFloat(Number(lng).toFixed(6)),
+  };
+  jobArrivalPointConfirmed = false;
+  jobArrivalPointSource = "manual";
+  jobArrivalPointAddress = normalizedJobSiteAddress();
+  updatePickerMarkerVisualState();
+  updatePinCoords();
+}
+
 function updatePickerMarkerVisualState() {
   const pin = pickerMarker?.getElement()?.querySelector(".onsite-entrance-pin");
   if (!pin) return;
@@ -25227,7 +25250,7 @@ function updatePickerMarkerVisualState() {
 }
 
 function syncPickerMarkerToCurrentPin() {
-  if (!pickerMap || !pickerMapLibre) return;
+  if (!pickerMap || !pickerMapRenderer) return;
   const hasPin =
     currentJobPin.lat != null &&
     currentJobPin.lng != null &&
@@ -25239,10 +25262,12 @@ function syncPickerMarkerToCurrentPin() {
     return;
   }
 
-  const lngLat = [Number(currentJobPin.lng), Number(currentJobPin.lat)];
+  const latLng = [Number(currentJobPin.lat), Number(currentJobPin.lng)];
+  const lngLat = [...latLng].reverse();
   if (pickerMarker) {
-    pickerMarker.setLngLat(lngLat);
-  } else {
+    if (pickerMapRenderer === "vector") pickerMarker.setLngLat(lngLat);
+    else pickerMarker.setLatLng(latLng);
+  } else if (pickerMapRenderer === "vector") {
     pickerMarker = new pickerMapLibre.Marker({
       element: createPickerMarkerElement(),
       anchor: "bottom",
@@ -25252,19 +25277,25 @@ function syncPickerMarkerToCurrentPin() {
       .addTo(pickerMap);
     pickerMarker.on("dragend", () => {
       const point = pickerMarker.getLngLat();
-      currentJobPin = {
-        lat: parseFloat(point.lat.toFixed(6)),
-        lng: parseFloat(point.lng.toFixed(6)),
-      };
-      jobArrivalPointConfirmed = false;
-      jobArrivalPointSource = "manual";
-      jobArrivalPointAddress = normalizedJobSiteAddress();
-      updatePickerMarkerVisualState();
-      updatePinCoords();
+      setCurrentJobPinFromMapPoint(point.lat, point.lng);
+    });
+  } else {
+    pickerMarker = L.marker(latLng, {
+      draggable: true,
+      icon: createLeafletPickerMarkerIcon(),
+      keyboard: true,
+      title: "Exact site entrance marker",
+    }).addTo(pickerMap);
+    pickerMarker.on("dragend", () => {
+      const point = pickerMarker.getLatLng();
+      setCurrentJobPinFromMapPoint(point.lat, point.lng);
     });
   }
   updatePickerMarkerVisualState();
-  pickerMarker.setDraggable(!jobWizardActive || jobEntrancePinOpen);
+  const draggable = !jobWizardActive || jobEntrancePinOpen;
+  if (pickerMapRenderer === "vector") pickerMarker.setDraggable(draggable);
+  else if (draggable) pickerMarker.dragging.enable();
+  else pickerMarker.dragging.disable();
 }
 
 // ── Toggle location section in job form ────────────────────
@@ -25439,7 +25470,7 @@ function pickerZoomForGeocodeResult(result = {}) {
     preciseTypes.has(resultType) ||
     (Number.isFinite(placeRank) && placeRank >= 30 && category !== "highway")
   ) {
-    return 18;
+    return 17;
   }
   if (streetTypes.has(resultType) || category === "highway") return 16.75;
   if (resultType === "postcode") {
@@ -25450,6 +25481,27 @@ function pickerZoomForGeocodeResult(result = {}) {
   }
   if (broadTypes.has(resultType)) return 14;
   return 15.5;
+}
+
+function resizePickerMap() {
+  if (pickerMapRenderer === "vector") pickerMap?.resize();
+  else pickerMap?.invalidateSize({ animate: false });
+}
+
+function movePickerMap(center, zoom, { animate = false } = {}) {
+  if (!pickerMap) return;
+  if (pickerMapRenderer === "vector") {
+    const move = animate ? "easeTo" : "jumpTo";
+    pickerMap[move]({
+      center,
+      zoom,
+      bearing: 0,
+      pitch: 0,
+      ...(animate ? { duration: 350 } : {}),
+    });
+    return;
+  }
+  pickerMap.setView([center[1], center[0]], zoom, { animate });
 }
 
 async function geocodeJobSiteAddress(trigger) {
@@ -25488,14 +25540,12 @@ async function geocodeJobSiteAddress(trigger) {
       requestAnimationFrame(async () => {
         await initPickerMap();
         syncPickerMarkerToCurrentPin();
-        pickerMap?.easeTo({
-          center: [lng, lat],
-          zoom: pickerZoomForGeocodeResult(result),
-          bearing: 0,
-          pitch: 0,
-          duration: 350,
-        });
-        pickerMap?.resize();
+        movePickerMap(
+          [lng, lat],
+          pickerZoomForGeocodeResult(result),
+          { animate: true },
+        );
+        resizePickerMap();
       });
       showToast("Site found — confirm the exact entrance point");
       return true;
@@ -25524,7 +25574,19 @@ function setPickerMapFailureState(failed, error = null) {
     else delete failure.dataset.mapError;
   }
   if (failed && error) {
-    console.error("[OnSite entrance map] MapLibre failed to load", error);
+    console.error("[OnSite entrance map] Map renderers failed to load", error);
+  }
+}
+
+function warnPickerMapFallback(error) {
+  const developmentHost =
+    ["localhost", "127.0.0.1"].includes(window.location.hostname) ||
+    window.location.hostname.endsWith(".replit.dev");
+  if (developmentHost) {
+    console.warn(
+      "[OnSite entrance map] Vector renderer unavailable; using raster fallback.",
+      error,
+    );
   }
 }
 
@@ -25535,89 +25597,59 @@ function destroyPickerMapRenderer() {
   pickerMarker = null;
   pickerMap?.remove();
   pickerMap = null;
+  pickerMapRenderer = "";
   pickerMapReady = false;
   pickerMapLastError = null;
+  const container = document.getElementById("jobPickerMap");
+  if (container) delete container.dataset.mapRenderer;
 }
 
-async function initPickerMap({ reset = false } = {}) {
-  if (reset) destroyPickerMapRenderer();
-  if (pickerMap) {
-    syncPickerMarkerToCurrentPin();
-    if (currentJobHasEntrancePin()) {
-      pickerMap.jumpTo({
-        center: [Number(currentJobPin.lng), Number(currentJobPin.lat)],
-        zoom: Math.max(pickerMap.getZoom(), 16),
-        bearing: 0,
-        pitch: 0,
-      });
+function bindPickerMapClick(handler) {
+  pickerMap.on("click", handler);
+}
+
+function initVectorPickerMap(container, center, zoom) {
+  pickerMap = new pickerMapLibre.Map({
+    container,
+    style: ONSITE_ENTRANCE_MAP_STYLE_URL,
+    center,
+    zoom,
+    bearing: 0,
+    pitch: 0,
+    minZoom: 5,
+    maxZoom: 19.5,
+    attributionControl: false,
+    dragRotate: false,
+    pitchWithRotate: false,
+    scrollZoom: false,
+    renderWorldCopies: false,
+    fadeDuration: 0,
+  });
+  pickerMapRenderer = "vector";
+  container.dataset.mapRenderer = pickerMapRenderer;
+  pickerMap.dragRotate.disable();
+  pickerMap.touchZoomRotate.disableRotation();
+  pickerMap.addControl(
+    new pickerMapLibre.NavigationControl({
+      showCompass: false,
+      showZoom: true,
+    }),
+    "top-right",
+  );
+  pickerMap.addControl(
+    new pickerMapLibre.AttributionControl({ compact: true }),
+    "bottom-right",
+  );
+  bindPickerMapClick((event) => {
+    if (jobWizardActive && currentJobHasEntrancePin() && !jobEntrancePinOpen) {
+      return;
     }
-    pickerMap.resize();
-    return pickerMap;
-  }
-  if (pickerMapInitPromise) return pickerMapInitPromise;
+    setCurrentJobPinFromMapPoint(event.lngLat.lat, event.lngLat.lng);
+    syncPickerMarkerToCurrentPin();
+  });
+  syncPickerMarkerToCurrentPin();
 
-  pickerMapInitPromise = (async () => {
-    setPickerMapFailureState(false);
-    pickerMapLibre = await loadMapLibreModule();
-    const container = document.getElementById("jobPickerMap");
-    if (!container) return null;
-
-    const hasPin = currentJobHasEntrancePin();
-    const center = hasPin
-      ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
-      : [-1.8904, 52.4862];
-    pickerMap = new pickerMapLibre.Map({
-      container,
-      style: ONSITE_ENTRANCE_MAP_STYLE_URL,
-      center,
-      zoom: hasPin ? 17 : 11,
-      bearing: 0,
-      pitch: 0,
-      minZoom: 5,
-      maxZoom: 19.5,
-      attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      scrollZoom: false,
-      renderWorldCopies: false,
-      fadeDuration: 0,
-    });
-    pickerMap.dragRotate.disable();
-    pickerMap.touchZoomRotate.disableRotation();
-    pickerMap.addControl(
-      new pickerMapLibre.NavigationControl({
-        showCompass: false,
-        showZoom: true,
-      }),
-      "top-right",
-    );
-    pickerMap.addControl(
-      new pickerMapLibre.AttributionControl({
-        compact: true,
-      }),
-      "bottom-right",
-    );
-
-    pickerMap.on("click", (event) => {
-      if (
-        jobWizardActive &&
-        currentJobHasEntrancePin() &&
-        !jobEntrancePinOpen
-      ) {
-        return;
-      }
-      const { lat, lng } = event.lngLat;
-      currentJobPin = {
-        lat: parseFloat(lat.toFixed(6)),
-        lng: parseFloat(lng.toFixed(6)),
-      };
-      jobArrivalPointConfirmed = false;
-      jobArrivalPointSource = "manual";
-      jobArrivalPointAddress = normalizedJobSiteAddress();
-      syncPickerMarkerToCurrentPin();
-      updatePinCoords();
-    });
-
+  return new Promise((resolve, reject) => {
     pickerMap.on("load", () => {
       pickerMapReady = true;
       pickerMapLastError = null;
@@ -25625,26 +25657,99 @@ async function initPickerMap({ reset = false } = {}) {
       pickerMapLoadTimeout = null;
       setPickerMapFailureState(false);
       syncPickerMarkerToCurrentPin();
-      pickerMap.resize();
+      resizePickerMap();
+      resolve(pickerMap);
     });
     pickerMap.on("error", (event) => {
       pickerMapLastError = event?.error || event;
-      console.warn("[OnSite entrance map] Map resource warning", pickerMapLastError);
+      if (pickerMapReady) {
+        console.warn(
+          "[OnSite entrance map] Map resource warning",
+          pickerMapLastError,
+        );
+      }
     });
-
-    syncPickerMarkerToCurrentPin();
     pickerMapLoadTimeout = setTimeout(() => {
       if (!pickerMapReady) {
-        setPickerMapFailureState(
-          true,
+        reject(
           pickerMapLastError ||
-            new Error("The entrance map did not become ready in time."),
+            new Error("The vector entrance map did not become ready in time."),
         );
       }
     }, 12000);
-    requestAnimationFrame(() => pickerMap?.resize());
-    setTimeout(() => pickerMap?.resize(), 300);
+  });
+}
+
+function initRasterPickerMap(container, center, zoom) {
+  if (!window.L?.map) {
+    throw new Error("The raster entrance map renderer is unavailable.");
+  }
+  container.replaceChildren();
+  container.classList.remove("maplibregl-map");
+  pickerMap = L.map(container, {
+    attributionControl: true,
+    doubleClickZoom: true,
+    scrollWheelZoom: false,
+    touchZoom: true,
+    zoomControl: false,
+  }).setView([center[1], center[0]], zoom);
+  pickerMapRenderer = "raster";
+  container.dataset.mapRenderer = pickerMapRenderer;
+  L.tileLayer(ONSITE_ENTRANCE_RASTER_TILES, {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19,
+  }).addTo(pickerMap);
+  L.control.zoom({ position: "topright" }).addTo(pickerMap);
+  bindPickerMapClick((event) => {
+    if (jobWizardActive && currentJobHasEntrancePin() && !jobEntrancePinOpen) {
+      return;
+    }
+    setCurrentJobPinFromMapPoint(event.latlng.lat, event.latlng.lng);
+    syncPickerMarkerToCurrentPin();
+  });
+  pickerMapReady = true;
+  setPickerMapFailureState(false);
+  syncPickerMarkerToCurrentPin();
+  requestAnimationFrame(resizePickerMap);
+  return pickerMap;
+}
+
+async function initPickerMap({ reset = false } = {}) {
+  if (reset) destroyPickerMapRenderer();
+  if (pickerMap) {
+    syncPickerMarkerToCurrentPin();
+    if (currentJobHasEntrancePin()) {
+      movePickerMap(
+        [Number(currentJobPin.lng), Number(currentJobPin.lat)],
+        Math.max(pickerMap.getZoom(), 16),
+      );
+    }
+    resizePickerMap();
     return pickerMap;
+  }
+  if (pickerMapInitPromise) return pickerMapInitPromise;
+
+  pickerMapInitPromise = (async () => {
+    setPickerMapFailureState(false);
+    const container = document.getElementById("jobPickerMap");
+    if (!container) return null;
+
+    const hasPin = currentJobHasEntrancePin();
+    const center = hasPin
+      ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
+      : [-1.8904, 52.4862];
+    const zoom = hasPin ? 17 : 11;
+    try {
+      pickerMapLibre = await loadMapLibreModule();
+      const map = await initVectorPickerMap(container, center, zoom);
+      requestAnimationFrame(resizePickerMap);
+      setTimeout(resizePickerMap, 300);
+      return map;
+    } catch (vectorError) {
+      destroyPickerMapRenderer();
+      warnPickerMapFallback(vectorError);
+      return initRasterPickerMap(container, center, zoom);
+    }
   })()
     .catch((error) => {
       destroyPickerMapRenderer();
