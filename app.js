@@ -25231,6 +25231,9 @@ const PICKER_VIEWPORT = Object.freeze({
     scaleReference: 0.0045,
     minScale: 1.35,
     maxScale: 3.5,
+    largeSiteThreshold: 0.0016,
+    largeSiteContextMultiplier: 6,
+    maxLargeSiteContextPadding: 0.0024,
   }),
   fallbackZooms: Object.freeze({
     precise: 16.7,
@@ -25572,12 +25575,20 @@ function expandPickerBounds(bounds) {
       config.scaleReference / Math.max(normalizedSpan, 0.000001),
     ),
   );
+  const largeSiteContextPadding =
+    normalizedSpan > config.largeSiteThreshold
+      ? Math.min(
+          config.maxLargeSiteContextPadding,
+          (normalizedSpan - config.largeSiteThreshold) *
+            config.largeSiteContextMultiplier,
+        )
+      : 0;
   const expandedLatitudeSpan = Math.max(
-    latitudeSpan * scale,
+    latitudeSpan * scale + largeSiteContextPadding * 2,
     config.minLatitudeSpan,
   );
   const expandedLongitudeSpan = Math.max(
-    longitudeSpan * scale,
+    longitudeSpan * scale + largeSiteContextPadding * 2,
     config.minLongitudeSpan,
   );
   return [
@@ -29713,9 +29724,4 @@ document
       .join("");
   });
 
-// ─── Init ─────────────────────────────────────────────────
-render();
-renderAttendance();
-
-// Add attend icon to activity log
-ACTIVITY_ICONS.attend = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+// ─── Init ─────────────────────
