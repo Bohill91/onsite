@@ -10132,12 +10132,6 @@ function draftPreStartStateHTML() {
   if (draftPreStartSetupStatus === "configured") {
     return draftPreStartConfiguredHTML();
   }
-  if (draftPreStartSetupStatus === "pending") {
-    return `<div class="jw-prestart-message is-pending"><strong>Setup pending</strong><span>Complete pre-start requirements from the project before workers begin.</span></div>`;
-  }
-  if (draftPreStartSetupStatus === "none") {
-    return "";
-  }
   return "";
 }
 

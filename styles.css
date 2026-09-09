@@ -22718,6 +22718,7 @@ button.project-requirement-step-control:focus-visible {
 }
 
 #formJob.jw-wizard-mode .jw-prestart-step-head {
+  border-bottom: 0;
   gap: 4px;
   padding-bottom: 0;
 }
