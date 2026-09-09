@@ -23449,6 +23449,13 @@ button.project-requirement-step-control:focus-visible {
   min-width: 148px;
 }
 
+#formJob.jw-wizard-mode .jw-wizard-continue:disabled,
+#formJob.jw-wizard-mode .jw-wizard-continue[aria-disabled="true"] {
+  background: var(--surface-3);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
 .jw-wizard-nav .jw-wizard-submit {
   margin-left: auto;
   min-width: 148px;
