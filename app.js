@@ -25214,8 +25214,8 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const PICKER_DEFAULT_SITE_ZOOM = 16.2;
-const PICKER_SAVED_ENTRANCE_ZOOM = 16.2;
+const PICKER_DEFAULT_SITE_ZOOM = 15.7;
+const PICKER_SAVED_ENTRANCE_ZOOM = 15.7;
 let mapLibreModulePromise = null;
 
 const siteMapModal = document.getElementById("siteMapModal");
@@ -25509,8 +25509,8 @@ function pickerZoomForGeocodeResult(result = {}) {
   if (resultType === "postcode") {
     const postcode = String(result.name || result.display_name || "").trim();
     return /\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b/i.test(postcode)
-      ? 16
-      : 15.75;
+      ? 15.5
+      : 15.25;
   }
   if (broadTypes.has(resultType)) return 14;
   return 15.5;
