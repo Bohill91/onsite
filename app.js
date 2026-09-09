@@ -9918,11 +9918,27 @@ function prepareJobSiteDisclosures() {
 }
 
 function setJobEntrancePinDisclosure(open) {
+  const wasOpen = jobEntrancePinOpen;
   jobEntrancePinOpen = !!open;
   syncJobSiteDisclosureState();
   syncPickerMarkerToCurrentPin();
   if (jobEntrancePinOpen || !jobWizardActive) {
-    requestAnimationFrame(() => initPickerMap());
+    requestAnimationFrame(async () => {
+      await initPickerMap();
+      if (
+        !wasOpen &&
+        jobEntrancePinOpen &&
+        jobArrivalPointConfirmed &&
+        currentJobHasEntrancePin()
+      ) {
+        movePickerMap(
+          [Number(currentJobPin.lng), Number(currentJobPin.lat)],
+          PICKER_SAVED_ENTRANCE_ZOOM,
+          { animate: true },
+        );
+        resizePickerMap();
+      }
+    });
   }
 }
 
@@ -25198,6 +25214,8 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const PICKER_DEFAULT_SITE_ZOOM = 17.2;
+const PICKER_SAVED_ENTRANCE_ZOOM = 17.4;
 let mapLibreModulePromise = null;
 
 const siteMapModal = document.getElementById("siteMapModal");
@@ -25483,7 +25501,7 @@ function pickerZoomForGeocodeResult(result = {}) {
     preciseTypes.has(resultType) ||
     (Number.isFinite(placeRank) && placeRank >= 30 && category !== "highway")
   ) {
-    return 17.6;
+    return PICKER_DEFAULT_SITE_ZOOM;
   }
   if (streetTypes.has(resultType) || category === "highway") return 17.2;
   if (resultType === "postcode") {
@@ -25629,7 +25647,9 @@ function recenterPickerMapToSiteAddress() {
     : null;
   const center = pickerMapSiteCenter?.center || fallbackCenter;
   if (!center) return;
-  movePickerMap(center, pickerMapSiteCenter?.zoom || 17.6, { animate: true });
+  movePickerMap(center, pickerMapSiteCenter?.zoom || PICKER_DEFAULT_SITE_ZOOM, {
+    animate: true,
+  });
 }
 
 function createPickerMapControlGroup() {
@@ -25790,12 +25810,6 @@ async function initPickerMap({ reset = false } = {}) {
   if (reset) destroyPickerMapRenderer();
   if (pickerMap) {
     syncPickerMarkerToCurrentPin();
-    if (currentJobHasEntrancePin()) {
-      movePickerMap(
-        [Number(currentJobPin.lng), Number(currentJobPin.lat)],
-        Math.max(pickerMap.getZoom(), 16),
-      );
-    }
     resizePickerMap();
     return pickerMap;
   }
@@ -25810,7 +25824,12 @@ async function initPickerMap({ reset = false } = {}) {
     const center = hasPin
       ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
       : [-1.8904, 52.4862];
-    const zoom = hasPin ? 17.6 : 11;
+    const zoom = hasPin
+      ? pickerMapSiteCenter?.zoom ||
+        (jobArrivalPointConfirmed
+          ? PICKER_SAVED_ENTRANCE_ZOOM
+          : PICKER_DEFAULT_SITE_ZOOM)
+      : 11;
     try {
       pickerMapLibre = await loadMapLibreModule();
       const map = await initVectorPickerMap(container, center, zoom);
