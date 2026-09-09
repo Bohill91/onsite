@@ -9931,11 +9931,15 @@ function setJobEntrancePinDisclosure(open) {
         jobArrivalPointConfirmed &&
         currentJobHasEntrancePin()
       ) {
-        movePickerMap(
-          [Number(currentJobPin.lng), Number(currentJobPin.lat)],
-          PICKER_SAVED_ENTRANCE_ZOOM,
-          { animate: true },
-        );
+        applyPickerMapViewport({
+          centerOverride: [
+            Number(currentJobPin.lng),
+            Number(currentJobPin.lat),
+          ],
+          minZoom: PICKER_VIEWPORT.editMinZoom,
+          maxZoom: PICKER_VIEWPORT.editMaxZoom,
+          animate: true,
+        });
         resizePickerMap();
       }
     });
@@ -25214,8 +25218,50 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const PICKER_DEFAULT_SITE_ZOOM = 15.7;
-const PICKER_SAVED_ENTRANCE_ZOOM = 15.7;
+const PICKER_VIEWPORT = Object.freeze({
+  minZoom: 16,
+  maxZoom: 17.4,
+  editMinZoom: 16.8,
+  editMaxZoom: 17.2,
+  savedFallbackZoom: 17,
+  padding: 64,
+  fallbackZooms: Object.freeze({
+    precise: 17,
+    street: 16.6,
+    local: 16.2,
+    broad: 14,
+  }),
+});
+const PICKER_PRECISE_RESULT_TYPES = new Set([
+  "house",
+  "building",
+  "office",
+  "amenity",
+  "shop",
+  "residential",
+  "commercial",
+  "industrial",
+  "construction",
+]);
+const PICKER_STREET_RESULT_TYPES = new Set([
+  "road",
+  "street",
+  "pedestrian",
+  "service",
+  "residential",
+  "tertiary",
+  "secondary",
+  "primary",
+]);
+const PICKER_BROAD_RESULT_TYPES = new Set([
+  "city",
+  "town",
+  "village",
+  "hamlet",
+  "administrative",
+  "county",
+  "state",
+]);
 let mapLibreModulePromise = null;
 
 const siteMapModal = document.getElementById("siteMapModal");
@@ -25462,58 +25508,63 @@ document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
   }
 });
 
-function pickerZoomForGeocodeResult(result = {}) {
+function pickerGeocodePrecision(result = {}) {
   const resultType = String(result.addresstype || result.type || "").toLowerCase();
   const category = String(result.category || result.class || "").toLowerCase();
   const placeRank = Number(result.place_rank);
-  const preciseTypes = new Set([
-    "house",
-    "building",
-    "office",
-    "amenity",
-    "shop",
-    "residential",
-    "commercial",
-    "industrial",
-    "construction",
-  ]);
-  const streetTypes = new Set([
-    "road",
-    "street",
-    "pedestrian",
-    "service",
-    "residential",
-    "tertiary",
-    "secondary",
-    "primary",
-  ]);
-  const broadTypes = new Set([
-    "city",
-    "town",
-    "village",
-    "hamlet",
-    "administrative",
-    "county",
-    "state",
-  ]);
 
   if (
-    preciseTypes.has(resultType) ||
+    PICKER_PRECISE_RESULT_TYPES.has(resultType) ||
     (Number.isFinite(placeRank) && placeRank >= 30 && category !== "highway")
   ) {
-    return PICKER_DEFAULT_SITE_ZOOM;
+    return "precise";
   }
-  if (streetTypes.has(resultType) || category === "highway") {
-    return PICKER_DEFAULT_SITE_ZOOM;
+  if (PICKER_STREET_RESULT_TYPES.has(resultType) || category === "highway") {
+    return "street";
   }
-  if (resultType === "postcode") {
-    const postcode = String(result.name || result.display_name || "").trim();
-    return /\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b/i.test(postcode)
-      ? 15.5
-      : 15.25;
+  if (PICKER_BROAD_RESULT_TYPES.has(resultType)) return "broad";
+  return "local";
+}
+
+function pickerZoomForGeocodeResult(result = {}) {
+  const precision = pickerGeocodePrecision(result);
+  return PICKER_VIEWPORT.fallbackZooms[precision] ||
+    PICKER_VIEWPORT.fallbackZooms.local;
+}
+
+function pickerBoundsForGeocodeResult(result = {}) {
+  const rawBounds = Array.isArray(result.boundingbox)
+    ? result.boundingbox.map(Number)
+    : [];
+  if (rawBounds.length !== 4 || rawBounds.some((value) => !Number.isFinite(value))) {
+    return null;
   }
-  if (broadTypes.has(resultType)) return 14;
-  return 15.5;
+  const [south, north, west, east] = rawBounds;
+  const latitudeSpan = north - south;
+  const longitudeSpan = east - west;
+  if (
+    south >= north ||
+    west >= east ||
+    latitudeSpan <= 0 ||
+    longitudeSpan <= 0 ||
+    latitudeSpan > 0.2 ||
+    longitudeSpan > 0.3 ||
+    pickerGeocodePrecision(result) === "broad"
+  ) {
+    return null;
+  }
+  return [
+    [west, south],
+    [east, north],
+  ];
+}
+
+function pickerViewportForGeocodeResult(result, center) {
+  return {
+    center,
+    zoom: pickerZoomForGeocodeResult(result),
+    bounds: pickerBoundsForGeocodeResult(result),
+  };
 }
 
 function resizePickerMap() {
@@ -25537,6 +25588,93 @@ function movePickerMap(center, zoom, { animate = false } = {}) {
   pickerMap.setView([center[1], center[0]], zoom, { animate });
 }
 
+function clampPickerZoom(zoom, minZoom = PICKER_VIEWPORT.minZoom, maxZoom = PICKER_VIEWPORT.maxZoom) {
+  const numericZoom = Number(zoom);
+  if (!Number.isFinite(numericZoom)) return minZoom;
+  return Math.min(maxZoom, Math.max(minZoom, numericZoom));
+}
+
+function pickerBoundsCamera(bounds, { minZoom, maxZoom } = {}) {
+  if (!pickerMap || !bounds) return null;
+  const lowerBound = minZoom ?? PICKER_VIEWPORT.minZoom;
+  const upperBound = maxZoom ?? PICKER_VIEWPORT.maxZoom;
+  try {
+    if (
+      pickerMapRenderer === "vector" &&
+      typeof pickerMap.cameraForBounds === "function"
+    ) {
+      const camera = pickerMap.cameraForBounds(bounds, {
+        padding: PICKER_VIEWPORT.padding,
+      });
+      return Number.isFinite(camera?.zoom)
+        ? {
+            center: camera.center,
+            zoom: clampPickerZoom(camera.zoom, lowerBound, upperBound),
+          }
+        : null;
+    }
+    if (
+      pickerMapRenderer === "raster" &&
+      window.L?.latLngBounds &&
+      typeof pickerMap.getBoundsZoom === "function"
+    ) {
+      const [[west, south], [east, north]] = bounds;
+      const leafletBounds = L.latLngBounds([
+        [south, west],
+        [north, east],
+      ]);
+      const padding = L.point(PICKER_VIEWPORT.padding, PICKER_VIEWPORT.padding);
+      const zoom = pickerMap.getBoundsZoom(leafletBounds, false, padding);
+      const boundsCenter = leafletBounds.getCenter();
+      return Number.isFinite(zoom)
+        ? {
+            center: [boundsCenter.lng, boundsCenter.lat],
+            zoom: clampPickerZoom(zoom, lowerBound, upperBound),
+          }
+        : null;
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+function applyPickerMapViewport({
+  centerOverride = null,
+  minZoom = PICKER_VIEWPORT.minZoom,
+  maxZoom = PICKER_VIEWPORT.maxZoom,
+  animate = false,
+} = {}) {
+  if (!pickerMap) return;
+  const siteViewport = pickerMapSiteCenter;
+  const center =
+    centerOverride ||
+    siteViewport?.center ||
+    (currentJobHasEntrancePin()
+      ? [Number(currentJobPin.lng), Number(currentJobPin.lat)]
+      : null);
+  if (!center) return;
+
+  const boundsCamera = pickerBoundsCamera(siteViewport?.bounds, {
+    minZoom,
+    maxZoom,
+  });
+  const zoom = boundsCamera?.zoom ??
+    clampPickerZoom(
+      siteViewport?.zoom ??
+        (jobArrivalPointConfirmed
+          ? PICKER_VIEWPORT.savedFallbackZoom
+          : PICKER_VIEWPORT.fallbackZooms.local),
+      minZoom,
+      maxZoom,
+    );
+  movePickerMap(
+    centerOverride ? center : boundsCamera?.center || center,
+    zoom,
+    { animate },
+  );
+}
+
 async function geocodeJobSiteAddress(trigger) {
   const addr = document.getElementById("jobSiteAddress")?.value.trim();
   if (!addr) {
@@ -25555,12 +25693,12 @@ async function geocodeJobSiteAddress(trigger) {
     const lat = parseFloat(result?.lat);
     const lng = parseFloat(result?.lon);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      const zoom = pickerZoomForGeocodeResult(result);
+      const viewport = pickerViewportForGeocodeResult(result, [lng, lat]);
       currentJobPin = {
         lat: parseFloat(lat.toFixed(6)),
         lng: parseFloat(lng.toFixed(6)),
       };
-      pickerMapSiteCenter = { center: [lng, lat], zoom };
+      pickerMapSiteCenter = viewport;
       jobArrivalPointConfirmed = false;
       jobArrivalPointSource = "address";
       jobArrivalPointAddress = normalizedJobSiteAddress(addr);
@@ -25575,11 +25713,7 @@ async function geocodeJobSiteAddress(trigger) {
       requestAnimationFrame(async () => {
         await initPickerMap();
         syncPickerMarkerToCurrentPin();
-        movePickerMap(
-          [lng, lat],
-          zoom,
-          { animate: true },
-        );
+        applyPickerMapViewport({ animate: true });
         resizePickerMap();
       });
       showToast("Site found — confirm the exact entrance point");
@@ -25649,9 +25783,7 @@ function recenterPickerMapToSiteAddress() {
     : null;
   const center = pickerMapSiteCenter?.center || fallbackCenter;
   if (!center) return;
-  movePickerMap(center, pickerMapSiteCenter?.zoom || PICKER_DEFAULT_SITE_ZOOM, {
-    animate: true,
-  });
+  applyPickerMapViewport({ centerOverride: center, animate: true });
 }
 
 function createPickerMapControlGroup() {
@@ -25829,8 +25961,8 @@ async function initPickerMap({ reset = false } = {}) {
     const zoom = hasPin
       ? pickerMapSiteCenter?.zoom ||
         (jobArrivalPointConfirmed
-          ? PICKER_SAVED_ENTRANCE_ZOOM
-          : PICKER_DEFAULT_SITE_ZOOM)
+          ? PICKER_VIEWPORT.savedFallbackZoom
+          : PICKER_VIEWPORT.fallbackZooms.local)
       : 11;
     try {
       pickerMapLibre = await loadMapLibreModule();
