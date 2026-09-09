@@ -12592,6 +12592,7 @@ body.modal-open {
   gap: 18px;
   overflow-x: auto;
   padding-bottom: 0;
+  scrollbar-width: thin;
 }
 
 .company-project-tab {
@@ -12605,6 +12606,7 @@ body.modal-open {
   font-size: 0.82rem;
   font-weight: 800;
   padding: 0 0 10px;
+  white-space: nowrap;
 }
 
 .company-project-tab.active {
@@ -12992,7 +12994,7 @@ body.modal-open {
 }
 .jw-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 .jw-overtime-grid {
@@ -13223,6 +13225,7 @@ body.modal-open {
   color: var(--ink-2);
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .jw-day-chip:hover span {
@@ -13239,10 +13242,13 @@ body.modal-open {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 920px) {
   .jw-days {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 760px) {
   .jw-price-row {
     grid-template-columns: 1fr;
   }
@@ -14525,6 +14531,36 @@ body.modal-open {
 }
 
 /* ─── Responsive Audit Fixes ───────────────────────────── */
+.primary-btn,
+.secondary-btn,
+.outline-btn,
+.company-project-tab,
+.tab-btn,
+.notification-action-btn,
+.company-project-open,
+.taxonomy-missing-action,
+.jw-day-chip span,
+.jw-wizard-nav button {
+  white-space: nowrap;
+}
+
+.company-page-head > *,
+.company-dashboard-head > *,
+.attendance-page-head > *,
+.attendance-project-detail-head > *,
+.company-project-page-head > *,
+.company-project-detail-head > *,
+.panel-header > *,
+.company-home-head > *,
+.company-home-section-head > *,
+.jw-compact-disclosure-row > *,
+.jw-labour-section-head > *,
+.jw-requirement-builder-head > *,
+.jw-requirement-group-head > *,
+.jw-phased-schedule-head > * {
+  min-width: 0;
+}
+
 .content-area,
 .tab-panel,
 .request-labour-page,
@@ -14560,6 +14596,32 @@ body.modal-open {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 1100px) and (min-width: 721px) {
+  :root {
+    --shell-desktop-gutter: 20px;
+  }
+
+  .tab-panel {
+    padding-inline: 20px;
+  }
+
+  .jw-wizard-mode .jw-wizard-stepper {
+    gap: 0;
+  }
+
+  .jw-wizard-step {
+    padding-inline: 0;
+  }
+
+  .jw-wizard-step-label {
+    font-size: 0.69rem;
+  }
+
+  .company-project-tabs {
+    gap: 14px;
+  }
+}
+
 @media (max-width: 859px) {
   .app-root {
     max-width: none;
@@ -14587,6 +14649,7 @@ body.modal-open {
 @media (max-width: 760px) {
   .jw-grid,
   .form-grid,
+  .form-grid-2,
   .project-edit-grid,
   .project-edit-actions,
   .company-project-detail-grid,
@@ -14594,6 +14657,12 @@ body.modal-open {
   .company-worker-profile-grid,
   .attendance-live-grid,
   .att-live-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .labour-schedule-row,
+  .labour-forecast-period {
+    align-items: stretch;
     grid-template-columns: 1fr;
   }
 
@@ -14680,6 +14749,24 @@ body.modal-open {
   .panel-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .company-home-head,
+  .company-home-section-head,
+  .jw-compact-disclosure-row,
+  .jw-labour-section-head,
+  .jw-requirement-builder-head,
+  .jw-requirement-group-head,
+  .jw-phased-schedule-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .jw-compact-disclosure-row > button,
+  .jw-labour-section-head > button,
+  .jw-requirement-builder-head > button,
+  .jw-phased-schedule-head > button {
+    align-self: flex-start;
   }
 
   .att-today-badge {
@@ -14792,7 +14879,6 @@ body.modal-open {
 }
 
 @media (max-width: 380px) {
-  .jw-days,
   .att-status-btns {
     grid-template-columns: 1fr;
   }
@@ -20346,6 +20432,7 @@ button.project-requirement-step-control:focus-visible {
   font-weight: 600;
   line-height: 1.25;
   text-align: center;
+  white-space: nowrap;
 }
 
 .jw-wizard-step.is-current .jw-wizard-dot {
@@ -21914,6 +22001,12 @@ button.project-requirement-step-control:focus-visible {
 #formJob.jw-wizard-mode .jw-days {
   gap: 8px;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+@media (max-width: 920px) and (min-width: 721px) {
+  #formJob.jw-wizard-mode .jw-days {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 #formJob.jw-wizard-mode .jw-day-chip span {
@@ -23489,7 +23582,7 @@ button.project-requirement-step-control:focus-visible {
   display: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
   .jw-wizard-mode .jw-wizard-stepper {
     display: none;
   }
@@ -23601,7 +23694,7 @@ button.project-requirement-step-control:focus-visible {
   }
 
   #formJob.jw-wizard-mode .jw-days {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .jw-estimate-head {
@@ -23841,6 +23934,12 @@ button.project-requirement-step-control:focus-visible {
 
   .jw-wizard-mode .jw-wizard-nav {
     padding-top: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  #formJob.jw-wizard-mode .jw-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
