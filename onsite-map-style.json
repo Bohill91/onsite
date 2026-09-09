@@ -275,8 +275,8 @@
       "minzoom": 9,
       "filter": ["==", ["get", "class"], "rail"],
       "paint": {
-        "line-color": "#898d90",
-        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 17, 1.5]
+        "line-color": "#9da3a5",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.45, 17, 1.25]
       }
     },
     {
@@ -299,9 +299,9 @@
       "source-layer": "building",
       "minzoom": 13,
       "paint": {
-        "fill-color": "#d5d7d4",
+        "fill-color": "#cfd3d0",
         "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.58, 15, 0.9],
-        "fill-outline-color": "#c1c4c1"
+        "fill-outline-color": "#bcc1be"
       }
     },
     {
@@ -361,7 +361,7 @@
         "text-padding": 6
       },
       "paint": {
-        "text-color": "#535a61",
+        "text-color": "#4c5359",
         "text-halo-color": "rgba(255, 255, 255, 0.92)",
         "text-halo-width": 1.1,
         "text-halo-blur": 0.25
