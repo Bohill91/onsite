@@ -10808,7 +10808,6 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
     );
   }
   if (jobWizardStep === 2) renderJobPricingBreakdown();
-  if (jobWizardStep === 3) bindScheduleNativePickers();
   if (jobWizardStep === 4) {
     if (previousStep !== 4) prepareJobSiteDisclosures();
     else syncJobSiteDisclosureState();
@@ -11684,21 +11683,19 @@ function openNativePickerFromField(input, event) {
   }
 }
 
-function bindNativePickerField(input) {
-  if (!input || input.dataset.nativePickerBound === "true") return;
-  input.dataset.nativePickerBound = "true";
-  input.addEventListener("click", (event) => {
+const JOB_SCHEDULE_PICKER_SELECTOR = JOB_SCHEDULE_PICKER_IDS
+  .map((id) => `#${id}`)
+  .join(", ");
+
+jobForm?.addEventListener(
+  "pointerdown",
+  (event) => {
+    const input = event.target.closest?.(JOB_SCHEDULE_PICKER_SELECTOR);
+    if (!input?.closest('.jw-step[data-wizard-step="3"]')) return;
     openNativePickerFromField(input, event);
-  });
-}
-
-function bindScheduleNativePickers() {
-  JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
-    bindNativePickerField(document.getElementById(id));
-  });
-}
-
-bindScheduleNativePickers();
+  },
+  true,
+);
 
 JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
   const input = document.getElementById(id);
