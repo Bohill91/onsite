@@ -19760,6 +19760,13 @@ button.project-requirement-step-control:focus-visible {
   gap: 10px;
 }
 
+.project-requirement-continue:disabled,
+.project-requirement-continue[aria-disabled="true"] {
+  background: var(--surface-3);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
 .project-requirement-sheet.is-draft-prestart .project-requirement-sheet-head {
   gap: 14px 18px;
   padding: 18px 22px;

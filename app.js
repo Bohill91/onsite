@@ -4319,6 +4319,7 @@ function normalizeProjectRequirementResource(resource, fallbackId = "") {
       label,
       url,
       instructions: String(resource?.instructions || "").trim(),
+      role: resource?.role === "video_source" ? "video_source" : "",
       createdAt,
     };
   }
@@ -4776,6 +4777,18 @@ function normalizePreStartDocument(doc) {
   const documentId = doc?.requirementId || doc?.documentId || doc?.id || createId();
   const projectId = String(doc?.projectId || "").trim();
   const resources = normalizeProjectRequirementResources(doc, documentId);
+  const normalizedResources =
+    requirementType === "video_induction"
+      ? resources.map((resource, index, allResources) =>
+          resource.type === "external_link" &&
+          !resource.role &&
+          index === allResources.findIndex(
+            (item) => item.type === "external_link",
+          )
+            ? { ...resource, role: "video_source" }
+            : resource,
+        )
+      : resources;
   const version = String(doc?.version || doc?.revision || "1").trim() || "1";
   const externalTraining = normalizeProjectRequirementExternalTraining(doc);
   const backgroundCheck = normalizeProjectRequirementBackgroundCheck(doc);
@@ -4797,7 +4810,15 @@ function normalizePreStartDocument(doc) {
   };
   const completionEvidence = normalizeProjectRequirementCompletionEvidence({
     requirementType,
-    resources,
+    resources: normalizedResources,
+    videoSourceUrl:
+      requirementType === "video_induction"
+        ? normalizedResources.find(
+            (resource) =>
+              resource.type === "external_link" &&
+              resource.role === "video_source",
+          )?.url || ""
+        : "",
     completionAction,
     externalTraining:
       requirementType === "external_training" ? externalTraining : null,
@@ -19276,8 +19297,17 @@ function projectRequirementResourceComposerHTML(editor) {
   </div>`;
 }
 
-function projectRequirementResourcesHTML(editor) {
-  const resources = editor.draft.resources || [];
+function projectRequirementResourcesHTML(
+  editor,
+  {
+    excludedResourceId = "",
+    title = "Resources",
+    helper = null,
+  } = {},
+) {
+  const resources = (editor.draft.resources || []).filter(
+    (resource) => resource.id !== excludedResourceId,
+  );
   const resourceList = resources.length
     ? `<div class="project-requirement-resource-list">${resources.map(projectRequirementResourceRowHTML).join("")}</div>`
     : `<p class="project-requirement-resources-empty">No resources added.</p>`;
@@ -19286,8 +19316,8 @@ function projectRequirementResourcesHTML(editor) {
     const editingResource = editor.resourceEditor && !choosing;
     return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementResourcesTitle">
       <div class="project-requirement-resources-head">
-        <p id="projectRequirementResourcesTitle">Resources</p>
-        <span>Attach files, links or supporting information.</span>
+        <p id="projectRequirementResourcesTitle">${escapeHtml(title)}</p>
+        <span>${escapeHtml(helper || "Attach files, links or supporting information.")}</span>
       </div>
       ${resourceList}
       ${editingResource ? "" : `<div class="project-requirement-resource-add-wrap">
@@ -19299,8 +19329,8 @@ function projectRequirementResourcesHTML(editor) {
   }
   return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementResourcesTitle">
     <div class="project-requirement-resources-head">
-      <p id="projectRequirementResourcesTitle">Resources</p>
-      <span>Attach files, external links or supporting references to this requirement.</span>
+      <p id="projectRequirementResourcesTitle">${escapeHtml(title)}</p>
+      <span>${escapeHtml(helper || "Attach files, external links or supporting references to this requirement.")}</span>
     </div>
     ${resourceList}
     ${projectRequirementResourceComposerHTML(editor)}
@@ -19321,11 +19351,17 @@ function projectRequirementTypeChoicesHTML(draft) {
 }
 
 function projectRequirementContentDraft(draft = {}) {
+  const videoSource = (draft.resources || []).find(
+    (resource) =>
+      resource.type === "external_link" &&
+      resource.role === "video_source",
+  );
   return {
     documentName: String(draft.documentName || ""),
     description: String(draft.description || ""),
     contentToFollow: !!draft.contentToFollow,
     resources: structuredClone(Array.isArray(draft.resources) ? draft.resources : []),
+    videoSourceUrl: String(draft.videoSourceUrl || videoSource?.url || ""),
     externalTraining: normalizeProjectRequirementExternalTraining(draft),
     backgroundCheck: normalizeProjectRequirementBackgroundCheck(draft),
     formDefinition: normalizeProjectRequirementFormDefinition(draft),
@@ -19338,6 +19374,7 @@ function applyProjectRequirementContentDraft(draft, content = {}) {
   draft.description = String(content.description || "");
   draft.contentToFollow = !!content.contentToFollow;
   draft.resources = structuredClone(Array.isArray(content.resources) ? content.resources : []);
+  draft.videoSourceUrl = String(content.videoSourceUrl || "");
   draft.externalTraining = normalizeProjectRequirementExternalTraining(content);
   draft.backgroundCheck = normalizeProjectRequirementBackgroundCheck(content);
   draft.formDefinition = normalizeProjectRequirementFormDefinition(content);
@@ -19358,6 +19395,7 @@ function projectRequirementDefaultContentDraft(editor, requirementType) {
     description: "",
     contentToFollow: false,
     resources: [],
+    videoSourceUrl: "",
     externalTraining: {},
     backgroundCheck: {},
     formDefinition: { fields: [] },
@@ -19389,7 +19427,7 @@ function projectRequirementExternalTrainingContentHTML(draft) {
     <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
       <textarea data-project-requirement-description rows="2" placeholder="Explain how the worker should complete this training.">${escapeHtml(draft.description || "")}</textarea>
     </label>
-    <p class="project-requirement-guidance project-requirement-form-span">Store only the training destination and permitted instructions. Never include passwords, access tokens or third-party login credentials.</p>
+    <p class="project-requirement-guidance project-requirement-form-span">Do not include passwords or third-party login credentials.</p>
   </div>`;
 }
 
@@ -19422,7 +19460,7 @@ function projectRequirementBackgroundCheckContentHTML(draft) {
     <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
       <textarea data-project-requirement-description rows="2" placeholder="Add permitted instructions for completing the check.">${escapeHtml(draft.description || "")}</textarea>
     </label>
-    <p class="project-requirement-guidance project-requirement-form-span">Do not enter criminal-history details or certificate contents. OnSite stores only the check configuration and restricted verification metadata needed for the requirement.</p>
+    <p class="project-requirement-guidance project-requirement-form-span">Do not enter criminal-history details or certificate contents here.</p>
   </div>`;
 }
 
@@ -19442,10 +19480,9 @@ function projectRequirementFormDefinitionHTML(draft) {
     (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
   );
   return `<section class="project-requirement-form-builder project-requirement-form-span" aria-labelledby="projectRequirementFormBuilderTitle">
-    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Source document</p><span>PDF is the canonical source format for form and signature requirements.</span></div>
+    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Source document</p><span>Upload the PDF workers will complete and sign.</span></div>
     ${pdf ? projectRequirementResourceRowHTML(pdf) : `<p class="project-requirement-resources-empty">No PDF uploaded.</p>`}
     <label class="secondary-btn project-requirement-resource-file-action">${pdf ? "Replace PDF" : "Upload PDF"}<input type="file" accept="application/pdf,.pdf" data-project-requirement-pdf-upload aria-label="${pdf ? "Replace source PDF" : "Upload source PDF"}" /></label>
-    <p class="project-requirement-guidance">PDF field placement is not available in this build because the application has no reliable PDF page renderer or durable file-storage service. Save this requirement as content pending; no worker signing or completed PDF is simulated.</p>
   </section>`;
 }
 
@@ -19454,10 +19491,59 @@ function projectRequirementDocumentUploadHTML(draft) {
     (resource) => resource.type === "file",
   );
   return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementDocumentTitle">
-    <div class="project-requirement-resources-head"><p id="projectRequirementDocumentTitle">Document upload *</p><span>Upload the document workers must read and acknowledge.</span></div>
+    <div class="project-requirement-resources-head"><p id="projectRequirementDocumentTitle">Document</p><span>Upload the document workers need to review.</span></div>
     ${documents.length ? `<div class="project-requirement-resource-list">${documents.map(projectRequirementResourceRowHTML).join("")}</div>` : `<p class="project-requirement-resources-empty">No document uploaded.</p>`}
     <label class="secondary-btn project-requirement-resource-file-action">${documents.length ? "Replace document" : "Upload document"}<input type="file" accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-document-upload aria-label="${documents.length ? "Replace document" : "Upload document"}" /></label>
   </section>`;
+}
+
+function projectRequirementVideoSourceResource(draft) {
+  const resources = Array.isArray(draft?.resources) ? draft.resources : [];
+  return (
+    resources.find(
+      (resource) =>
+        resource.type === "external_link" &&
+        resource.role === "video_source",
+    ) ||
+    resources.find((resource) => resource.type === "external_link") ||
+    null
+  );
+}
+
+function projectRequirementVideoSourceUrl(draft) {
+  return String(
+    draft?.videoSourceUrl || projectRequirementVideoSourceResource(draft)?.url || "",
+  ).trim();
+}
+
+function projectRequirementVideoContentHTML(editor) {
+  const draft = editor.draft;
+  const source = projectRequirementVideoSourceResource(draft);
+  return `<div class="project-requirement-form-grid">
+    <label class="field-label project-requirement-form-span">Title *
+      <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Video induction title" />
+    </label>
+    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+      <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need before starting.">${escapeHtml(draft.description || "")}</textarea>
+    </label>
+    <section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementVideoSourceTitle">
+      <div class="project-requirement-resources-head"><p id="projectRequirementVideoSourceTitle">Video source</p><span>Add the video workers need to watch before starting.</span></div>
+      ${source ? `<p class="project-requirement-resources-empty"><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">Open current video source</a></p>` : `<p class="project-requirement-resources-empty">No video source added.</p>`}
+      <label class="field-label">Video URL *
+        <input data-project-requirement-video-url type="url" required value="${escapeHtml(projectRequirementVideoSourceUrl(draft))}" placeholder="https://" inputmode="url" />
+      </label>
+      <p class="project-requirement-guidance">Use a secure web address that workers can open without sharing passwords or login credentials.</p>
+    </section>
+    <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
+      <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
+      <span><strong>Add content later</strong><small>Save the requirement now and add its final video before workers need to complete it.</small></span>
+    </label>
+    ${projectRequirementResourcesHTML(editor, {
+      excludedResourceId: source?.id || "",
+      title: "Supporting materials",
+      helper: "Optional files, links or notes that support the induction video.",
+    })}
+  </div>`;
 }
 
 function projectRequirementStandardContentHTML(editor) {
@@ -19480,7 +19566,6 @@ function projectRequirementStandardContentHTML(editor) {
       : isDocument
         ? projectRequirementDocumentUploadHTML(draft)
         : projectRequirementResourcesHTML(editor)}
-    ${isDocument && !draft.contentToFollow ? `<p class="project-requirement-guidance project-requirement-form-span">Workers must read the full document and acknowledge it.</p>` : ""}
   </div>`;
 }
 
@@ -19488,6 +19573,8 @@ function projectRequirementStepOneHTML(editor) {
   const draft = editor.draft;
   const content = draft.requirementType === "onsite_induction"
     ? ""
+    : draft.requirementType === "video_induction"
+      ? projectRequirementVideoContentHTML(editor)
     : draft.requirementType === "external_training"
       ? projectRequirementExternalTrainingContentHTML(draft)
       : draft.requirementType === "background_check"
@@ -19729,6 +19816,10 @@ function projectRequirementEditorStepHTML(editor) {
 
 function projectRequirementEditorFooterHTML(editor) {
   const isFinal = editor.step === 3;
+  const contentIssue = editor.step === 1
+    ? projectRequirementDraftValidationIssue(editor)
+    : null;
+  const contentContinueDisabled = editor.step === 1 && contentIssue?.step === 1;
   const remove = isFinal && editor.requirementId
     ? `<button class="secondary-btn danger" type="button" data-project-requirement-remove="${escapeHtml(editor.requirementId)}">Remove requirement</button>`
     : "<span></span>";
@@ -19737,7 +19828,7 @@ function projectRequirementEditorFooterHTML(editor) {
     : `<button class="secondary-btn" type="button" data-project-requirement-back>Back</button>`;
   const rightAction = isFinal
     ? `<button class="primary-btn" type="submit">${editor.mode === "draft" ? "Save requirement" : editor.requirementId ? "Save changes" : "Add requirement"}</button>`
-    : `<button class="primary-btn project-requirement-continue" type="button" data-project-requirement-next>Continue</button>`;
+    : `<button class="primary-btn project-requirement-continue" type="button" data-project-requirement-next${contentContinueDisabled ? " disabled" : ""}>Continue</button>`;
   return `<footer class="project-requirement-sheet-actions">${remove}<div>${leftAction}${rightAction}</div></footer>`;
 }
 
@@ -19758,6 +19849,25 @@ function syncProjectRequirementEditorDraft(modal) {
   }
   if (value("[data-project-requirement-training-url]") != null) {
     draft.externalTraining.url = value("[data-project-requirement-training-url]");
+  }
+  if (value("[data-project-requirement-video-url]") != null) {
+    const videoUrl = value("[data-project-requirement-video-url]").trim();
+    const existingVideo = projectRequirementVideoSourceResource(draft);
+    draft.videoSourceUrl = videoUrl;
+    draft.resources = (draft.resources || []).filter(
+      (resource) => resource.id !== existingVideo?.id,
+    );
+    if (validProjectRequirementExternalUrl(videoUrl)) {
+      draft.resources.push({
+        id: existingVideo?.id || createId(),
+        type: "external_link",
+        label: "Induction video",
+        url: videoUrl,
+        instructions: "",
+        role: "video_source",
+        createdAt: existingVideo?.createdAt || new Date().toISOString(),
+      });
+    }
   }
   if (value("[data-project-requirement-background-type]") != null) {
     draft.backgroundCheck.checkType = value(
@@ -19981,14 +20091,12 @@ function projectRequirementDraftValidationIssue(editor) {
   if (
     !draft.contentToFollow &&
     draft.requirementType === "video_induction" &&
-    !(draft.resources || []).some(
-      (resource) => resource.type === "external_link",
-    )
+    !validProjectRequirementExternalUrl(projectRequirementVideoSourceUrl(draft))
   ) {
     return {
       step: 1,
-      selector: "[data-project-requirement-resource-add]",
-      message: "Add an external video or training link.",
+      selector: "[data-project-requirement-video-url]",
+      message: "Add a valid video URL.",
     };
   }
   if (
@@ -20002,20 +20110,6 @@ function projectRequirementDraftValidationIssue(editor) {
       step: 1,
       selector: "[data-project-requirement-pdf-upload]",
       message: "Upload the source PDF, or choose Add content later.",
-    };
-  }
-  if (
-    !draft.contentToFollow &&
-    draft.requirementType === "form_signature" &&
-    (!normalizeProjectRequirementPdfTemplate(draft).fields.length ||
-      !normalizeProjectRequirementPdfTemplate(draft).fields.some(
-        (field) => field.type === "signature",
-      ))
-  ) {
-    return {
-      step: 1,
-      selector: "[data-project-requirement-content-follow]",
-      message: "Field placement requires PDF rendering infrastructure. Choose Add content later to save this requirement safely.",
     };
   }
   const validAction = (PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [])
@@ -20083,6 +20177,15 @@ function projectRequirementDraftValidationIssue(editor) {
     };
   }
   return null;
+}
+
+function updateProjectRequirementContentContinueState(modal) {
+  const editor = projectRequirementEditorState;
+  const button = modal?.querySelector("[data-project-requirement-next]");
+  if (!editor || !button || editor.step !== 1) return;
+  syncProjectRequirementEditorDraft(modal);
+  const issue = projectRequirementDraftValidationIssue(editor);
+  button.disabled = issue?.step === 1;
 }
 
 function showProjectRequirementValidationIssue(issue) {
@@ -20656,13 +20759,18 @@ function bindProjectRequirementEditorControls(modal) {
       });
     });
   modal.querySelectorAll('input[name="projectRequirementType"]').forEach((input) => {
-    input.addEventListener("change", () => {
+    input.addEventListener("change", (event) => {
+      event.stopPropagation();
       const editor = projectRequirementEditorState;
       const previousType = editor.draft.requirementType;
       syncProjectRequirementEditorDraft(modal);
       const draft = editor.draft;
       if (draft.requirementType !== previousType) {
-        editor.contentDrafts[previousType] = projectRequirementContentDraft(draft);
+        const previousContent = projectRequirementContentDraft({
+          ...draft,
+          requirementType: previousType,
+        });
+        editor.contentDrafts[previousType] = previousContent;
         applyProjectRequirementContentDraft(
           draft,
           editor.contentDrafts[draft.requirementType] ||
@@ -20841,6 +20949,14 @@ function bindProjectRequirementEditorControls(modal) {
     syncProjectRequirementEditorDraft(modal);
     refreshProjectRequirementReview(modal);
   });
+  modal.addEventListener("input", (event) => {
+    if (event.target.matches('input[name="projectRequirementType"]')) return;
+    updateProjectRequirementContentContinueState(modal);
+  });
+  modal.addEventListener("change", () => {
+    updateProjectRequirementContentContinueState(modal);
+  });
+  updateProjectRequirementContentContinueState(modal);
   modal.querySelector("[data-project-requirement-next]")?.addEventListener("click", () => {
     syncProjectRequirementEditorDraft(modal);
     const issue = projectRequirementDraftValidationIssue(
@@ -29724,4 +29840,9 @@ document
       .join("");
   });
 
-// ─── Init ─────────────────────
+// ─── Init ─────────────────────────────────────────────────
+render();
+renderAttendance();
+
+// Add attend icon to activity log
+ACTIVITY_ICONS.attend = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
