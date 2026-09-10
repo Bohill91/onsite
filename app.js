@@ -4114,7 +4114,7 @@ const PROJECT_REQUIREMENT_TYPES = [
     value: "document",
     label: "Document",
     shortLabel: "Document",
-    description: "A document or information workers need to read or acknowledge.",
+    description: "A document or information workers need to review before starting.",
   },
   {
     value: "video_induction",
@@ -4146,6 +4146,12 @@ const PROJECT_REQUIREMENT_TYPES = [
     shortLabel: "On-site induction",
     description: "A face-to-face induction completed when the worker arrives.",
   },
+];
+
+const PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS = [
+  { value: "web_link", label: "Web link" },
+  { value: "invitation_separately", label: "Invitation sent separately" },
+  { value: "details_later", label: "Details provided later" },
 ];
 
 const PROJECT_REQUIREMENT_TIMINGS = [
@@ -4391,8 +4397,9 @@ function projectRequirementResourceSummary(resources) {
 }
 
 function projectRequirementHasExternalLink(requirement) {
+  const externalTraining = normalizeProjectRequirementExternalTraining(requirement);
   return !!(
-    requirement?.externalTraining?.url ||
+    (externalTraining.accessMethod === "web_link" && externalTraining.url) ||
     requirement?.backgroundCheck?.applicationUrl ||
     (requirement?.resources || []).some(
       (resource) => resource.type === "external_link",
@@ -4469,9 +4476,14 @@ function projectRequirementOptionLabel(options, value, fallback = "Not set") {
 function projectRequirementContentSummary(requirement) {
   if (requirement?.requirementType === "external_training") {
     const training = normalizeProjectRequirementExternalTraining(requirement);
+    const accessMethod = projectRequirementOptionLabel(
+      PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS,
+      training.accessMethod,
+      "Details provided later",
+    );
     return training.provider
-      ? `${training.provider} · External training link`
-      : "External training link";
+      ? `${training.provider} · ${accessMethod}`
+      : accessMethod;
   }
   if (requirement?.requirementType === "background_check") {
     const check = normalizeProjectRequirementBackgroundCheck(requirement);
@@ -4556,9 +4568,18 @@ function projectRequirementAudienceIds(requirementOrAudience) {
 
 function normalizeProjectRequirementExternalTraining(requirement) {
   const source = requirement?.externalTraining || {};
+  const url = String(source.url || "").trim();
+  const accessMethod = PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS.some(
+    (option) => option.value === source.accessMethod,
+  )
+    ? source.accessMethod
+    : url
+      ? "web_link"
+      : "details_later";
   return {
     provider: String(source.provider || "").trim(),
-    url: String(source.url || "").trim(),
+    url,
+    accessMethod,
   };
 }
 
@@ -6561,7 +6582,8 @@ function workerProjectRequirementStatusHTML(job, workerId, requirement) {
 
 function projectRequirementPrimaryExternalUrl(requirement) {
   if (requirement?.requirementType === "external_training") {
-    return normalizeProjectRequirementExternalTraining(requirement).url;
+    const training = normalizeProjectRequirementExternalTraining(requirement);
+    return training.accessMethod === "web_link" ? training.url : "";
   }
   if (requirement?.requirementType === "background_check") {
     return normalizeProjectRequirementBackgroundCheck(requirement).applicationUrl;
@@ -19418,6 +19440,12 @@ function projectRequirementSelectOptions(options, selected) {
 
 function projectRequirementExternalTrainingContentHTML(draft) {
   const training = normalizeProjectRequirementExternalTraining(draft);
+  const accessMethodGuidance = {
+    invitation_separately:
+      "An invitation will be sent separately. No URL is required here.",
+    details_later:
+      "Access details will be provided later. No URL is required here.",
+  }[training.accessMethod];
   return `<div class="project-requirement-form-grid">
     <label class="field-label">${projectRequirementFieldHeading("Training provider", { optional: true })}
       <input data-project-requirement-training-provider type="text" value="${escapeHtml(training.provider)}" placeholder="Training provider" autocomplete="organization" />
@@ -19425,13 +19453,20 @@ function projectRequirementExternalTrainingContentHTML(draft) {
     <label class="field-label">${projectRequirementFieldHeading("Training title", { required: true })}
       <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Training title" />
     </label>
-    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("External training URL", { required: true })}
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("How workers access the training", { required: true })}
+      <select data-project-requirement-training-access required>${projectRequirementSelectOptions(PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS, training.accessMethod)}</select>
+    </label>
+    ${
+      training.accessMethod === "web_link"
+        ? `<label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("External training URL", { required: true })}
       <input data-project-requirement-training-url type="url" required value="${escapeHtml(training.url)}" placeholder="https://" inputmode="url" />
     </label>
+    <p class="project-requirement-guidance project-requirement-form-span">Do not include passwords or third-party login credentials.</p>`
+        : `<p class="project-requirement-guidance project-requirement-form-span">${escapeHtml(accessMethodGuidance)}</p>`
+    }
     <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Worker instructions", { optional: true })}
       <textarea data-project-requirement-description rows="2" placeholder="Explain how the worker should complete this training.">${escapeHtml(draft.description || "")}</textarea>
     </label>
-    <p class="project-requirement-guidance project-requirement-form-span">Do not include passwords or third-party login credentials.</p>
   </div>`;
 }
 
@@ -19777,7 +19812,16 @@ function projectRequirementReviewHTML(editor, draft) {
       1,
       0,
       ["Training provider", training.provider || "Not specified"],
-      ["Training URL", training.url || "Not set"],
+      [
+        "Access method",
+        projectRequirementOptionLabel(
+          PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS,
+          training.accessMethod,
+        ),
+      ],
+      ...(training.accessMethod === "web_link"
+        ? [["Training URL", training.url || "Not set"]]
+        : []),
     );
   }
   if (draft.requirementType === "background_check") {
@@ -19885,6 +19929,7 @@ function syncProjectRequirementEditorDraft(modal) {
   const editor = projectRequirementEditorState;
   if (!editor) return;
   const draft = editor.draft;
+  const externalTraining = normalizeProjectRequirementExternalTraining(draft);
   const value = (selector) => modal.querySelector(selector)?.value;
   const checked = (name) => modal.querySelector(`input[name="${name}"]:checked`)?.value;
   const type = checked("projectRequirementType");
@@ -19892,13 +19937,19 @@ function syncProjectRequirementEditorDraft(modal) {
   if (value("[data-project-requirement-title]") != null) draft.documentName = value("[data-project-requirement-title]");
   if (value("[data-project-requirement-description]") != null) draft.description = value("[data-project-requirement-description]");
   if (value("[data-project-requirement-training-provider]") != null) {
-    draft.externalTraining.provider = value(
+    externalTraining.provider = value(
       "[data-project-requirement-training-provider]",
     );
   }
-  if (value("[data-project-requirement-training-url]") != null) {
-    draft.externalTraining.url = value("[data-project-requirement-training-url]");
+  if (value("[data-project-requirement-training-access]") != null) {
+    externalTraining.accessMethod = value(
+      "[data-project-requirement-training-access]",
+    );
   }
+  if (value("[data-project-requirement-training-url]") != null) {
+    externalTraining.url = value("[data-project-requirement-training-url]");
+  }
+  draft.externalTraining = externalTraining;
   if (value("[data-project-requirement-video-url]") != null) {
     const videoUrl = value("[data-project-requirement-video-url]").trim();
     const existingVideo = projectRequirementVideoSourceResource(draft);
@@ -20061,15 +20112,18 @@ function projectRequirementDraftValidationIssue(editor) {
       message: "Enter a requirement title.",
     };
   }
-  if (
-    draft.requirementType === "external_training" &&
-    !validProjectRequirementExternalUrl(draft.externalTraining?.url)
-  ) {
-    return {
-      step: 1,
-      selector: "[data-project-requirement-training-url]",
-      message: "Enter a valid external training URL.",
-    };
+  if (draft.requirementType === "external_training") {
+    const training = normalizeProjectRequirementExternalTraining(draft);
+    if (
+      training.accessMethod === "web_link" &&
+      !validProjectRequirementExternalUrl(training.url)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-training-url]",
+        message: "Enter a valid external training URL.",
+      };
+    }
   }
   if (draft.requirementType === "background_check") {
     const check = draft.backgroundCheck || {};
@@ -20839,6 +20893,10 @@ function bindProjectRequirementEditorControls(modal) {
     });
   });
   modal.querySelector("[data-project-requirement-action]")?.addEventListener("change", () => {
+    syncProjectRequirementEditorDraft(modal);
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
+  modal.querySelector("[data-project-requirement-training-access]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
     renderProjectRequirementEditor({ focusHeading: false });
   });
