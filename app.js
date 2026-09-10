@@ -19310,7 +19310,7 @@ function projectRequirementResourcesHTML(
   );
   const resourceList = resources.length
     ? `<div class="project-requirement-resource-list">${resources.map(projectRequirementResourceRowHTML).join("")}</div>`
-    : `<p class="project-requirement-resources-empty">No resources added.</p>`;
+    : "";
   if (editor.mode === "draft") {
     const choosing = editor.resourceEditor?.type === "choose";
     const editingResource = editor.resourceEditor && !choosing;
@@ -19336,6 +19336,10 @@ function projectRequirementResourcesHTML(
     ${projectRequirementResourceComposerHTML(editor)}
     ${editor.resourceEditor ? "" : `<button class="project-requirement-add-resource" type="button" data-project-requirement-resource-add>+ Add resource</button>`}
   </section>`;
+}
+
+function projectRequirementFieldHeading(label, { optional = false, required = false } = {}) {
+  return `<span class="project-requirement-field-heading">${escapeHtml(label)}${required ? " *" : ""}${optional ? ' <span class="jw-field-optional">Optional</span>' : ""}</span>`;
 }
 
 function projectRequirementTypeChoicesHTML(draft) {
@@ -19415,16 +19419,16 @@ function projectRequirementSelectOptions(options, selected) {
 function projectRequirementExternalTrainingContentHTML(draft) {
   const training = normalizeProjectRequirementExternalTraining(draft);
   return `<div class="project-requirement-form-grid">
-    <label class="field-label">Training provider <span class="jw-field-optional">Optional</span>
+    <label class="field-label">${projectRequirementFieldHeading("Training provider", { optional: true })}
       <input data-project-requirement-training-provider type="text" value="${escapeHtml(training.provider)}" placeholder="Training provider" autocomplete="organization" />
     </label>
-    <label class="field-label">Training title *
+    <label class="field-label">${projectRequirementFieldHeading("Training title", { required: true })}
       <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Training title" />
     </label>
-    <label class="field-label project-requirement-form-span">External training URL *
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("External training URL", { required: true })}
       <input data-project-requirement-training-url type="url" required value="${escapeHtml(training.url)}" placeholder="https://" inputmode="url" />
     </label>
-    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Worker instructions", { optional: true })}
       <textarea data-project-requirement-description rows="2" placeholder="Explain how the worker should complete this training.">${escapeHtml(draft.description || "")}</textarea>
     </label>
     <p class="project-requirement-guidance project-requirement-form-span">Do not include passwords or third-party login credentials.</p>
@@ -19448,16 +19452,16 @@ function projectRequirementBackgroundCheckContentHTML(draft) {
       <select data-project-requirement-background-level>${projectRequirementSelectOptions(levelOptions, check.level)}</select>
     </label>` : ""}
     ${eligibilityGuidance}
-    <label class="field-label project-requirement-form-span">How the check is initiated
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("How the check is initiated")}
       <select data-project-requirement-background-initiation>${projectRequirementSelectOptions(PROJECT_BACKGROUND_CHECK_INITIATION, check.initiation)}</select>
     </label>
-    <label class="field-label">Provider <span class="jw-field-optional">Optional</span>
+    <label class="field-label">${projectRequirementFieldHeading("Provider", { optional: true })}
       <input data-project-requirement-background-provider type="text" value="${escapeHtml(check.provider)}" placeholder="Verification provider" autocomplete="organization" />
     </label>
-    <label class="field-label">Application / provider URL${urlRequired ? " *" : ' <span class="jw-field-optional">Optional</span>'}
+    <label class="field-label">${projectRequirementFieldHeading("Application / provider URL", { optional: !urlRequired, required: urlRequired })}
       <input data-project-requirement-background-url type="url"${urlRequired ? " required" : ""} value="${escapeHtml(check.applicationUrl)}" placeholder="https://" inputmode="url" />
     </label>
-    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Worker instructions", { optional: true })}
       <textarea data-project-requirement-description rows="2" placeholder="Add permitted instructions for completing the check.">${escapeHtml(draft.description || "")}</textarea>
     </label>
     <p class="project-requirement-guidance project-requirement-form-span">Do not enter criminal-history details or certificate contents here.</p>
@@ -19479,21 +19483,67 @@ function projectRequirementFormDefinitionHTML(draft) {
   const pdf = (draft.resources || []).find(
     (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
   );
-  return `<section class="project-requirement-form-builder project-requirement-form-span" aria-labelledby="projectRequirementFormBuilderTitle">
-    <div class="project-requirement-resources-head"><p id="projectRequirementFormBuilderTitle">Source document</p><span>Upload the PDF workers will complete and sign.</span></div>
-    ${pdf ? projectRequirementResourceRowHTML(pdf) : `<p class="project-requirement-resources-empty">No PDF uploaded.</p>`}
-    <label class="secondary-btn project-requirement-resource-file-action">${pdf ? "Replace PDF" : "Upload PDF"}<input type="file" accept="application/pdf,.pdf" data-project-requirement-pdf-upload aria-label="${pdf ? "Replace source PDF" : "Upload source PDF"}" /></label>
-  </section>`;
+  return projectRequirementPrimaryFileHTML({
+    resource: pdf,
+    title: "Source document",
+    helper: "Upload the PDF workers will complete and sign.",
+    emptyLabel: "No PDF uploaded",
+    uploadLabel: "Upload PDF",
+    replaceLabel: "Replace PDF",
+    accept: "application/pdf,.pdf",
+    inputAttribute: "data-project-requirement-pdf-upload",
+    inputAriaLabel: pdf ? "Replace source PDF" : "Upload source PDF",
+  });
 }
 
 function projectRequirementDocumentUploadHTML(draft) {
-  const documents = (draft.resources || []).filter(
+  const document = (draft.resources || []).find(
     (resource) => resource.type === "file",
   );
-  return `<section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementDocumentTitle">
-    <div class="project-requirement-resources-head"><p id="projectRequirementDocumentTitle">Document</p><span>Upload the document workers need to review.</span></div>
-    ${documents.length ? `<div class="project-requirement-resource-list">${documents.map(projectRequirementResourceRowHTML).join("")}</div>` : `<p class="project-requirement-resources-empty">No document uploaded.</p>`}
-    <label class="secondary-btn project-requirement-resource-file-action">${documents.length ? "Replace document" : "Upload document"}<input type="file" accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-document-upload aria-label="${documents.length ? "Replace document" : "Upload document"}" /></label>
+  return projectRequirementPrimaryFileHTML({
+    resource: document,
+    title: "Document",
+    helper: "Upload the document workers need to review.",
+    emptyLabel: "No document uploaded",
+    uploadLabel: "Upload document",
+    replaceLabel: "Replace document",
+    accept: PROJECT_REQUIREMENT_FILE_ACCEPT,
+    inputAttribute: "data-project-requirement-document-upload",
+    inputAriaLabel: document ? "Replace document" : "Upload document",
+  });
+}
+
+function projectRequirementPrimaryFileHTML({
+  resource,
+  title,
+  helper,
+  emptyLabel,
+  uploadLabel,
+  replaceLabel,
+  accept,
+  inputAttribute,
+  inputAriaLabel,
+}) {
+  const hasFile = resource?.type === "file";
+  const status = hasFile
+    ? `${projectRequirementFileTypeLabel(resource)} · ${projectRequirementFileSizeLabel(resource.size)}`
+    : "Choose a file to add the primary source.";
+  return `<section class="project-requirement-primary-source project-requirement-form-span" aria-label="${escapeHtml(title)}">
+    <div class="project-requirement-resources-head">
+      <p>${escapeHtml(title)}</p>
+      <span>${escapeHtml(helper)}</span>
+    </div>
+    <div class="project-requirement-primary-file-row">
+      <span class="project-requirement-primary-file-icon">${onsiteIcon("fileText", 17)}</span>
+      <div class="project-requirement-primary-file-copy">
+        <strong>${escapeHtml(hasFile ? resource.fileName : emptyLabel)}</strong>
+        <span>${escapeHtml(status)}</span>
+      </div>
+      <div class="project-requirement-primary-file-actions">
+        <label class="secondary-btn project-requirement-primary-file-action">${hasFile ? escapeHtml(replaceLabel) : escapeHtml(uploadLabel)}<input type="file" accept="${escapeHtml(accept)}" ${inputAttribute} aria-label="${escapeHtml(inputAriaLabel)}" /></label>
+        ${hasFile ? `<button class="project-requirement-primary-file-remove" type="button" data-project-requirement-resource-remove="${escapeHtml(resource.id)}">Remove</button>` : ""}
+      </div>
+    </div>
   </section>`;
 }
 
@@ -19505,7 +19555,6 @@ function projectRequirementVideoSourceResource(draft) {
         resource.type === "external_link" &&
         resource.role === "video_source",
     ) ||
-    resources.find((resource) => resource.type === "external_link") ||
     null
   );
 }
@@ -19520,19 +19569,19 @@ function projectRequirementVideoContentHTML(editor) {
   const draft = editor.draft;
   const source = projectRequirementVideoSourceResource(draft);
   return `<div class="project-requirement-form-grid">
-    <label class="field-label project-requirement-form-span">Title *
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Title", { required: true })}
       <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Video induction title" />
     </label>
-    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Worker instructions", { optional: true })}
       <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need before starting.">${escapeHtml(draft.description || "")}</textarea>
     </label>
     <section class="project-requirement-resources project-requirement-form-span" aria-labelledby="projectRequirementVideoSourceTitle">
       <div class="project-requirement-resources-head"><p id="projectRequirementVideoSourceTitle">Video source</p><span>Add the video workers need to watch before starting.</span></div>
-      ${source ? `<p class="project-requirement-resources-empty"><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">Open current video source</a></p>` : `<p class="project-requirement-resources-empty">No video source added.</p>`}
-      <label class="field-label">Video URL *
+      <label class="field-label project-requirement-video-url">${projectRequirementFieldHeading("Video URL", { required: true })}
         <input data-project-requirement-video-url type="url" required value="${escapeHtml(projectRequirementVideoSourceUrl(draft))}" placeholder="https://" inputmode="url" />
       </label>
-      <p class="project-requirement-guidance">Use a secure web address that workers can open without sharing passwords or login credentials.</p>
+      <p class="project-requirement-guidance">Use a secure web address that workers can access.</p>
+      <p class="project-requirement-guidance">Do not include passwords or login credentials.</p>
     </section>
     <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
       <input data-project-requirement-content-follow type="checkbox"${draft.contentToFollow ? " checked" : ""} />
@@ -19540,8 +19589,8 @@ function projectRequirementVideoContentHTML(editor) {
     </label>
     ${projectRequirementResourcesHTML(editor, {
       excludedResourceId: source?.id || "",
-      title: "Supporting materials",
-      helper: "Optional files, links or notes that support the induction video.",
+      title: "Supporting materials · Optional",
+      helper: "Add files, links or notes that support the induction.",
     })}
   </div>`;
 }
@@ -19551,10 +19600,10 @@ function projectRequirementStandardContentHTML(editor) {
   const isForm = draft.requirementType === "form_signature";
   const isDocument = draft.requirementType === "document";
   return `<div class="project-requirement-form-grid">
-    <label class="field-label project-requirement-form-span">Title *
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Title", { required: true })}
       <input data-project-requirement-title type="text" required value="${escapeHtml(draft.documentName || "")}" placeholder="Requirement title" />
     </label>
-    <label class="field-label project-requirement-form-span">Worker instructions <span class="jw-field-optional">Optional</span>
+    <label class="field-label project-requirement-form-span">${projectRequirementFieldHeading("Worker instructions", { optional: true })}
       <textarea data-project-requirement-description rows="2" placeholder="Add any instructions workers need to complete this requirement.">${escapeHtml(draft.description || "")}</textarea>
     </label>
     <label class="checkbox-row project-requirement-content-follow project-requirement-form-span">
