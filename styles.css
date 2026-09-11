@@ -1800,6 +1800,15 @@ button.is-loading,
     height: 100vh;
   }
 
+  .sidebar-utility-zone {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+    min-height: 32px;
+  }
+
   .tab-btn {
     display: flex;
     align-items: center;
@@ -1841,13 +1850,12 @@ button.is-loading,
     cursor: pointer;
     display: flex;
     font: inherit;
-    gap: 10px;
-    margin: 8px 0 0;
-    padding: 8px 14px;
-    justify-content: flex-end;
-    text-align: left;
+    height: 32px;
+    justify-content: center;
+    margin: 0;
+    padding: 7px;
     transition: background-color 150ms ease, color 150ms ease;
-    width: 100%;
+    width: 32px;
   }
 
   .sidebar-collapse-control:hover,
@@ -1864,7 +1872,7 @@ button.is-loading,
   .sidebar-collapse-icon {
     display: inline-flex;
     flex: 0 0 16px;
-    transform: rotate(180deg);
+    transform: none;
     transition: transform 180ms ease;
   }
 
@@ -1885,9 +1893,8 @@ button.is-loading,
   }
 
   .sidebar-collapsed .tab-btn > span:not(.nav-unread-badge),
-  .sidebar-collapsed .sidebar-collapse-label,
   .sidebar-collapsed .sidebar-company-text,
-  .sidebar-collapsed .sidebar-account-chevron {
+  .sidebar-collapsed .sidebar-account-more {
     display: none;
   }
 
@@ -1897,14 +1904,13 @@ button.is-loading,
     top: 4px;
   }
 
-  .sidebar-collapsed .sidebar-collapse-control {
+  .sidebar-collapsed .sidebar-utility-zone {
+    align-self: stretch;
     justify-content: center;
-    padding-inline: 10px;
-    width: 48px;
   }
 
   .sidebar-collapsed .sidebar-collapse-icon {
-    transform: none;
+    transform: rotate(180deg);
   }
 
   .sidebar-collapsed .sidebar-account-slot {
@@ -2039,10 +2045,11 @@ button.is-loading,
     white-space: nowrap;
   }
 
-  .sidebar-account-chevron {
+  .sidebar-account-more {
+    align-items: center;
     color: var(--ink-3);
-    font-size: 1rem;
-    line-height: 1;
+    display: inline-flex;
+    flex: 0 0 18px;
     margin-left: auto;
   }
 
@@ -10527,6 +10534,12 @@ body:has(
   border: 0;
   box-shadow: none;
   padding: 10px 0 0;
+}
+
+@media (min-width: 860px) {
+  .company-shell-page-header {
+    margin-top: 8px;
+  }
 }
 
 .company-page-head--standard .os-date-pill,

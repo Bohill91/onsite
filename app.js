@@ -35,7 +35,9 @@ const ICON_PATHS = {
   home: `<path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
   locate: `<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/>`,
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
+  moreHorizontal: `<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>`,
   minusCircle: `<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>`,
+  panelLeft: `<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/><polyline points="15 9 12 12 15 15"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   qrCode: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/>`,
   search: `<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>`,
@@ -2825,13 +2827,13 @@ function companyPageHeaderHTML({
   showDate = false,
 } = {}) {
   if (compact) {
-    return `<header class="company-page-head company-page-head--compact">
+    return `<header class="company-page-head company-page-head--compact company-shell-page-header">
       ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
       ${showDate ? `<span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>` : ""}
       ${actions}
     </header>`;
   }
-  return `<header class="request-labour-page-head company-page-head company-page-head--standard os-page-header os-page-header--square">
+  return `<header class="request-labour-page-head company-page-head company-page-head--standard company-shell-page-header os-page-header os-page-header--square">
     <div>
       ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
       ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
@@ -12863,12 +12865,20 @@ function syncSidebarState() {
 function ensureSidebarCollapseControl() {
   const nav = document.querySelector(".tab-nav");
   if (!nav) return;
+  let utility = nav.querySelector("[data-sidebar-utility]");
   let control = nav.querySelector("[data-sidebar-collapse]");
-  if (!control) {
+  if (!utility) {
     nav.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="sidebar-utility-zone" data-sidebar-utility></div>`,
+    );
+    utility = nav.querySelector("[data-sidebar-utility]");
+  }
+  if (!control) {
+    utility?.insertAdjacentHTML(
       "beforeend",
       `<button class="sidebar-collapse-control" type="button" data-sidebar-collapse aria-pressed="false">
-        <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("chevronRight", 16)}</span>
+        <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("panelLeft", 16)}</span>
       </button>`,
     );
     control = nav.querySelector("[data-sidebar-collapse]");
@@ -12876,6 +12886,11 @@ function ensureSidebarCollapseControl() {
       const collapsed = !document.getElementById("main-app")?.classList.contains("sidebar-collapsed");
       setSidebarCollapsed(collapsed, { persist: true });
     });
+  } else if (control.parentElement !== utility) {
+    utility?.append(control);
+  }
+  if (control) {
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("panelLeft", 16)}</span>`;
   }
   syncSidebarState();
 }
@@ -12986,7 +13001,7 @@ function renderSidebarAccount(user) {
           <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
         </span>
       </span>
-      <span class="sidebar-account-chevron" aria-hidden="true">⌄</span>
+      <span class="sidebar-account-more" aria-hidden="true">${onsiteIcon("moreHorizontal", 18)}</span>
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
       <div class="sidebar-account-menu-summary">
