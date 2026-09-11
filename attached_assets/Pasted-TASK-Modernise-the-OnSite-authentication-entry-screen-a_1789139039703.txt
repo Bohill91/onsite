@@ -1,0 +1,412 @@
+TASK: Modernise the OnSite authentication entry screen and Login screen so they match the current OnSite company-app design language.
+
+This is a VISUAL / UX POLISH task only.
+
+Do NOT change authentication logic.
+Do NOT change registration logic.
+Do NOT change password handling.
+Do NOT change localStorage keys.
+Do NOT change company/project ownership.
+Do NOT touch the current recovery/migration work.
+Do NOT change demo/fixture/project data.
+
+==================================================
+GOAL
+==================================================
+
+The current auth pages are visibly from the old OnSite design.
+
+Problems include:
+
+- oversized centred OnSite logo
+- oversized header
+- too much unused vertical space
+- old spacing and proportions
+- login page feels disconnected from the current app
+- Back button feels detached from the layout
+- orange CTA is visually too heavy
+- weak hierarchy around supporting links
+- old grey/background treatment
+- inconsistent component styling
+- the welcome page currently says:
+  "Join thousands of verified tradespeople and companies already using OnSite."
+  which does not match the current OnSite positioning
+
+Bring these screens into the same visual family as the new:
+
+- Dashboard
+- Projects
+- Request Labour
+- Project Detail
+
+Use the same restrained OnSite design language:
+
+- clean white / very light grey
+- black typography
+- orange #F97316 accent
+- neutral borders
+- restrained shadows
+- no gradients
+- no glass effects
+- no oversized branding
+- strong spacing and hierarchy
+- modern Stripe / Linear / Ramp-style restraint
+
+==================================================
+1. REDESIGN THE SHARED AUTH HEADER
+==================================================
+
+The current Login header has:
+
+- giant centred OnSite logo
+- Back button floating on the left
+- excessive header height
+
+Replace this with a compact shared auth header.
+
+Desktop target:
+
+- approximately 64–72px tall
+- white background
+- subtle bottom border
+- content aligned to the same overall page width/grid
+- OnSite wordmark significantly smaller
+- wordmark should feel like navigation branding, NOT the hero content
+- Back action positioned cleanly within the same header layout when required
+
+Preferred structure:
+
+[ Back ]        [ compact OnSite wordmark ]
+
+or another balanced implementation that keeps the wordmark visually centred without needing a giant logo.
+
+Do NOT make the header feel like a marketing website navbar.
+
+No extra navigation links.
+
+The header should be reusable by:
+
+- Welcome/account choice
+- Login
+- Register
+- Forgot Password
+
+even if only the first two are visually updated in this task.
+
+==================================================
+2. WELCOME / ACCOUNT CHOICE SCREEN
+==================================================
+
+Current screen:
+
+OnSite logo
+Reliable trades. On demand.
+subtitle
+Log In button
+"or create an account"
+Worker / Company
+
+Redesign this screen.
+
+The large OnSite logo inside the page content should be removed because branding now lives in the compact header.
+
+Main content should become a focused auth card/section.
+
+Suggested hierarchy:
+
+Welcome to OnSite
+
+Reliable trades. On demand.
+
+A short supporting line, for example:
+
+"Sign in to your account or create a new one."
+
+Do NOT use:
+
+"Join thousands of verified tradespeople and companies already using OnSite."
+
+Avoid unsupported social-proof claims.
+
+==================================================
+3. WELCOME PAGE ACTIONS
+==================================================
+
+Keep the actions:
+
+Log In
+Worker
+Company
+
+But improve hierarchy.
+
+Log In remains the primary existing-account action.
+
+Then a clear divider:
+
+New to OnSite?
+
+Then Worker / Company account creation choices.
+
+Worker and Company should be equal secondary cards/buttons.
+
+Use restrained icons already available in the app if suitable.
+
+Do not create oversized cards.
+
+Do not add unnecessary explanatory paragraphs.
+
+==================================================
+4. LOGIN SCREEN
+==================================================
+
+Retain:
+
+Welcome back
+Sign in to your OnSite account
+
+Fields:
+
+Email Address
+Password
+
+Actions:
+
+Forgot password?
+Sign In
+Register
+
+But bring them into the current design system.
+
+Use a compact, professional auth panel.
+
+Target desktop form width:
+
+approximately 400–440px
+
+Avoid making the form excessively wide.
+
+Spacing should feel deliberate and consistent.
+
+==================================================
+5. LOGIN FORM POLISH
+==================================================
+
+Inputs:
+
+- current OnSite border style
+- current radius
+- orange focus state
+- approximately 44–48px high
+- label spacing consistent with Request Labour forms
+- no oversized controls
+
+Sign In button:
+
+- orange #F97316
+- current app radius
+- approximately 44–48px high
+- no oversized hero-button appearance
+- restrained hover/focus treatment
+- keep existing icon only if it genuinely improves the design
+
+Forgot Password:
+
+- visually secondary
+- smaller
+- positioned naturally beneath or alongside Password
+- orange text is acceptable
+- avoid making it compete with Sign In
+
+Register:
+
+Instead of:
+
+"Don't have an account? Register"
+
+use a cleaner secondary footer treatment such as:
+
+"New to OnSite? Create an account"
+
+Do not change the actual navigation destination.
+
+==================================================
+6. ERROR STATE
+==================================================
+
+Keep the existing:
+
+"Incorrect email or password."
+
+But refine the visual treatment.
+
+Use:
+
+- soft red background
+- subtle red border
+- dark red text
+- compact height
+- same radius system as inputs
+
+Do not make it dominate the form.
+
+It should sit naturally above the relevant fields.
+
+==================================================
+7. PAGE BACKGROUND + LAYOUT
+==================================================
+
+Use the same light neutral page background as the current app where appropriate.
+
+Auth content should feel intentionally centred without appearing vertically lost in a huge empty page.
+
+Desktop:
+
+- compact header
+- auth content vertically positioned comfortably
+- not stuck against header
+- not excessively low
+
+Do NOT use giant logo/hero spacing.
+
+==================================================
+8. RESPONSIVE BEHAVIOUR
+==================================================
+
+Check:
+
+1440px
+1024px
+768px
+390px
+
+At mobile widths:
+
+- header remains compact
+- Back action remains usable
+- wordmark does not collide
+- auth panel becomes full-width with sensible side padding
+- Worker / Company options stack if necessary
+- no text clipping
+- no horizontal overflow
+- no awkward wrapped labels
+
+==================================================
+9. SHARED AUTH DESIGN SYSTEM
+==================================================
+
+Where practical, create/reuse shared auth classes so:
+
+Welcome
+Login
+Register
+Forgot Password
+
+can share:
+
+- header
+- page shell
+- card width
+- form controls
+- action spacing
+- error treatment
+
+Do NOT duplicate large blocks of CSS.
+
+Do NOT append a giant override section at the bottom of auth.css.
+
+Refactor only enough to create a clean shared auth system.
+
+==================================================
+10. DO NOT CHANGE FUNCTIONALITY
+==================================================
+
+Preserve all existing:
+
+- IDs
+- form submissions
+- event listeners
+- login behaviour
+- Register navigation
+- Forgot Password navigation
+- Back navigation
+- account-type selection
+
+This task is visual/structural only.
+
+==================================================
+11. VISUAL TARGET
+==================================================
+
+The finished screens should feel like:
+
+"the same OnSite product"
+
+not:
+
+"the old login website before entering the new dashboard"
+
+The branding should be confident but restrained.
+
+The OnSite wordmark should no longer dominate either screen.
+
+==================================================
+12. VALIDATION
+==================================================
+
+Run:
+
+node --check auth.js
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+Physically inspect both pages in Chrome.
+
+Test:
+
+- Welcome/account choice
+- Login
+- error state
+- Back
+- Forgot Password link
+- Register link
+- Worker selection
+- Company selection
+
+Do not modify auth/account data while testing.
+
+==================================================
+13. COMMIT + PUSH
+==================================================
+
+Before commit:
+
+git status
+git diff
+
+Do not include unrelated recovery or browser-storage data.
+
+Commit exactly:
+
+Modernise authentication screens
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- header changes
+- welcome-screen changes
+- login-screen changes
+- responsive widths tested
+- functionality preserved
+- validation results
+- commit hash
+- push result

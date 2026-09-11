@@ -1,0 +1,766 @@
+TASK: Finalise the OnSite Exact Entrance map across DIFFERENT TYPES OF LOCATION.
+
+There are TWO remaining issues:
+
+1. The vector-map visual hierarchy is still too washed-out across suburban,
+   dense urban and mixed locations.
+2. The automatic opening viewport is too dependent on a fixed zoom and behaves
+   very differently depending on the physical size/density of the site.
+
+Solve BOTH issues as one coherent final map pass.
+
+IMPORTANT:
+
+Do NOT optimise the map around Amazon DHA1 or any single test location.
+
+Amazon, residential/suburban, Golders Green and central London examples are QA
+cases only.
+
+The final implementation must work generically across UK construction sites.
+
+Do NOT:
+- change map provider
+- change renderer
+- change fallback architecture
+- change geocoder provider
+- change pin interaction
+- change confirmation logic
+- change unrelated Step 4 UI
+- edit demo/fixture/seed/sample data
+
+==================================================
+PART A — CROSS-LOCATION VISUAL HIERARCHY
+==================================================
+
+The current styling has the correct overall direction:
+
+- clean
+- neutral
+- modern
+- restrained
+- orange OnSite pin
+- no ugly yellow roads
+- no pink/purple industrial land
+- low POI clutter
+
+KEEP THAT DIRECTION.
+
+However, across multiple locations the map is still approximately 10–15% too
+washed-out.
+
+The user should be able to understand the physical layout immediately.
+
+The visual hierarchy should clearly read:
+
+1. ROAD NETWORK
+2. BUILDINGS
+3. GREEN / WATER
+4. USEFUL LABELS
+5. SECONDARY INFRASTRUCTURE / DETAILS
+
+Do not make everything equally prominent.
+
+==================================================
+1. GENERAL LAND
+==================================================
+
+Keep general land:
+
+- warm off-white
+- light neutral
+- visually quiet
+
+Approximate family:
+
+#F5F5F2
+
+or the closest value appropriate to the current vector style.
+
+Do NOT introduce:
+- pink industrial land
+- purple land
+- strong beige fills
+
+The land is the background.
+
+==================================================
+2. BUILDINGS
+==================================================
+
+Buildings currently merge too much with the land in several locations.
+
+Increase building visibility enough that individual footprints are immediately
+readable.
+
+Target general family around:
+
+#D4D6D3 – #D9DBD8
+
+Use a restrained slightly darker outline where supported.
+
+Buildings should be clearly darker than general land.
+
+Do NOT make them:
+- dark
+- brown
+- visually dominant
+
+Acceptance:
+
+At residential and dense-city locations, individual building blocks should be
+easy to distinguish without zooming further.
+
+==================================================
+3. LOCAL / ACCESS ROADS
+==================================================
+
+Entrance access is one of the most important parts of this map.
+
+Local roads should remain:
+
+- white / near-white
+- crisp
+- visually separated from surrounding land
+
+Strengthen the road casing/edge enough to make the network obvious.
+
+Approximate visual family:
+
+road fill:
+#FFFFFF
+
+road casing:
+#CFD3D1 – #D5D8D6
+
+Do NOT use yellow/orange road fills.
+
+==================================================
+4. ROAD HIERARCHY
+==================================================
+
+The current map does not distinguish road importance strongly enough.
+
+Create a clearer hierarchy:
+
+SMALL ACCESS / SERVICE ROAD
+- crisp white
+- subtle casing
+- narrow
+
+NORMAL STREET
+- slightly wider / stronger casing
+
+IMPORTANT LOCAL / SECONDARY ROAD
+- clearly more prominent
+- slightly stronger width / casing
+- still neutral
+
+MAJOR ROAD
+- strongest neutral road treatment
+- must still not dominate everything else
+
+Do not create an Apple Maps clone.
+
+Use Apple Maps only as inspiration for how easily the road hierarchy can be
+understood at a glance.
+
+==================================================
+5. LABELS
+==================================================
+
+Road labels are currently too faint across several locations.
+
+Increase useful road-label contrast by approximately 15–20%.
+
+Target family:
+
+#505A63 – #5C6670
+
+Prioritise:
+
+- road names
+- access roads
+- immediate site/building names where available
+- useful transport/landmark references
+
+Keep secondary labels lighter.
+
+Do NOT increase miscellaneous POI clutter.
+
+==================================================
+6. POI CLUTTER
+==================================================
+
+For the Exact Entrance map, orientation matters more than business discovery.
+
+Reduce prominence of:
+
+- shops
+- restaurants
+- entertainment
+- miscellaneous commercial POIs
+
+where the current vector style supports it.
+
+KEEP:
+
+- roads
+- building labels
+- transport infrastructure
+- useful immediate landmarks
+
+Do not remove useful context blindly.
+
+==================================================
+7. GREEN + WATER
+==================================================
+
+The current colour direction here is good.
+
+Keep approximately:
+
+GREEN:
+soft muted green such as #DCEBD7 family
+
+WATER:
+clear pale blue such as #BFE3EF family
+
+Ensure they remain clearly distinguishable from general land.
+
+Do not over-saturate.
+
+==================================================
+8. RAIL
+==================================================
+
+Rail should remain visible but subordinate.
+
+Across industrial/urban examples it should NOT compete with:
+
+- site access roads
+- target building
+- local streets
+
+Reduce rail visual strength where necessary.
+
+Keep it useful for orientation.
+
+==================================================
+9. ONSITE PIN
+==================================================
+
+KEEP the existing orange entrance marker.
+
+It is now correct.
+
+Do not redesign it.
+
+No:
+- number
+- label
+- pulse
+- glow
+- bounce
+
+It should remain the strongest individual map element.
+
+==================================================
+PART B — ADAPTIVE OPENING VIEWPORT
+==================================================
+
+STOP trying to solve entrance-map framing with one magic zoom number.
+
+Different sites require different framing.
+
+Examples:
+
+- a huge logistics warehouse
+- a small suburban building
+- a dense central-London building
+
+cannot always open at exactly the same zoom and provide equivalent useful
+context.
+
+The desired result is:
+
+TARGET SITE
++
+IMMEDIATE ACCESS ROADS
++
+NEAREST USEFUL JUNCTIONS
++
+NEIGHBOURING BUILDINGS
+
+NOT:
+
+one giant building filling the map
+
+and NOT:
+
+a district-level overview.
+
+==================================================
+10. INSPECT GEOCODER RESULT DATA
+==================================================
+
+Inspect the current Site Address geocoder response/model.
+
+Determine whether selected locations currently provide:
+
+- bounding box / bbox
+- feature bounds
+- geometry
+- feature type
+- place type
+- result precision
+- address/building/street classification
+
+Do not invent data that the geocoder does not provide.
+
+Use the best trustworthy data already available.
+
+==================================================
+11. PREFERRED METHOD — FIT TRUSTWORTHY BOUNDS
+==================================================
+
+IF the selected geocoder result provides a trustworthy bounding box or feature
+bounds:
+
+prefer:
+
+fitBounds(featureBounds, padding)
+
+rather than immediately choosing one fixed zoom.
+
+Add generous context padding around the feature.
+
+The view should include more than the literal building bounds because the user
+needs access-road context.
+
+Use approximately:
+
+50–90px effective map padding
+
+depending on current provider/API behaviour.
+
+After fitBounds:
+
+CLAMP the resulting zoom.
+
+Do not allow absurd extremes.
+
+Suggested initial clamp:
+
+MINIMUM / WIDEST:
+approximately 16.0–16.3
+
+MAXIMUM / CLOSEST:
+approximately 17.2–17.4
+
+Tune based on actual live results.
+
+The important behaviour is the CLAMPED ADAPTIVE VIEW, not the exact numbers.
+
+==================================================
+12. LARGE FEATURE HANDLING
+==================================================
+
+A large warehouse/logistics site may have a much larger feature footprint.
+
+If valid feature bounds exist:
+
+fit the whole useful site/building context plus immediate access roads.
+
+Do NOT zoom in until a large warehouse becomes a giant grey rectangle filling
+the map.
+
+At the same time:
+
+do not zoom so far out that unrelated neighbourhood landmarks dominate.
+
+==================================================
+13. SMALL BUILDING / DENSE URBAN HANDLING
+==================================================
+
+For small buildings in dense areas:
+
+the fitted feature itself may be tiny.
+
+Clamp maximum zoom so the user still sees:
+
+- building
+- street
+- neighbouring junction
+- nearby immediate context
+
+Do not zoom to an excessively close single-building view.
+
+==================================================
+14. FALLBACK WHEN NO BOUNDS EXIST
+==================================================
+
+If trustworthy bounds are NOT available:
+
+use geocoder precision/type.
+
+Create a small central helper for entrance-context zoom.
+
+Example conceptual logic:
+
+PRECISE BUILDING / ADDRESS
+→ approximately 17.0
+
+STREET / ROAD ADDRESS
+→ approximately 16.6
+
+LESS PRECISE LOCAL RESULT
+→ approximately 16.2
+
+Do not scatter these numbers through app.js.
+
+Use one clear source of truth/helper.
+
+==================================================
+15. DO NOT USE ADDRESS TEXT GUESSING
+==================================================
+
+Do NOT infer site size based on:
+
+- "Amazon"
+- "warehouse"
+- postcode formatting
+- project name
+- manually guessed keywords
+
+Use actual geocoder geometry/precision where available.
+
+==================================================
+16. SAVED EXACT ENTRANCE
+==================================================
+
+When:
+
+Edit entrance
+
+is opened for an already confirmed exact pin:
+
+centre on the SAVED ENTRANCE.
+
+Use a useful close-context view.
+
+If valid site bounds remain available, consider them when framing.
+
+Otherwise use approximately:
+
+16.8–17.2
+
+depending on actual map scale.
+
+Do not open on a featureless close-up.
+
+==================================================
+17. RECENTRE CONTROL
+==================================================
+
+Re-centre on site address should re-run the same generic entrance-context framing
+strategy:
+
+bounds if trustworthy
+otherwise precision-based fallback.
+
+Do NOT use a completely separate fixed zoom for Re-centre.
+
+Keep one shared viewport strategy.
+
+==================================================
+18. USER MANUAL INTERACTION WINS
+==================================================
+
+Automatic viewport selection applies only when:
+
+- map first opens
+- Re-centre is explicitly clicked
+- confirmed entrance is reopened appropriately
+
+Once the user manually:
+
+- pans
+- zooms
+- clicks
+- drags the pin
+
+DO NOT keep auto-fitting or resetting the view.
+
+==================================================
+PART C — MULTI-LOCATION QA
+==================================================
+
+Do NOT consider the task complete after testing one site.
+
+Use at least FOUR temporary QA locations representing genuinely different
+contexts.
+
+==================================================
+19. QA LOCATION TYPE 1 — LARGE INDUSTRIAL / LOGISTICS
+==================================================
+
+Use a large UK warehouse/logistics site.
+
+Acceptance:
+
+- full useful site/building visible
+- immediate access roads visible
+- neighbouring road context visible
+- building does not fill whole map
+- unrelated district-scale landmarks do not dominate
+
+Amazon DHA1 may be used as one of the test cases.
+
+But do NOT build Amazon-specific logic.
+
+==================================================
+20. QA LOCATION TYPE 2 — SUBURBAN / RESIDENTIAL
+==================================================
+
+Use a suburban UK address.
+
+Acceptance:
+
+- target street/building location understandable
+- surrounding streets provide orientation
+- not so wide that many unrelated residential blocks dominate
+- not so close that only a few roofs are visible
+
+==================================================
+21. QA LOCATION TYPE 3 — DENSE URBAN
+==================================================
+
+Use a dense central-London address.
+
+Acceptance:
+
+- target building/street identifiable
+- immediate road network clear
+- major nearby road useful
+- map not so wide that half of central London appears
+- map not so close that road orientation disappears
+
+==================================================
+22. QA LOCATION TYPE 4 — COMMERCIAL / MIXED
+==================================================
+
+Use a smaller commercial/business site.
+
+Acceptance:
+
+- target visible
+- immediate access visible
+- sensible amount of nearby context
+- framing feels comparable in usefulness to the other site types
+
+==================================================
+23. COMPARE ALL FOUR TOGETHER
+==================================================
+
+Do not judge each screenshot independently.
+
+Compare them as a set.
+
+Ask:
+
+"Does each map provide roughly the same LEVEL OF USEFUL ENTRANCE CONTEXT even
+though the physical locations are very different?"
+
+That is the goal.
+
+The visible geographic area does NOT need to be identical.
+
+The usefulness should be equivalent.
+
+==================================================
+PART D — VISUAL QA
+==================================================
+
+24. REVIEW VISUAL HIERARCHY ON ALL FOUR
+
+For every test location verify:
+
+- buildings distinct from land
+- road network immediately readable
+- important roads stronger than tiny access roads
+- labels readable
+- green/water recognisable
+- rail subordinate
+- pin obvious
+- no old pink/yellow OSM aesthetic
+- no excessive POI clutter
+
+If the style only looks good at the industrial site:
+the task is NOT complete.
+
+==================================================
+25. SIDE-BY-SIDE BEFORE / AFTER
+==================================================
+
+Inspect at least one industrial, one suburban and one dense-urban location before
+and after the style changes.
+
+The visual hierarchy change must be noticeable without inspecting the JSON.
+
+Do not make changes so tiny that before/after looks identical.
+
+==================================================
+PART E — RESPONSIVE BEHAVIOUR
+==================================================
+
+26. RESPONSIVE QA
+
+Check representative map framing at:
+
+1440px
+1024px
+768px
+390px
+
+The viewport may naturally show a slightly different area because the aspect
+ratio changes.
+
+However:
+
+do NOT intentionally zoom district-level wide on mobile.
+
+Preserve entrance usefulness.
+
+==================================================
+PART F — PRESERVE EXISTING BEHAVIOUR
+==================================================
+
+27. DO NOT REGRESS
+
+Verify:
+
+- click-to-place
+- pin drag
+- zoom +
+- zoom -
+- Re-centre
+- page scrolling not hijacked
+- Confirm entrance point
+- Confirmed collapsed state
+- Edit entrance
+- draft vs confirmed coordinates
+- required attribution
+- vector renderer
+- fallback renderer
+- no console errors
+
+==================================================
+28. MAP / CONFIRMATION SPACING
+==================================================
+
+The current surrounding UI is already good.
+
+Do not redesign it.
+
+Keep:
+
+helper text left
+Confirm entrance point right
+
+Maintain approximately:
+
+10–12px map-to-row spacing
+
+and a compact gap before the next section.
+
+==================================================
+29. CODE QUALITY
+==================================================
+
+Keep adaptive viewport logic centralised.
+
+Do NOT:
+
+- hard-code coordinates
+- add Amazon-specific conditions
+- add location-name heuristics
+- create numerous scattered zoom constants
+- duplicate fitBounds logic
+- create giant CSS overrides
+- use !important
+- replace the map stack
+- add satellite
+- introduce new map APIs
+
+==================================================
+30. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+jq empty onsite-map-style.json
+git diff --check
+
+Inspect browser console.
+
+==================================================
+31. DO NOT FINISH UNTIL BOTH PROBLEMS ARE SOLVED
+==================================================
+
+This task has TWO acceptance areas:
+
+A. VISUAL HIERARCHY
+
+Across industrial, suburban, urban and commercial sites:
+roads/buildings/labels must be materially clearer than before.
+
+B. ADAPTIVE VIEWPORT
+
+Different site sizes/densities should automatically receive useful
+entrance-context framing without depending on one fixed zoom.
+
+Do not report complete if only one is solved.
+
+==================================================
+32. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include map styling + adaptive viewport changes required by this task.
+
+Commit exactly:
+
+Finalise adaptive entrance map
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- whether geocoder bounds are available
+- exact adaptive viewport strategy implemented
+- min/max zoom clamps
+- fallback precision-based zoom rules
+- saved entrance behaviour
+- recenter behaviour
+- building style changes
+- road hierarchy changes
+- label changes
+- rail changes
+- POI changes
+- four site types actually tested
+- result for each
+- responsive widths tested
+- validation results
+- commit hash
+- push result

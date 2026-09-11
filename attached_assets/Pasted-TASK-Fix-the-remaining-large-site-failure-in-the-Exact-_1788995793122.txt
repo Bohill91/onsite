@@ -1,0 +1,431 @@
+TASK: Fix the remaining large-site failure in the Exact Entrance adaptive viewport.
+
+This is a VERY NARROW viewport task.
+
+Current status after testing four different locations:
+
+PASS / GOOD:
+- Pocklington Close
+- 855 Finchley Road
+- The Lanesborough
+
+FAIL:
+- Amazon DHA1 / large logistics site
+
+The general adaptive viewport is now working well for:
+- suburban/residential
+- small commercial
+- dense urban
+
+DO NOT disturb those.
+
+The only remaining problem is:
+
+LARGE PHYSICAL SITE BOUNDS are still being framed too tightly.
+
+==================================================
+LOCK EVERYTHING ELSE
+==================================================
+
+DO NOT change:
+
+- map visual styling
+- colours
+- buildings
+- roads
+- labels
+- rail
+- green/water
+- pin
+- controls
+- provider
+- renderer
+- fallback
+- attribution
+- geocoder provider
+- confirmation flow
+- click-to-place
+- drag behaviour
+- responsive layout
+- Step 4 surrounding UI
+- demo/fixture/seed/sample data
+
+Do NOT globally lower the automatic max zoom again unless absolutely required.
+
+The current smaller-site behaviour is good and must remain good.
+
+==================================================
+THE BUG
+==================================================
+
+The current adaptive framing correctly handles:
+
+- Pocklington Close
+- 855 Finchley Road
+- The Lanesborough
+
+But a physically large feature such as Amazon DHA1 still opens too close.
+
+Observed failure:
+
+- warehouse footprint dominates the viewport
+- surrounding access-road context is insufficient
+- nearest useful public-road context is missing
+- user would still need to zoom out before choosing the exact entrance
+
+That defeats the purpose of the automatic entrance-context view.
+
+==================================================
+IMPORTANT PRODUCT RULE
+==================================================
+
+For LARGE SITES, the automatic opening view should show:
+
+1. the full useful building/site footprint
+2. internal/perimeter access roads where mapped
+3. nearest public access road
+4. nearest useful junctions
+5. some neighbouring site/building context
+
+The user can manually zoom in afterwards for exact gate placement.
+
+Automatic opening is for ORIENTATION.
+
+==================================================
+1. TRACE THE CURRENT LARGE-BOUNDS PATH
+==================================================
+
+Inspect the current adaptive viewport helper.
+
+Identify:
+
+- how feature bbox span is measured
+- how feature bounds are expanded
+- how expansion changes with feature size
+- how fitBounds is called
+- what zoom clamp is applied afterwards
+- whether large features are currently receiving too little expansion
+
+Do not start by changing a random zoom constant.
+
+Find the actual geometric reason.
+
+==================================================
+2. DO NOT ADD LOCATION-SPECIFIC LOGIC
+==================================================
+
+Do NOT add:
+
+- Amazon-specific code
+- warehouse name detection
+- logistics keyword detection
+- postcode checks
+- city-specific logic
+- hard-coded coordinates
+
+The fix must be based only on:
+
+- feature geographic span
+- feature bounds
+- generic geometry
+
+Amazon DHA1 is only a QA example.
+
+==================================================
+3. IMPROVE LARGE-BOUNDS EXPANSION
+==================================================
+
+The current logic appears to expand large bounds too little.
+
+Change the generic bounds-expansion strategy so that physically large site bounds receive more useful surrounding context.
+
+Important:
+
+This does NOT mean using the same percentage expansion for every feature.
+
+Use a generic span-aware strategy.
+
+For example:
+
+TINY feature:
+- enough expansion to enforce the existing minimum context
+- preserve current good Finchley/Pocklington behaviour
+
+MEDIUM feature:
+- existing behaviour if already good
+
+LARGE feature:
+- expand enough beyond the literal feature footprint to capture surrounding access roads and nearby junctions
+
+The goal is NOT:
+
+fit only the feature polygon
+
+The goal is:
+
+fit feature + entrance context
+
+==================================================
+4. USE GEOGRAPHIC CONTEXT, NOT ONLY PIXEL PADDING
+==================================================
+
+Pixel padding alone may not be enough for a very large feature.
+
+If necessary, expand the actual geographic bounds before fitBounds.
+
+Use the feature span to derive additional lat/lng padding.
+
+Keep the calculation centralised and understandable.
+
+Example conceptual structure:
+
+getFeatureSpan(bounds)
+→ classify/derive expansion factor
+→ expandBounds(bounds, factor/minimumContext)
+→ fitBounds(expandedBounds)
+→ clamp automatic zoom
+
+Do not scatter calculations across map handlers.
+
+==================================================
+5. PRESERVE CURRENT GOOD SMALL-SITE BEHAVIOUR
+==================================================
+
+This is mandatory.
+
+After the fix:
+
+Pocklington Close should remain approximately as it is now.
+
+855 Finchley Road should remain approximately as it is now.
+
+The Lanesborough should remain approximately as it is now.
+
+Do NOT solve Amazon by making every map wider.
+
+That would be a regression.
+
+==================================================
+6. LARGE-SITE ACCEPTANCE TEST
+==================================================
+
+Test Amazon DHA1 or the same large logistics-site result.
+
+The final opening view MUST satisfy all of these simultaneously:
+
+PASS A:
+The whole relevant Amazon DHA1 building/site footprint is visible.
+
+PASS B:
+Hannah Close is visible.
+
+PASS C:
+Great Central Way or equivalent nearest significant public access-road context is visible.
+
+PASS D:
+Nearby access/perimeter roads are visible.
+
+PASS E:
+Several nearby buildings/site features are visible for orientation.
+
+PASS F:
+Wembley Stadium is NOT visible.
+
+PASS G:
+The site is still clearly the main focus.
+
+Do not stop if only some pass.
+
+==================================================
+7. ITERATE THE GEOMETRY, NOT THE GLOBAL ZOOM
+==================================================
+
+If Amazon still opens too close:
+
+increase the LARGE-BOUNDS geographic expansion.
+
+Retest.
+
+If it becomes too wide:
+
+reduce only the large-bounds expansion.
+
+Do not immediately change the global zoom clamp.
+
+Tune the large-feature branch until the acceptance test passes.
+
+==================================================
+8. SECOND LARGE-SITE TEST
+==================================================
+
+Do NOT validate with Amazon alone.
+
+Use one additional large UK site, such as:
+
+- another logistics warehouse
+- large hospital campus
+- large commercial/industrial complex
+
+Do not hard-code it.
+
+Acceptance:
+
+- full useful site footprint visible
+- access context visible
+- not district-level wide
+
+The behaviour should feel equivalent to Amazon.
+
+==================================================
+9. REGRESSION TEST ALL FOUR ORIGINAL CONTEXTS
+==================================================
+
+After the large-site fix, re-check:
+
+1. Pocklington Close
+2. 855 Finchley Road
+3. The Lanesborough
+4. Amazon DHA1
+
+Expected:
+
+Pocklington:
+PASS — still balanced
+
+Finchley:
+PASS — still balanced
+
+Lanesborough:
+PASS — still balanced
+
+Amazon:
+PASS — now wider than before with useful access context
+
+If Amazon improves but any of the first three becomes noticeably too wide:
+
+THE TASK IS NOT COMPLETE.
+
+Refine the span-aware expansion logic.
+
+==================================================
+10. SAVED ENTRANCE / RECENTRE
+==================================================
+
+Do not create a separate large-site algorithm for each action.
+
+Use the same central adaptive framing strategy for:
+
+- first opening
+- Re-centre
+- reopening around saved entrance where site bounds remain relevant
+
+Do not duplicate the logic.
+
+==================================================
+11. MANUAL INTERACTION
+==================================================
+
+Preserve current behaviour:
+
+once the user manually:
+- pans
+- zooms
+- clicks
+- drags the pin
+
+do not auto-fit again unless they explicitly use Re-centre or reopen the map.
+
+==================================================
+12. RESPONSIVE CHECK
+==================================================
+
+Quickly verify at:
+
+1440px
+1024px
+768px
+390px
+
+Do not make mobile automatically district-level wide.
+
+The site and its immediate access context should remain useful.
+
+==================================================
+13. CODE QUALITY
+==================================================
+
+Keep this fix small.
+
+Prefer updating the existing adaptive viewport helper.
+
+Do not:
+
+- create parallel viewport systems
+- add giant condition trees
+- add location-name exceptions
+- duplicate bounds logic
+- broadly refactor app.js
+
+==================================================
+14. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+15. DO NOT START REGRESSION-PROTECTION TASK YET
+==================================================
+
+Do NOT click/start/create the separate:
+
+"Protect entrance-map framing from regression"
+
+task during this work.
+
+First finish and visually verify this final large-site fix.
+
+Regression protection comes AFTER this behaviour is approved.
+
+==================================================
+16. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+review:
+git status
+git diff
+
+Only include the large-site adaptive viewport fix.
+
+Commit exactly:
+
+Fix large-site entrance map framing
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- root cause
+- exact large-bounds expansion strategy before
+- exact large-bounds expansion strategy after
+- whether global zoom clamp changed
+- Amazon result
+- second large-site result
+- Pocklington regression result
+- Finchley regression result
+- Lanesborough regression result
+- responsive widths tested
+- validation results
+- commit hash
+- push result

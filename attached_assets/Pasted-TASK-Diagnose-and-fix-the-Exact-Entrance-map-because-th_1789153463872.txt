@@ -1,0 +1,395 @@
+TASK: Diagnose and fix the Exact Entrance map because the standalone Replit development URL is now also falling back to Leaflet/OpenStreetMap.
+
+IMPORTANT CONTEXT:
+
+The previous diagnosis found:
+
+- standalone MapLibre/OpenFreeMap vector map normally loaded in about 0.3–1.4 seconds
+- Replit Preview sometimes failed the vector renderer
+- the old fallback timeout was 12 seconds
+- we changed it to approximately 2 seconds
+- we added a "Loading map…" state
+- fatal initialization errors can now trigger immediate fallback
+
+CURRENT RESULT:
+
+I have now tested the STANDALONE replit.dev URL directly in Chrome.
+
+The sequence is:
+
+1. "Loading map…" appears
+2. the vector map does NOT appear
+3. the application switches to the Leaflet/OpenStreetMap raster fallback
+
+The bottom-right attribution confirms:
+
+Leaflet | © OpenStreetMap contributors
+
+Therefore this is NOT merely an embedded Preview problem anymore.
+
+The polished MapLibre/OpenFreeMap vector renderer must remain the normal primary map.
+
+==================================================
+1. DO NOT REDESIGN THE MAP
+==================================================
+
+Do NOT change:
+
+- onsite-map-style.json
+- map colours
+- roads
+- buildings
+- greenery
+- water
+- labels
+- orange entrance pin
+- controls
+- map dimensions
+- framing algorithm
+- entrance confirmation behaviour
+
+This task is renderer initialization / fallback reliability only.
+
+==================================================
+2. REPRODUCE IN STANDALONE CHROME
+==================================================
+
+Use the standalone Replit development URL, not only the embedded Preview.
+
+Open:
+
+Request Labour
+→ Step 4 Site & Attendance
+→ Exact Entrance map
+
+Perform:
+
+- cold load
+- hard refresh
+- warm reopen
+- close/reopen map
+
+Confirm that the current build reaches Leaflet fallback.
+
+==================================================
+3. IDENTIFY EXACTLY WHY FALLBACK IS TRIGGERING
+==================================================
+
+Instrument/read the existing diagnostics and determine which path causes fallback.
+
+Explicitly distinguish:
+
+A. 2-second initialization timeout
+
+B. fatal MapLibre error handler
+
+C. WebGL unavailable/failure
+
+D. MapLibre module import failure
+
+E. worker initialization failure
+
+F. style JSON load failure
+
+G. OpenFreeMap source failure
+
+H. glyph/font/resource failure
+
+I. another concrete cause
+
+Report the exact reason.
+
+Do NOT infer from the final Leaflet state alone.
+
+==================================================
+4. MEASURE THE VECTOR STARTUP STAGES
+==================================================
+
+Measure timestamps for:
+
+- initPickerMap() called
+- MapLibre module requested
+- MapLibre module resolved
+- Map instance constructed
+- canvas inserted
+- style begins loading
+- style loaded
+- first render / first usable visual frame
+- MapLibre load event
+- fallback triggered
+
+Also report:
+
+- whether the 2-second timer fired
+- elapsed time when it fired
+- whether a usable vector canvas/render already existed at that time
+
+==================================================
+5. CHECK WHETHER THE 2-SECOND DEADLINE IS TOO SHORT
+==================================================
+
+The previous standalone measurement showed normal cold loads could take up to approximately 1.4 seconds.
+
+The new fixed 2-second timeout may be too close to normal variance for:
+
+- cold browser cache
+- module loading
+- WebGL worker startup
+- network jitter
+- Replit development URLs
+
+If the vector renderer is healthy but simply exceeds 2 seconds occasionally:
+
+DO NOT treat that as a fatal vector failure.
+
+Use a safer bounded timeout.
+
+Likely range:
+
+approximately 4 seconds
+
+BUT choose the value from measured evidence.
+
+Do NOT restore the old 12-second delay.
+
+==================================================
+6. DO NOT WAIT FOR THE WRONG SIGNAL
+==================================================
+
+Inspect what event currently marks vector initialization as successful.
+
+If the code waits for a late event such as full MapLibre `load` even though a valid usable vector render already exists earlier, improve the readiness condition.
+
+Prefer the earliest reliable event/state that proves the map is genuinely usable.
+
+Possible signals may include an appropriate first render/style-ready state.
+
+Do NOT declare success merely because:
+
+- constructor returned
+- canvas DOM node exists
+
+The user must have a usable rendered vector map.
+
+But equally:
+
+do NOT abandon a healthy vector renderer just because every non-critical font/tile resource has not finished.
+
+==================================================
+7. FATAL ERRORS VS RECOVERABLE ERRORS
+==================================================
+
+Keep immediate fallback for genuine fatal startup failures.
+
+Examples:
+
+- renderer cannot initialize
+- WebGL context creation fails
+- style cannot be parsed/loaded at all
+- module/worker cannot start
+
+Do NOT immediately fall back for recoverable warnings such as:
+
+- temporary tile request issue
+- optional glyph/font request
+- one non-critical resource failure
+
+Log the reason clearly.
+
+==================================================
+8. SUCCESSFUL TARGET BEHAVIOUR
+==================================================
+
+Standalone Chrome must normally behave:
+
+Loading map…
+→ polished MapLibre/OpenFreeMap vector map
+
+NOT:
+
+Loading map…
+→ Leaflet/OpenStreetMap map
+
+Fallback should only happen if the primary renderer genuinely cannot become usable within a reasonable bounded window.
+
+==================================================
+9. KEEP FALLBACK FAST WHEN IT IS ACTUALLY NEEDED
+==================================================
+
+We do NOT want the previous 12-second blank state back.
+
+Target:
+
+- fatal renderer error → fallback immediately
+- healthy vector initialization → allow enough time to succeed
+- genuine timeout → fallback after a reasonable bounded window
+
+The visible loading state should remain throughout initialization.
+
+==================================================
+10. PRESERVE MAP STATE
+==================================================
+
+Throughout any retry/fallback:
+
+preserve:
+
+- draft entrance coordinates
+- existing moved pin
+- centre
+- zoom/framing
+- click-to-place
+- draggable marker
+- recenter
+- + / − controls
+- confirmation state
+
+Never reset a manually moved pin to the geocoded address.
+
+==================================================
+11. CHECK FOR RECENT REGRESSION
+==================================================
+
+Review the recent map-loading commit:
+
+ab67462f2ded69d129ae5a461f2341b5894ab6a0
+
+Compare the current initialization/fallback behaviour with the state immediately before that change if useful.
+
+Do NOT broadly revert the whole commit.
+
+We want to preserve:
+
+- visible Loading map state
+- immediate handling of genuine fatal errors
+- protection against the old 12-second blank state
+
+Only correct the behaviour that is now causing the normal vector path to be abandoned.
+
+==================================================
+12. TEST MULTIPLE RUNS
+==================================================
+
+In standalone Chrome perform at least:
+
+- 3 cold/hard refresh tests
+- 3 warm reopen tests
+
+The vector renderer should win consistently when WebGL/network are healthy.
+
+Report each result.
+
+Also test embedded Replit Preview separately.
+
+It is acceptable if Preview sometimes requires fallback because of its environment.
+
+It is NOT acceptable for standalone Chrome to routinely fall back.
+
+==================================================
+13. NETWORK / CONSOLE
+==================================================
+
+Check for:
+
+- MapLibre errors
+- worker errors
+- WebGL errors
+- style errors
+- CORS
+- CSP
+- source failures
+- glyph/font failures
+- aborted requests
+- timeout firing while resources are still progressing normally
+
+Confirm there is no:
+
+- repeated initialization loop
+- duplicate canvas
+- duplicate map instance
+- vector → raster → vector cycling
+- request storm
+
+==================================================
+14. LOADING STATE
+==================================================
+
+Keep the existing restrained:
+
+Loading map…
+
+state.
+
+It should remain visible until either:
+
+A. vector map is genuinely usable
+
+or
+
+B. raster fallback is genuinely usable.
+
+No blank beige interval.
+
+==================================================
+15. VALIDATION
+==================================================
+
+After the fix physically verify:
+
+Standalone:
+- normal vector renderer appears
+- correct OnSite map styling
+- correct entrance pin
+- existing framing
+- no premature fallback
+
+Preview:
+- vector if supported
+- otherwise quick clean fallback
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+16. COMMIT + PUSH
+==================================================
+
+Before commit:
+
+git status
+git diff
+
+Do not include unrelated changes.
+
+Commit exactly:
+
+Fix vector map startup reliability
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- exact cause of fallback
+- whether 2-second timeout was responsible
+- old timeout
+- new timeout if changed
+- readiness event/state used
+- cold-load results
+- warm-load results
+- standalone renderer result
+- Preview renderer result
+- fatal-error fallback timing
+- pin-state preservation
+- files changed
+- validation results
+- commit hash
+- push result

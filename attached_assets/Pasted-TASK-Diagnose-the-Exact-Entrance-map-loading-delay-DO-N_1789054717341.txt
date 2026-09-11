@@ -1,0 +1,223 @@
+TASK: Diagnose the Exact Entrance map loading delay. DO NOT change the implementation yet.
+
+Observed issue:
+
+Request Labour → Step 4 → Site & Attendance → Exact entrance map.
+
+When the map first opens, the map container appears as a blank pale/beige rectangle for several seconds before the map actually renders.
+
+I need to know whether:
+
+A) this is caused by Replit's embedded Preview environment / iframe / GPU/WebGL limitations,
+
+OR
+
+B) the OnSite map implementation itself is unnecessarily slow and needs fixing.
+
+This task is DIAGNOSTIC ONLY.
+
+DO NOT modify app.js, styles.css, index.html, onsite-map-style.json or any other implementation file unless I explicitly ask after seeing your diagnosis.
+
+DO NOT commit.
+DO NOT push.
+DO NOT publish the app.
+
+==================================================
+1. TEST THE SAME MAP IN BOTH ENVIRONMENTS
+==================================================
+
+Test the Exact Entrance map with the same site/address in:
+
+1. Replit embedded Preview iframe
+2. The standalone Replit development URL opened directly in Chrome in its own tab/window
+
+Do not treat the embedded Preview result as representative of production until compared with standalone.
+
+Use Amazon DHA1 or another existing test address that reliably opens the map.
+
+==================================================
+2. MEASURE THE LOAD SEQUENCE
+==================================================
+
+Measure approximately:
+
+- time from opening/expanding Exact Entrance to map container appearing
+- time until map renderer initialises
+- time until map style is loaded
+- time until first usable map content is visible
+- time until the map is fully interactive
+- whether the vector renderer succeeds
+- whether the raster fallback activates
+
+I do not need laboratory-level benchmarking.
+
+I need enough evidence to identify where the visible delay comes from.
+
+==================================================
+3. TRACE THE EXISTING RENDERER PATH
+==================================================
+
+Inspect the existing map implementation and report the actual sequence.
+
+Specifically identify:
+
+- when MapLibre/vector map initialisation begins
+- whether any intentional timeout/retry exists
+- how long it waits before falling back
+- what causes fallback activation
+- whether WebGL/GPU detection delays rendering
+- whether style JSON is fetched before map display
+- whether external tile/style/font requests are blocking first render
+- whether map initialisation waits unnecessarily for anything unrelated
+- whether the map is being destroyed/re-created during Step 4 rendering
+
+Do not guess.
+
+Use browser console/network/performance information where useful.
+
+==================================================
+4. CHECK FOR PREVIEW-SPECIFIC LIMITATIONS
+==================================================
+
+We have previously established that Replit's embedded Preview can behave differently from a direct Chrome page.
+
+Specifically check whether the embedded iframe has:
+
+- reduced/disabled GPU acceleration
+- WebGL restrictions
+- slower MapLibre initialisation
+- failed vector renderer followed by raster fallback
+- iframe/network restrictions
+- delayed resource fetching
+
+If Preview is triggering a renderer failure and waiting before fallback, tell me explicitly.
+
+==================================================
+5. WATCH THE BLANK STATE
+==================================================
+
+The visible problem is not simply that tiles continue sharpening/loading.
+
+The issue is:
+
+the entire map area initially appears as a blank pale/beige panel.
+
+Determine exactly what that blank panel represents.
+
+Is it:
+
+- map container background before renderer initialisation
+- vector canvas before style load
+- failed WebGL render
+- fallback waiting period
+- delayed tile response
+- another state
+
+Report which one.
+
+==================================================
+6. TEST MORE THAN ONCE
+==================================================
+
+Run at least:
+
+- first/cold map open
+- close/reopen or navigate away/back
+- hard refresh then open again
+
+Compare cold vs warm behaviour.
+
+This matters because browser/CDN caching may make later loads appear faster.
+
+==================================================
+7. NETWORK CHECK
+==================================================
+
+Check requests involved in the map.
+
+Look for:
+
+- failed requests
+- requests waiting several seconds
+- duplicate requests
+- style JSON delay
+- vector tile delay
+- raster tile delay
+- fonts/sprites delay
+- CORS errors
+- repeated renderer/version retries
+
+Do not alter providers.
+
+Just report findings.
+
+==================================================
+8. DECISION REQUIRED
+==================================================
+
+At the end, give me ONE clear conclusion:
+
+RESULT A — PREVIEW ONLY
+The standalone direct Chrome development URL loads the map normally and the delay is materially caused by Replit embedded Preview.
+
+OR
+
+RESULT B — REAL IMPLEMENTATION ISSUE
+The standalone development URL also has an unacceptable blank delay and there is something in OnSite that should be optimised.
+
+OR
+
+RESULT C — MIXED
+Preview makes it significantly worse, but there is still an identifiable OnSite delay worth fixing.
+
+Do not give a vague answer.
+
+==================================================
+9. IF IT NEEDS FIXING
+==================================================
+
+If the result is B or C:
+
+DO NOT implement the fix yet.
+
+Instead tell me:
+
+- root cause
+- approximate delay it creates
+- exact code/path responsible
+- smallest safe fix you recommend
+- whether fixing it risks changing the current map visual appearance, viewport logic, pin behaviour or fallback behaviour
+
+I will approve the fix separately.
+
+==================================================
+10. IF IT IS PREVIEW ONLY
+==================================================
+
+If the result is A:
+
+tell me:
+
+- embedded Preview load time
+- standalone direct load time
+- why they differ
+- whether a normal deployed/public OnSite app would be expected to behave like standalone rather than embedded Preview
+
+Do not publish the app just to test this.
+
+==================================================
+11. DO NOT CHANGE ANYTHING
+==================================================
+
+This is important.
+
+At the end:
+
+git status
+
+must show no implementation changes caused by this diagnostic task.
+
+Do not commit.
+Do not push.
+
+STOP after reporting the diagnosis.

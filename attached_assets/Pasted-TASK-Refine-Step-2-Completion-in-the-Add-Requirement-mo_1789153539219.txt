@@ -1,0 +1,377 @@
+TASK: Refine Step 2 — Completion in the Add Requirement modal so Completion and Assignment have clean, distinct responsibilities.
+
+Do NOT redesign the overall modal.
+Do NOT change Step 1 Content.
+Do NOT change saved requirement architecture unnecessarily.
+Do NOT build worker-side completion yet.
+Do NOT build the PDF field editor.
+
+The current Completion screen visually looks good, but it mixes:
+
+- requirement level
+- completion action
+- completion timing
+
+We need to separate these concepts properly.
+
+==================================================
+1. STEP RESPONSIBILITIES
+==================================================
+
+The modal architecture must be:
+
+STEP 1 — Content
+What content/resource is this requirement based on?
+
+STEP 2 — Completion
+How is this requirement completed / what action must the sub-contractor take?
+
+STEP 3 — Assignment
+Who does it apply to, is it required, and when must it be completed?
+
+Keep the current 3-step modal.
+
+==================================================
+2. REMOVE REQUIREMENT LEVEL FROM COMPLETION
+==================================================
+
+Remove from Step 2 Completion:
+
+Required
+Optional
+
+These belong in Step 3 Assignment.
+
+Do not delete the underlying draft values if they already exist.
+
+Move/render those controls in Assignment instead.
+
+==================================================
+3. REMOVE TIMING FROM COMPLETION
+==================================================
+
+Remove from Step 2 Completion:
+
+Before first shift
+On arrival
+
+These belong in Step 3 Assignment.
+
+Again, preserve underlying draft state if already implemented.
+
+==================================================
+4. DOCUMENT COMPLETION OPTIONS
+==================================================
+
+For requirement type:
+
+Document
+
+Step 2 should ask:
+
+What must the sub-contractor do?
+
+Provide three clear selectable options:
+
+View only
+Review the document. No acknowledgement required.
+
+Read & acknowledge
+Review the document and confirm it has been read.
+
+Read & sign
+Review the document and provide a signature.
+
+Use compact selectable cards/rows consistent with the existing OnSite design.
+
+Only one option can be selected.
+
+Default may remain:
+Read & acknowledge
+
+if that matches current behaviour.
+
+==================================================
+5. VISUAL DESIGN
+==================================================
+
+Preserve the existing strong modal design:
+
+- Add requirement title
+- 3-step progress header
+- fixed footer
+- Back
+- Continue
+- existing width
+- existing radius/shadow
+- current orange selection treatment
+
+Do not artificially make the modal taller.
+
+A shorter Completion screen is acceptable.
+
+Do not add filler content simply to occupy space.
+
+==================================================
+6. COMPLETION STEP COPY
+==================================================
+
+Preferred structure:
+
+COMPLETION
+
+What must the sub-contractor do?
+
+Then the completion-action choices.
+
+Do not repeat unnecessary explanatory headings.
+
+Keep helper copy short.
+
+==================================================
+7. STEP 3 — ASSIGNMENT
+==================================================
+
+Move the following concepts into Assignment:
+
+A. Requirement level
+
+Required
+Required items contribute to readiness / can block readiness.
+
+Optional
+Does not block readiness.
+
+B. Completion timing
+
+Before first shift
+
+On arrival
+
+Keep requirement level and timing conceptually separate.
+
+Do not combine "Optional" as a timing option.
+
+==================================================
+8. ASSIGNMENT SCOPE
+==================================================
+
+If not already present, Step 3 should also support:
+
+Applies to:
+
+All sub-contractors
+
+Selected labour requirements
+
+For selected labour requirements, use the labour requirements already created in Step 2 of Request Labour.
+
+Do not invent individual worker assignment in this initial Request Labour wizard.
+
+The project does not necessarily have assigned workers yet.
+
+==================================================
+9. TYPE-AWARE COMPLETION
+==================================================
+
+Structure Step 2 so completion choices can vary by requirement type.
+
+Target behaviour:
+
+Document:
+- View only
+- Read & acknowledge
+- Read & sign
+
+Video induction:
+- Watch & acknowledge
+- Watch + comprehension check
+
+Form & signature:
+- Complete & sign
+
+On-site induction:
+- Supervisor sign-off
+- optionally worker acknowledgement/signature if already supported cleanly
+
+External training:
+Do NOT treat opening a link as completion.
+Use an evidence/verification-based completion model.
+
+Background check:
+Use verification/status completion.
+Do not store criminal-history details or certificate contents.
+
+Do not fully redesign all six types blindly in this task if they are already implemented.
+
+First establish the shared Completion architecture and make each type semantically correct.
+
+==================================================
+10. VIDEO COMPREHENSION RULE
+==================================================
+
+Only show a pass threshold / comprehension configuration if:
+
+Watch + comprehension check
+
+is selected.
+
+Do not show quiz/pass settings for ordinary Watch & acknowledge.
+
+==================================================
+11. FORM & SIGNATURE
+==================================================
+
+For Form & signature:
+
+Step 2 can simply show:
+
+Complete & sign
+
+as the completion method.
+
+Do not invent multiple choices if there is only one legitimate completion action.
+
+Do not build PDF field placement yet.
+
+That is a separate future feature.
+
+==================================================
+12. ON-SITE INDUCTION
+==================================================
+
+For On-site induction:
+
+Primary completion should be:
+
+Supervisor sign-off
+
+If an optional worker acknowledgement/signature setting already exists or is easy to preserve, keep it as a secondary option.
+
+Do not create unnecessary content fields.
+
+==================================================
+13. EXTERNAL TRAINING
+==================================================
+
+For External training:
+
+Opening the external URL must NEVER automatically mark the requirement complete.
+
+Completion should represent actual evidence/verification.
+
+Use the safest existing supported options such as:
+
+Worker confirms completion
+Evidence uploaded
+Hiring company verifies completion
+
+or equivalent based on the current implementation.
+
+Do not fabricate integrations with external training providers.
+
+==================================================
+14. BACKGROUND CHECK
+==================================================
+
+For Background check:
+
+Completion must represent verification/status only.
+
+Do not request or store:
+
+- criminal-history details
+- DBS certificate contents
+- sensitive result details
+
+The system should only need enough metadata to know whether the required check has been verified/cleared according to the hiring company's process.
+
+==================================================
+15. TERMINOLOGY
+==================================================
+
+If the site-wide terminology update has already been committed, use:
+
+Sub-contractor
+
+instead of:
+
+Worker
+
+in user-facing copy.
+
+Do NOT change internal `worker` values/IDs.
+
+If that terminology task is still in progress, avoid creating conflicting broad replacements.
+
+==================================================
+16. STATE PRESERVATION
+==================================================
+
+Moving Required/Optional and timing into Assignment must not lose draft state.
+
+Back/Continue must preserve:
+
+- selected completion method
+- requirement level
+- completion timing
+- assignment scope
+
+Switching between modal steps must not reset values unexpectedly.
+
+==================================================
+17. VALIDATION
+==================================================
+
+Physically test Document:
+
+Content
+→ Completion
+→ Assignment
+→ Back to Completion
+→ Back to Content
+→ forward again
+
+Confirm all selections persist.
+
+Also test each requirement type reaches a semantically appropriate Completion screen.
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+18. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+git status
+git diff
+
+Do not include unrelated work.
+
+Commit exactly:
+
+Separate requirement completion and assignment
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- Document completion options
+- which controls moved to Assignment
+- completion behaviour for all six requirement types
+- state preservation result
+- validation results
+- files changed
+- commit hash
+- push result

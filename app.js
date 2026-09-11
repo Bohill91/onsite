@@ -4167,8 +4167,8 @@ const PROJECT_REQUIREMENT_LEVELS = [
 
 const PROJECT_REQUIREMENT_ACTIONS = {
   document: [
-    { value: "read_acknowledge", label: "Read & acknowledge" },
     { value: "view_only", label: "View only" },
+    { value: "read_acknowledge", label: "Read & acknowledge" },
     { value: "read_sign", label: "Read & sign" },
   ],
   video_induction: [
@@ -18643,7 +18643,7 @@ function projectRequirementAudienceLabelFromRequirements(
 ) {
   const assignedIds = projectRequirementAudienceIds(requirement);
   if (!assignedIds.length) {
-    return "All project workers";
+    return "All project sub-contractors";
   }
   const assigned = assignedIds.map((id) =>
     (labourRequirements || []).find((item) => item.id === id),
@@ -19153,7 +19153,7 @@ function projectRequirementAudienceOptionsForRequirements(
   const missingIds = [...selectedIds].filter(
     (id) => !requirements.some((requirement) => requirement.id === id),
   );
-  return `<option value=""${selectedIds.size ? "" : " selected"}>All project workers</option>
+  return `<option value=""${selectedIds.size ? "" : " selected"}>All project sub-contractors</option>
     ${missingIds.map((id) => `<option value="${escapeHtml(id)}" selected>Previously selected labour requirement · needs review</option>`).join("")}
     ${requirements
       .map((requirement) => {
@@ -19196,6 +19196,74 @@ function projectRequirementEditorAudienceLabel(editor, requirement) {
     projectRequirementEditorLabourRequirements(editor),
     requirement,
   );
+}
+
+function projectRequirementAudienceSelectionHTML(editor, selectedAudience) {
+  const requirements = Array.isArray(
+    projectRequirementEditorLabourRequirements(editor),
+  )
+    ? projectRequirementEditorLabourRequirements(editor)
+    : [];
+  const selectedIds = new Set(projectRequirementAudienceIds(selectedAudience));
+  const missingIds = [...selectedIds].filter(
+    (id) => !requirements.some((requirement) => requirement.id === id),
+  );
+  const selectedRequirements = requirements
+    .map((requirement) => {
+      const workerCount = Math.max(1, Number(requirement.quantity) || 1);
+      const label = [
+        requirement.trade,
+        requirement.specialism || requirement.grade,
+        `${workerCount} ${workerCount === 1 ? "sub-contractor" : "sub-contractors"}`,
+      ]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        id: requirement.id,
+        label: label || "Labour requirement",
+      };
+    });
+  const requirementsScope =
+    selectedAudience?.type === "labour_requirements" ||
+    selectedAudience?.type === "labour_requirement";
+  const allSelected = !requirementsScope;
+  return `<fieldset class="project-requirement-fieldset project-requirement-audience-fieldset">
+    <legend>Applies to</legend>
+    <div class="project-requirement-audience-choices">
+      <label class="project-requirement-audience-choice">
+        <input type="radio" name="projectRequirementAudienceScope" value="all"${allSelected ? " checked" : ""} />
+        <span><strong>All project sub-contractors</strong><small>Apply this requirement to everyone assigned to the project.</small></span>
+      </label>
+      <label class="project-requirement-audience-choice">
+        <input type="radio" name="projectRequirementAudienceScope" value="requirements"${!allSelected ? " checked" : ""} />
+        <span><strong>Selected labour requirements</strong><small>Choose the Step 2 labour requirements this applies to.</small></span>
+      </label>
+    </div>
+    <div class="project-requirement-audience-selection"${allSelected ? ' hidden' : ""} data-project-requirement-audience-selection>
+      <p class="project-requirement-audience-selection-label">Labour requirements</p>
+      ${
+        selectedRequirements.length
+          ? selectedRequirements
+              .map(
+                (requirement) => `<label class="project-requirement-audience-requirement">
+          <input type="checkbox" data-project-requirement-audience-id value="${escapeHtml(requirement.id)}"${selectedIds.has(requirement.id) ? " checked" : ""} />
+          <span>${escapeHtml(requirement.label)}</span>
+        </label>`,
+              )
+              .join("")
+          : `<p class="project-requirement-audience-empty">No saved labour requirements are available yet.</p>`
+      }
+      ${missingIds
+        .map(
+          (id) => `<label class="project-requirement-audience-requirement is-missing">
+        <input type="checkbox" data-project-requirement-audience-id value="${escapeHtml(id)}" checked />
+        <span>Previously selected labour requirement · needs review</span>
+      </label>`,
+        )
+        .join("")}
+    </div>
+  </fieldset>`;
 }
 
 let projectRequirementModalTrigger = null;
@@ -19686,16 +19754,31 @@ function projectRequirementLevelChoicesHTML(draft) {
 function projectRequirementActionFieldHTML(draft) {
   const actions = PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [];
   const explanations = {
-    document: "Workers must read the full document and acknowledge it.",
-    video_induction: "Workers must watch the full video and acknowledge it.",
-    form_signature: "Workers must complete the required fields and sign the document.",
-    external_training: "Completion must be verified after the worker completes the external training.",
-    background_check: "The requested check must be verified before the requirement is complete.",
-    onsite_induction: "A supervisor confirms completion when the worker arrives.",
+    view_only: "Review the document. No acknowledgement required.",
+    read_acknowledge: "Review the document and confirm it has been read.",
+    read_sign: "Review the document and provide a signature.",
+    watch_acknowledge: "Watch the induction and confirm it is complete.",
+    watch_comprehension: "Watch the induction and pass the comprehension check.",
+    complete_sign: "Complete the required fields and sign the form.",
+    company_verification: "A hiring company verifies completion or status.",
+    worker_confirmation: "The sub-contractor confirms the external activity is complete.",
+    upload_evidence: "The sub-contractor provides completion evidence.",
+    provider_verification: "The provider confirms the training or check status.",
+    supervisor_signoff: "A supervisor confirms completion on site.",
   };
-  return `<div class="project-requirement-action-config">
-    <div class="project-requirement-fixed-value"><span>Completion</span><strong>${escapeHtml(actions[0]?.label || "Completion required")}</strong><small>${escapeHtml(explanations[draft.requirementType] || "")}</small></div>
-  </div>`;
+  return `<fieldset class="project-requirement-fieldset project-requirement-action-fieldset">
+    <legend>Completion action</legend>
+    <div class="project-requirement-action-choices">
+      ${actions
+        .map(
+          (action) => `<label class="project-requirement-action-choice">
+        <input type="radio" name="projectRequirementAction" data-project-requirement-action value="${escapeHtml(action.value)}"${draft.completionAction === action.value ? " checked" : ""} />
+        <span><strong>${escapeHtml(action.label)}</strong><small>${escapeHtml(explanations[action.value] || "")}</small></span>
+      </label>`,
+        )
+        .join("")}
+    </div>
+  </fieldset>`;
 }
 
 function projectRequirementCompletionEvidenceHTML(draft) {
@@ -19769,12 +19852,8 @@ function projectRequirementStepTwoHTML(draft) {
         </div>`
       : "";
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
-    <div class="project-requirement-step-intro"><p>Completion</p><h3 id="projectRequirementStepTitle" tabindex="-1">What must the worker do?</h3></div>
-    ${projectRequirementLevelChoicesHTML(draft)}
-    <div class="project-requirement-completion-grid">
-      ${projectRequirementActionFieldHTML(draft)}
-      ${projectRequirementTimingChoicesHTML(draft)}
-    </div>
+    <div class="project-requirement-step-intro"><p>Completion</p><h3 id="projectRequirementStepTitle" tabindex="-1">What must the sub-contractor do?</h3></div>
+    ${projectRequirementActionFieldHTML(draft)}
     ${projectRequirementCompletionEvidenceHTML(draft)}
     ${comprehension}
   </section>`;
@@ -19881,10 +19960,11 @@ function projectRequirementReviewHTML(editor, draft) {
 function projectRequirementStepThreeHTML(editor, draft) {
   return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
     <div class="project-requirement-step-intro"><p>Assignment</p><h3 id="projectRequirementStepTitle" tabindex="-1">Who does this apply to?</h3></div>
-    <label class="field-label">Worker scope
-      <select data-project-requirement-audience multiple size="${Math.min(5, projectRequirementEditorLabourRequirements(editor).length + 1)}">${projectRequirementEditorAudienceOptions(editor, draft.audience)}</select>
-      <span class="form-helper">Choose All project workers, or select one or more saved labour requirements.</span>
-    </label>
+    ${projectRequirementAudienceSelectionHTML(editor, draft.audience)}
+    ${projectRequirementLevelChoicesHTML(draft)}
+    <div class="project-requirement-completion-grid">
+      ${projectRequirementTimingChoicesHTML(draft)}
+    </div>
     ${editor.mode === "draft" ? "" : `<details class="project-requirement-advanced">
       <summary>Advanced settings</summary>
       <div class="project-requirement-advanced-body">
@@ -19998,7 +20078,8 @@ function syncProjectRequirementEditorDraft(modal) {
     "[data-project-requirement-content-follow]",
   );
   if (contentToFollow) draft.contentToFollow = contentToFollow.checked;
-  if (value("[data-project-requirement-action]") != null) draft.completionAction = value("[data-project-requirement-action]");
+  const action = checked("projectRequirementAction");
+  if (action) draft.completionAction = action;
   const level = checked("projectRequirementLevel");
   if (level) draft.requirementLevel = level;
   const timing = checked("projectRequirementTiming");
@@ -20006,16 +20087,18 @@ function syncProjectRequirementEditorDraft(modal) {
   if (value("[data-project-requirement-pass]") != null) {
     draft.comprehensionCheck.passThreshold = Number(value("[data-project-requirement-pass]"));
   }
-  if (value("[data-project-requirement-audience]") != null) {
-    const audienceControl = modal.querySelector("[data-project-requirement-audience]");
-    const audienceIds = Array.from(audienceControl?.selectedOptions || [])
-      .map((option) => option.value)
+  if (modal.querySelector('input[name="projectRequirementAudienceScope"]')) {
+    const audienceScope = checked("projectRequirementAudienceScope");
+    const audienceIds = Array.from(
+      modal.querySelectorAll("[data-project-requirement-audience-id]:checked"),
+    )
+      .map((input) => input.value)
       .filter(Boolean);
-    draft.audience = audienceIds.length
+    draft.audience = audienceScope === "requirements"
       ? {
           type: "labour_requirements",
           labourRequirementIds: audienceIds,
-          labourRequirementId: audienceIds[0],
+          labourRequirementId: audienceIds[0] || "",
         }
       : { type: "all_project_workers", labourRequirementId: "" };
   }
@@ -20276,7 +20359,18 @@ function projectRequirementDraftValidationIssue(editor) {
     return {
       step: 3,
       selector: "[data-project-requirement-audience]",
-      message: "Choose an available labour requirement or all project workers.",
+      message: "Choose an available labour requirement or all project sub-contractors.",
+    };
+  }
+  if (
+    editor.step === 3 &&
+    draft.audience?.type === "labour_requirements" &&
+    !projectRequirementAudienceIds(draft).length
+  ) {
+    return {
+      step: 3,
+      selector: 'input[name="projectRequirementAudienceScope"][value="requirements"]',
+      message: "Choose at least one labour requirement, or apply this to all project sub-contractors.",
     };
   }
   return null;
@@ -20892,9 +20986,11 @@ function bindProjectRequirementEditorControls(modal) {
       renderProjectRequirementEditor({ focusHeading: false });
     });
   });
-  modal.querySelector("[data-project-requirement-action]")?.addEventListener("change", () => {
-    syncProjectRequirementEditorDraft(modal);
-    renderProjectRequirementEditor({ focusHeading: false });
+  modal.querySelectorAll('input[name="projectRequirementAction"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      syncProjectRequirementEditorDraft(modal);
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
   });
   modal.querySelector("[data-project-requirement-training-access]")?.addEventListener("change", () => {
     syncProjectRequirementEditorDraft(modal);
@@ -21044,10 +21140,22 @@ function bindProjectRequirementEditorControls(modal) {
         syncProjectRequirementEditorDraft(modal);
       });
     });
-  modal.querySelector("[data-project-requirement-audience]")?.addEventListener("change", () => {
-    syncProjectRequirementEditorDraft(modal);
-    refreshProjectRequirementReview(modal);
-  });
+  modal
+    .querySelectorAll('input[name="projectRequirementAudienceScope"]')
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        syncProjectRequirementEditorDraft(modal);
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-audience-id]")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        syncProjectRequirementEditorDraft(modal);
+        refreshProjectRequirementReview(modal);
+      });
+    });
   modal.querySelector("[data-project-requirement-version]")?.addEventListener("input", () => {
     syncProjectRequirementEditorDraft(modal);
     refreshProjectRequirementReview(modal);
@@ -25442,7 +25550,7 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const PICKER_MAP_VECTOR_TIMEOUT_MS = 2000;
+const PICKER_MAP_VECTOR_TIMEOUT_MS = 4000;
 const PICKER_MAP_RASTER_LOADING_FALLBACK_MS = 1500;
 const PICKER_VIEWPORT = Object.freeze({
   minZoom: 16,
@@ -25499,11 +25607,33 @@ const PICKER_BROAD_RESULT_TYPES = new Set([
   "state",
 ]);
 let mapLibreModulePromise = null;
+let pickerMapDiagnosticsStartedAt = 0;
 
 const siteMapModal = document.getElementById("siteMapModal");
 
+function pickerMapDiagnosticsEnabled() {
+  return (
+    ["localhost", "127.0.0.1"].includes(window.location.hostname) ||
+    window.location.hostname.endsWith(".replit.dev")
+  );
+}
+
+function tracePickerMapStage(stage, details = {}) {
+  if (!pickerMapDiagnosticsEnabled()) return;
+  const elapsed = pickerMapDiagnosticsStartedAt
+    ? Math.round(performance.now() - pickerMapDiagnosticsStartedAt)
+    : null;
+  console.debug("[OnSite entrance map]", stage, {
+    ...(elapsed == null ? {} : { elapsedMs: elapsed }),
+    ...details,
+  });
+}
+
 function loadMapLibreModule() {
   if (!mapLibreModulePromise) {
+    tracePickerMapStage("MapLibre module requested", {
+      url: MAPLIBRE_MODULE_URL,
+    });
     mapLibreModulePromise = import(MAPLIBRE_MODULE_URL).catch((error) => {
       mapLibreModulePromise = null;
       throw error;
@@ -26074,7 +26204,7 @@ function isFatalPickerMapError(event = {}) {
   const error = event?.error || event;
   const message = String(error?.message || error || "").toLowerCase();
   if (!message || event?.sourceId || event?.source || event?.tile) return false;
-  return /webgl|canvas|renderer|context|style|stylesheet/.test(message) &&
+  return /webgl|canvas|renderer|context|style|stylesheet|worker/.test(message) &&
     /fail|error|unable|invalid|cannot|could not|not supported|unavailable/.test(
       message,
     );
@@ -26188,6 +26318,9 @@ function initVectorPickerMap(container, center, zoom) {
     renderWorldCopies: false,
     fadeDuration: 0,
   });
+  tracePickerMapStage("MapLibre map constructed", {
+    canvasInserted: !!container.querySelector("canvas"),
+  });
   pickerMapRenderer = "vector";
   container.dataset.mapRenderer = pickerMapRenderer;
   pickerMap.dragRotate.disable();
@@ -26208,17 +26341,10 @@ function initVectorPickerMap(container, center, zoom) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const resolveVectorMap = (map) => {
+    const resolveVectorMap = (map, readiness = "load") => {
       if (settled) return;
       settled = true;
-      resolve(map);
-    };
-    const rejectVectorMap = (error) => {
-      if (settled) return;
-      settled = true;
-      reject(error);
-    };
-    pickerMap.on("load", () => {
+      tracePickerMapStage("Vector map ready", { readiness });
       pickerMapReady = true;
       pickerMapLastError = null;
       clearTimeout(pickerMapLoadTimeout);
@@ -26227,11 +26353,47 @@ function initVectorPickerMap(container, center, zoom) {
       syncPickerMarkerToCurrentPin();
       resizePickerMap();
       setPickerMapLoading(false);
-      resolveVectorMap(pickerMap);
+      resolve(map);
+    };
+    const rejectVectorMap = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const isUsableVectorRender = () => {
+      const canvas = container.querySelector("canvas");
+      return !!(
+        canvas &&
+        canvas.width > 0 &&
+        canvas.height > 0 &&
+        typeof pickerMap.isStyleLoaded === "function" &&
+        pickerMap.isStyleLoaded()
+      );
+    };
+    const markUsableVectorRender = (readiness) => {
+      if (settled || !isUsableVectorRender()) return;
+      resolveVectorMap(pickerMap, readiness);
+    };
+    pickerMap.on("style.load", () => {
+      tracePickerMapStage("Style loaded");
+      requestAnimationFrame(() => markUsableVectorRender("style-render"));
+    });
+    pickerMap.on("render", () => {
+      if (!settled && isUsableVectorRender()) {
+        tracePickerMapStage("First usable render");
+        markUsableVectorRender("first-render");
+      }
+    });
+    pickerMap.on("load", () => {
+      tracePickerMapStage("MapLibre load event");
+      markUsableVectorRender("load");
     });
     pickerMap.on("error", (event) => {
       pickerMapLastError = event?.error || event;
       if (!pickerMapReady && isFatalPickerMapError(event)) {
+        tracePickerMapStage("Fatal renderer error", {
+          message: pickerMapLastError?.message || String(pickerMapLastError),
+        });
         rejectVectorMap(pickerMapLastError);
         return;
       }
@@ -26244,6 +26406,13 @@ function initVectorPickerMap(container, center, zoom) {
     });
     pickerMapLoadTimeout = setTimeout(() => {
       if (!pickerMapReady) {
+        tracePickerMapStage("Vector startup timeout", {
+          timeoutMs: PICKER_MAP_VECTOR_TIMEOUT_MS,
+          canvasReady: !!container.querySelector("canvas"),
+          styleLoaded:
+            typeof pickerMap?.isStyleLoaded === "function" &&
+            pickerMap.isStyleLoaded(),
+        });
         rejectVectorMap(
           pickerMapLastError ||
             new Error("The vector entrance map did not become ready in time."),
@@ -26306,6 +26475,8 @@ async function initPickerMap({ reset = false } = {}) {
   }
   if (pickerMapInitPromise) return pickerMapInitPromise;
 
+  pickerMapDiagnosticsStartedAt = performance.now();
+  tracePickerMapStage("Map initialisation started", { reset });
   pickerMapInitPromise = (async () => {
     setPickerMapFailureState(false);
     const container = document.getElementById("jobPickerMap");

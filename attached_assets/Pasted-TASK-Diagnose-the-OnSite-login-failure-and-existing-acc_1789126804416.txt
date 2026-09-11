@@ -1,0 +1,287 @@
+TASK: Diagnose the OnSite login failure and existing account/project data relationship.
+
+IMPORTANT: DIAGNOSTIC ONLY.
+
+DO NOT redesign the login page yet.
+DO NOT create a new account.
+DO NOT reset any password.
+DO NOT delete or migrate any data.
+DO NOT clear localStorage/sessionStorage/cookies.
+DO NOT modify implementation files.
+DO NOT commit.
+DO NOT push.
+DO NOT publish.
+
+The current login page is old and will be redesigned separately after authentication is understood.
+
+==================================================
+CURRENT PROBLEM
+==================================================
+
+I am trying to sign into the existing OnSite company account using:
+
+luke_bohill@outlook.com
+
+The login screen returns:
+
+"Incorrect email or password."
+
+However, the app still contains projects/jobs I previously created.
+
+I need to understand:
+
+1. whether this existing user account still exists
+2. where authentication data is currently stored
+3. where the existing project/job data is stored
+4. whether the projects are actually associated with this account
+5. why the current login no longer accepts the existing credentials
+6. the safest way to restore access WITHOUT losing or reassigning existing project data
+
+Do not ask me for or expose my password.
+
+==================================================
+1. TRACE THE CURRENT AUTH SYSTEM
+==================================================
+
+Inspect the actual authentication implementation.
+
+Check relevant files such as:
+
+- auth.js
+- app.js
+- server.js
+- index.html
+- any user/account storage helpers
+- any JSON/local persistence
+- localStorage/sessionStorage usage
+- environment-backed storage if present
+
+Determine exactly:
+
+- how users are registered
+- how users are stored
+- how login identifies a user
+- how passwords are stored/compared
+- whether passwords are plain text, hashed, or otherwise transformed
+- whether company accounts and worker accounts use the same auth path
+- whether email comparison is case-sensitive
+- whether email is trimmed/normalised
+- whether authentication changed during recent development
+
+Do not output password values or password hashes unnecessarily.
+
+==================================================
+2. CHECK WHETHER THIS ACCOUNT EXISTS
+==================================================
+
+Search the application's current user/account data for:
+
+luke_bohill@outlook.com
+
+Also check for obvious historical variants ONLY if they naturally exist in current stored data, for example:
+
+- different case
+- leading/trailing whitespace
+- a prior email attached to the same company/user record
+
+Do not invent possible emails.
+
+Report:
+
+- whether a user record exists
+- user/company ID if applicable
+- company name/relationship if applicable
+- where that record is stored
+- whether the account record appears complete
+- whether it has valid authentication credentials in the format the current login expects
+
+Do NOT reveal secret credential contents.
+
+==================================================
+3. TRACE THE LOGIN FAILURE
+==================================================
+
+Follow the actual Sign In flow from the button to the final credential comparison.
+
+Identify exactly where:
+
+"Incorrect email or password."
+
+is generated.
+
+Determine whether the failure is due to:
+
+- user not found
+- password mismatch
+- old password format
+- changed hashing/comparison logic
+- different storage source
+- malformed account record
+- email normalization
+- login querying a different dataset from registration
+- stale authentication state
+- a code regression
+- another concrete cause
+
+Do not guess.
+
+I want the exact code path and evidence.
+
+==================================================
+4. INSPECT EXISTING PROJECT/JOB DATA
+==================================================
+
+WITHOUT altering browser storage, identify where the projects/jobs visible in the app are currently stored.
+
+Check:
+
+- localStorage
+- sessionStorage
+- server-side state
+- JSON/file storage
+- any other existing persistence layer
+
+Report the relevant storage key(s) or source.
+
+Determine:
+
+- how many project/job records currently exist
+- whether each project has a companyId/userId/ownerId or equivalent
+- whether they are linked to the existing account
+- whether they are effectively global browser data
+- whether they would survive logging out/in
+- whether registering a new account could make them disappear from view or become associated with the wrong account
+
+DO NOT change any records.
+
+==================================================
+5. CHECK OTHER IMPORTANT COMPANY DATA
+==================================================
+
+While tracing ownership, also check whether the same company/account identifier is used for:
+
+- labour requirements
+- worker assignments
+- preferred workers
+- attendance
+- project details
+- pre-start requirements
+- other company-specific records
+
+Do not perform a broad refactor.
+
+I only need to know whether restoring the correct account identity is important for existing linked data.
+
+==================================================
+6. BROWSER STORAGE INSPECTION
+==================================================
+
+Use the current browser session if needed.
+
+Inspect storage READ-ONLY.
+
+Do not:
+
+- clear storage
+- edit keys
+- change active user
+- manually inject an account
+- register a replacement account
+
+If a currently authenticated/legacy user ID or company ID exists in browser state, report it and explain what uses it.
+
+==================================================
+7. DETERMINE WHETHER DATA IS SAFE
+==================================================
+
+Give an explicit answer to:
+
+"If we repair the login account, can the existing projects/jobs be preserved exactly as they are?"
+
+Classify:
+
+A — SAFE
+The projects are already correctly linked and auth can be restored without data migration.
+
+B — SAFE WITH SMALL REPAIR
+The data exists but a user/company identifier or auth record needs a controlled repair.
+
+C — DATA OWNERSHIP PROBLEM
+Projects are not currently linked reliably to the account and must be handled carefully before auth is changed.
+
+Explain why.
+
+==================================================
+8. RECOMMEND THE SAFEST FIX — DO NOT IMPLEMENT IT
+==================================================
+
+Once root cause is known, recommend the smallest safe solution.
+
+Examples could include:
+
+- repair existing user record
+- update legacy password format
+- fix login comparison
+- restore account/company link
+- add a controlled password-reset path
+- another evidence-based repair
+
+But DO NOT implement it yet.
+
+The recommendation must preserve:
+
+- all existing projects
+- job data
+- company identity
+- related labour data
+- existing local browser state where needed
+
+Do not tell me simply to register again unless there is genuinely no recoverable account — and even then explain what would happen to existing data first.
+
+==================================================
+9. OLD LOGIN DESIGN
+==================================================
+
+Briefly identify which page/components/styles currently produce the old login screen.
+
+DO NOT redesign them yet.
+
+Just report the likely files/components we will need to update after auth is repaired.
+
+The future login redesign should match the new OnSite company visual system, but that is a separate task.
+
+==================================================
+10. FINAL REPORT
+==================================================
+
+Give me a concise report containing:
+
+- Does luke_bohill@outlook.com exist? YES/NO
+- Where user data is stored
+- Where project/job data is stored
+- Number of current project/job records found
+- Whether projects are tied to a user/company ID
+- Exact reason current login fails
+- Data safety classification: A / B / C
+- Safest recommended repair
+- Whether any existing project data needs migration
+- Files involved in the auth fix
+- Files/styles involved in the later login redesign
+
+==================================================
+11. PROJECT INTEGRITY
+==================================================
+
+At the end run:
+
+node --check app.js
+node --check server.js
+git diff --check
+git status
+
+There must be NO implementation changes caused by this diagnostic task.
+
+Do not commit.
+Do not push.
+
+STOP after the diagnosis.

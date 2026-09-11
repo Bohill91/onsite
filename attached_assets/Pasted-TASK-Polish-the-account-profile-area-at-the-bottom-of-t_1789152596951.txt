@@ -1,0 +1,291 @@
+TASK: Polish the account/profile area at the bottom of the OnSite left sidebar.
+
+This is a small UI refinement only.
+
+Do NOT redesign the sidebar.
+Do NOT change navigation.
+Do NOT change authentication.
+Do NOT change company/user data.
+Do NOT change sidebar width.
+Do NOT change account roles or permissions.
+
+The current bottom profile area is functional but looks less polished than the rest of the application, particularly when the company name is long.
+
+==================================================
+1. DESIGN GOAL
+==================================================
+
+Bring the sidebar account/profile area up to the same quality as the rest of the current OnSite interface.
+
+It should feel:
+
+- compact
+- intentional
+- professional
+- easy to scan
+- robust with long company names
+
+Preserve the existing:
+
+- avatar
+- company name
+- user name
+- role
+- dropdown chevron
+
+==================================================
+2. INFORMATION HIERARCHY
+==================================================
+
+Use this hierarchy:
+
+1. Company name
+2. User name
+3. User role
+
+Example:
+
+Bohill Electrical & Mechanical...
+Luke Bohill
+Administrator
+
+Company name should be the strongest text.
+
+User name should be slightly secondary.
+
+Role should be smaller and muted.
+
+Do not make all three lines the same visual weight.
+
+==================================================
+3. LONG COMPANY NAME HANDLING
+==================================================
+
+Do NOT widen the sidebar.
+
+Do NOT force long company names onto one line with aggressive truncation like:
+
+"Bohill Electrical ..."
+
+Instead:
+
+- allow company name to use up to 2 lines
+- use CSS line clamping after 2 lines
+- add ellipsis only after the second line
+- prevent the text from colliding with the chevron
+- keep the row height flexible enough for either 1-line or 2-line company names
+
+A very short company name should still look balanced.
+
+A very long company name must not:
+
+- overflow
+- push the chevron outside the sidebar
+- distort the sidebar width
+- overlap the avatar
+- create horizontal scrolling
+
+==================================================
+4. FULL COMPANY NAME ACCESS
+==================================================
+
+When the company name is truncated, make the full company name accessible.
+
+Preferred:
+
+- native or lightweight tooltip on hover
+- accessible on keyboard focus
+
+Do not build a complex custom tooltip system solely for this.
+
+The full company name should also remain available within the existing account/profile dropdown if that dropdown already contains company information.
+
+==================================================
+5. PROFILE ROW LAYOUT
+==================================================
+
+Refine the existing layout.
+
+Keep:
+
+[Avatar] [Text block] [Chevron]
+
+Avatar:
+- approximately 36–40px
+- existing OnSite orange treatment
+- vertically aligned cleanly
+
+Text block:
+- use remaining width
+- min-width: 0 where necessary so truncation works correctly
+- consistent line-height
+- company name clearly separated from user/role
+
+Chevron:
+- aligned to the far right
+- vertically centred against the profile block
+- should not move around based on company-name length
+
+Give the text enough right padding so it never sits underneath the chevron.
+
+==================================================
+6. CLICK TARGET
+==================================================
+
+Make the entire account/profile row the click target for the existing account dropdown.
+
+Do not require users to click only the tiny chevron.
+
+Preserve the existing dropdown behaviour.
+
+Use:
+
+- pointer cursor
+- subtle hover background
+- visible keyboard focus state
+
+No scale animation.
+No glow.
+No heavy border.
+
+==================================================
+7. VISUAL TREATMENT
+==================================================
+
+Match the rest of the sidebar.
+
+Use:
+
+- neutral background by default
+- subtle hover surface
+- restrained radius
+- no heavy card border
+- no floating-card effect
+- no large shadow
+
+Keep the divider above the profile area if it fits the current sidebar structure.
+
+This should feel like part of the navigation, not a separate card stuck at the bottom.
+
+==================================================
+8. ROLE TEXT
+==================================================
+
+Preserve actual role values such as:
+
+Administrator
+Manager
+Supervisor
+
+Do not rename or alter permissions.
+
+Display role text consistently with muted secondary typography.
+
+==================================================
+9. RESPONSIVE / EDGE CASES
+==================================================
+
+Test examples such as:
+
+ABC Ltd
+
+Bohill Electrical Ltd
+
+Bohill Electrical & Mechanical Contractors Limited
+
+The Royal Borough Construction & Engineering Services Limited
+
+Also test long user names.
+
+Confirm:
+
+- company name clamps after 2 lines
+- user name remains readable
+- role remains readable
+- chevron stays aligned
+- avatar stays fixed
+- sidebar width does not change
+- no horizontal overflow
+
+==================================================
+10. ACCOUNT MENU
+==================================================
+
+Do NOT redesign the account menu unless a tiny alignment change is required because of this profile-row update.
+
+Preserve existing menu actions and functionality.
+
+If the current dropdown does not show the full company name and doing so is trivial and safe, add it as non-interactive context at the top of the menu.
+
+Do not add new account features in this task.
+
+==================================================
+11. ACCESSIBILITY
+==================================================
+
+Ensure:
+
+- entire row is keyboard accessible
+- visible focus state
+- chevron remains decorative if the row itself is the control
+- accessible label appropriately describes the account menu action
+- truncated company name can still be discovered by keyboard users
+
+==================================================
+12. VALIDATION
+==================================================
+
+Physically inspect the sidebar with:
+
+- short company name
+- medium company name
+- very long company name
+
+Check at:
+
+1440px
+1024px
+768px
+
+Also confirm the sidebar does not develop horizontal overflow.
+
+Run:
+
+node --check app.js
+node --check auth.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+13. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+git status
+git diff
+
+Do not include unrelated files.
+
+Commit exactly:
+
+Polish sidebar account profile
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- company-name clamping behaviour
+- profile-row hierarchy
+- click-target behaviour
+- long-name tests
+- validation results
+- commit hash
+- push result

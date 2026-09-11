@@ -1,0 +1,534 @@
+TASK: Make the Exact Entrance map visibly better.
+
+The current vector map works correctly, but the last polish pass made changes so small that the map looks essentially unchanged.
+
+This task is NOT another map rebuild.
+
+KEEP:
+- current map provider
+- current vector renderer
+- current fallback
+- current pin
+- click-to-place
+- drag-to-adjust
+- recenter
+- zoom controls
+- confirmation flow
+- confirmed/edit state
+- geocoding
+- attribution
+
+CHANGE ONLY:
+- default viewport/zoom
+- vector-map visual hierarchy
+- map/confirmation spacing
+
+The result must be VISIBLY different at first glance.
+
+Do NOT edit demo/fixture/seed/sample data.
+Do NOT touch unrelated Step 4 functionality.
+Do NOT change business logic.
+
+==================================================
+1. MOST IMPORTANT: DEFAULT VIEW IS STILL TOO WIDE
+==================================================
+
+The current default view around the Amazon/Wembley test site still shows:
+
+- Wembley Stadium
+- large sections of Neasden
+- a wide surrounding district
+
+That is too wide for:
+
+"Set the exact site entrance"
+
+The default view should instead show:
+
+- the target building/site
+- immediate access roads around it
+- adjacent buildings
+- nearest useful junctions
+- enough surrounding context to understand where the gate is
+
+It should NOT normally show major landmarks several neighbourhoods away.
+
+For the existing Amazon/Wembley visual QA location:
+
+Wembley Stadium should NOT be visible in the default opening view.
+
+DO NOT hard-code this site.
+
+This is only an acceptance test for the generic zoom strategy.
+
+==================================================
+2. USE A STRONGER DEFAULT ZOOM
+==================================================
+
+Current zoom is still effectively too wide.
+
+For a precise geocoded site/building coordinate, target approximately:
+
+zoom 17.4–17.7
+
+For a less precise street-level geocode:
+
+approximately 17.0–17.3
+
+For an already saved exact entrance:
+
+approximately 17.6
+
+Choose values that work correctly in the current provider.
+
+At desktop width, the map should generally show roughly the immediate site area / surrounding few hundred metres, NOT several kilometres.
+
+Do not automatically reset zoom after the user manually changes it.
+
+==================================================
+3. VISUAL CHANGE MUST BE NOTICEABLE
+==================================================
+
+The current map is still too washed out.
+
+Do NOT make another 2–5% contrast adjustment.
+
+Create clear but tasteful separation between:
+
+LAND
+BUILDINGS
+ROADS
+GREEN SPACE
+WATER
+RAIL
+LABELS
+
+The user should be able to identify a building and its access road immediately.
+
+==================================================
+4. LAND
+==================================================
+
+Make general land a clean warm off-white/light neutral.
+
+Target visual family roughly equivalent to:
+
+#F5F5F2
+
+Do not make general land grey enough to merge with buildings.
+
+Do not use pink/purple industrial-area fills.
+
+Industrial land should remain neutral.
+
+==================================================
+5. BUILDINGS — MAKE THEM CLEARLY READABLE
+==================================================
+
+Current buildings still blend too much into the background.
+
+Make building footprints visibly darker than land.
+
+Target visual family roughly equivalent to:
+
+#D8D9D6 to #DDDEDA
+
+Use a subtle darker outline if supported.
+
+A user should be able to look at the map and instantly see:
+
+"that is the building"
+
+without zooming further.
+
+Do NOT make buildings dark or brown.
+
+==================================================
+6. ACCESS ROADS — MUCH CLEARER
+==================================================
+
+This is an entrance picker, so access roads are critical.
+
+Local/access roads should be:
+
+- white or near-white
+- clearly separated from surrounding land
+- have a subtle neutral casing/edge
+
+Target road fill:
+approximately #FFFFFF
+
+Target casing family:
+approximately #D7D9D7
+
+Make access roads meaningfully more visible than they are now.
+
+Do NOT use yellow/orange road fills.
+
+==================================================
+7. ROAD HIERARCHY
+==================================================
+
+Use obvious hierarchy:
+
+Small/local access road
+→ crisp white, restrained casing
+
+Normal road
+→ slightly stronger/wider
+
+Major road
+→ clearly identifiable but still neutral
+
+Do NOT let major roads dominate the whole map.
+
+The road leading around/into a construction site should be easier to read than railway infrastructure.
+
+==================================================
+8. LABELS — DARKEN THEM ENOUGH TO READ
+==================================================
+
+Current labels are still too faint.
+
+Increase nearby road-label contrast visibly.
+
+Target road-label text approximately:
+
+#59636D / similar charcoal-neutral
+
+Prioritise:
+
+- road names
+- nearby access roads
+- useful site/building labels
+
+Secondary labels may remain lighter.
+
+Do not make every POI prominent.
+
+==================================================
+9. REDUCE POI CLUTTER
+==================================================
+
+For an exact entrance selector, we care much more about:
+
+- roads
+- buildings
+- access
+- transport infrastructure
+- useful immediate landmarks
+
+than:
+
+- restaurants
+- shops
+- entertainment
+- miscellaneous businesses
+
+Where the current vector style allows it, reduce unnecessary POI prominence.
+
+Do not remove useful road/site labels.
+
+==================================================
+10. GREEN + WATER
+==================================================
+
+Keep restrained colour, but ensure both are clearly distinguishable.
+
+GREEN:
+soft muted green, approximately the visual family of #DCEBD7
+
+WATER:
+clear pale blue, approximately #BFE3EF
+
+Do not over-saturate either.
+
+==================================================
+11. RAIL
+==================================================
+
+Rail currently remains too visually competitive in some locations.
+
+Reduce rail line visual dominance.
+
+Target:
+roughly 25–40% less visual emphasis than the current prominent rail treatment, while keeping it identifiable.
+
+Rail must remain useful orientation information.
+
+But local roads and site access should win the hierarchy.
+
+==================================================
+12. ORANGE PIN
+==================================================
+
+KEEP the current OnSite orange marker.
+
+Do not redesign it unless there is a rendering defect.
+
+It should remain the strongest single visual element on the map.
+
+No:
+- number
+- pulse
+- glow
+- bounce
+- text label
+
+==================================================
+13. CONFIRMATION ROW
+==================================================
+
+Keep:
+
+"Position the pin on the exact gate or entrance."
+
+and:
+
+Confirm entrance point
+
+But tighten the composition.
+
+Target:
+
+map bottom
+→ approximately 10–12px
+→ confirmation/helper row
+
+Then:
+
+approximately 14–18px
+→ next divider/section
+
+Vertically centre helper text with the button.
+
+Do not add another container/card.
+
+==================================================
+14. MAP HEIGHT
+==================================================
+
+Keep approximately 300–320px desktop height.
+
+Do not enlarge the map to compensate for poor zoom.
+
+The correct solution is a better viewport, not a giant map.
+
+==================================================
+15. DO NOT CHANGE THE MAP STACK
+==================================================
+
+Absolutely do NOT:
+
+- replace OpenFreeMap
+- replace MapLibre
+- introduce another provider
+- add satellite
+- add new APIs
+- add new credentials
+- change fallback architecture
+- change geocoding
+
+The current technical foundation is now working.
+
+This is a visual/viewport refinement only.
+
+==================================================
+16. VISUAL QA MUST USE SIDE-BY-SIDE COMPARISON
+==================================================
+
+Before editing:
+
+capture/inspect the current exact-entrance map at a realistic industrial site.
+
+After editing:
+
+inspect the SAME site at the SAME viewport size.
+
+The difference should be immediately visible.
+
+Specifically compare:
+
+- amount of surrounding area shown
+- building contrast
+- access-road clarity
+- label readability
+- rail prominence
+
+If the before and after screenshots look almost identical:
+
+THE TASK IS NOT COMPLETE.
+
+Continue adjusting.
+
+==================================================
+17. REQUIRED AMAZON/WEMBLEY QA
+==================================================
+
+Use the current Amazon/Wembley-area site only as one temporary visual QA case.
+
+Do not alter application data permanently.
+
+Acceptance:
+
+DEFAULT OPENING VIEW:
+
+- Amazon/site building clearly visible
+- immediate surrounding access roads visible
+- nearby useful roads visible
+- enough context to find the entrance
+
+BUT:
+
+Wembley Stadium should NOT be visible in the initial entrance view.
+
+If Wembley Stadium is still visible:
+
+default view remains too wide.
+
+==================================================
+18. TEST TWO OTHER SITE TYPES
+==================================================
+
+Also temporarily test:
+
+A. dense London city-centre address
+B. smaller suburban/commercial location
+
+Check that the stronger zoom strategy does not become unusably close.
+
+The generic behaviour must work across different site types.
+
+==================================================
+19. RESPONSIVE QA
+==================================================
+
+Inspect:
+
+1440px
+1024px
+768px
+390px
+
+At smaller widths, ensure:
+
+- map remains useful
+- pin visible
+- controls accessible
+- no overflow
+- confirmation row adapts properly
+
+Do NOT widen the default geographical view simply because the viewport is smaller.
+
+==================================================
+20. PRESERVE INTERACTIONS
+==================================================
+
+Verify after styling:
+
+- click map → pin moves
+- drag pin works
+- recenter works
+- zoom +/- works
+- page scroll not hijacked
+- Confirm works
+- confirmed state collapses map
+- Edit entrance reopens correctly
+- moving an edited pin does not overwrite confirmed coordinates until reconfirmed
+
+==================================================
+21. ATTRIBUTION
+==================================================
+
+Keep all legally required attribution.
+
+Do not hide it.
+
+Do not make attribution larger or more visually prominent.
+
+==================================================
+22. CODE QUALITY
+==================================================
+
+Do NOT:
+
+- add giant CSS overrides
+- use !important
+- add duplicate map handlers
+- hard-code test coordinates
+- use CSS filters over the rendered map
+- alter unrelated responsive rules
+
+Make the visual changes in the existing vector style configuration where appropriate.
+
+==================================================
+23. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+jq empty onsite-map-style.json
+git diff --check
+
+Check browser console.
+
+==================================================
+24. DO NOT FINISH UNTIL THE DIFFERENCE IS OBVIOUS
+==================================================
+
+The prior task technically changed:
+
+- slightly darker buildings
+- slightly darker labels
+- slightly reduced rail
+- tiny spacing differences
+
+but visually looked effectively unchanged.
+
+That is NOT sufficient this time.
+
+The final map should look visibly clearer and more entrance-focused in a screenshot without needing to inspect CSS values.
+
+Do not overdo the palette.
+
+But make the hierarchy materially stronger.
+
+==================================================
+25. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include this map refinement.
+
+Commit exactly:
+
+Strengthen exact entrance map hierarchy
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- old vs new opening zoom
+- approximate geographical context shown
+- building contrast changes
+- road changes
+- label changes
+- rail changes
+- Amazon/Wembley visual QA result
+- whether Wembley Stadium is absent from default view
+- two other site types tested
+- responsive widths tested
+- validation results
+- commit hash
+- push result

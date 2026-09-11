@@ -1,0 +1,703 @@
+TASK: Make Request Labour → Step 5 → Add requirement → Content visually consistent across all six requirement types.
+
+This is a focused UI/UX consistency pass.
+
+The underlying type-specific logic is broadly correct.
+
+DO NOT make every requirement type contain the same fields.
+
+Different requirement types genuinely require different information.
+
+The goal is:
+
+CONSISTENT DESIGN SYSTEM
++
+TYPE-SPECIFIC CONTENT
+
+Do not redesign the modal from scratch.
+
+==================================================
+CURRENT QUALITY ISSUE
+==================================================
+
+Review the Content step as ONE six-type flow.
+
+The current individual screens are reasonably good, but they do not yet feel like they were designed as one coherent system.
+
+Observed issues:
+
+1. External Training has vertically misaligned paired inputs.
+2. Document and Form & signature use very large upload blocks.
+3. Document and Form upload treatments are not perfectly consistent with each other.
+4. Video uses a very different visual source pattern.
+5. Several screens contain large muted grey information/empty-state blocks while others do not.
+6. Some source sections consume too much vertical space.
+7. Modal height changes more than necessary between comparable complex requirement types.
+8. Supporting/primary content actions use inconsistent visual weight.
+
+Fix these issues without flattening legitimate type differences.
+
+==================================================
+1. LOCK THE MODAL SHELL
+==================================================
+
+Keep the existing:
+
+- Add requirement heading
+- close X
+- Content / Completion / Assignment stepper
+- 3×2 requirement-type grid
+- selected orange state
+- sticky footer
+- Cancel
+- Continue
+- modal width
+- internal scrolling behaviour
+
+Do not redesign these.
+
+They are already strong.
+
+==================================================
+2. CONSISTENT FIELD LABEL ALIGNMENT
+==================================================
+
+Fix External Training specifically.
+
+Current problem:
+
+Training provider
+Optional
+
+sits beside:
+
+Training title *
+
+Because "Optional" occupies a second line on the left, the two input boxes begin at different vertical positions.
+
+This is not acceptable.
+
+Change optional metadata in paired rows so it does NOT alter input alignment.
+
+Preferred pattern:
+
+Training provider  Optional
+
+Training title *
+
+with both labels occupying the same vertical label row.
+
+Both input boxes must start at EXACTLY the same Y position.
+
+Apply the same principle anywhere else inside the Add requirement modal where:
+
+- one field is optional
+- the adjacent field is required
+
+Optional status must never push one input lower than its neighbour.
+
+Do not globally redesign every application form in this task.
+
+==================================================
+3. CREATE ONE COMPACT PRIMARY-SOURCE PATTERN
+==================================================
+
+Document and Form & signature currently use oversized stacked source areas:
+
+example:
+
+No document uploaded.
+
+[large full-width Upload document area]
+
+and:
+
+No PDF uploaded.
+
+[large full-width Upload PDF area]
+
+These occupy too much space.
+
+Create one reusable compact primary-source component/pattern for file-based requirements.
+
+It should look approximately like:
+
+DOCUMENT
+Upload the document workers need to review.
+
+[ No document uploaded.                 Upload document ]
+
+and for Form & signature:
+
+SOURCE DOCUMENT
+Upload the PDF workers will complete and sign.
+
+[ No PDF uploaded.                           Upload PDF ]
+
+The exact markup may follow the existing design system.
+
+Important principles:
+
+- one contained row rather than two large stacked blocks
+- filename/status on the left
+- clear action on the right
+- approximately normal input/control height
+- subtle neutral border
+- no giant drop-zone appearance unless drag/drop genuinely exists
+- action must obviously look clickable
+- Document and Form must use the SAME component styling
+
+After upload, the same component should show:
+
+- filename
+- replace/change action
+- remove action if currently supported
+
+Do not fake capabilities that do not exist.
+
+==================================================
+4. DOCUMENT
+==================================================
+
+Keep:
+
+- Title *
+- Worker instructions — Optional
+- Add content later
+- Document source
+
+Change only presentation.
+
+Use the compact primary-source component.
+
+Do not use a huge upload area.
+
+Ensure:
+
+Upload document
+
+has the same clear action treatment as:
+
+Upload PDF
+
+The action must not appear disabled when it is actually available.
+
+Do not require the company to enter the title before being allowed to select a document unless there is a genuine technical dependency.
+
+Validation for Continue can still require both.
+
+==================================================
+5. FORM & SIGNATURE
+==================================================
+
+Keep:
+
+- Title *
+- Worker instructions — Optional
+- Add content later
+- Source document
+- PDF-only architecture
+
+Use exactly the same compact primary-source component family as Document.
+
+The only meaningful differences should be:
+
+label:
+SOURCE DOCUMENT
+
+helper:
+Upload the PDF workers will complete and sign.
+
+action:
+Upload PDF
+
+Do not build PDF field placement in this task.
+
+==================================================
+6. VIDEO INDUCTION
+==================================================
+
+Video is legitimately different because its current primary source is a URL.
+
+Do NOT force it into a fake file-upload component.
+
+However, make the VIDEO SOURCE section visually belong to the same system.
+
+Current screen contains too many vertically stacked pieces:
+
+- No video source added
+- Video URL
+- security/helper grey strip
+- Add content later
+- Supporting materials
+- No resources added
+- Add resource
+
+Simplify it.
+
+Preferred structure:
+
+VIDEO SOURCE
+
+Video URL *
+
+[input]
+
+small muted helper text directly underneath:
+"Use a secure web address that workers can access."
+
+Do NOT use a large grey information panel for this simple helper.
+
+When no URL exists, the empty input already communicates that there is no source.
+
+Therefore REMOVE the redundant:
+
+"No video source added."
+
+empty-state bar if it adds no additional value.
+
+==================================================
+7. VIDEO SECURITY COPY
+==================================================
+
+Current security guidance is too visually prominent for ordinary helper copy.
+
+Keep the principle.
+
+Do not collect passwords/login credentials.
+
+But display it as small muted helper text rather than a large grey full-width panel.
+
+For example:
+
+"Do not include passwords or login credentials."
+
+Use the existing helper-text visual language.
+
+==================================================
+8. VIDEO SUPPORTING MATERIALS
+==================================================
+
+Supporting materials are OPTIONAL and secondary.
+
+Keep the capability if already supported.
+
+Present it compactly.
+
+Preferred:
+
+SUPPORTING MATERIALS
+Optional
+
+"Add files, links or notes that support the induction."
+
+[ + Add resource ]
+
+If zero resources exist, do NOT require a large:
+
+"No resources added."
+
+grey block unless the component genuinely needs an empty-state container.
+
+A simple Add resource action is sufficient.
+
+Once resources exist, show compact resource rows.
+
+The primary video must remain visually more important than supplementary resources.
+
+==================================================
+9. ADD CONTENT LATER
+==================================================
+
+Keep the existing semantic behaviour.
+
+It is appropriate for:
+
+- Document
+- Video induction
+- Form & signature
+
+Do not add it blindly to every type just for consistency.
+
+The checkbox row can remain.
+
+However, standardise:
+
+- padding
+- typography
+- helper spacing
+- checkbox alignment
+
+across the three types.
+
+It should look like exactly the same reusable component every time.
+
+==================================================
+10. EXTERNAL TRAINING
+==================================================
+
+External Training does NOT need a fake upload/source box.
+
+Its content is configuration-based.
+
+Keep its actual fields.
+
+But fix the visual structure.
+
+Preferred order:
+
+Training provider  Optional     | Training title *
+[input]                        | [input]
+
+External training URL *
+[input]
+
+Worker instructions  Optional
+[textarea]
+
+small muted guidance:
+"Do not include passwords or third-party login credentials."
+
+Do NOT use an oversized grey notice box for that guidance.
+
+Most importantly:
+
+Training provider and Training title inputs must be perfectly vertically aligned.
+
+==================================================
+11. BACKGROUND CHECK
+==================================================
+
+Background Check is also configuration-based.
+
+It therefore does NOT need the large source/upload treatment.
+
+Keep the existing contextual fields.
+
+Maintain:
+
+Check type | DBS level where applicable
+
+How the check is initiated
+
+Provider Optional | Application/provider URL Optional
+
+Worker instructions Optional
+
+However, convert the bottom privacy guidance from a large grey panel into normal restrained helper/guidance text.
+
+Keep the wording concise:
+
+"Do not enter criminal-history details or certificate contents here."
+
+Do not weaken the privacy rule.
+
+Only reduce unnecessary visual weight.
+
+==================================================
+12. ON-SITE INDUCTION
+==================================================
+
+DO NOT ADD FILLER.
+
+The current On-site induction Content state is deliberately minimal and is correct.
+
+It should remain:
+
+select type
+→ Continue
+
+No title.
+No upload.
+No instructions.
+No empty cards.
+No fake sections.
+
+Its modal can legitimately be shorter.
+
+Do not make all six screens the same height merely for visual symmetry.
+
+==================================================
+13. MODAL HEIGHT CONSISTENCY
+==================================================
+
+Do not force an identical fixed height across all requirement types.
+
+That would create pointless whitespace.
+
+Instead:
+
+- keep one consistent max-height
+- keep the header fixed
+- keep the footer fixed
+- allow the body to scroll
+- use consistent section spacing
+- remove oversized source/notice/empty-state blocks
+
+As a result:
+
+Document
+Video
+Form & signature
+External training
+Background check
+
+should naturally feel closer in density and height.
+
+On-site induction may remain substantially shorter.
+
+Avoid noticeable layout jumping caused purely by arbitrary padding or giant empty components.
+
+==================================================
+14. SECTION SPACING SYSTEM
+==================================================
+
+Audit vertical spacing inside Content.
+
+Create a consistent rhythm between:
+
+type selector
+→ primary metadata
+→ worker instructions
+→ Add content later where applicable
+→ primary source/configuration
+→ supporting content
+→ footer
+
+Do not let one type use much larger arbitrary gaps than another.
+
+Use existing OnSite spacing tokens/classes where possible.
+
+Avoid appending a giant CSS override block.
+
+==================================================
+15. GREY PANELS
+==================================================
+
+There are currently too many muted grey rectangular blocks.
+
+Use grey panels only when they genuinely represent:
+
+- a selectable/control state
+- a meaningful content row
+- a status requiring containment
+
+Do NOT put ordinary helper copy inside a large grey rectangle.
+
+Convert ordinary explanations/security/privacy guidance to standard muted helper text.
+
+This should materially reduce the prototype/form-builder feel.
+
+==================================================
+16. ACTION HIERARCHY
+==================================================
+
+There should still be ONE primary orange action in the modal footer:
+
+Continue
+
+Content-level actions such as:
+
+Upload document
+Upload PDF
+Add resource
+
+must remain secondary.
+
+But they must still obviously look clickable.
+
+Use consistent secondary button styling.
+
+Do not make one upload action orange text, another grey text and another giant blank box without a reason.
+
+==================================================
+17. TYPE-SWITCHING CONSISTENCY
+==================================================
+
+Physically switch through all six types repeatedly.
+
+Document
+→ Video
+→ Form & signature
+→ External training
+→ Background check
+→ On-site induction
+→ Document
+
+Check that:
+
+- content changes cleanly
+- modal shell stays stable
+- footer does not jump unpredictably
+- scroll position resets appropriately when changing type
+- hidden fields do not leave gaps
+- no stale validation is visible
+- no stale values visually appear in another type
+- Continue recalculates correctly
+
+==================================================
+18. TRUE DESIGN PRINCIPLE
+==================================================
+
+Do NOT make every type visually identical.
+
+Use these families:
+
+FILE-BASED:
+- Document
+- Form & signature
+
+They should share one compact primary-source component.
+
+URL/MEDIA:
+- Video induction
+
+It should share the same spacing/label/helper language but use a URL input.
+
+CONFIGURATION-BASED:
+- External training
+- Background check
+
+They should use aligned standard form controls.
+
+IN-PERSON:
+- On-site induction
+
+Minimal by design.
+
+These four families should still clearly feel like the same OnSite product.
+
+==================================================
+19. VISUAL QA
+==================================================
+
+Take screenshots of ALL SIX Content states after the change.
+
+Compare them side-by-side.
+
+Specifically inspect:
+
+- paired input alignment
+- label alignment
+- modal header position
+- footer position
+- section spacing
+- action styling
+- grey-panel usage
+- upload component consistency
+- overall information density
+
+Do not declare complete after checking only one or two types.
+
+==================================================
+20. RESPONSIVE QA
+==================================================
+
+Check at:
+
+1440px
+1024px
+768px
+390px
+
+At narrower widths:
+
+- paired fields stack deliberately
+- no labels collide
+- Optional metadata stays associated with the correct label
+- upload status/action row can stack if genuinely needed
+- modal does not horizontally overflow
+- sticky footer stays accessible
+
+==================================================
+21. PRESERVE FUNCTIONAL LOGIC
+==================================================
+
+Do not regress the Content validation already implemented.
+
+Preserve:
+
+Document:
+Title + document OR Title + Add content later
+
+Video:
+Title + valid video URL OR Title + Add content later
+
+Form & signature:
+Title + PDF OR Title + Add content later
+
+External training:
+existing valid requirements
+
+Background check:
+existing contextual valid state
+
+On-site induction:
+selection alone can Continue
+
+Do not alter Completion or Assignment.
+
+==================================================
+22. DO NOT BUILD NEW INFRASTRUCTURE
+==================================================
+
+Do not implement:
+
+- PDF field placement
+- worker signing
+- completed PDFs
+- video completion tracking
+- external provider integrations
+- DBS integrations
+- new storage infrastructure
+
+This task is UI consistency only.
+
+==================================================
+23. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+24. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Do not include unrelated map, worker-profile, demo, fixture, seed or sample-data edits.
+
+Commit exactly:
+
+Unify pre-start requirement content UI
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- External Training alignment result
+- Document source component result
+- Form & signature source component result
+- Video simplification result
+- Supporting Materials result
+- Background Check guidance result
+- On-site induction preserved result
+- all six screenshot QA results
+- responsive widths tested
+- validation results
+- commit hash
+- push result

@@ -1,0 +1,698 @@
+TASK: Polish and correct Request Labour → Step 5 → Add requirement → Content.
+
+This is a focused Content-stage task.
+
+DO NOT build the full PDF field-placement/signing engine in this task.
+That will be a separate substantial implementation stage.
+
+DO NOT:
+- change the main Step 5 landing page
+- change Completion yet
+- change Assignment yet
+- change requirement data architecture unless required for validation
+- change unrelated Request Labour steps
+- edit demo/fixture/seed/sample data
+- broadly refactor the app
+
+KEEP the existing six requirement types:
+
+1. Document
+2. Video induction
+3. Form & signature
+4. External training
+5. Background check
+6. On-site induction
+
+KEEP the 3-step modal:
+
+Content → Completion → Assignment
+
+==================================================
+1. FIX CONTENT-STEP VALIDATION
+==================================================
+
+The modal currently shows an active orange Continue button even when required Content fields are incomplete.
+
+Change this.
+
+Continue should be visually and functionally DISABLED until the selected requirement has the minimum valid Content configuration.
+
+Do not rely only on browser-native required-field validation after clicking Continue.
+
+Use the actual requirement state to control the button.
+
+==================================================
+2. DOCUMENT VALIDATION
+==================================================
+
+For Document:
+
+Required to proceed normally:
+
+- Title
+- uploaded document
+
+OR:
+
+- Title
+- "Add content later" selected
+
+If "Add content later" is selected:
+document upload is not required yet.
+
+Worker instructions remain optional.
+
+==================================================
+3. DOCUMENT COPY IS CURRENTLY WRONG
+==================================================
+
+The Content step currently assumes acknowledgement.
+
+Examples of current wording include:
+
+"Upload the document workers must read and acknowledge."
+
+and:
+
+"Workers must read the full document and acknowledge it."
+
+This is wrong because acknowledgement/signing behaviour belongs to STEP 2 — COMPLETION.
+
+A Document may later be configured as:
+
+- View only
+- Read & acknowledge
+- Read & sign
+
+Therefore Content must remain neutral.
+
+Change the Document upload section to wording such as:
+
+DOCUMENT
+
+"Upload the document workers need to review."
+
+Empty state:
+
+"No document uploaded."
+
+Upload action:
+
+"Upload document"
+
+Do NOT mention:
+
+- acknowledge
+- accept
+- sign
+- completion
+
+in the Document Content-stage upload helper.
+
+==================================================
+4. VIDEO INDUCTION — CREATE A CLEAR VIDEO SOURCE AREA
+==================================================
+
+Video induction currently drops into the generic Resources pattern.
+
+That is too vague.
+
+The primary content for a Video induction is the video itself.
+
+After selecting Video induction, show a dedicated:
+
+VIDEO SOURCE
+
+section.
+
+The company should clearly understand where the induction video goes.
+
+Support the capabilities that truthfully exist in the current app.
+
+If the current app supports a real video file upload:
+allow:
+
+"Upload video"
+
+If durable/reliable video upload does NOT currently exist:
+do NOT fake it.
+
+Instead support a real external video URL if that is currently reliable.
+
+For example:
+
+Video URL *
+
+https://
+
+Use neutral professional helper copy such as:
+
+"Add the video workers need to watch before starting."
+
+If both real file upload and URL are genuinely supported, allow the company to choose either.
+
+Do not present a generic "+ Add resource" as the primary method of adding the required video.
+
+==================================================
+5. VIDEO VALIDATION
+==================================================
+
+For Video induction:
+
+Normal path requires:
+
+- Title
+- valid video source
+
+OR:
+
+- Title
+- Add content later selected
+
+Worker instructions remain optional.
+
+Do NOT implement full-watch tracking here.
+
+That belongs to the worker completion system.
+
+Do NOT put:
+
+"must watch full video"
+
+logic into Content configuration.
+
+Completion behaviour belongs to Step 2 / worker-side completion.
+
+==================================================
+6. SUPPLEMENTARY VIDEO RESOURCES
+==================================================
+
+If the existing requirement architecture supports additional resources:
+
+keep supplementary resources available AFTER the primary video source where appropriate.
+
+Example:
+
+SUPPORTING MATERIALS
+Optional
+
+But do not make the company use "Add resource" merely to provide the actual induction video.
+
+The primary video source must be obvious.
+
+==================================================
+7. FORM & SIGNATURE
+==================================================
+
+The PDF-source architecture is correct.
+
+KEEP:
+
+- PDF as the canonical source document
+- Title
+- optional Worker instructions
+- Add content later
+- Upload PDF
+
+However, remove all developer/internal infrastructure copy from the company UI.
+
+REMOVE the visible message currently saying things like:
+
+"PDF field placement is not available in this build because the application has no reliable PDF page renderer or durable file-storage service..."
+
+A company using OnSite must never see internal development limitations.
+
+Do not replace it with fake functionality.
+
+==================================================
+8. FORM & SIGNATURE COMPANY-FACING COPY
+==================================================
+
+Use simple professional copy.
+
+Section:
+
+SOURCE DOCUMENT
+
+Helper:
+
+"Upload the PDF workers will complete and sign."
+
+Empty:
+
+"No PDF uploaded."
+
+Action:
+
+"Upload PDF"
+
+Do not mention:
+
+- renderer
+- durable storage
+- simulation
+- technical limitations
+- infrastructure
+
+in the normal company UI.
+
+==================================================
+9. FORM & SIGNATURE VALIDATION
+==================================================
+
+Normal path requires:
+
+- Title
+- source PDF
+
+OR:
+
+- Title
+- Add content later selected
+
+Worker instructions remain optional.
+
+Do NOT implement fake field placement.
+
+Do NOT create fake signatures.
+
+Do NOT pretend that PDF signing is complete.
+
+The actual PDF field-placement/signing engine will be implemented separately.
+
+==================================================
+10. EXTERNAL TRAINING
+==================================================
+
+The current External training structure is good.
+
+KEEP:
+
+- Training provider — Optional
+- Training title *
+- External training URL *
+- Worker instructions — Optional
+
+Continue should require:
+
+- Training title
+- valid external training URL
+
+Do not require Training provider.
+
+Validate URL sensibly.
+
+Support normal secure web URLs.
+
+Do not collect:
+
+- passwords
+- access tokens
+- third-party login credentials
+
+==================================================
+11. EXTERNAL TRAINING SECURITY NOTE
+==================================================
+
+The current security note is useful but visually somewhat heavy.
+
+Keep the principle but make it quieter and concise.
+
+Suggested copy:
+
+"Do not include passwords or third-party login credentials."
+
+Do not place it in a large attention-grabbing warning box unless the existing design system requires it.
+
+This is guidance, not an error.
+
+==================================================
+12. BACKGROUND CHECK
+==================================================
+
+The current Background check architecture is strong.
+
+KEEP:
+
+- Check type
+- DBS level when DBS applies
+- How the check is initiated
+- Provider — Optional
+- Application / provider URL — Optional where appropriate
+- Worker instructions — Optional
+
+Do not redesign this flow.
+
+==================================================
+13. BACKGROUND CHECK VALIDATION
+==================================================
+
+Make validation contextual.
+
+Examples:
+
+If:
+"Worker applies / completes externally"
+
+and an external application URL is necessary for the configured route,
+validate that appropriately.
+
+Do not blindly require Provider if it is optional.
+
+Do not force a URL if the company instructions legitimately explain another process.
+
+Preserve the current flexible architecture.
+
+==================================================
+14. BACKGROUND CHECK PRIVACY NOTE
+==================================================
+
+Keep the important privacy principle:
+
+OnSite should not ask companies to enter:
+
+- criminal-history details
+- DBS certificate contents
+- sensitive check results
+
+But simplify the visible company-facing note.
+
+Suggested:
+
+"Do not enter criminal-history details or certificate contents here."
+
+Do not expose internal storage terminology unnecessarily.
+
+==================================================
+15. ON-SITE INDUCTION
+==================================================
+
+The current On-site induction Content behaviour is correct.
+
+KEEP IT SIMPLE.
+
+When On-site induction is selected:
+
+- no Title required
+- no Worker instructions required
+- no upload required
+- no resources required
+- no "Add content later"
+- no unnecessary setup fields
+
+The company should be able to select:
+
+On-site induction
+
+and immediately Continue to Completion.
+
+Do not complicate this type.
+
+==================================================
+16. TYPE SWITCHING
+==================================================
+
+When switching between requirement types inside the modal:
+
+- show only fields relevant to the selected type
+- do not leave stale validation errors from the previous type
+- do not accidentally treat hidden fields as required
+- preserve unsaved values intelligently if the existing draft model supports it
+- never allow hidden fields to block Continue
+
+Do not introduce cross-type state corruption.
+
+==================================================
+17. ADD CONTENT LATER
+==================================================
+
+Keep:
+
+"Add content later"
+
+for types where it makes sense.
+
+It should mean:
+
+the company can save/configure the requirement now and supply the final content before workers need to complete it.
+
+It should NOT appear for On-site induction.
+
+When checked:
+
+- missing primary file/video content should not block progression
+- Title should still be required where that requirement type uses a Title
+
+Do not use Add content later to bypass unrelated required metadata such as External training title/URL where the entire requirement itself depends on that destination.
+
+==================================================
+18. CONTINUE BUTTON STATES
+==================================================
+
+Make the Continue button state immediately understandable.
+
+INVALID / incomplete:
+- disabled
+- existing neutral disabled treatment
+- no misleading orange active button
+
+VALID:
+- OnSite orange
+- clickable
+
+Do not wait until the user clicks to reveal obvious missing-state errors.
+
+If a user has interacted with a required field and leaves it invalid, use the app's existing field error treatment.
+
+==================================================
+19. MODAL VISUAL POLISH
+==================================================
+
+Keep the current overall modal design.
+
+It is already strong.
+
+Do not redesign the shell.
+
+Preserve:
+
+- Add requirement title
+- close X
+- Content / Completion / Assignment mini-stepper
+- 3×2 requirement type grid
+- selected pale-orange/orange state
+- sticky footer
+- Cancel / Continue
+- internal scrolling
+
+Tighten only where necessary.
+
+Avoid:
+- extra cards
+- giant grey notice boxes
+- excessive explanatory text
+- enterprise form-builder complexity
+
+==================================================
+20. RESOURCE TERMINOLOGY
+==================================================
+
+Use specific labels when content has an obvious primary format.
+
+Document:
+DOCUMENT
+
+Video:
+VIDEO SOURCE
+
+Form & signature:
+SOURCE DOCUMENT
+
+External training:
+EXTERNAL TRAINING URL
+
+Background check:
+provider/application configuration
+
+Only use generic:
+
+RESOURCES / SUPPORTING MATERIALS
+
+for genuinely supplementary items.
+
+Do not make primary content look like an optional generic attachment.
+
+==================================================
+21. DO NOT BUILD THE PDF EDITOR YET
+==================================================
+
+Very important.
+
+Do NOT attempt in this task to implement:
+
+- PDF page rendering
+- draggable PDF fields
+- text-field placement
+- date-field placement
+- signature-field placement
+- initials
+- worker PDF completion
+- electronic signature capture
+- completed PDF generation
+- immutable audit records
+
+That is the next dedicated architecture/implementation stage.
+
+This task prepares the Content configuration cleanly for it.
+
+==================================================
+22. QA ALL SIX TYPES
+==================================================
+
+Physically test each requirement type.
+
+DOCUMENT:
+- empty → Continue disabled
+- Title only → disabled
+- Title + document → enabled
+- Title + Add content later → enabled
+
+VIDEO:
+- empty → disabled
+- Title only → disabled
+- Title + valid video source → enabled
+- Title + Add content later → enabled
+
+FORM & SIGNATURE:
+- empty → disabled
+- Title only → disabled
+- Title + PDF → enabled
+- Title + Add content later → enabled
+- no developer-facing limitation notice visible
+
+EXTERNAL TRAINING:
+- missing title → disabled
+- missing URL → disabled
+- title + valid URL → enabled
+- provider remains optional
+
+BACKGROUND CHECK:
+- contextual configuration behaves correctly
+- hidden fields do not block progression
+- sensitive-data guidance remains concise
+
+ON-SITE INDUCTION:
+- selection alone allows Continue
+- no unnecessary Content fields appear
+
+==================================================
+23. TYPE SWITCH QA
+==================================================
+
+Test switching repeatedly:
+
+Document
+→ Video
+→ Form & signature
+→ External training
+→ Background check
+→ On-site induction
+→ Document
+
+Confirm:
+
+- fields change correctly
+- Continue state recalculates correctly
+- no stale browser validation bubbles
+- no hidden required fields
+- no console errors
+
+==================================================
+24. RESPONSIVE QA
+==================================================
+
+Check modal at:
+
+1440px
+1024px
+768px
+390px
+
+Ensure:
+
+- requirement type cards remain usable
+- content fields fit
+- modal scroll works
+- footer remains accessible
+- no horizontal overflow
+- text does not awkwardly collide/wrap
+
+==================================================
+25. PRESERVE DATA ARCHITECTURE
+==================================================
+
+Preserve the Stage 1 requirement architecture already implemented:
+
+- unlimited requirements
+- duplicate requirement types allowed
+- stable IDs
+- order
+- readiness
+- completion configuration
+- assignment configuration
+- version compatibility
+- legacy compatibility
+- unsaved-change protection
+
+Do not regress any of this.
+
+==================================================
+26. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+27. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include this Content-stage polish.
+
+Do not include unrelated worker/profile changes.
+
+Commit exactly:
+
+Polish pre-start requirement content flow
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- validation rules implemented by requirement type
+- Document copy changes
+- Video source changes
+- Form & signature company-facing changes
+- External training changes
+- Background check changes
+- On-site induction result
+- all six QA results
+- responsive widths tested
+- validation results
+- commit hash
+- push result

@@ -1,0 +1,280 @@
+TASK: Final viewport-only adjustment for Request Labour → Step 4 → Exact site entrance map.
+
+The map styling is now good and should be LOCKED.
+
+Do NOT change:
+- map colours
+- building colours
+- road colours
+- labels
+- rail styling
+- pin design
+- controls
+- map provider
+- renderer
+- fallback
+- geocoding
+- confirmation logic
+- click-to-place
+- drag behavior
+- attribution
+- unrelated Step 4 content
+
+This task is ONLY about the automatic opening viewport / zoom / centering.
+
+==================================================
+1. CURRENT RESULT
+==================================================
+
+Two current map states were reviewed.
+
+The very close view is TOO CLOSE:
+- target building fills too much of the map
+- surrounding access context is lost
+- useful nearby roads/junctions disappear
+
+The wider view is MUCH BETTER:
+- target building is identifiable
+- immediate access roads are visible
+- surrounding context is useful
+
+However, the wider view is still slightly too broad:
+- Wembley Stadium is just starting to appear at the far-left edge in the Amazon/Wembley QA case
+
+The desired automatic opening view should be very close to the wider screenshot, but slightly tighter.
+
+==================================================
+2. TARGET OPENING VIEW
+==================================================
+
+When opening the Exact Entrance map from a precise geocoded site:
+
+show:
+
+- the target building/site clearly
+- access roads around the site
+- nearest useful junctions
+- immediately adjacent buildings
+- enough context to identify the correct gate
+
+Do NOT normally show:
+- major landmarks several blocks away
+- large sections of the surrounding district
+- unnecessary wide-area context
+
+For the Amazon/Wembley QA case:
+
+Wembley Stadium should NOT be visible in the initial automatic view.
+
+The Amazon/site building and immediate road network should remain clearly visible.
+
+Do NOT hard-code this site.
+
+==================================================
+3. DEFAULT ZOOM
+==================================================
+
+Tune the default automatic zoom so it lands BETWEEN the current two screenshots, but noticeably closer to the wider screenshot.
+
+Start around:
+
+17.1–17.3
+
+for a precise site/building geocode.
+
+Use the actual current map/provider scale and visually choose the best value.
+
+Do NOT use the previous extremely close value as the default.
+
+For a saved exact entrance opened via Edit entrance:
+
+use a slightly closer view if useful, approximately:
+
+17.3–17.5
+
+but still retain enough road context to reposition the pin.
+
+==================================================
+4. CENTERING
+==================================================
+
+The target site/building should sit naturally near the centre of the usable map.
+
+Current wider view feels slightly right-heavy.
+
+Refine the opening centre if required so:
+
+- target building is visually central
+- surrounding access roads are balanced around it
+- controls do not obscure important site detail
+
+Do NOT introduce arbitrary pixel offsets specific to Amazon/Wembley.
+
+Use generic map centering logic.
+
+==================================================
+5. USER-ADJUSTED VIEW MUST WIN
+==================================================
+
+Only apply this viewport when the map is initially opened/reopened from the site location or confirmed entrance.
+
+Once the user:
+
+- pans
+- zooms
+- clicks to place
+- drags the pin
+
+do NOT keep resetting the viewport.
+
+Manual user interaction must remain authoritative.
+
+==================================================
+6. RECENTER BEHAVIOUR
+==================================================
+
+The existing Re-centre on site address button should use the same improved entrance-level viewport.
+
+Re-centre should not zoom out to a district-level view.
+
+Expected:
+
+click Re-centre
+→ site returns to useful entrance-context zoom
+→ building + immediate roads visible
+
+==================================================
+7. DO NOT CHANGE MAP STYLE
+==================================================
+
+The current visual styling is approved for this stage.
+
+Do NOT edit `onsite-map-style.json` unless a viewport-related setting genuinely lives there.
+
+Do NOT make more colour/contrast adjustments.
+
+This task should ideally be limited to viewport/initialisation logic.
+
+==================================================
+8. QA
+==================================================
+
+Test the automatic opening view with:
+
+A. Large industrial/logistics site
+B. Dense city-centre address
+C. Smaller suburban/commercial site
+
+For all three:
+
+- target site visible
+- immediate access roads visible
+- enough context to locate entrance
+- not excessively zoomed in
+- not district-level zoomed out
+
+For Amazon/Wembley temporary QA:
+
+PASS only if:
+- Amazon/site building clearly visible
+- Hannah Close / immediate access network visible
+- useful neighbouring buildings visible
+- Wembley Stadium NOT visible in the initial view
+
+==================================================
+9. EDIT ENTRANCE QA
+==================================================
+
+Confirm entrance.
+
+Collapse map.
+
+Click Edit entrance.
+
+Expected:
+
+- map opens centred around saved entrance
+- useful close context remains
+- not so close that the building becomes a featureless block
+- not so far that distant landmarks appear
+
+==================================================
+10. RESPONSIVE CHECK
+==================================================
+
+Verify at:
+
+1440px
+1024px
+768px
+390px
+
+Do NOT deliberately zoom further out simply because the viewport width decreases.
+
+The geographical context should remain entrance-focused.
+
+==================================================
+11. PRESERVE ALL FUNCTIONALITY
+==================================================
+
+Verify:
+
+- click-to-place works
+- drag works
+- + / − works
+- recenter works
+- page scrolling behavior unchanged
+- Confirm works
+- Edit entrance works
+- confirmed coordinates remain safe until reconfirmed
+- no console errors
+
+==================================================
+12. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Visually inspect the final automatic viewport.
+
+Do NOT mark complete if Wembley Stadium is still visible in the initial Amazon/Wembley QA view.
+
+==================================================
+13. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include viewport-related changes from this task.
+
+Commit exactly:
+
+Tune exact entrance map viewport
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- old default zoom
+- new default zoom
+- saved-entrance edit zoom
+- recenter zoom
+- Amazon/Wembley QA result
+- confirmation that Wembley Stadium is absent from default view
+- other site types tested
+- responsive widths tested
+- validation results
+- commit hash
+- push result

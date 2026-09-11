@@ -1,0 +1,495 @@
+TASK: Finalise the OnSite authentication experience to a 10/10 visual standard.
+
+IMPORTANT:
+The site-wide terminology update has already been handled separately.
+
+Do NOT redo the terminology audit.
+Do NOT broadly replace Worker / Company strings again.
+Do NOT change internal account-type values.
+Do NOT change authentication logic.
+Do NOT change project/company ownership.
+Do NOT touch recovery data or localStorage records.
+
+This task is AUTH UI / UX POLISH ONLY.
+
+The desired account labels on the auth screens are:
+
+Sub-contractor
+Find CIS work
+
+Hiring company
+Hire and manage labour
+
+Preserve the internal existing role values behind them.
+
+==================================================
+1. GOAL
+==================================================
+
+The Welcome / Login / Register / Forgot Password screens should now feel fully consistent with the modern OnSite product.
+
+They must visually belong to the same product as:
+
+- Dashboard
+- Projects
+- Project Detail
+- Request Labour
+- Pre-start
+
+Visual direction:
+
+- white / very light neutral background
+- black typography
+- OnSite orange #F97316
+- restrained borders
+- subtle shadow only where useful
+- modern radius system
+- no gradients
+- no glass effects
+- no oversized logo
+- no generic marketing-page styling
+- polished, restrained, professional
+
+Think Stripe / Linear / Ramp-level restraint.
+
+==================================================
+2. SHARED AUTH HEADER
+==================================================
+
+Review the current compact auth header.
+
+Keep it compact, approximately 64–68px tall.
+
+Use:
+
+- white background
+- subtle bottom border
+- compact OnSite wordmark
+- clean alignment
+
+On inner auth screens, include Back on the left.
+
+IMPORTANT:
+The OnSite logo should remain visually centred even when Back is present.
+
+Do not return to the old oversized header.
+
+Do not add unnecessary text such as:
+
+THE ONSITE PLATFORM
+
+Do not add marketing navigation.
+
+==================================================
+3. WELCOME SCREEN
+==================================================
+
+Final hierarchy:
+
+Welcome to OnSite
+
+Reliable trades. On demand.
+
+Sign in to your account or create a new one.
+
+Primary:
+Log In
+
+Then:
+New to OnSite?
+
+Account choices:
+
+Sub-contractor
+Find CIS work
+
+Hiring company
+Hire and manage labour
+
+Make the two account choices:
+
+- equal size
+- visually balanced
+- restrained
+- obvious
+- clean on hover/focus
+- not oversized feature cards
+
+Use existing suitable icons if they genuinely improve clarity.
+
+==================================================
+4. WELCOME SCREEN SPACING
+==================================================
+
+Review spacing carefully.
+
+Fix:
+
+- header-to-card distance
+- card top/bottom padding
+- title/tagline spacing
+- primary CTA spacing
+- spacing around "New to OnSite?"
+- account-choice spacing
+
+Avoid:
+
+- giant empty areas
+- excessive top padding
+- overly tall card
+- content sitting too low on the page
+
+The card should feel intentionally positioned.
+
+==================================================
+5. LOGIN SCREEN
+==================================================
+
+Keep:
+
+Welcome back
+
+Sign in to your OnSite account.
+
+Fields:
+
+Email address
+Password
+
+Actions:
+
+Forgot password?
+Sign In
+
+Footer:
+
+New to OnSite? Create an account
+
+Target desktop form width:
+
+approximately 400–440px.
+
+Do not make the login card too wide.
+
+==================================================
+6. LOGIN FIELD POLISH
+==================================================
+
+Inputs should match the current OnSite form system.
+
+Use:
+
+- 44–48px height
+- neutral border
+- current radius
+- orange focus treatment
+- clean labels
+- precise vertical spacing
+
+Ensure:
+
+Email:
+autocomplete="email"
+
+Password:
+autocomplete="current-password"
+
+If no password visibility toggle exists, add a small accessible eye control inside the password field.
+
+It must:
+
+- not affect authentication logic
+- be keyboard accessible
+- have an accessible label
+- not interfere with password managers
+- remain visually subtle
+
+==================================================
+7. SIGN IN BUTTON
+==================================================
+
+Use the current OnSite primary-button treatment:
+
+- #F97316
+- 44–48px height
+- current radius
+- restrained hover/focus state
+
+No glow.
+No gradient.
+No scale animation.
+No oversized hero-button look.
+
+If there is an unnecessary decorative arrow/icon, remove it.
+
+==================================================
+8. ERROR STATE
+==================================================
+
+Keep:
+
+Incorrect email or password.
+
+Refine the presentation:
+
+- compact soft-red background
+- subtle red border
+- dark readable red text
+- same radius language as inputs
+- sensible spacing
+
+It should be clear but not visually dominate the form.
+
+==================================================
+9. FORGOT PASSWORD
+==================================================
+
+Bring the Forgot Password screen into the same auth system.
+
+Suggested structure:
+
+Reset your password
+
+Enter your email address and we'll help you regain access.
+
+Email address
+
+Primary:
+Continue
+
+Secondary:
+Back to sign in
+
+IMPORTANT:
+
+Do not claim that an email was sent unless real email delivery exists.
+
+Do not fake production password-reset behaviour.
+
+Preserve existing prototype functionality honestly.
+
+==================================================
+10. REGISTRATION SCREENS
+==================================================
+
+Review BOTH registration flows.
+
+Display:
+
+Create a Sub-contractor account
+
+and
+
+Create a Hiring company account
+
+Suggested supporting copy:
+
+Sub-contractor:
+Set up your profile to find CIS work through OnSite.
+
+Hiring company:
+Set up your company to request and manage labour through OnSite.
+
+Keep copy concise.
+
+Review and polish:
+
+- title hierarchy
+- supporting copy
+- fields
+- spacing
+- groupings
+- button heights
+- error states
+- back links
+- footer treatment
+
+Do not change form logic.
+
+==================================================
+11. SHARED DESIGN SYSTEM
+==================================================
+
+Welcome, Login, Register and Forgot Password should use the same:
+
+- auth shell
+- header
+- content width logic
+- card/panel treatment
+- typography hierarchy
+- inputs
+- buttons
+- error components
+- secondary links
+
+Avoid multiple slightly different auth designs.
+
+Refactor CSS cleanly where needed.
+
+Do not append a giant override section.
+
+==================================================
+12. AUTH PANEL
+==================================================
+
+Use a restrained white panel against the neutral page background.
+
+Prefer:
+
+- subtle border
+- restrained shadow
+- approximately 12–16px radius
+- balanced padding
+
+Do not make the card huge.
+
+Longer registration forms may naturally be wider/taller than Login.
+
+==================================================
+13. MOBILE / RESPONSIVE
+==================================================
+
+Physically inspect:
+
+1440px
+1024px
+768px
+390px
+
+At 390px ensure:
+
+- header is clean
+- Back and logo do not collide
+- auth card fits comfortably
+- controls do not overflow
+- Sub-contractor does not wrap awkwardly
+- Hiring company does not wrap awkwardly
+- account choices remain balanced
+- password-eye control stays aligned
+- buttons remain full width
+- footer links wrap naturally
+
+==================================================
+14. ACCESSIBILITY
+==================================================
+
+Check:
+
+- input labels correctly associated
+- keyboard navigation
+- visible focus states
+- Enter submits login
+- links/buttons use correct semantics
+- icon-only controls have accessible labels
+- error copy is readable
+- colour contrast is acceptable
+
+Do not over-engineer.
+
+==================================================
+15. PROTECT AUTH / RECOVERY DATA
+==================================================
+
+DO NOT:
+
+- clear localStorage
+- change onsite_users_v1
+- change onsite_auth_v1
+- change sitematch_v2
+- reassign company IDs
+- reassign user IDs
+- reset passwords
+- alter credential comparison
+- create migration logic
+
+Use isolated/test state for visual testing if required.
+
+==================================================
+16. PHYSICAL REVIEW
+==================================================
+
+Physically inspect all of these together:
+
+1. Welcome
+2. Login
+3. Login error
+4. Forgot Password
+5. Sub-contractor registration
+6. Hiring company registration
+
+Look specifically for:
+
+- inconsistent widths
+- mismatched spacing
+- old design remnants
+- oversized branding
+- different button heights
+- rogue typography
+- awkward mobile wrapping
+- inconsistent cards
+- weak hierarchy
+
+Fix those before considering the task complete.
+
+==================================================
+17. FUNCTIONAL CHECK
+==================================================
+
+Confirm:
+
+- Log In still works
+- Sub-contractor still opens the existing worker-side registration path
+- Hiring company still opens the existing company-side registration path
+- Back works
+- Forgot Password works
+- Create account works
+- existing role values remain unchanged
+- no auth data was modified during testing
+
+==================================================
+18. VALIDATION
+==================================================
+
+Run:
+
+node --check auth.js
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+19. COMMIT + PUSH
+==================================================
+
+Before commit:
+
+git status
+git diff
+
+Do not include recovery files or unrelated terminology work already committed separately.
+
+Commit exactly:
+
+Finalise authentication design
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- Welcome changes
+- Login changes
+- Register changes
+- Forgot Password changes
+- responsive widths checked
+- auth states physically inspected
+- functionality preserved
+- validation results
+- commit hash
+- push result

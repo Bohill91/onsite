@@ -1,0 +1,573 @@
+TASK: Fix the Exact Entrance map adaptive viewport algorithm across different site types.
+
+The visual styling is now APPROVED.
+
+DO NOT change:
+- map colours
+- building styling
+- road styling
+- labels
+- rail styling
+- green/water
+- pin
+- controls
+- provider
+- renderer
+- fallback
+- attribution
+- click-to-place
+- drag behaviour
+- confirmation logic
+- unrelated Step 4 UI
+- demo/fixture/seed/sample data
+
+This task is ONLY about how the map automatically frames a site when it opens.
+
+==================================================
+THE CURRENT PROBLEM
+==================================================
+
+Testing several real location types proves the current adaptive framing is inconsistent.
+
+Examples observed:
+
+1. Residential/suburban site:
+Good useful context.
+
+2. Large Amazon logistics site:
+Too close.
+The building dominates and surrounding access-road context is insufficient.
+
+3. Dense central London / Lanesborough:
+Good useful context.
+
+4. 855 Finchley Road:
+Far too close.
+The map shows only a handful of buildings and gives almost no useful road orientation.
+
+The problem is therefore NOT one fixed zoom value.
+
+The adaptive viewport algorithm is still allowing some sites to open much too close.
+
+==================================================
+CORE PRODUCT RULE
+==================================================
+
+Automatic opening view is for:
+
+ORIENTATION + ENTRANCE CONTEXT
+
+Manual zoom is for:
+
+PRECISE GATE PLACEMENT
+
+The automatic map should NEVER open so close that the user first has to zoom out just to understand where the site is.
+
+The company can always manually zoom in afterwards.
+
+==================================================
+1. INSPECT CURRENT ADAPTIVE LOGIC
+==================================================
+
+Trace the existing entrance-map framing code.
+
+Inspect:
+
+- fitBounds logic
+- geocoder bbox/bounds usage
+- precision/type-based fallback
+- minimum zoom
+- maximum zoom
+- padding
+- saved entrance framing
+- recenter framing
+
+Determine exactly why small address/building bounds can produce excessively close maps.
+
+Do not make another speculative single-number adjustment.
+
+==================================================
+2. TRUST BOUNDS, BUT NOT LITERALLY
+==================================================
+
+If the geocoder provides trustworthy feature bounds:
+
+DO NOT fit the raw bounds directly and allow them to determine an extremely close zoom.
+
+The purpose is not to frame only the literal building polygon.
+
+The map must include surrounding entrance context.
+
+Use the bounds as a STARTING POINT.
+
+Expand them before fitting.
+
+==================================================
+3. EXPAND FEATURE BOUNDS
+==================================================
+
+Create a reusable helper that expands trustworthy geocoder bounds geographically before calling fitBounds.
+
+The expanded frame should include:
+
+- whole site/building
+- nearby access roads
+- nearest useful junctions
+- neighbouring buildings
+
+Do not use Amazon-specific logic.
+
+Do not use address-name heuristics.
+
+Use geometry only.
+
+For small/tight bounds:
+expand proportionally MORE.
+
+For already large bounds:
+expand proportionally LESS.
+
+A useful conceptual strategy:
+
+small feature bounds
+→ expand significantly
+
+large feature bounds
+→ expand moderately
+
+The expansion should be based on geographic span, not project/company names.
+
+==================================================
+4. MINIMUM CONTEXT RADIUS
+==================================================
+
+Introduce a minimum surrounding geographic context.
+
+Even if the geocoder returns:
+
+- a tiny building bbox
+- a single-address point
+- very tight feature geometry
+
+the automatic map must still show a useful surrounding area.
+
+Do not allow the automatic viewport to collapse onto only:
+
+- one building
+- a few adjacent roofs
+- a tiny section of one road
+
+The Finchley Road screenshot is an explicit example of what must NOT happen.
+
+==================================================
+5. STRONGER MAXIMUM AUTOMATIC ZOOM
+==================================================
+
+The current maximum automatic zoom is still too close.
+
+Lower the maximum automatic zoom.
+
+Start by testing a clamp around:
+
+MAX AUTO ZOOM:
+approximately 16.7
+
+Allow tuning roughly within:
+
+16.5–16.9
+
+based on actual visual QA.
+
+This maximum applies to AUTOMATIC framing only.
+
+The user must still be able to manually zoom further in.
+
+==================================================
+6. MINIMUM AUTOMATIC ZOOM
+==================================================
+
+Also prevent excessively wide district-level views.
+
+Use a sensible minimum automatic zoom roughly around:
+
+16.0–16.2
+
+unless trustworthy large feature bounds genuinely require slightly wider framing.
+
+Do not show half a city.
+
+The viewport should remain entrance-focused.
+
+==================================================
+7. TARGET AUTO-ZOOM RANGE
+==================================================
+
+The resulting automatic entrance viewport should generally land approximately within:
+
+16.1 – 16.8
+
+depending on:
+
+- feature size
+- geocoder precision
+- valid bounds
+- physical site context
+
+Do NOT force every site to the same zoom.
+
+This is a CLAMPED adaptive system.
+
+==================================================
+8. POINT-ONLY / NO BOUNDS FALLBACK
+==================================================
+
+If no trustworthy bbox exists:
+
+use one central precision-based helper.
+
+Example:
+
+precise building/address:
+~16.7
+
+street-level:
+~16.4
+
+less precise locality result:
+~16.1
+
+These are fallback values only.
+
+Do not scatter them throughout app.js.
+
+==================================================
+9. LARGE SITE BEHAVIOUR
+==================================================
+
+For a large logistics/industrial building:
+
+automatic view should show:
+
+- the whole relevant building/site footprint
+- internal/perimeter access roads where mapped
+- nearest public road
+- useful neighbouring buildings
+
+The building must NOT fill most of the map.
+
+Amazon DHA1 is a QA example only.
+
+Do not hard-code it.
+
+==================================================
+10. SMALL BUILDING / ADDRESS BEHAVIOUR
+==================================================
+
+For a small suburban/commercial/residential address:
+
+automatic view should show:
+
+- target location
+- street
+- nearby junctions
+- enough neighbouring streets/buildings for orientation
+
+It must NOT zoom in until only a few roofs are visible.
+
+855 Finchley Road is an explicit QA example of the current failure.
+
+==================================================
+11. DENSE URBAN BEHAVIOUR
+==================================================
+
+For dense central London:
+
+automatic view should show:
+
+- target building
+- immediately relevant roads
+- major adjacent junction/landmark where useful
+
+but not a huge portion of central London.
+
+The Lanesborough/Hyde Park Corner result is currently close to the desired level of context.
+
+Use that as a quality benchmark, NOT hard-coded logic.
+
+==================================================
+12. SAVED EXACT ENTRANCE
+==================================================
+
+When opening:
+
+Edit entrance
+
+centre on the confirmed entrance pin.
+
+But still apply a useful automatic context zoom.
+
+Do NOT reopen so close that surrounding access roads disappear.
+
+Use the same clamped context logic, with at most a very small bias closer than initial opening.
+
+==================================================
+13. RECENTRE
+==================================================
+
+Re-centre on site address must call the SAME adaptive framing helper.
+
+Do not maintain a separate fixed recenter zoom.
+
+One viewport strategy should control:
+
+- first opening
+- recenter
+- reopening around a saved entrance where appropriate
+
+==================================================
+14. USER INTERACTION WINS
+==================================================
+
+Once the user manually:
+
+- pans
+- zooms
+- clicks to move the pin
+- drags the pin
+
+do not automatically refit/reset the map.
+
+Auto-framing applies only at deliberate initialization/recenter moments.
+
+==================================================
+15. MANDATORY FOUR-LOCATION QA
+==================================================
+
+Physically test at least these four context types.
+
+Do NOT stop after one passes.
+
+A. LARGE INDUSTRIAL / LOGISTICS
+
+Acceptance:
+- full useful site visible
+- surrounding access network visible
+- building does not dominate whole map
+- not district-level wide
+
+B. SUBURBAN / RESIDENTIAL
+
+Acceptance:
+- target street easy to understand
+- nearby road network visible
+- not huge neighbourhood overview
+- not tiny handful-of-buildings close-up
+
+C. DENSE URBAN / CENTRAL LONDON
+
+Acceptance:
+- target building/street visible
+- surrounding junction context visible
+- no excessive city-wide area
+
+D. SMALLER COMMERCIAL / MIXED SITE
+
+Acceptance:
+- building/site visible
+- immediate access context visible
+- balanced framing
+
+==================================================
+16. SPECIFIC REGRESSION CASES
+==================================================
+
+Use these existing QA examples temporarily where available:
+
+Amazon DHA1:
+CURRENT ISSUE = too close
+
+855 Finchley Road:
+CURRENT ISSUE = far too close
+
+The Lanesborough:
+CURRENT RESULT = close to good
+
+Pocklington Close:
+CURRENT RESULT = close to good
+
+After the change:
+
+Amazon should improve WITHOUT ruining Lanesborough.
+
+Finchley Road should improve WITHOUT making Pocklington too wide.
+
+That is the main acceptance test for the adaptive algorithm.
+
+==================================================
+17. DO NOT TUNE TO ONE SCREENSHOT
+==================================================
+
+Do NOT add:
+
+- Amazon-specific conditions
+- Finchley-specific conditions
+- postcode-specific logic
+- building-name logic
+- city-specific zoom values
+
+The solution must derive from:
+
+- geometry
+- feature bounds
+- geocoder precision
+- generic clamped viewport rules
+
+==================================================
+18. RESPONSIVE QA
+==================================================
+
+Check:
+
+1440px
+1024px
+768px
+390px
+
+Different aspect ratios naturally show slightly different map areas.
+
+That is fine.
+
+But the usefulness should remain consistent.
+
+Do not intentionally zoom far out on mobile.
+
+==================================================
+19. PRESERVE ALL WORKING MAP FEATURES
+==================================================
+
+Verify:
+
+- vector map still loads
+- fallback still works
+- click-to-place works
+- drag works
+- zoom +/− works
+- recenter works
+- page scrolling is not hijacked
+- Confirm entrance works
+- Confirmed state collapses
+- Edit entrance works
+- draft/confirmed coordinates remain correct
+- required attribution remains visible
+- no console errors
+
+==================================================
+20. DO NOT TOUCH VISUAL STYLE
+==================================================
+
+The current visual style is now locked for this task.
+
+Ideally do NOT edit:
+
+onsite-map-style.json
+
+This should primarily be viewport logic in app.js / existing map helpers.
+
+==================================================
+21. CODE QUALITY
+==================================================
+
+Create one understandable adaptive-framing helper rather than scattered conditional logic.
+
+Prefer concepts such as:
+
+- normalize bounds
+- calculate geographic span
+- expand bounds
+- clamp zoom
+- fallback based on precision
+- initialise/recenter using shared helper
+
+Do NOT:
+
+- duplicate fitBounds logic
+- add many magic values in different handlers
+- use hard-coded coordinates
+- build location-specific exceptions
+
+==================================================
+22. MANDATORY BEFORE/AFTER QA
+==================================================
+
+Inspect screenshots before and after for:
+
+Amazon DHA1
+855 Finchley Road
+Lanesborough / dense urban equivalent
+Pocklington / suburban equivalent
+
+Ask:
+
+Does each final map provide roughly the same LEVEL OF USEFUL ENTRANCE CONTEXT?
+
+Not the same geographic area.
+
+The same usefulness.
+
+If two still open far too close while two look good:
+
+THE TASK IS NOT COMPLETE.
+
+Continue tuning the adaptive algorithm.
+
+==================================================
+23. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+24. COMMIT + PUSH
+==================================================
+
+Do not commit until the four-location QA is satisfactory.
+
+Review:
+
+git status
+git diff
+
+Only include adaptive viewport changes.
+
+Commit exactly:
+
+Fix adaptive entrance map framing
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- root cause of inconsistent framing
+- whether geocoder bounds were too tight
+- geographic bounds expansion strategy
+- minimum context strategy
+- final automatic zoom clamp
+- point-only fallback values
+- Amazon result
+- Finchley Road result
+- dense urban result
+- suburban result
+- responsive widths tested
+- validation results
+- commit hash
+- push result

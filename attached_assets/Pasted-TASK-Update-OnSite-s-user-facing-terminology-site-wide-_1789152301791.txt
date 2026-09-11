@@ -1,0 +1,428 @@
+TASK: Update OnSite’s user-facing terminology site-wide so the two sides of the platform are consistently described as:
+
+Worker-side user → Sub-contractor
+Company-side user → Hiring company
+
+This is a COPY / TERMINOLOGY consistency pass only.
+
+IMPORTANT:
+Do NOT change internal role values, IDs, storage keys, data schemas, routing, authentication logic, permissions, matching logic, project ownership, or existing records.
+
+Existing internal values such as:
+
+worker
+company
+
+must remain exactly as they are where they are used programmatically.
+
+Only update USER-FACING TEXT.
+
+==================================================
+1. PRIMARY TERMINOLOGY
+==================================================
+
+Use these display terms consistently:
+
+Singular:
+Sub-contractor
+Hiring company
+
+Plural:
+Sub-contractors
+Hiring companies
+
+Examples:
+
+"Worker" account → "Sub-contractor"
+"Company" account → "Hiring company"
+
+"Worker registration" → "Sub-contractor registration"
+"Company registration" → "Hiring company registration"
+
+"Worker account" → "Sub-contractor account"
+"Company account" → "Hiring company account"
+
+Where wording needs to be rewritten naturally rather than mechanically replacing words, do so.
+
+==================================================
+2. AUTH / ENTRY SCREEN
+==================================================
+
+On the Welcome to OnSite screen change the account choices to:
+
+Sub-contractor
+Find CIS work
+
+Hiring company
+Hire and manage labour
+
+Remove:
+
+"THE ONSITE PLATFORM"
+
+if it is still present.
+
+Keep:
+
+Welcome to OnSite
+Reliable trades. On demand.
+Sign in to your account or create a new one.
+Log In
+New to OnSite?
+
+Preserve the new compact auth header.
+
+Do NOT change the internal account-type values behind either button.
+
+Sub-contractor must continue to invoke the existing `worker` account flow.
+
+Hiring company must continue to invoke the existing `company` account flow.
+
+==================================================
+3. SITE-WIDE TERMINOLOGY AUDIT
+==================================================
+
+Search the entire front end for user-facing text that identifies the two USER TYPES.
+
+Review:
+
+- index.html
+- app.js
+- auth.js
+- auth.css
+- styles.css
+- dynamically generated HTML
+- modals
+- empty states
+- buttons
+- headings
+- filters
+- account menus
+- registration flows
+- login/auth screens
+- profile screens
+- onboarding
+- dashboards
+- project pages
+- labour/request flows
+- preferred-worker features
+- notifications
+- attendance screens
+- pre-start screens
+- any other visible UI copy
+
+Update terminology where it refers specifically to one of the two sides of OnSite.
+
+==================================================
+4. DO NOT BLINDLY REPLACE EVERY INSTANCE
+==================================================
+
+This is very important.
+
+Do NOT perform a global string replacement of:
+
+worker → sub-contractor
+company → hiring company
+
+Some uses of these words have different meanings and should remain unchanged.
+
+For example, preserve natural business fields such as:
+
+Company Name
+Company Number
+Companies House
+Company address
+Company VAT number
+
+Those describe an actual legal/company entity, not the OnSite account-type label.
+
+Likewise inspect operational phrases individually.
+
+For example:
+
+"Number of workers required"
+
+may still be better written as:
+
+"Number of workers required"
+
+depending on the context.
+
+Do not create unnatural copy such as:
+
+"Number of sub-contractors workers"
+
+Use judgement.
+
+==================================================
+5. OPERATIONAL WORKER TERMINOLOGY
+==================================================
+
+Where the UI is clearly referring to people supplied through OnSite, prefer "sub-contractor" where it reads naturally.
+
+Examples that should normally change:
+
+Worker Profile
+→ Sub-contractor Profile
+
+Preferred Workers
+→ Preferred Sub-contractors
+
+Specific Workers
+→ Specific Sub-contractors
+
+Previous Workers
+→ Previous Sub-contractors
+
+Worker documents
+→ Sub-contractor documents
+
+Worker registration
+→ Sub-contractor registration
+
+Worker account
+→ Sub-contractor account
+
+However, do NOT change internal variable/function/property names.
+
+For example:
+
+workerId
+workers
+preferredWorkers
+workerProfile
+
+should remain unchanged in code unless they are literal UI strings.
+
+==================================================
+6. HIRING-SIDE TERMINOLOGY
+==================================================
+
+Where "Company" is being used as the name of the OnSite user/account type, display:
+
+Hiring company
+
+Examples:
+
+Company account
+→ Hiring company account
+
+Register as a Company
+→ Register as a Hiring company
+
+Company registration
+→ Hiring company registration
+
+Company dashboard
+→ Hiring company dashboard
+
+But again, preserve legitimate business/entity terminology such as:
+
+Company Name
+Company Number
+Company address
+Company documents
+
+Do not make these:
+
+Hiring company Name
+Hiring company Number
+
+That would be incorrect.
+
+==================================================
+7. CAPITALISATION
+==================================================
+
+Use:
+
+Sub-contractor
+Hiring company
+
+in buttons/cards/account-type labels.
+
+Within normal sentences use natural sentence casing:
+
+sub-contractor
+hiring company
+
+Plural:
+
+sub-contractors
+hiring companies
+
+Keep the hyphen in:
+
+sub-contractor
+
+Do not alternate between:
+
+subcontractor
+sub contractor
+sub-contractor
+
+Use "sub-contractor" consistently in user-facing copy.
+
+==================================================
+8. DO NOT ALTER PRODUCT LOGIC
+==================================================
+
+Absolutely preserve:
+
+- `worker` internal role
+- `company` internal role
+- account IDs
+- company IDs
+- worker IDs
+- localStorage keys
+- auth logic
+- permissions
+- routes
+- project filtering
+- ownership
+- matching
+- existing data
+- saved projects
+- registration behaviour
+
+This task must not require any data migration.
+
+==================================================
+9. CHECK FOR AWKWARD COPY
+==================================================
+
+After changing terminology, physically review the main screens.
+
+Do not accept mechanically awkward phrases.
+
+Rewrite nearby copy where necessary so it sounds natural.
+
+Examples:
+
+Bad:
+"Select a Sub-contractor account if you are a sub-contractor worker."
+
+Better:
+"Choose Sub-contractor if you're looking for CIS work."
+
+Bad:
+"Hiring company company details"
+
+Correct:
+"Company details"
+
+The terminology should clarify the two sides of the marketplace without damaging normal construction/business language.
+
+==================================================
+10. KEY SCREENS TO PHYSICALLY VERIFY
+==================================================
+
+At minimum inspect:
+
+- Welcome / account choice
+- Login
+- Sub-contractor registration
+- Hiring company registration
+- Dashboard
+- Projects
+- Request Labour
+- Project Detail
+- Labour
+- Workforce
+- Attendance
+- Pre-start
+- account/profile areas
+- any modal containing Worker/Company account terminology
+
+Search for remaining visible occurrences of:
+
+Worker
+Workers
+Company
+Companies
+
+and decide individually whether each should stay or change.
+
+Do NOT simply report the search results—fix the relevant user-facing ones.
+
+==================================================
+11. RESPONSIVE CHECK
+==================================================
+
+Check:
+
+1440px
+1024px
+768px
+390px
+
+The longer terms:
+
+Sub-contractor
+Hiring company
+
+must not:
+
+- overflow buttons
+- wrap awkwardly
+- distort cards
+- create uneven heights
+- break mobile layouts
+
+Adjust spacing minimally where required.
+
+Do not redesign the pages.
+
+==================================================
+12. VALIDATION
+==================================================
+
+Run:
+
+node --check auth.js
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+Test that:
+
+- Sub-contractor still opens the existing worker flow
+- Hiring company still opens the existing company flow
+- login still works
+- registration routing still works
+- no internal role values changed
+- existing project/company data is unaffected
+
+==================================================
+13. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+git status
+git diff
+
+Do not include unrelated files.
+
+Commit exactly:
+
+Update platform account terminology
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- major terminology changes
+- examples deliberately left as "Company" or "worker" and why
+- confirmation internal `worker` / `company` values were preserved
+- responsive widths checked
+- validation results
+- commit hash
+- push result

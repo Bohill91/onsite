@@ -1,0 +1,327 @@
+TASK: Fix the Exact Entrance map loading/fallback delay based on the completed diagnosis.
+
+This is a focused reliability/UX fix.
+
+The diagnosis established:
+
+- Normal standalone vector-map loading is healthy:
+  approximately 0.3–1.4 seconds.
+- Replit Preview sometimes fails the MapLibre/vector path.
+- When that happens, the current code waits up to 12 seconds before creating the Leaflet raster fallback.
+- During that wait the user sees only the pale map-container background.
+- The iframe itself is not inherently slow.
+- The problem is the slow failure/fallback path.
+
+Do NOT redesign the map.
+Do NOT change map styling.
+Do NOT change viewport/framing logic.
+Do NOT change entrance pin positioning.
+Do NOT change confirmed/draft state behaviour.
+
+==================================================
+1. REDUCE THE FALLBACK WAIT
+==================================================
+
+Locate the existing vector initialization timeout, currently approximately:
+
+pickerMapLoadTimeout = setTimeout(..., 12000)
+
+The 12-second timeout is far too long.
+
+Change the fallback threshold to approximately:
+
+2000 ms
+
+Use a named constant if appropriate rather than burying a magic value.
+
+The purpose is:
+
+- allow normal MapLibre initialization time
+- but do not leave the user staring at a blank panel for many seconds
+
+Do NOT reduce it so aggressively that normal cold vector loads fall back unnecessarily.
+
+Target approximately 2 seconds.
+
+==================================================
+2. FALL BACK IMMEDIATELY ON FATAL VECTOR FAILURE
+==================================================
+
+Inspect the existing MapLibre initialization/error handling.
+
+Currently MapLibre errors can be recorded without immediately rejecting the initialization promise, meaning the app may still wait for the entire timeout.
+
+Improve this.
+
+If initialization encounters a genuinely fatal condition such as:
+
+- WebGL unavailable
+- map/canvas cannot initialize
+- style fails to load in a way that prevents rendering
+- renderer cannot start
+
+then reject the vector initialization immediately and create the existing raster fallback.
+
+Do NOT fall back merely because one non-critical tile/font request emits a recoverable MapLibre warning.
+
+Be conservative.
+
+Only fatal initialization/rendering failures should cause immediate fallback.
+
+==================================================
+3. PRESERVE VECTOR AS THE PRIMARY MAP
+==================================================
+
+The normal OnSite vector map must remain the preferred renderer.
+
+Do NOT make Leaflet/OpenStreetMap raster the default.
+
+Expected sequence:
+
+1. Open Exact Entrance
+2. show loading state
+3. attempt current MapLibre vector renderer
+4. if successful, show existing polished vector map
+5. if fatal failure OR ~2 second bounded timeout, switch to existing Leaflet raster fallback
+
+Do not alter the visual style JSON.
+
+==================================================
+4. ADD A REAL LOADING STATE
+==================================================
+
+Currently the user sees an unexplained pale/beige rectangle while the renderer is starting.
+
+Add a restrained loading state INSIDE the map container.
+
+It should fit the existing OnSite design language.
+
+Preferred appearance:
+
+- same neutral map container
+- small subtle loading indicator
+- text such as:
+
+"Loading map…"
+
+Centered or appropriately positioned.
+
+No giant spinner.
+No skeleton map.
+No orange full-screen loader.
+No layout shift.
+
+The map container must keep its existing dimensions while loading.
+
+==================================================
+5. REMOVE LOADER AT THE RIGHT TIME
+==================================================
+
+The loading state should disappear when either:
+
+A) the vector map has produced its first usable render
+
+OR
+
+B) the raster fallback has produced its usable map
+
+Do not remove the loader merely because the MapLibre constructor returned.
+
+The user should not see:
+
+loader → blank beige map → actual map
+
+The transition should be:
+
+loader → usable map
+
+as cleanly as possible.
+
+==================================================
+6. FALLBACK TRANSITION
+==================================================
+
+When vector initialization fails:
+
+- cleanly destroy any partial MapLibre instance
+- remove its canvas/listeners
+- initialize the existing Leaflet raster map
+- preserve the same current center
+- preserve the same zoom/framing logic
+- preserve the same draft entrance pin coordinates
+- preserve click-to-place
+- preserve draggable marker
+- preserve + / − controls
+- preserve recenter behaviour
+- preserve confirmation state
+
+There must not be a flash of two maps or stacked canvases.
+
+==================================================
+7. DO NOT BREAK MANUAL PIN STATE
+==================================================
+
+This is important.
+
+If the worker/company user has already moved the entrance pin, the fallback/retry path must NOT reset it to the geocoded address center.
+
+Current pin coordinates remain authoritative.
+
+Preserve the earlier fix for this.
+
+==================================================
+8. DO NOT CHANGE MAP VISUALS
+==================================================
+
+Do NOT modify:
+
+- onsite-map-style.json
+- building colours
+- road hierarchy
+- park/water styling
+- label styling
+- orange pin appearance
+- map height
+- map border/radius
+- control styling
+- attribution styling
+- opening zoom/framing algorithm
+
+This task is loading/failure behaviour only.
+
+==================================================
+9. TEST THE SUCCESS PATH
+==================================================
+
+Test in standalone Chrome where vector rendering works.
+
+Verify:
+
+- loader appears only briefly
+- vector map remains the renderer
+- no unnecessary raster fallback
+- cold load still works
+- warm reopen still works
+- map opens at the same framing as before
+- pin is unchanged
+- no visible beige blank interval remains after loader removal
+
+==================================================
+10. TEST THE FAILURE/FALLBACK PATH
+==================================================
+
+Deliberately exercise or simulate the existing vector failure path if possible.
+
+Verify:
+
+- fallback begins within roughly 2 seconds maximum
+- fatal initialization errors can trigger fallback sooner
+- user does NOT wait approximately 12 seconds
+- loader remains visible during the transition
+- raster map becomes usable normally
+- pin/center/zoom are preserved
+- no duplicate map instances remain
+
+Do not permanently alter the app just to simulate failure.
+
+==================================================
+11. PREVIEW VS STANDALONE
+==================================================
+
+Check:
+
+- Replit embedded Preview
+- standalone Replit development URL
+
+The embedded Preview may still use the raster fallback because of its renderer environment.
+
+That is acceptable.
+
+What is NOT acceptable is a long blank delay before fallback.
+
+Standalone should continue using the polished vector map normally.
+
+==================================================
+12. CONSOLE / NETWORK
+==================================================
+
+Confirm:
+
+- no new uncaught exceptions
+- no repeated initialization loop
+- no repeated vector → raster → vector cycling
+- no duplicate style/tile fetch storm
+- no duplicate event listeners
+- no duplicate map instances
+
+A single clear diagnostic console message for fallback is acceptable.
+
+==================================================
+13. RESPONSIVE CHECK
+==================================================
+
+Quickly test map loading at:
+
+1440px
+1024px
+768px
+390px
+
+The loader and rendered map must:
+
+- stay inside the existing map container
+- not cause horizontal overflow
+- not alter map height unexpectedly
+- not affect the confirmation-row layout
+
+==================================================
+14. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+15. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+git status
+git diff
+
+Do not include unrelated changes.
+
+Do not change demo/fixture/seed/sample data.
+
+Commit exactly:
+
+Improve entrance map loading fallback
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- old fallback timeout
+- new fallback timeout
+- fatal-error fallback behaviour
+- loading-state behaviour
+- successful vector-path timing
+- fallback-path timing
+- Preview result
+- standalone result
+- pin-state preservation result
+- responsive widths tested
+- validation results
+- commit hash
+- push result

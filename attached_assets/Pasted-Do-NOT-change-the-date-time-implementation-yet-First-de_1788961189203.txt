@@ -1,0 +1,72 @@
+Do NOT change the date/time implementation yet.
+
+First determine whether the remaining issue is caused specifically by Replit's embedded Preview iframe.
+
+The current implementation uses input.showPicker() for:
+
+- Project Start Date
+- Estimated End Date
+- Start time
+- Finish time
+
+Codex previously physically tested all four fields in standalone Chrome and reported 16/16 PASS.
+
+However, inside Replit's embedded Preview, clicking the main body of the input still only focuses the field and does not open the picker.
+
+IMPORTANT BROWSER CONSTRAINT:
+
+HTMLInputElement.showPicker() for date/time inputs is blocked when called from a cross-origin iframe and can throw SecurityError.
+
+Replit's embedded Preview may therefore be preventing the programmatic native picker even though the implementation works correctly in the standalone app.
+
+TASK:
+
+1. Inspect the current app and confirm whether Replit Preview is running the app inside a cross-origin iframe.
+
+2. Test the four schedule fields in:
+   A. Replit embedded Preview
+   B. the app opened using Replit's "Open in new tab" / standalone replit.dev page
+
+3. Report whether input.showPicker() succeeds in each environment.
+
+4. Inspect the browser console for SecurityError or another showPicker-related exception in embedded Preview.
+
+5. Do NOT make code changes merely to work around a Replit-only iframe restriction.
+
+6. If all four full-field pickers work in standalone Chrome:
+   - report that the production behaviour is correct
+   - leave the code unchanged
+   - explain that embedded Replit Preview cannot programmatically open native date/time pickers because of browser iframe security
+
+7. ONLY if the full field also fails in standalone Chrome:
+   - investigate the genuine application bug
+   - fix it
+   - test all four fields again
+
+Do NOT build a custom date/time picker in this task.
+
+Do NOT modify:
+- schedule data
+- date validation
+- time defaults
+- working days
+- overtime
+- map
+- other Request Labour steps
+- demo/fixture/seed/sample data
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+If no code change is required, do NOT create a meaningless commit.
+
+Report:
+
+- embedded Preview result
+- standalone Chrome result
+- whether SecurityError occurs
+- whether the existing implementation is correct for the real app
+- whether any code change was required

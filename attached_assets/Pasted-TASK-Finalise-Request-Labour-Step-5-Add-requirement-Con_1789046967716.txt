@@ -1,0 +1,365 @@
+TASK: Finalise Request Labour → Step 5 → Add requirement → Content.
+
+This is a NARROW final Content-stage fix.
+
+The overall Content UI is now strong and should NOT be redesigned again.
+
+Only address the remaining issues below, then validate all affected states.
+
+==================================================
+1. DOCUMENT REQUIREMENT CARD COPY
+==================================================
+
+Current requirement-type card copy for Document says:
+
+"A document or information workers need to read or acknowledge."
+
+This is conceptually wrong because acknowledgement is chosen later in the Completion step.
+
+Change it to exactly:
+
+"A document or information workers need to review before starting."
+
+Do not change the Document title.
+
+Do not alter its Content fields or source component.
+
+==================================================
+2. FIX EXTERNAL TRAINING ACCESS LOGIC
+==================================================
+
+Current External Training flow incorrectly requires:
+
+External training URL *
+
+This assumes every third-party training requirement has a URL available during project setup.
+
+That is too restrictive.
+
+Replace this with a clear access-method choice.
+
+Preferred structure:
+
+Training provider  Optional      | Training title *
+[input]                         | [input]
+
+How will workers access the training?
+[select or compact choice control]
+
+Options:
+
+- Web link
+- Invitation sent separately
+- Details provided later
+
+Then conditionally show fields based on the selection.
+
+==================================================
+3. WEB LINK BEHAVIOUR
+==================================================
+
+If:
+
+Web link
+
+is selected:
+
+show:
+
+External training URL *
+
+The URL is required.
+
+Keep:
+
+Worker instructions  Optional
+
+Keep small muted guidance:
+
+"Do not include passwords or third-party login credentials."
+
+Continue should only become valid when:
+
+- Training title exists
+- valid External training URL exists
+
+Training provider remains optional.
+
+==================================================
+4. INVITATION SENT SEPARATELY
+==================================================
+
+If:
+
+Invitation sent separately
+
+is selected:
+
+DO NOT show or require External training URL.
+
+Keep:
+
+Training provider  Optional
+Training title *
+Worker instructions  Optional
+
+Add restrained helper text beneath the access choice:
+
+"Workers will receive access details separately."
+
+Do not add a large grey information panel.
+
+Continue should be valid when:
+
+- Training title exists
+
+Do not require provider.
+
+Do not require URL.
+
+==================================================
+5. DETAILS PROVIDED LATER
+==================================================
+
+If:
+
+Details provided later
+
+is selected:
+
+DO NOT show or require External training URL.
+
+Keep:
+
+Training provider  Optional
+Training title *
+Worker instructions  Optional
+
+Use restrained helper text:
+
+"Access details can be added before workers need to complete the training."
+
+Continue should be valid when:
+
+- Training title exists
+
+This state represents legitimate pending content/configuration.
+
+Do not fake a URL.
+
+==================================================
+6. PRESERVE FIELD ALIGNMENT
+==================================================
+
+The latest External Training layout correctly aligns:
+
+Training provider Optional
+
+with:
+
+Training title *
+
+Keep that alignment.
+
+The Optional metadata must remain inline with the label.
+
+Do not reintroduce the previous vertical misalignment.
+
+==================================================
+7. TEST "ADD CONTENT LATER"
+==================================================
+
+Audit these three types:
+
+- Document
+- Video induction
+- Form & signature
+
+When "Add content later" is checked:
+
+Document:
+- Title remains required
+- document upload becomes non-required
+- Continue becomes valid once Title exists
+
+Video:
+- Title remains required
+- Video URL becomes non-required
+- Continue becomes valid once Title exists
+
+Form & signature:
+- Title remains required
+- PDF upload becomes non-required
+- Continue becomes valid once Title exists
+
+The source control may remain visible if that is the cleanest existing UX, but it must clearly no longer block progression.
+
+If the existing pattern already disables/hides the source field cleanly, preserve it.
+
+Do not redesign this area unnecessarily.
+
+==================================================
+8. TEST UNCHECKING "ADD CONTENT LATER"
+==================================================
+
+This is important.
+
+For Document, Video and Form & signature:
+
+1. enter a Title
+2. check Add content later
+3. confirm Continue enables
+4. uncheck Add content later
+5. confirm the normal source requirement immediately returns
+6. confirm Continue disables again until the required source is supplied
+
+No stale validation state.
+
+No stale enabled Continue button.
+
+==================================================
+9. TYPE SWITCHING
+==================================================
+
+Test switching between:
+
+Document
+Video induction
+Form & signature
+External training
+Background check
+On-site induction
+
+Verify:
+
+- no fields from one type remain visible in another
+- no access-method state leaks into another type
+- validation recalculates correctly
+- Continue state recalculates correctly
+- scroll position behaves sensibly
+- no blank gaps are left by conditional fields
+
+==================================================
+10. DO NOT CHANGE THESE
+==================================================
+
+Do NOT alter:
+
+- modal shell
+- modal width
+- header
+- close button
+- Content / Completion / Assignment stepper
+- 3×2 requirement type layout
+- selected-state styling
+- sticky footer
+- Document source UI
+- Video source UI
+- Form & signature source UI
+- Background Check UI
+- On-site Induction UI
+- Completion step
+- Assignment step
+- PDF field placement
+- worker signing
+- backend storage architecture
+- demo/fixture/seed/sample data
+- map code
+- Request Labour steps outside Step 5 Content
+
+This task is NOT a redesign.
+
+==================================================
+11. VISUAL QA
+==================================================
+
+Check desktop screenshots for:
+
+Document
+Video induction
+Form & signature
+External training — Web link
+External training — Invitation sent separately
+External training — Details provided later
+Background check
+On-site induction
+
+Confirm:
+
+- External Training paired fields remain level
+- conditional URL field appears/disappears cleanly
+- no unnecessary whitespace remains when URL is hidden
+- helper copy uses normal muted text, not large grey panels
+- footer remains stable
+- modal feels consistent with the other Content types
+
+==================================================
+12. RESPONSIVE QA
+==================================================
+
+Quickly verify at:
+
+1440px
+1024px
+768px
+390px
+
+At narrow widths:
+
+- paired fields stack cleanly
+- access-method control remains usable
+- conditional URL field fits correctly
+- no horizontal overflow
+- footer remains accessible
+
+==================================================
+13. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+==================================================
+14. COMMIT + PUSH
+==================================================
+
+Before committing:
+
+git status
+git diff
+
+Only include this final Step 5 Content fix.
+
+Do not include unrelated files.
+
+Commit exactly:
+
+Finalise pre-start requirement content flow
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- Document card copy result
+- External Training access-method implementation
+- Web link validation result
+- Invitation sent separately validation result
+- Details provided later validation result
+- Document Add content later test
+- Video Add content later test
+- Form & signature Add content later test
+- type-switching QA result
+- responsive widths tested
+- validation results
+- commit hash
+- push result

@@ -6,3 +6,6 @@
 - [Digital Job Agreement lifecycle](agreement-lifecycle.md) — only the job's CURRENT agreement may toggle bookingActive; detached agreements must be terminalized (kept as history); legacy/no-agreementId stays active; backfill runs on local state.
 - [Rate Structure & Payments System](rate-payments-system.md) — private worker min rate never shown to companies; 15% margin floor; role-gated money visibility; posting+booking both gate on isCompanyRestricted; invoices from approved attendance; payouts only after funds received; formatDateOnly for date-only strings.
 - [Labour Request form conventions](labour-request-form.md) — multi-trade builder is UI-only (first card restored at submit); jobForm listener order matters; map inits on modal open; Sat/Sun rate inputs removed by design.
+- [Entrance map state ownership](entrance-map-state.md) — current manual/saved pin coordinates stay authoritative; geocoded site center is only a recenter target.
+- [Requirement editor type switching](requirement-editor-switching.md) — isolate type-radio events from generic input syncing and snapshot each type’s content before re-rendering.
+- [User-facing account terminology](terminology-conventions.md) — use Sub-contractor and Hiring company in copy while preserving internal role values and legal field labels.

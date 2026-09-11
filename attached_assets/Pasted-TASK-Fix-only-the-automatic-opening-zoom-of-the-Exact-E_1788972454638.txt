@@ -1,0 +1,118 @@
+TASK: Fix only the automatic opening zoom of the Exact Entrance map.
+
+The current visual styling is approved and must NOT be changed.
+
+CURRENT PROBLEM
+
+When the Exact Entrance map first opens, it is too zoomed in.
+
+The current automatic opening view shows the target building filling most of the map and removes too much surrounding road/access context.
+
+The user manually zooming out by approximately one level produces the desired view.
+
+TARGET
+
+The automatic opening map should closely match the current manually zoomed-out state.
+
+For the current Amazon/Wembley QA example, the initial view should show:
+
+- the target Amazon building
+- Hannah Close
+- Great Central Way
+- immediate access roads
+- nearby surrounding buildings
+
+but should NOT show Wembley Stadium.
+
+Do NOT hard-code this location.
+
+This is only a visual QA example for the generic zoom level.
+
+IMPLEMENTATION
+
+1. Inspect the current automatic entrance-map zoom value.
+
+2. Reduce the automatic zoom by approximately ONE normal map zoom step.
+
+Do not guess solely from the numeric value:
+visually verify the result.
+
+The desired opening view is essentially the current view achieved after the user manually presses zoom-out once.
+
+3. Apply the same corrected automatic viewport to:
+
+- initial map opening from the geocoded site address
+- Re-centre on site address
+
+4. Edit entrance:
+
+When reopening an already confirmed entrance, use the same useful entrance-context zoom or only slightly closer.
+
+Do not reopen so close that the building becomes a large featureless block.
+
+5. Preserve user control:
+
+Once the user manually pans or zooms, do not reset their viewport automatically.
+
+6. DO NOT CHANGE:
+
+- onsite-map-style.json colours
+- building styling
+- road styling
+- labels
+- rail styling
+- green/water
+- map height
+- pin
+- controls
+- map provider
+- renderer
+- fallback
+- click-to-place
+- drag
+- geocoding
+- confirmation logic
+- attribution
+- anything outside the map viewport logic
+
+QA
+
+Use the current Amazon/Wembley site temporarily.
+
+PASS if the initial automatic view:
+
+- resembles the manually zoomed-out screenshot
+- shows Amazon building + Hannah Close + Great Central Way
+- provides enough immediate access-road context
+- does NOT show Wembley Stadium
+
+Also verify one city-centre and one suburban/commercial address so the new default is not too wide elsewhere.
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Commit exactly:
+
+Fix entrance map opening zoom
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- previous automatic zoom
+- new automatic zoom
+- recenter zoom
+- Edit entrance zoom
+- Amazon/Wembley QA result
+- confirmation Wembley Stadium is absent
+- other locations tested
+- validation results
+- commit hash
+- push result

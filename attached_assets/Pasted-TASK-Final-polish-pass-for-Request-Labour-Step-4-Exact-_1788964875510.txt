@@ -1,0 +1,464 @@
+TASK: Final polish pass for Request Labour → Step 4 → Exact site entrance map.
+
+The current map is now on the correct visual foundation and is approximately 9/10.
+
+DO NOT:
+- replace the mapping technology
+- change providers
+- change geocoding
+- change entrance-state logic
+- change click/drag behaviour
+- change site-address logic
+- change unrelated Step 4 fields
+- edit demo/fixture/seed/sample data
+- make broad refactors
+
+This task is specifically to move the CURRENT map from good to production-quality.
+
+==================================================
+1. DEFAULT OPENING ZOOM / VIEWPORT
+==================================================
+
+The biggest remaining issue is the opening viewport.
+
+Current behaviour can land at two bad extremes:
+
+TOO CLOSE:
+- building fills most of map
+- surrounding access context is lost
+
+TOO FAR:
+- large surrounding districts / major landmarks become visible
+- no longer feels like an exact entrance selector
+
+The default entrance-map view should normally show:
+
+- the target site/building
+- its immediate site/access roads
+- adjacent junctions
+- nearby surrounding buildings where useful
+- enough context to identify which gate/entrance is correct
+
+but NOT several kilometres of surrounding area.
+
+Tune the vector-map default to approximately the equivalent of zoom 16.5–17.25.
+
+Choose the actual provider-specific value based on visual results.
+
+Do NOT hard-code Amazon/Wembley.
+
+Use the selected site's real coordinates.
+
+If the user already has a saved entrance and clicks Edit entrance:
+centre on the saved entrance at an appropriate close zoom.
+
+Do not reset a deliberately user-adjusted view unnecessarily.
+
+==================================================
+2. BUILDING CONTRAST
+==================================================
+
+The current building footprints are slightly too close in tone to the surrounding land.
+
+Increase building contrast subtly.
+
+Target:
+
+LAND
+- warm/off-white very light neutral
+
+BUILDINGS
+- clearly distinguishable light neutral grey
+- slightly darker than land
+- still restrained
+
+The user should immediately understand:
+
+"this shape is a building"
+
+without the map becoming heavy.
+
+Do NOT return to the old dark/beige/pink industrial treatment.
+
+==================================================
+3. ROAD HIERARCHY
+==================================================
+
+Improve road legibility slightly.
+
+LOCAL / ACCESS ROADS:
+- clean white or near-white
+- subtle neutral outline/edge
+- visibly distinct from land
+
+LARGER ROADS:
+- slightly stronger hierarchy
+- modestly wider / stronger edge where supported
+- still neutral
+
+Do NOT use:
+- bright yellow
+- orange
+- saturated road fills
+
+Construction-site access roads are particularly important.
+
+A company should be able to distinguish the road leading around a building from the surrounding land immediately.
+
+==================================================
+4. LABEL LEGIBILITY
+==================================================
+
+Road/place labels are currently slightly too faint.
+
+Increase label contrast modestly.
+
+Prioritise:
+
+- nearby road names
+- access-road names
+- useful building/site labels
+- major immediate landmarks
+
+Use dark neutral/charcoal text.
+
+Keep secondary labels subdued.
+
+Do NOT create excessive POI clutter.
+
+Do NOT make labels black/heavy everywhere.
+
+The result should remain clean and restrained but easier to read at a glance.
+
+==================================================
+5. WATER / GREEN SPACE
+==================================================
+
+The current restrained colour direction is good.
+
+Keep:
+
+- soft green land/vegetation
+- pale clear blue water
+
+Only adjust if necessary to maintain enough distinction from neighbouring land.
+
+Do not increase saturation significantly.
+
+==================================================
+6. RAIL / INFRASTRUCTURE
+==================================================
+
+Railways should remain useful orientation features but must not dominate.
+
+If current rail styling feels stronger than local roads/buildings:
+
+reduce it slightly.
+
+Keep enough detail to recognise:
+- railway lines
+- major transport infrastructure
+
+but ensure entrance/access roads remain the main visual priority.
+
+==================================================
+7. ONSITE PIN
+==================================================
+
+KEEP the current orange entrance pin.
+
+It is working well.
+
+Only refine if necessary for:
+
+- sharper high-DPI rendering
+- consistent ~30–32px visual size
+- restrained shadow
+- easy drag hit target
+
+Do NOT:
+- enlarge significantly
+- pulse
+- glow
+- bounce
+- add labels/numbers
+
+==================================================
+8. CONTROLS
+==================================================
+
+Keep the current compact upper-right controls:
+
++
+−
+re-centre
+
+They are in the correct direction.
+
+Only polish alignment/spacing if necessary.
+
+They should feel like one coherent control cluster.
+
+Preserve:
+- white surface
+- subtle shadow/border
+- dark icons
+- adequate hit areas
+
+No orange control backgrounds.
+
+==================================================
+9. CONFIRMATION ROW SPACING
+==================================================
+
+The current row beneath the map contains:
+
+"Position the pin on the exact gate or entrance."
+
+and:
+
+Confirm entrance point
+
+This is useful and should remain.
+
+Polish the spacing.
+
+Current bottom area feels slightly too loose.
+
+Target:
+
+- approximately 12–16px gap from map to helper/action row
+- helper vertically centred against button
+- row aligned exactly with map edges
+- approximately 16–20px separation before the next section/divider
+
+Keep the helper muted.
+
+When pin has been moved:
+show existing state such as:
+
+"Entrance point ready to confirm."
+
+Do NOT create another card/container around this row.
+
+==================================================
+10. ATTRIBUTION
+==================================================
+
+Required map attribution must remain.
+
+However, inspect whether the current provider/library supports a more visually restrained legitimate presentation.
+
+If permitted:
+- reduce visual prominence
+- smaller restrained typography
+- minimal background
+- tidy placement
+
+Do NOT:
+- hide attribution
+- remove required provider names
+- obscure it
+- violate provider terms
+
+If current attribution is already at the minimum legitimate presentation:
+leave it alone.
+
+==================================================
+11. MAP BORDER / CONTAINER
+==================================================
+
+Keep:
+
+- full-width map
+- current rounded corners
+- subtle neutral border
+- no permanent orange outline
+
+Ensure border/radius remain crisp with the vector canvas.
+
+Do not add stronger shadows.
+
+==================================================
+12. MAP HEIGHT
+==================================================
+
+Keep the map generous but compact enough for the form.
+
+Desktop target:
+approximately 300–320px.
+
+Use the smallest height that still makes entrance placement comfortable.
+
+Do not let the map dominate the entire Step 4 page.
+
+==================================================
+13. PRESERVE ALL WORKING INTERACTIONS
+==================================================
+
+Do not regress:
+
+- click-to-place
+- drag-to-adjust
+- draft coordinates
+- confirmed coordinates
+- re-centre on site address
+- zoom controls
+- page scrolling not being hijacked
+- Confirm entrance point
+- collapsed Confirmed state
+- Edit entrance
+- previous confirmed location remaining saved until reconfirmed
+
+==================================================
+14. TEST REALISTIC SITES
+==================================================
+
+Test at least three different kinds of UK location:
+
+A. Large industrial/logistics building
+B. Dense city-centre address
+C. Smaller suburban/commercial site
+
+Do NOT hard-code these locations into the application.
+
+For each, inspect:
+
+- opening zoom
+- building readability
+- road readability
+- labels
+- pin visibility
+- overall spatial context
+
+The default viewport should work sensibly across all three.
+
+==================================================
+15. RESPONSIVE QA
+==================================================
+
+Inspect at approximately:
+
+1440px
+1024px
+768px
+390px
+
+Ensure:
+
+- map does not horizontally overflow
+- controls remain usable
+- pin remains draggable/tappable
+- helper/button row adapts cleanly
+- confirmation button does not become cramped
+- map remains useful on smaller screens
+
+==================================================
+16. VISUAL TARGET
+==================================================
+
+Apple Maps remains the quality inspiration only.
+
+Do NOT copy Apple assets or branding.
+
+The target qualities are:
+
+- calm
+- clean
+- high legibility
+- restrained colour
+- excellent road/building hierarchy
+- minimal visual clutter
+- consumer-grade polish
+
+The result must still clearly be OnSite through its own UI and orange entrance pin.
+
+==================================================
+17. DO NOT OVER-POLISH
+==================================================
+
+Do NOT start another mapping rewrite.
+
+Do NOT introduce:
+- satellite
+- new providers
+- new APIs
+- new map libraries
+- animations
+- extra controls
+- floating legends
+- unnecessary POIs
+- visual gimmicks
+
+This should be a SMALL refinement of the map that already works.
+
+==================================================
+18. QA ACCEPTANCE
+==================================================
+
+Before finishing, visually verify:
+
+- default zoom is between the previous too-close and too-wide states
+- target building and immediate access roads are visible together
+- building footprints clearly distinguish from land
+- access roads are immediately readable
+- no bright yellow/orange road styling
+- labels are crisper than before
+- rail does not overpower the map
+- orange pin remains dominant
+- helper/action row spacing is tighter
+- attribution remains legitimate
+- no new console errors
+
+==================================================
+19. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Use the actual live preview for visual inspection.
+
+Do not claim visual QA was completed unless it was actually inspected.
+
+==================================================
+20. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Include only map visual/viewport changes from this task.
+
+Do not include unrelated changes.
+
+Commit exactly:
+
+Finalise exact entrance map styling
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- final opening zoom strategy
+- building contrast change
+- road hierarchy change
+- label change
+- rail change
+- confirmation-row spacing change
+- attribution treatment
+- locations/types tested
+- responsive widths tested
+- validation results
+- commit hash
+- push result

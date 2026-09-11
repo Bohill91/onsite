@@ -1,0 +1,325 @@
+TASK: Fix the Exact Entrance map opening zoom once and for all.
+
+THIS IS A VIEWPORT-ONLY TASK.
+
+Do not change styling.
+Do not change colours.
+Do not change the map provider.
+Do not change the renderer.
+Do not change the pin.
+Do not change controls.
+Do not change geocoding.
+Do not change confirmation logic.
+Do not change any other Step 4 UI.
+Do not edit demo/fixture/seed/sample data.
+
+The current automatic opening view is STILL too close.
+
+==================================================
+EXACT TARGET
+==================================================
+
+Use the current Amazon DHA1 / Wembley-area test case.
+
+When the map FIRST opens automatically, I want this exact level of context:
+
+MUST BE VISIBLE:
+
+1. The ENTIRE Amazon DHA1 building footprint.
+2. Hannah Close, clearly visible and readable.
+3. Great Central Way, clearly visible and readable.
+4. The immediate access-road network around the Amazon building.
+5. Several nearby neighbouring buildings, enough to orient yourself.
+
+MUST NOT BE VISIBLE:
+
+6. Wembley Stadium.
+7. Large sections of the wider Wembley/Neasden district.
+
+The desired view is essentially the manually zoomed-out screenshot where:
+- Amazon is still the obvious focus,
+- Hannah Close is visible,
+- Great Central Way is visible,
+- Wembley Stadium is NOT visible.
+
+==================================================
+SET THE ZOOM EXPLICITLY
+==================================================
+
+Do not make another tiny relative adjustment and stop.
+
+Start with:
+
+INITIAL OPENING ZOOM = 16.5
+
+RECENTRE ZOOM = 16.5
+
+EDIT ENTRANCE ZOOM = 16.7
+
+Use these as the starting values.
+
+If the current mapping library/provider renders those values differently than expected, physically inspect the result and tune in increments of:
+
+0.1
+
+until the visual acceptance test above passes.
+
+Do NOT stop merely because the code changed.
+
+==================================================
+MANDATORY ITERATION
+==================================================
+
+After setting 16.5:
+
+1. Open the Amazon DHA1 entrance map.
+2. Inspect it visually.
+
+If Great Central Way is NOT visible:
+zoom OUT by 0.1.
+
+Repeat:
+16.4
+16.3
+etc.
+
+until Great Central Way is clearly visible.
+
+If Wembley Stadium becomes visible:
+zoom IN by 0.1.
+
+Repeat until:
+
+- Great Central Way visible
+- Hannah Close visible
+- full Amazon building visible
+- Wembley Stadium absent
+
+There is a correct value between those states.
+
+FIND IT DURING THIS TASK.
+
+Do not return the task to me for another manual zoom adjustment.
+
+==================================================
+CENTRING
+==================================================
+
+Keep the pin/site close to the visual centre of the map.
+
+The Amazon building should not be pushed against an edge.
+
+The opening frame should distribute nearby access context reasonably around the target.
+
+Do NOT use an Amazon-specific pixel offset.
+
+Do NOT hard-code coordinates.
+
+Use the generic selected site / entrance coordinates.
+
+==================================================
+INITIAL OPENING
+==================================================
+
+Apply the final tested zoom to:
+
+- first opening after a valid site address has been geocoded
+- opening when no entrance has yet been confirmed
+
+Do not alter the underlying coordinates.
+
+==================================================
+RECENTRE
+==================================================
+
+The Re-centre on site address button must return to:
+
+the SAME tested entrance-context zoom
+
+not the old close zoom.
+
+Use the final value discovered during QA.
+
+==================================================
+EDIT ENTRANCE
+==================================================
+
+When a confirmed entrance is reopened with:
+
+Edit entrance
+
+use:
+
+final initial zoom + approximately 0.2
+
+ONLY if that still keeps Great Central Way / equivalent immediate context available.
+
+Otherwise use the same zoom as initial opening.
+
+Do not reopen on a giant close-up of one building.
+
+==================================================
+USER MANUAL CONTROL
+==================================================
+
+After the map opens:
+
+if the user manually:
+- zooms
+- pans
+- clicks a location
+- drags the pin
+
+DO NOT keep resetting the viewport.
+
+The automatic zoom applies only to opening/recentering.
+
+==================================================
+DO NOT TOUCH MAP STYLE
+==================================================
+
+The current map styling is approved.
+
+Do not change:
+
+- onsite-map-style.json colours
+- road hierarchy
+- building contrast
+- labels
+- green
+- water
+- rail
+- attribution
+- marker appearance
+
+This task should be an app.js / viewport logic change only unless the existing zoom constants live elsewhere.
+
+==================================================
+MANDATORY VISUAL QA
+==================================================
+
+Use Amazon DHA1 at the same desktop Preview size currently being used.
+
+The task is NOT COMPLETE until all five statements are true:
+
+PASS 1:
+Entire Amazon DHA1 building is visible.
+
+PASS 2:
+“Hannah Close” is clearly visible.
+
+PASS 3:
+“Great Central Way” is clearly visible.
+
+PASS 4:
+Immediate surrounding access roads / neighbouring buildings are visible.
+
+PASS 5:
+Wembley Stadium is NOT visible anywhere in the map.
+
+If even ONE fails:
+adjust zoom again and retest.
+
+Do not report success before all five pass simultaneously.
+
+==================================================
+SECONDARY QA
+==================================================
+
+After the Amazon test passes, verify the same final generic zoom with:
+
+- one dense central-London address
+- one smaller suburban/commercial site
+
+Make sure:
+- it is not absurdly close
+- it is not district-level wide
+- immediate access context remains useful
+
+Do not modify the final zoom unless one of these exposes a genuine generic problem.
+
+==================================================
+RESPONSIVE CHECK
+==================================================
+
+Quickly inspect:
+
+1440px
+1024px
+768px
+390px
+
+The map should remain usable.
+
+Do not deliberately zoom further out at narrower widths.
+
+==================================================
+PRESERVE FUNCTIONALITY
+==================================================
+
+Verify:
+
+- click-to-place
+- drag pin
+- zoom +
+- zoom -
+- recentre
+- page scrolling
+- Confirm entrance point
+- collapsed Confirmed state
+- Edit entrance
+- confirmed coordinates remain unchanged until reconfirmed
+
+No new console errors.
+
+==================================================
+VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Before committing, visually inspect the Amazon test one final time.
+
+Do NOT commit if Great Central Way is missing.
+Do NOT commit if Wembley Stadium is visible.
+
+==================================================
+COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include this viewport fix.
+
+Commit exactly:
+
+Set final entrance map opening zoom
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- original automatic zoom
+- final automatic zoom actually chosen
+- final recentre zoom
+- final Edit entrance zoom
+- how many 0.1 adjustments were required
+- Amazon full building: PASS/FAIL
+- Hannah Close visible: PASS/FAIL
+- Great Central Way visible: PASS/FAIL
+- Wembley Stadium absent: PASS/FAIL
+- other two locations tested
+- validation results
+- commit hash
+- push result

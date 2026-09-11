@@ -1,0 +1,350 @@
+TASK: Fix KPI/stat tile responsiveness site-wide, starting with the Dashboard Operational Summary.
+
+This is a focused responsive UI/layout correction.
+
+Do NOT redesign the Dashboard.
+Do NOT change Dashboard business logic or data.
+Do NOT change the Action Required logic.
+Do NOT edit demo/fixture/seed/sample data.
+Do NOT touch date/time picker logic.
+Do NOT touch map logic.
+Do NOT change unrelated pages unless they use the same KPI/stat layout pattern.
+
+CURRENT PROBLEM
+
+The previous responsive pass still leaves KPI/stat groups squeezed into too many columns at narrower desktop widths.
+
+The clearest example is:
+
+Dashboard
+→ Today’s Operational Summary
+
+The four KPI tiles:
+
+- Projects scheduled today
+- Workers expected today
+- Open labour requirements
+- Starting next 7 days
+
+are still forced into four narrow columns.
+
+At the current narrower desktop width, labels wrap into ugly 3-line blocks and the cards feel compressed.
+
+This is NOT acceptable responsive behaviour.
+
+The layout should deliberately change column count before the cards become too narrow.
+
+==================================================
+1. DASHBOARD OPERATIONAL SUMMARY
+==================================================
+
+Preserve the existing four KPI tiles and their data.
+
+Wide desktop:
+keep 4 tiles in one row.
+
+At narrower desktop/tablet widths:
+switch to a clean 2 × 2 grid BEFORE label readability becomes poor.
+
+Do NOT keep squeezing four cards into one row.
+
+The four tiles should remain visually balanced.
+
+Suggested behaviour:
+
+Wide desktop:
+4 columns
+
+Mid-width:
+2 columns × 2 rows
+
+Very narrow/mobile:
+2 columns where comfortable
+or 1 column only when truly necessary
+
+Use content-driven breakpoints rather than blindly following exact numbers.
+
+==================================================
+2. LABEL READABILITY
+==================================================
+
+KPI labels must remain readable.
+
+Do NOT solve this by excessively reducing font size.
+
+Do NOT allow awkward narrow wrapping such as:
+
+Projects
+scheduled
+today
+
+if the card could instead be given more width.
+
+Natural 1–2 line wrapping is acceptable.
+
+Three-line compressed labels caused by an overly narrow tile are not.
+
+Preserve the prominence of the KPI number.
+
+==================================================
+3. CARD WIDTH / GRID BEHAVIOUR
+==================================================
+
+Inspect the current Operational Summary KPI container.
+
+Look for:
+
+- fixed 4-column grid definitions
+- minmax values that allow cards to shrink too far
+- flex-basis problems
+- missing min-width constraints
+- oversized gaps
+
+Fix the underlying layout rule cleanly.
+
+Do NOT hard-code a special width for only this screenshot.
+
+==================================================
+4. TOP ROW HEIGHT BALANCE
+==================================================
+
+The Dashboard top row is intended to remain approximately:
+
+Operational Summary: ~65%
+Action Required: ~35%
+
+and the two top-level cards should remain equal height.
+
+When Operational Summary becomes a 2 × 2 KPI grid:
+
+the Operational Summary card will naturally become taller.
+
+The Action Required card must stretch to the same overall row height.
+
+Do NOT leave one card visibly shorter than the other.
+
+Preserve the existing desktop two-column relationship where space allows.
+
+==================================================
+5. ACTION REQUIRED CARD
+==================================================
+
+Do NOT redesign Action Required.
+
+Keep its current:
+
+- priority indicator
+- heading
+- description
+- project/job reference
+- primary action
+
+Only ensure that its outer card stretches correctly to match the Operational Summary card height.
+
+Content should remain vertically balanced and intentional.
+
+==================================================
+6. SITE-WIDE KPI / STAT AUDIT
+==================================================
+
+Do not stop after fixing Dashboard Operational Summary.
+
+Audit other existing KPI/stat tile groups across the current company-side application for the SAME class of issue.
+
+Examples may include:
+
+- Project Overview staffing KPIs
+- Project Readiness tiles
+- Attendance summary metrics
+- Workforce/stat summaries
+- Labour summary cards
+- Commercial summary tiles
+- any other current 3/4/5-column stat groups
+
+Only modify groups that actually suffer from excessive squeezing.
+
+Do NOT redesign healthy layouts.
+
+==================================================
+7. RESPONSIVE PRINCIPLE
+==================================================
+
+For KPI/stat tiles site-wide:
+
+Prefer:
+fewer columns + readable content
+
+over:
+more columns + cramped cards
+
+General rule:
+
+4–5 tiles:
+wide desktop → one row
+mid-width → 2-column grid or suitable balanced layout
+mobile → 1–2 columns depending on content
+
+Do not force a single row past the point where cards stop being readable.
+
+==================================================
+8. CONSISTENCY
+==================================================
+
+Use a reusable responsive pattern where practical.
+
+Avoid creating a completely different media-query rule for every KPI group.
+
+If several components share the same structure, centralise the responsive behaviour using existing shared classes or a small reusable class pattern.
+
+Do NOT globally apply rules that break unrelated cards.
+
+==================================================
+9. VISUAL DESIGN
+==================================================
+
+Preserve the current OnSite design system:
+
+- white cards
+- neutral borders
+- restrained shadow
+- current radii
+- black KPI values
+- muted KPI labels
+- OnSite orange section label
+- no gradients
+- no glass
+- no excessive decoration
+
+Do not make KPI tiles taller than necessary.
+
+==================================================
+10. QA WIDTHS
+==================================================
+
+Test at approximately:
+
+1440px
+1200px
+1024px
+900px
+768px
+390px
+
+Specifically verify Dashboard Operational Summary.
+
+At wide desktop:
+- 4 KPI tiles in one row
+- readable labels
+- equal top-row card heights
+
+At narrower desktop:
+- switches to 2 × 2 before labels become cramped
+- labels remain readable
+- Action Required matches height
+
+At mobile:
+- no horizontal overflow
+- KPI tiles remain readable
+- layout is deliberate
+
+==================================================
+11. SITE-WIDE QA
+==================================================
+
+Inspect every existing KPI/stat group found during the audit.
+
+For each one verify:
+
+- no awkward 3-line label wrapping caused by card width
+- no clipped values
+- no overlapping content
+- no horizontal overflow
+- no giant empty gaps
+- no excessively narrow tiles
+- no broken equal-height parent-card relationships
+
+Do not claim a group was audited if it was not actually inspected.
+
+==================================================
+12. DO NOT CHANGE
+==================================================
+
+Do NOT alter:
+
+- Dashboard metrics
+- project data
+- attendance data
+- labour data
+- Action Required prioritisation
+- navigation
+- event handlers
+- business logic
+- date/time picker
+- map
+- Pre-start
+- localStorage/data models
+
+This is layout/CSS only unless a tiny structural wrapper adjustment is genuinely required.
+
+==================================================
+13. CODE QUALITY
+==================================================
+
+Do NOT:
+
+- use !important
+- add giant CSS override blocks
+- create dozens of one-off media queries
+- shrink KPI typography excessively
+- hard-code Dashboard-only widths where a reusable pattern is better
+- use JavaScript for responsive layout if CSS can solve it
+
+Prefer clean grid/flex rules and a small number of coherent breakpoints.
+
+==================================================
+14. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Resize the actual app in Preview and visually inspect the Dashboard top row.
+
+Check browser console for new errors.
+
+==================================================
+15. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include KPI/stat responsive changes from this task.
+
+Commit exactly:
+
+Fix responsive KPI tile layouts
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- root cause of Operational Summary squeezing
+- final Dashboard breakpoints/column behaviour
+- confirmation that Action Required matches height
+- other KPI/stat groups audited
+- any additional groups corrected
+- widths tested
+- validation results
+- commit hash
+- push result

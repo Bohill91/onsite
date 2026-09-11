@@ -1,0 +1,289 @@
+TASK: Make one final viewport-only adjustment to the Exact Entrance map.
+
+The visual styling is now approved.
+
+DO NOT change:
+- map colours
+- building styling
+- road styling
+- label styling
+- rail styling
+- pin
+- controls
+- provider
+- renderer
+- fallback
+- attribution
+- click-to-place
+- drag behaviour
+- confirmation logic
+- any unrelated Step 4 UI
+
+This task is ONLY about the automatic opening zoom / viewport.
+
+CURRENT PROBLEM
+
+The current automatic opening view is improved, but still too close.
+
+It now shows:
+- the target Amazon building
+- some immediate access roads
+
+but it still does NOT show enough surrounding entrance context.
+
+In particular:
+- Great Central Way is not visible
+- Hannah Close is not fully useful
+- the target building occupies too much of the map
+
+GOAL
+
+Open the map roughly another:
+
+0.4–0.6 zoom level further OUT
+
+from the current automatic opening state.
+
+The final automatic view should show:
+
+- the full target building clearly
+- Hannah Close clearly
+- Great Central Way clearly
+- immediate access roads around the site
+- useful neighbouring buildings
+- enough surrounding context to identify the correct gate
+
+but:
+
+- Wembley Stadium should NOT be visible
+- large sections of the surrounding district should NOT be visible
+
+Do NOT hard-code Amazon/Wembley coordinates.
+
+Use it only as a QA benchmark for the generic entrance-context zoom.
+
+==================================================
+1. CHANGE THE CURRENT DEFAULT ZOOM
+==================================================
+
+Inspect the exact current automatic zoom value.
+
+Reduce it by approximately 0.4–0.6.
+
+Do not blindly follow the number.
+
+Visually verify the resulting map.
+
+The desired result should be very close to the previously manually zoomed-out screenshot where:
+
+- Amazon building was fully visible
+- Hannah Close was visible
+- Great Central Way was visible
+- Wembley Stadium was not visible
+
+==================================================
+2. INITIAL MAP OPENING
+==================================================
+
+Apply the corrected zoom to:
+
+- first opening from geocoded Site Address
+- reopening when the map has no previously confirmed entrance
+
+Do not alter the selected coordinates.
+
+Only adjust the viewport.
+
+==================================================
+3. RECENTRE CONTROL
+==================================================
+
+The existing:
+
+Re-centre on site address
+
+control should use the SAME corrected entrance-context zoom.
+
+Expected:
+
+click Re-centre
+→ target building + immediate access roads + nearest junction context visible
+
+Do not recenter too close.
+
+==================================================
+4. EDIT ENTRANCE
+==================================================
+
+When opening an already confirmed entrance via:
+
+Edit entrance
+
+use either:
+
+- the same corrected zoom
+
+or
+
+- at most approximately 0.2 closer
+
+The user should still see enough surrounding roads to reposition the entrance intelligently.
+
+Do not open on a featureless close-up of the building.
+
+==================================================
+5. USER CONTROL
+==================================================
+
+Once the user manually:
+
+- pans
+- zooms
+- drags the pin
+- clicks to reposition the pin
+
+do not automatically reset the viewport.
+
+Manual interaction remains authoritative.
+
+==================================================
+6. AMAZON/WEMBLEY ACCEPTANCE TEST
+==================================================
+
+Use the current Amazon/Wembley-area site temporarily for visual QA.
+
+PASS only if the INITIAL automatic view shows:
+
+- Amazon building fully visible
+- Hannah Close visible
+- Great Central Way visible
+- immediate access-road context visible
+- useful neighbouring buildings visible
+
+AND:
+
+- Wembley Stadium NOT visible
+
+If Great Central Way is still missing:
+the map is still too close.
+
+If Wembley Stadium becomes visible:
+the map is too far out.
+
+Continue tuning until the view sits between those two states.
+
+==================================================
+7. OTHER LOCATION QA
+==================================================
+
+Also test:
+
+A. one dense city-centre UK address
+B. one smaller suburban/commercial UK site
+
+Verify the new zoom is not too wide or too close for those locations.
+
+The generic viewport must remain useful.
+
+==================================================
+8. RESPONSIVE QA
+==================================================
+
+Verify at approximately:
+
+1440px
+1024px
+768px
+390px
+
+Do not change geographical zoom simply because the viewport is narrower unless current responsive map logic genuinely requires it.
+
+==================================================
+9. PRESERVE ALL MAP FUNCTIONALITY
+==================================================
+
+Verify after the zoom adjustment:
+
+- click-to-place works
+- drag works
+- + / − works
+- recenter works
+- normal page scrolling still works
+- Confirm entrance point works
+- confirmed map collapses
+- Edit entrance works
+- previous confirmed coordinates remain safe until reconfirmed
+- no new console errors
+
+==================================================
+10. DO NOT CHANGE STYLING
+==================================================
+
+This is important.
+
+Do NOT edit:
+
+onsite-map-style.json
+
+unless the automatic zoom value itself genuinely lives there.
+
+Do not make another colour/contrast pass.
+
+The map styling is now locked.
+
+==================================================
+11. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Visually inspect the final automatic opening view.
+
+Do NOT mark complete unless:
+
+- Great Central Way is visible
+- Hannah Close is visible
+- Wembley Stadium is not visible
+
+in the Amazon/Wembley QA case.
+
+==================================================
+12. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Only include viewport-related changes.
+
+Commit exactly:
+
+Fine tune entrance map opening zoom
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- previous default zoom
+- new default zoom
+- recenter zoom
+- Edit entrance zoom
+- Amazon/Wembley QA result
+- confirmation Great Central Way is visible
+- confirmation Hannah Close is visible
+- confirmation Wembley Stadium is absent
+- other locations tested
+- responsive widths tested
+- validation results
+- commit hash
+- push result

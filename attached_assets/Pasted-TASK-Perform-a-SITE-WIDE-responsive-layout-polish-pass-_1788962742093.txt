@@ -1,0 +1,702 @@
+TASK: Perform a SITE-WIDE responsive layout polish pass across the current OnSite company application.
+
+This is a responsive UI/layout task only.
+
+The issue was first noticed in Request Labour, where narrower desktop widths caused:
+
+- Wednesday / Thursday to wrap inside buttons
+- “Site & Attendance” to wrap awkwardly in the wizard stepper
+- controls to compress rather than responsively adapt
+
+However, DO NOT fix this only on Request Labour.
+
+Audit the CURRENT COMPANY-SIDE ONSITE APP for the same class of responsive problems and establish consistent responsive behaviour site-wide.
+
+Do NOT redesign the product.
+Do NOT change business logic.
+Do NOT alter stored data.
+Do NOT edit demo/fixture/seed/sample data.
+Do NOT change the date/time picker implementation.
+Do NOT change map functionality.
+Do NOT change Pre-start logic.
+Do NOT include unrelated worker/profile changes.
+
+==================================================
+1. SCOPE
+==================================================
+
+Audit the current company-side application including, where present:
+
+- Dashboard
+- Projects directory
+- Project Detail shell
+- Project Overview
+- Labour
+- Workforce
+- Attendance
+- Site
+- Pre-start
+- Commercial
+- Activity
+- Request Labour Steps 1–6
+- Labour Insights
+- Notifications
+- shared sidebar/navigation
+- shared headers
+- shared cards
+- shared buttons
+- shared filters/search controls
+- modals/dialogs
+
+Do not invent unfinished pages.
+
+Only work on screens/components that currently exist.
+
+==================================================
+2. GOAL
+==================================================
+
+OnSite should respond deliberately as the viewport narrows.
+
+It must NOT look like a desktop layout being squeezed until words randomly wrap.
+
+At every supported width:
+
+- labels should remain readable
+- buttons should not split words
+- navigation should stay aligned
+- cards should adapt intentionally
+- field rows should stack when necessary
+- no horizontal overflow
+- no clipped content
+- no overlapping controls
+- no awkward half-responsive states
+
+The app should feel intentionally designed at every width.
+
+==================================================
+3. DESKTOP FIRST
+==================================================
+
+Preserve the existing desktop layouts.
+
+At wide widths such as:
+
+1440px+
+1200px
+1024px
+
+keep the current desktop visual hierarchy wherever there is enough room.
+
+Do NOT unnecessarily stack layouts that comfortably fit.
+
+Responsive behaviour should progressively adapt rather than radically change the interface.
+
+==================================================
+4. MID-WIDTH DESKTOP / TABLET
+==================================================
+
+This is currently the weak area.
+
+Around roughly:
+
+900–1100px
+
+the app should still feel like a polished desktop/tablet application.
+
+Do NOT allow:
+
+- words splitting inside buttons
+- navigation labels wrapping unpredictably
+- KPI values colliding
+- controls becoming unusably narrow
+- cards squeezing their content too far
+- buttons dropping randomly to another line
+- fixed-width elements creating overflow
+
+Prefer:
+
+- slightly reduced gaps
+- slightly reduced horizontal padding
+- sensible min-widths
+- flexible grid columns
+- controlled stacking where required
+
+==================================================
+5. NO BROKEN BUTTON LABELS
+==================================================
+
+Audit buttons and compact interactive controls site-wide.
+
+Short action/control labels should generally remain on one line.
+
+Examples include:
+
+- Wednesday
+- Thursday
+- Request Labour
+- View project
+- Edit project
+- Add requirement
+- Add labour requirement
+- Confirm entrance point
+- Set entrance on map
+- Attendance actions
+- project tab labels where appropriate
+
+Use:
+
+white-space: nowrap
+
+ONLY where wrapping is undesirable.
+
+Do NOT globally prevent normal body text from wrapping.
+
+==================================================
+6. REQUEST LABOUR WORKING DAYS
+==================================================
+
+Fix the known Step 3 issue.
+
+Desktop/tablet:
+
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+Saturday
+Sunday
+
+must remain on one line within each button.
+
+At suitable desktop/tablet widths:
+keep all seven buttons in one row if comfortably possible.
+
+If width becomes genuinely too narrow:
+switch deliberately to a clean grid such as 4 + 3.
+
+Never display:
+
+Wednes
+day
+
+or:
+
+Thursda
+y
+
+==================================================
+7. REQUEST LABOUR STEPPER
+==================================================
+
+Audit the six-step wizard:
+
+Project
+Labour
+Schedule
+Site & Attendance
+Pre-start
+Review
+
+At desktop/tablet widths:
+
+- keep labels readable
+- keep circles aligned
+- keep connector lines aligned
+- “Site & Attendance” should remain one line where reasonably possible
+- “Pre-start” must remain one line
+
+Reduce spacing/gaps slightly before allowing ugly wrapping.
+
+For genuinely narrow mobile widths:
+switch to a deliberate compact representation rather than crushing the six-step desktop stepper.
+
+Example acceptable mobile concept:
+
+Step 3 of 6
+Schedule
+
+Use the existing architecture where possible.
+
+==================================================
+8. SIDEBAR
+==================================================
+
+Audit the main company sidebar.
+
+At normal desktop widths:
+preserve the existing sidebar.
+
+Check:
+
+- labels do not wrap unnecessarily
+- company/user/role block remains aligned
+- icons and labels maintain consistent spacing
+- no clipped navigation text
+- no overlap at reduced viewport heights/widths
+
+At genuinely narrow/mobile widths:
+use the current intended mobile navigation behaviour if one exists.
+
+Do NOT invent a major new navigation system unless necessary.
+
+==================================================
+9. PAGE HEADERS
+==================================================
+
+Audit site-wide page headers.
+
+Examples:
+
+Dashboard
+Projects
+Request Labour
+Project Detail pages
+Attendance
+Labour Insights
+Notifications
+
+Check combinations of:
+
+title
+subtitle
+status
+actions
+filters
+date pill
+Edit project
+Request labour
+
+At narrower widths:
+
+- allow actions to move underneath deliberately if required
+- preserve hierarchy
+- avoid squeezing headings/actions into unreadable layouts
+- no accidental text overlap
+
+==================================================
+10. CARDS / GRID LAYOUTS
+==================================================
+
+Audit current card grids.
+
+Examples may include:
+
+Dashboard operational summary
+Action Required
+Project Overview
+Project Readiness
+Workforce
+Attendance cards
+Project detail context strips
+Commercial sections
+
+Wide:
+preserve intended column ratios.
+
+Narrower:
+move to fewer columns or stacked layout when necessary.
+
+Do not let a 65/35 layout become two unusably narrow cards simply to preserve desktop columns.
+
+==================================================
+11. KPI / STAT TILES
+==================================================
+
+Audit KPI/stat rows.
+
+Ensure values and labels:
+
+- remain readable
+- do not collide
+- do not break awkwardly
+- do not overflow cards
+
+When there is insufficient width:
+allow the tile grid itself to adapt.
+
+Do not shrink typography excessively.
+
+==================================================
+12. TABLES / ROSTERS / LIST ROWS
+==================================================
+
+Audit existing:
+
+- worker rosters
+- labour lists
+- project lists
+- attendance rows
+- activity rows
+- requirements lists
+
+At reduced widths:
+
+prioritise the most important information.
+
+Avoid:
+- text crashing into actions
+- action buttons overlapping content
+- arbitrary fixed columns
+
+Do NOT hide important business information purely to make the layout fit unless an existing responsive pattern already does so.
+
+==================================================
+13. FORMS
+==================================================
+
+Audit forms site-wide.
+
+Two-column field rows should remain two-column while comfortable.
+
+When they become too narrow:
+stack them deliberately.
+
+Examples:
+
+- Project Start / End dates
+- Start / Finish times
+- Site Contact Name / Number
+- project fields
+- labour requirement fields
+- modal form rows
+
+Do NOT wait until inputs are extremely narrow before stacking.
+
+==================================================
+14. MODALS
+==================================================
+
+Audit current modals/dialogs including Pre-start Add requirement.
+
+Ensure:
+
+- appropriate max-width
+- internal scrolling where necessary
+- header/footer remain accessible
+- no horizontal overflow
+- option-card grids adapt cleanly
+- fields do not become unusably narrow
+- buttons remain visible
+
+At mobile widths:
+modal should fit within viewport with safe margins.
+
+==================================================
+15. PROJECT DETAIL TABS
+==================================================
+
+Audit the project tabs:
+
+Overview
+Labour
+Workforce
+Attendance
+Site
+Pre-start
+Commercial
+Activity
+
+At normal desktop widths:
+keep them clean and aligned.
+
+At narrower widths:
+use a deliberate responsive method.
+
+Do NOT let individual labels break into ugly multi-line fragments.
+
+If horizontal scrolling is already an appropriate existing pattern, use it cleanly.
+
+Otherwise use another restrained responsive pattern compatible with the current design.
+
+==================================================
+16. FILTER / SEARCH TOOLBARS
+==================================================
+
+Audit current control bars such as the Projects directory:
+
+tabs
+search
+filters
+sort
+Request labour
+
+At narrower widths:
+
+- allow controls to wrap into deliberate rows
+- keep inputs/buttons usable
+- preserve hierarchy
+- avoid arbitrary squeeze
+
+Do not let one large search field force several buttons into broken layouts.
+
+==================================================
+17. LONG TEXT
+==================================================
+
+Differentiate between:
+
+UI labels
+and
+content text.
+
+UI labels:
+generally should not split awkwardly.
+
+Descriptions/helper text:
+may naturally wrap.
+
+Do NOT blanket the application with:
+
+white-space: nowrap
+
+That would create new overflow problems.
+
+==================================================
+18. FLEX / GRID ROOT CAUSES
+==================================================
+
+Inspect underlying layout rules rather than patching individual screenshots.
+
+Look for:
+
+- excessive fixed widths
+- missing min-width: 0 on flex/grid children
+- hard-coded grid columns
+- oversized gaps
+- excessive button padding
+- flex-shrink behaviour
+- inflexible sidebar/content calculations
+- max-width assumptions
+- duplicate media queries
+- conflicting breakpoint rules
+
+Fix the responsive system cleanly.
+
+==================================================
+19. BREAKPOINT STRATEGY
+==================================================
+
+Review the existing media queries before adding new ones.
+
+Consolidate where reasonable.
+
+Aim for a small, understandable breakpoint system rather than many one-off fixes.
+
+Test approximately:
+
+1440px
+1280px
+1200px
+1024px
+900px
+768px
+600px
+390px
+
+The exact breakpoints may differ based on existing CSS.
+
+Use content-driven decisions rather than blindly hard-coding those numbers.
+
+==================================================
+20. MOBILE
+==================================================
+
+The company app is currently desktop-first, but obvious mobile breakage should not remain.
+
+At approximately 390px:
+
+- no horizontal page overflow
+- headings remain readable
+- forms stack
+- buttons remain usable
+- modals fit
+- navigation behaves intentionally
+- day selector uses deliberate compact layout
+- stepper becomes compact
+- cards stack cleanly
+
+Do NOT attempt to redesign the entire company platform as a dedicated mobile app in this task.
+
+This is responsive resilience, not the future worker mobile application.
+
+==================================================
+21. PRESERVE ONSITE VISUAL SYSTEM
+==================================================
+
+Maintain:
+
+- white / light grey
+- black typography
+- #F97316 OnSite orange
+- neutral borders
+- restrained shadows
+- existing radii
+- existing hierarchy
+- no gradients
+- no glass effects
+- no unnecessary visual decoration
+
+Responsive changes must still look like OnSite.
+
+==================================================
+22. DO NOT CHANGE FUNCTIONALITY
+==================================================
+
+Do NOT change:
+
+- project business logic
+- labour logic
+- attendance
+- reliability
+- matching
+- date/time picker implementation
+- map implementation
+- Pre-start completion rules
+- file handling
+- localStorage/data structures
+- event logic
+- form validation
+- navigation behaviour
+
+This task is layout/responsive behaviour.
+
+Tiny markup changes are permitted only if needed for clean responsive layout.
+
+==================================================
+23. TEST INTERACTIONS AFTER RESPONSIVE CHANGES
+==================================================
+
+At representative widths verify:
+
+- sidebar navigation
+- project navigation
+- Request Labour step navigation
+- working day selection
+- form input access
+- modal open/close
+- project tabs
+- buttons remain clickable
+- no invisible overlays
+- no controls pushed outside viewport
+
+==================================================
+24. VISUAL QA
+==================================================
+
+At each tested width check for:
+
+- broken words
+- orphaned labels
+- accidental two-line buttons
+- overlapping content
+- clipped text
+- horizontal overflow
+- misaligned cards
+- inconsistent gaps
+- giant whitespace
+- squeezed inputs
+- floating actions detached from their section
+
+Do not mark this task complete merely because there is no horizontal scrollbar.
+
+The layouts should look deliberate.
+
+==================================================
+25. CODE QUALITY
+==================================================
+
+Do NOT:
+
+- add a huge end-of-file CSS override block
+- use !important
+- create dozens of one-off media queries
+- use JavaScript to manage layout when CSS can do it
+- hard-code fixes specifically for the screenshots
+- duplicate existing responsive rules
+
+Prefer:
+
+- existing component classes
+- grid/flex improvements
+- a small coherent set of breakpoints
+- reusable responsive patterns
+
+==================================================
+26. QA PRIORITY
+==================================================
+
+Pay particular attention to the currently confirmed issue at narrower desktop width:
+
+REQUEST LABOUR STEP 3
+
+Expected:
+
+- Monday–Sunday all readable
+- Wednesday one line
+- Thursday one line
+- Site & Attendance step label not awkwardly broken
+- fields remain comfortably sized
+- no crowding
+
+But do NOT stop after fixing that screen.
+
+Continue the responsive audit across the current company-side app.
+
+==================================================
+27. VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check server.js
+git diff --check
+
+Use Replit Preview and resize it through multiple widths.
+
+Check browser console for new errors.
+
+Do not claim a width was tested unless it was actually inspected.
+
+==================================================
+28. COMMIT + PUSH
+==================================================
+
+Review:
+
+git status
+git diff
+
+Ensure only responsive/layout changes from this task are included.
+
+Do not include unrelated worker/profile changes.
+
+Commit exactly:
+
+Polish site-wide responsive layout
+
+Push to:
+
+origin/main
+
+Then STOP.
+
+Report:
+
+- files changed
+- pages/screens audited
+- root causes found
+- responsive patterns introduced
+- breakpoints used/changed
+- Request Labour working-day result
+- Request Labour stepper result
+- Project Detail tab result
+- sidebar result
+- form/grid result
+- mobile result
+- widths actually tested
+- validation results
+- commit hash
+- push result

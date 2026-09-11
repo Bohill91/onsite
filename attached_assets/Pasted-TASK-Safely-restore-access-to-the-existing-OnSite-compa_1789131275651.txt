@@ -1,0 +1,406 @@
+TASK: Safely restore access to the existing OnSite company data by creating one canonical company account and attaching ONLY the existing four real project records and their genuinely linked child data.
+
+This is a CONTROLLED DATA-RECOVERY / OWNERSHIP REPAIR task.
+
+Do not redesign the login UI in this task.
+
+==================================================
+KNOWN DIAGNOSIS
+==================================================
+
+Current authentication:
+
+- users stored in localStorage key:
+  onsite_users_v1
+
+- active auth stored in:
+  onsite_auth_v1
+
+- project/application state stored in:
+  sitematch_v2
+
+- activity:
+  sitematch_activity
+
+- attendance:
+  onsite_attendance_v1
+
+- worker identities:
+  onsite_identities_v1
+
+Current login email:
+
+luke_bohill@outlook.com
+
+The inspected browser state currently has:
+
+- 4 existing jobs/projects
+- no onsite_users_v1 account record
+- no onsite_auth_v1 active account record
+
+The four existing jobs do NOT currently contain stable:
+
+- companyId
+- ownerId
+- userId
+- createdBy
+
+Some unrelated/demo application records may contain other company IDs.
+
+Therefore:
+
+DO NOT blindly assign every unowned/company-related record to the recovered account.
+
+==================================================
+PHASE 1 — BACK UP EVERYTHING FIRST
+==================================================
+
+Before changing any application data, create a complete recovery snapshot of the existing browser-local OnSite state.
+
+Read and preserve the full values of:
+
+- sitematch_v2
+- sitematch_activity
+- onsite_attendance_v1
+- onsite_identities_v1
+- onsite_users_v1 if present
+- onsite_auth_v1 if present
+
+Create a timestamped JSON backup that contains:
+
+{
+  createdAt,
+  origin,
+  keys: {
+    ...
+  }
+}
+
+Do not mutate any data until this backup has been successfully created.
+
+Make the backup available locally in the project/recovery area or through an existing safe download mechanism.
+
+Do NOT commit personal browser-state backup data to GitHub.
+
+Do NOT push the backup.
+
+Report where the backup exists.
+
+==================================================
+PHASE 2 — IDENTIFY THE EXACT FOUR PROJECTS
+==================================================
+
+Before migrating anything, enumerate the four current project/job records.
+
+For each report:
+
+- project/job ID
+- project name
+- job number
+- location
+- companyName if present
+- start/end date if present
+- current companyId if any
+- other stable identifying fields
+
+These four IDs become the authoritative migration scope.
+
+Do not include unrelated/demo jobs.
+
+==================================================
+PHASE 3 — IDENTIFY LINKED CHILD RECORDS
+==================================================
+
+Inspect sitematch_v2 and related stores for records linked to those four project IDs.
+
+Possible categories include:
+
+- labour requirements
+- applications
+- worker assignments
+- agreements
+- transfers
+- project activity
+- project documents
+- invoices
+- billing records
+- notifications
+- pre-start requirements
+- attendance
+- any other project-scoped records
+
+For each category determine whether records are linked by:
+
+- projectId
+- jobId
+- requirementId belonging to one of the four projects
+- another explicit project relationship
+
+ONLY explicit linked records should be included in the migration.
+
+Do NOT migrate records simply because:
+
+- companyId is blank
+- companyName looks similar
+- the record is nearby in an array
+- it appears to be company data
+
+==================================================
+PHASE 4 — CREATE A CANONICAL COMPANY IDENTITY
+==================================================
+
+The account to restore is:
+
+luke_bohill@outlook.com
+
+Create ONE canonical company account if no current user record exists for that normalized email.
+
+Use the existing OnSite user/account schema.
+
+Do NOT invent a second account if one appears during this process.
+
+Generate stable IDs using the application's existing ID conventions.
+
+The account should be a company-side Administrator account.
+
+IMPORTANT:
+
+Do NOT hard-code or invent a password silently.
+
+If a password is needed to complete account creation, STOP before creating the account and tell me exactly what input is required from me.
+
+Do not expose password values in logs.
+
+==================================================
+PHASE 5 — COMPANY IDENTITY
+==================================================
+
+Create/reuse ONE canonical company identity for the restored account using the existing company schema.
+
+Do not assume "Apex Construction Ltd" is the correct current company solely because two old jobs contain that string.
+
+Inspect the existing app/company state first.
+
+If the correct company identity cannot be determined confidently:
+
+STOP and report the available company-name/company-ID candidates instead of guessing.
+
+Do not migrate ownership until the company identity is known.
+
+==================================================
+PHASE 6 — CONTROLLED OWNERSHIP MIGRATION
+==================================================
+
+Once the canonical company ID is known:
+
+Assign that companyId ONLY to:
+
+1. the four authoritative project records
+2. child records explicitly linked to those project IDs
+
+Where the schema also legitimately uses:
+
+- ownerId
+- userId
+- createdBy
+
+use the correct canonical user ID only if that field is actually part of the current ownership model.
+
+Do not spray user IDs into structures that do not currently use them.
+
+Do not change:
+
+- project names
+- job numbers
+- dates
+- labour requirements
+- rates
+- attendance values
+- worker assignments
+- project status
+- project content
+
+This is ownership repair only.
+
+==================================================
+PHASE 7 — DO NOT TOUCH DEMO / UNRELATED DATA
+==================================================
+
+Do NOT reassign:
+
+- demo company records
+- unrelated jobs
+- unrelated applications
+- unrelated workers
+- unrelated invoices
+- unrelated notifications
+- records with a different explicit project ID
+- records already owned by another legitimate company ID
+
+If a child record is ambiguous, leave it unchanged and report it.
+
+==================================================
+PHASE 8 — LOGIN RECOVERY
+==================================================
+
+After the canonical account exists and ownership is repaired:
+
+Verify that login with:
+
+luke_bohill@outlook.com
+
+resolves to that exact user/company identity.
+
+Do not weaken authentication checks just to make login succeed.
+
+Do not add bypasses.
+
+Do not auto-login permanently.
+
+Do not remove logout behaviour.
+
+==================================================
+PHASE 9 — VERIFY DATA SURVIVES AUTH CYCLES
+==================================================
+
+Test:
+
+1. sign in
+2. open Projects
+3. verify all four migrated projects are visible
+4. open each project
+5. verify project detail loads
+6. logout
+7. sign back in
+8. verify the same four projects remain visible
+9. hard refresh
+10. verify they remain visible
+
+Also verify Request Labour still creates future jobs using the canonical companyId.
+
+==================================================
+PHASE 10 — SAFETY ASSERTIONS
+==================================================
+
+Before and after migration compare:
+
+- number of jobs
+- four project IDs
+- labour requirement counts
+- application counts
+- assignment counts
+- agreement counts
+- invoice counts
+- pre-start requirement counts
+- project activity counts
+
+Ownership metadata may change.
+
+Business/project content must not disappear.
+
+If any unexpected record count changes:
+
+STOP.
+
+Restore from the backup rather than continuing.
+
+==================================================
+PHASE 11 — AUTH ARCHITECTURE WARNING
+==================================================
+
+The current prototype stores passwords directly in localStorage.
+
+DO NOT attempt a full production-auth rebuild in this task.
+
+But add a concise implementation note/report stating that before production launch we must replace:
+
+- client-side user database
+- plain-text password storage
+- localStorage authentication
+
+with proper server-side authentication and secure password hashing/session management.
+
+Do not implement that architecture now.
+
+==================================================
+PHASE 12 — DO NOT REDESIGN AUTH UI
+==================================================
+
+Do NOT modify the visual design of:
+
+- Login
+- Register
+- Forgot password
+
+That comes immediately after this recovery is confirmed.
+
+Do not spend time styling the old auth page.
+
+==================================================
+PHASE 13 — VALIDATION
+==================================================
+
+Run:
+
+node --check app.js
+node --check auth.js
+node --check server.js
+git diff --check
+
+Check browser console.
+
+Verify:
+
+- no data loss
+- no duplicate company account
+- no duplicate user
+- no project duplication
+- no ownership leakage
+- no unrelated demo data migration
+
+==================================================
+PHASE 14 — COMMIT + PUSH
+==================================================
+
+Only commit application code required for the controlled recovery/migration.
+
+NEVER commit the browser-data backup.
+
+Before commit:
+
+git status
+git diff
+
+Commit exactly:
+
+Repair company account ownership
+
+Push to:
+
+origin/main
+
+==================================================
+FINAL REPORT
+==================================================
+
+Report:
+
+- backup successfully created: YES/NO
+- backup location
+- exact four project IDs/names
+- canonical user ID
+- canonical company ID
+- company name used and evidence for it
+- number of project records migrated
+- number of linked child records migrated by category
+- ambiguous records deliberately left unchanged
+- login result
+- logout/login persistence result
+- hard-refresh persistence result
+- future project companyId test
+- validation results
+- files changed
+- commit hash
+- push result
+
+If company identity or required account credentials cannot be determined safely, STOP BEFORE MIGRATION and ask me for the missing information.
