@@ -3880,6 +3880,102 @@ margin-bottom: 12px;
 
 .ai-fab-label { line-height: 1; }
 
+/* Quiet utility treatment: AI stays discoverable without competing with
+   orange workflow actions. */
+.ai-fab {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 50%;
+  bottom: 24px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--orange);
+  height: 50px;
+  justify-content: center;
+  padding: 0;
+  right: 24px;
+  width: 50px;
+}
+
+.ai-fab-label { display: none; }
+.ai-fab:hover {
+  background: var(--orange-light);
+  border-color: rgba(249, 115, 22, 0.42);
+  box-shadow: 0 9px 24px rgba(15, 23, 42, 0.16);
+  transform: translateY(-2px);
+}
+
+.company-first-project-card {
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  display: grid;
+  gap: 22px;
+  max-width: 760px;
+  padding: 30px;
+}
+
+.company-first-project-copy { min-width: 0; }
+.company-first-project-copy h2 {
+  color: var(--ink);
+  font-size: 1.45rem;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 6px 0 8px;
+}
+.company-first-project-copy p:last-child {
+  color: var(--ink-2);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 52ch;
+}
+.company-first-project-cta {
+  justify-self: start;
+  min-height: 42px;
+}
+.company-first-project-steps {
+  border-top: 1px solid var(--card-divider);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 18px 0 0;
+}
+.company-first-project-steps li {
+  align-items: center;
+  color: var(--ink-2);
+  display: flex;
+  font-size: 0.8rem;
+  gap: 8px;
+  line-height: 1.35;
+}
+.company-first-project-steps b {
+  align-items: center;
+  background: var(--orange-light);
+  border-radius: 50%;
+  color: var(--orange-dark);
+  display: inline-flex;
+  flex: 0 0 24px;
+  font-size: 0.72rem;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+.company-projects-empty-shell > .company-page-head--compact {
+  padding-bottom: 0;
+}
+.company-projects-first-card { margin-top: 2px; }
+
+@media (max-width: 640px) {
+  .ai-fab { bottom: calc(var(--shell-mobile-bottom-space) + 10px); right: 16px; }
+  .company-first-project-card { padding: 22px; }
+  .company-first-project-steps { grid-template-columns: 1fr; }
+}
+
 @media (min-width: 860px) {
   .ai-fab {
     bottom: 24px;

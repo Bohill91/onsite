@@ -2705,11 +2705,12 @@ function companyPageHeaderHTML({
   subtitle = "",
   actions = "",
   compact = false,
+  showDate = false,
 } = {}) {
   if (compact) {
     return `<header class="company-page-head company-page-head--compact">
       ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
-      <span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>
+      ${showDate ? `<span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>` : ""}
       ${actions}
     </header>`;
   }
@@ -2720,7 +2721,7 @@ function companyPageHeaderHTML({
         kicker: "",
         title,
         subtitle,
-        datePill: formatAttDate(todayDateStr()),
+        datePill: showDate ? formatAttDate(todayDateStr()) : "",
         actions,
         square: true,
       })
@@ -2742,7 +2743,7 @@ function companyPageHeaderHTML({
       ${title ? `<h2>${escapeHtml(title)}</h2>` : ""}
       ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
     </div>
-    <span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>
+    ${showDate ? `<span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>` : ""}
     ${actions}
   </header>`;
 }
@@ -2756,9 +2757,10 @@ function companyPageShellHTML({
   className = "",
   bodyClass = "",
   compactHeader = false,
+  showDate = false,
 } = {}) {
   return `<section class="request-labour-page os-page-content company-saas-page ${escapeHtml(className)}">
-    ${companyPageHeaderHTML({ kicker, title, subtitle, actions, compact: compactHeader })}
+    ${companyPageHeaderHTML({ kicker, title, subtitle, actions, compact: compactHeader, showDate })}
     <div class="request-labour-page-body os-card company-saas-body ${escapeHtml(bodyClass)}">
       ${body}
     </div>
@@ -15440,7 +15442,6 @@ function attendanceSelectedProjectHeaderHTML(job) {
       <h3>${escapeHtml(companyProjectTitle(job))}</h3>
       <p>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</p>
     </div>
-    <span class="att-today-badge">${formatAttDate(todayDateStr())}</span>
   </header>`;
 }
 
@@ -21994,6 +21995,7 @@ function renderContractorHome(user) {
   const previousProjects = companyJobs.filter(
     (job) => job.completed || job.completedAt || job.cancelledAt || job.bookingStatus === "cancelled",
   );
+  const isFirstProject = companyJobs.length === 0;
 
   el.innerHTML = companyPageShellHTML({
     kicker: "DASHBOARD",
@@ -22001,10 +22003,26 @@ function renderContractorHome(user) {
     className: "company-dashboard-shell",
     bodyClass: "company-dashboard-body",
     compactHeader: true,
+    showDate: true,
     body: `
         <div class="jw-form">
-          ${companyDashboardFocusHTML(summary, user)}
-          ${companyRecentActivityHTML(summary, user)}
+          ${
+            isFirstProject
+              ? `<section class="company-first-project-card jw-card" aria-labelledby="firstProjectTitle">
+                  <div class="company-first-project-copy">
+                    <p class="company-home-kicker">GET STARTED</p>
+                    <h2 id="firstProjectTitle">No projects yet</h2>
+                    <p>Create your first project to start requesting labour and managing your site through OnSite.</p>
+                  </div>
+                  <button class="primary-btn company-first-project-cta" type="button" data-company-request-labour>Request labour</button>
+                  <ol class="company-first-project-steps" aria-label="Getting started">
+                    <li><b>1</b><span>Create your project</span></li>
+                    <li><b>2</b><span>Add the labour you need</span></li>
+                    <li><b>3</b><span>Manage Sub-contractors and attendance</span></li>
+                  </ol>
+                </section>`
+              : `${companyDashboardFocusHTML(summary, user)}${companyRecentActivityHTML(summary, user)}`
+          }
           ${previousProjects.length ? `<section class="jw-card previous-projects-card compact">
             <div class="company-live-site-head">
               <div>
@@ -22118,9 +22136,29 @@ function renderCompanyProjectsPage(user) {
     });
     return;
   }
+  if (!companyJobs.length) {
+    el.innerHTML = companyPageShellHTML({
+      title: "Projects",
+      compactHeader: true,
+      showDate: false,
+      className: "company-dashboard-shell company-projects-shell company-projects-empty-shell",
+      bodyClass: "company-dashboard-body company-projects-body",
+      body: `<section class="company-first-project-card company-projects-first-card jw-card" aria-labelledby="projectsFirstTitle">
+        <div class="company-first-project-copy">
+          <p class="company-home-kicker">GET STARTED</p>
+          <h2 id="projectsFirstTitle">No projects yet</h2>
+          <p>Create your first project and tell OnSite what labour you need.</p>
+        </div>
+        <button class="primary-btn company-first-project-cta" type="button" data-company-request-labour>Request labour</button>
+      </section>`,
+    });
+    bindLabourRequestWorkflow(el);
+    return;
+  }
   el.innerHTML = companyPageShellHTML({
     title: "Projects",
     compactHeader: true,
+    showDate: false,
     className: "company-dashboard-shell company-projects-shell",
     bodyClass: "company-dashboard-body company-projects-body",
     body: `
