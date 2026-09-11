@@ -25430,6 +25430,7 @@ let pickerMapLibre = null;
 let pickerMapRenderer = "";
 let pickerMapInitPromise = null;
 let pickerMapLoadTimeout = null;
+let pickerMapLoadingFallbackTimeout = null;
 let pickerMapReady = false;
 let pickerMapLastError = null;
 let pickerMapSiteCenter = null;
@@ -25441,6 +25442,8 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const PICKER_MAP_VECTOR_TIMEOUT_MS = 2000;
+const PICKER_MAP_RASTER_LOADING_FALLBACK_MS = 1500;
 const PICKER_VIEWPORT = Object.freeze({
   minZoom: 16,
   maxZoom: 16.7,
@@ -26041,6 +26044,42 @@ function setPickerMapFailureState(failed, error = null) {
   }
 }
 
+function setPickerMapLoading(loading) {
+  const map = document.getElementById("jobPickerMap");
+  const loader = document.getElementById("jobPickerMapLoading");
+  clearTimeout(pickerMapLoadingFallbackTimeout);
+  pickerMapLoadingFallbackTimeout = null;
+  if (map) map.setAttribute("aria-busy", String(loading));
+  if (!loader) return;
+  loader.classList.toggle("hidden", !loading);
+  loader.hidden = !loading;
+}
+
+function ensurePickerMapLoadingElement(container) {
+  if (!container) return null;
+  let loader = container.querySelector("#jobPickerMapLoading");
+  if (loader) return loader;
+  loader = document.createElement("div");
+  loader.id = "jobPickerMapLoading";
+  loader.className = "picker-map-loading";
+  loader.setAttribute("role", "status");
+  loader.setAttribute("aria-live", "polite");
+  loader.innerHTML =
+    '<span class="picker-map-loading-indicator" aria-hidden="true"></span><span>Loading map…</span>';
+  container.appendChild(loader);
+  return loader;
+}
+
+function isFatalPickerMapError(event = {}) {
+  const error = event?.error || event;
+  const message = String(error?.message || error || "").toLowerCase();
+  if (!message || event?.sourceId || event?.source || event?.tile) return false;
+  return /webgl|canvas|renderer|context|style|stylesheet/.test(message) &&
+    /fail|error|unable|invalid|cannot|could not|not supported|unavailable/.test(
+      message,
+    );
+}
+
 function warnPickerMapFallback(error) {
   const developmentHost =
     ["localhost", "127.0.0.1"].includes(window.location.hostname) ||
@@ -26056,6 +26095,8 @@ function warnPickerMapFallback(error) {
 function destroyPickerMapRenderer() {
   clearTimeout(pickerMapLoadTimeout);
   pickerMapLoadTimeout = null;
+  clearTimeout(pickerMapLoadingFallbackTimeout);
+  pickerMapLoadingFallbackTimeout = null;
   pickerMarker?.remove();
   pickerMarker = null;
   pickerMap?.remove();
@@ -26166,6 +26207,17 @@ function initVectorPickerMap(container, center, zoom) {
   syncPickerMarkerToCurrentPin();
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const resolveVectorMap = (map) => {
+      if (settled) return;
+      settled = true;
+      resolve(map);
+    };
+    const rejectVectorMap = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     pickerMap.on("load", () => {
       pickerMapReady = true;
       pickerMapLastError = null;
@@ -26174,10 +26226,15 @@ function initVectorPickerMap(container, center, zoom) {
       setPickerMapFailureState(false);
       syncPickerMarkerToCurrentPin();
       resizePickerMap();
-      resolve(pickerMap);
+      setPickerMapLoading(false);
+      resolveVectorMap(pickerMap);
     });
     pickerMap.on("error", (event) => {
       pickerMapLastError = event?.error || event;
+      if (!pickerMapReady && isFatalPickerMapError(event)) {
+        rejectVectorMap(pickerMapLastError);
+        return;
+      }
       if (pickerMapReady) {
         console.warn(
           "[OnSite entrance map] Map resource warning",
@@ -26187,12 +26244,12 @@ function initVectorPickerMap(container, center, zoom) {
     });
     pickerMapLoadTimeout = setTimeout(() => {
       if (!pickerMapReady) {
-        reject(
+        rejectVectorMap(
           pickerMapLastError ||
             new Error("The vector entrance map did not become ready in time."),
         );
       }
-    }, 12000);
+    }, PICKER_MAP_VECTOR_TIMEOUT_MS);
   });
 }
 
@@ -26201,6 +26258,7 @@ function initRasterPickerMap(container, center, zoom) {
     throw new Error("The raster entrance map renderer is unavailable.");
   }
   container.replaceChildren();
+  ensurePickerMapLoadingElement(container);
   container.classList.remove("maplibregl-map");
   pickerMap = L.map(container, {
     attributionControl: true,
@@ -26211,10 +26269,12 @@ function initRasterPickerMap(container, center, zoom) {
   }).setView([center[1], center[0]], zoom);
   pickerMapRenderer = "raster";
   container.dataset.mapRenderer = pickerMapRenderer;
-  L.tileLayer(ONSITE_ENTRANCE_RASTER_TILES, {
+  const tileLayer = L.tileLayer(ONSITE_ENTRANCE_RASTER_TILES, {
     attribution: "&copy; OpenStreetMap contributors",
     maxZoom: 19,
-  }).addTo(pickerMap);
+  });
+  tileLayer.once("load", () => setPickerMapLoading(false));
+  tileLayer.addTo(pickerMap);
   addRasterPickerMapControls();
   bindPickerMapClick((event) => {
     if (jobWizardActive && currentJobHasEntrancePin() && !jobEntrancePinOpen) {
@@ -26227,6 +26287,13 @@ function initRasterPickerMap(container, center, zoom) {
   setPickerMapFailureState(false);
   syncPickerMarkerToCurrentPin();
   requestAnimationFrame(resizePickerMap);
+  pickerMapLoadingFallbackTimeout = setTimeout(
+    () => {
+      pickerMapLoadingFallbackTimeout = null;
+      setPickerMapLoading(false);
+    },
+    PICKER_MAP_RASTER_LOADING_FALLBACK_MS,
+  );
   return pickerMap;
 }
 
@@ -26243,6 +26310,8 @@ async function initPickerMap({ reset = false } = {}) {
     setPickerMapFailureState(false);
     const container = document.getElementById("jobPickerMap");
     if (!container) return null;
+    ensurePickerMapLoadingElement(container);
+    setPickerMapLoading(true);
 
     const hasPin = currentJobHasEntrancePin();
     const center = hasPin
@@ -26269,6 +26338,7 @@ async function initPickerMap({ reset = false } = {}) {
     .catch((error) => {
       destroyPickerMapRenderer();
       setPickerMapFailureState(true, error);
+      setPickerMapLoading(false);
       return null;
     })
     .finally(() => {
