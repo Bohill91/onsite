@@ -1,4 +1,6 @@
-matching jobs right now",
+)).join("") : guidedEmptyStateHTML({
+          kicker: "Matching",
+          title: "No matching jobs right now",
           body: "There are no open roles matching your trade at the moment. Update your profile, travel radius and availability to improve future matching.",
           actionLabel: "Open Profile",
           actionTab: "profile",
@@ -1610,11 +1612,10 @@ function groupedAttendanceWorkers(workers) {
       groups.set(key, {
         label: attendanceGroupLabel(worker),
         workers: [],
-      });
-    }
-    groups.get(key).workers.push(worker);
-  });
-  return Array.from(groups.values  dedupeKey: `qr_regenerated:${code.id}`,
+      });ndance_qr",
+        severity: "warning",
+        metadata: { qrCodeId: code.id },
+        dedupeKey: `qr_regenerated:${code.id}`,
       });
       saveState();
     }

@@ -1897,11 +1897,16 @@ button.is-loading,
 
   .sidebar-company-name {
     color: var(--ink);
+    display: -webkit-box;
     font-size: 0.82rem;
     font-weight: 800;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.2;
+    max-height: 2.4em;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
   }
 
   .sidebar-user-name {
@@ -3913,7 +3918,7 @@ margin-bottom: 12px;
   box-shadow: var(--card-shadow);
   display: grid;
   gap: 22px;
-  max-width: 760px;
+  max-width: 820px;
   padding: 30px;
 }
 
