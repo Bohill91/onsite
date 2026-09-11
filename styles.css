@@ -2000,42 +2000,29 @@ button.is-loading,
   .sidebar-company-text {
     display: grid;
     gap: 1px;
+    flex: 1 1 auto;
     min-width: 0;
+    overflow: hidden;
   }
 
   .sidebar-company-name {
     color: var(--ink);
-    display: -webkit-box;
+    display: block;
     font-size: 0.82rem;
     font-weight: 800;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.2;
-    max-height: 2.4em;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    white-space: normal;
-  }
-
-  .sidebar-user-meta {
-    color: var(--ink-2);
-    font-size: 0.76rem;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
     white-space: nowrap;
   }
 
   .sidebar-account-identity {
-    display: grid;
-    gap: 1px;
-    min-width: 0;
-  }
-
-  .sidebar-user-role {
     color: var(--ink-3);
+    display: block;
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 600;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

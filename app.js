@@ -37,8 +37,8 @@ const ICON_PATHS = {
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   moreHorizontal: `<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>`,
   minusCircle: `<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>`,
-  sidebarClose: `<rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" fill-opacity=".1"/><path d="M9 3v18"/><path d="m15 8-4 4 4 4" stroke-width="2.25"/>`,
-  sidebarOpen: `<rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" fill-opacity=".1"/><path d="M9 3v18"/><path d="m13 8 4 4-4 4" stroke-width="2.25"/>`,
+  chevronsLeft: `<polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>`,
+  chevronsRight: `<polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   qrCode: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/>`,
   search: `<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>`,
@@ -12852,11 +12852,11 @@ function setSidebarCollapsed(collapsed, { persist = false } = {}) {
   }
   const control = document.querySelector("[data-sidebar-collapse]");
   if (control) {
-    const nextLabel = collapsed ? "Show sidebar" : "Hide sidebar";
+    const nextLabel = collapsed ? "Show menu" : "Hide menu";
     control.setAttribute("aria-label", nextLabel);
     control.setAttribute("title", nextLabel);
     control.setAttribute("aria-pressed", String(collapsed));
-    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon(collapsed ? "sidebarOpen" : "sidebarClose", 20)}</span>`;
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon(collapsed ? "chevronsRight" : "chevronsLeft", 20)}</span>`;
   }
 }
 
@@ -12880,7 +12880,7 @@ function ensureSidebarCollapseControl() {
     utility?.insertAdjacentHTML(
       "beforeend",
       `<button class="sidebar-collapse-control" type="button" data-sidebar-collapse aria-pressed="false">
-        <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("panelLeft", 16)}</span>
+         <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("chevronsLeft", 20)}</span>
       </button>`,
     );
     control = nav.querySelector("[data-sidebar-collapse]");
@@ -12892,7 +12892,7 @@ function ensureSidebarCollapseControl() {
     utility?.append(control);
   }
   if (control) {
-    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("sidebarClose", 20)}</span>`;
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("chevronsLeft", 20)}</span>`;
   }
   syncSidebarState();
 }
@@ -12997,11 +12997,8 @@ function renderSidebarAccount(user) {
     <button class="sidebar-account-card" type="button" aria-expanded="false" data-sidebar-account-toggle title="${escapeHtml(companyName)}" aria-label="${escapeHtml(companyName)} account menu">
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
-        <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
-        <span class="sidebar-account-identity">
-          <span class="sidebar-user-meta">${escapeHtml(userName)}</span>
-          <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
-        </span>
+        <span class="sidebar-company-name" title="${escapeHtml(companyName)}">${escapeHtml(companyName)}</span>
+        <span class="sidebar-account-identity">${escapeHtml(userName)} <span aria-hidden="true">·</span> ${escapeHtml(userRole)}</span>
       </span>
       <span class="sidebar-account-more" aria-hidden="true">${onsiteIcon("moreHorizontal", 18)}</span>
     </button>
