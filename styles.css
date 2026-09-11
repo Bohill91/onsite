@@ -7248,6 +7248,59 @@ margin-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 
+.worker-readiness-checklist {
+  padding-bottom: 14px;
+}
+
+.worker-readiness-checklist .prof-section-hint,
+.worker-readiness-checklist .prof-field-label,
+.worker-readiness-checklist .profile-checklist,
+.worker-readiness-checklist .secondary-btn {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.worker-readiness-checklist .prof-section-hint {
+  margin-top: 12px;
+}
+
+.worker-readiness-checklist .prof-field-label {
+  display: block;
+  margin-top: 12px;
+}
+
+.profile-checklist {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin-top: 7px;
+  list-style: none;
+}
+
+.profile-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.profile-checklist li span {
+  color: var(--orange);
+  font-weight: 700;
+}
+
+.worker-readiness-checklist--compact .profile-checklist {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .worker-readiness-checklist--compact .profile-checklist {
+    grid-template-columns: 1fr;
+  }
+}
+
 .prof-fields { padding: 4px 0; }
 
 .prof-field {

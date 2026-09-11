@@ -226,56 +226,20 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
   setWorkerStep(2);
 });
 
-// ─── Worker Reg — Step 2 ───────────────────────────────────
+// ─── Worker Reg — Step 2: create the account ───────────────
 document.getElementById('workerStep2Form').addEventListener('submit', function(e) {
   e.preventDefault();
   workerRegData.trade = document.getElementById('regTrade').value;
   workerRegData.tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(workerRegData.trade) || '';
   workerRegData.specialism = document.getElementById('regRole').value;
-  workerRegData.roleKey = window.OnSiteTaxonomy?.roleKeyFor(
-    workerRegData.trade,
-    workerRegData.specialism,
-  ) || '';
+  workerRegData.roleKey = window.OnSiteTaxonomy?.roleKeyFor(workerRegData.trade, workerRegData.specialism) || '';
   workerRegData.yearsExp = document.getElementById('regYearsExp').value;
   workerRegData.location = document.getElementById('regLocation').value.trim();
-  workerRegData.minRate  = document.getElementById('regMinRate').value;
+  workerRegData.locationData = window.workerLocationSelection || null;
+  workerRegData.minRate = '';
   workerRegData.travelRadiusMiles = Number(document.getElementById('regTravelRadius').value) || 15;
   workerRegData.travelFurtherWithAccommodation =
     document.querySelector('input[name="regTravelFurther"]:checked')?.value === 'yes';
-  workerRegData.weekendPreferences = {
-    saturday: document.getElementById('regWeekendSaturday')?.value === 'yes',
-    sunday: document.getElementById('regWeekendSunday')?.value === 'yes',
-    weekendOnly: document.getElementById('regWeekendOnly')?.value === 'yes',
-  };
-  setWorkerStep(3);
-});
-
-// ─── Worker Reg — Step 3 ───────────────────────────────────
-document.getElementById('workerStep3Form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const utr = document.getElementById('regUTR').value.replace(/\D/g, '');
-  const err = document.getElementById('step3Error');
-
-  if (!/^\d{10}$/.test(utr)) {
-    err.textContent = 'UTR number must be exactly 10 digits.';
-    err.style.display = 'block';
-    return;
-  }
-  err.style.display = 'none';
-
-  const certs = Array.from(document.querySelectorAll('#certCheckboxes input[type="checkbox"]:checked'))
-    .map(function(c) {
-      const lbl    = c.closest('.cert-checkbox');
-      const expiry = lbl ? (lbl.querySelector('.cert-expiry-input')?.value || null) : null;
-      const credential = window.OnSiteCredentials?.findById?.(c.value);
-      return {
-        name: credential?.label || c.value,
-        credentialId: credential?.id || "",
-        expiry: expiry || null,
-        verificationStatus: "pending",
-      };
-    });
-
   const user = {
     id: 'user-' + Date.now() + '-' + Math.random().toString(16).slice(2),
     type: 'worker',
@@ -299,15 +263,19 @@ document.getElementById('workerStep3Form').addEventListener('submit', function(e
       sunday: false,
       weekendOnly: false,
     },
-    utr,
-    cisStatus:        document.getElementById('regCisStatus').value,
-    nationalInsuranceNumber: document.getElementById('regNationalInsurance').value.trim(),
-    dateOfBirth:      document.getElementById('regDOB').value,
-    cscsCard:         document.getElementById('regCscsCard').value.trim(),
-    rightToWork:      document.getElementById('regRightToWork').value,
-    photoId:          document.getElementById('regPhotoId').value,
-    drivingLicenceHolder: document.getElementById('regDrivingLicenceHolder').value === 'yes',
-    certifications:   certs,
+    locationData: workerRegData.locationData,
+    // Empty compatibility fields are intentionally completed later in Profile.
+    utr: '',
+    cisStatus: '',
+    nationalInsuranceNumber: '',
+    dateOfBirth: '',
+    cscsCard: '',
+    rightToWork: '',
+    photoId: '',
+    drivingLicenceHolder: false,
+    certifications: [],
+    qualifications: [],
+    profilePhoto: '',
     verificationStatus: 'pending',
     workerVerificationStatus: 'pending',
     qualificationVerificationStatus: 'pending',
@@ -355,16 +323,27 @@ function setWorkerStep(step) {
   });
 
   document.getElementById('workerStepLabel').innerHTML =
-    'Step <strong>' + step + '</strong> of 3 — ' + ['Basic Details', 'Trade Information', 'Compliance'][step - 1];
+    'Step <strong>' + step + '</strong> of 2 — ' + ['Account', 'Work profile'][step - 1];
   authOverlay.scrollTop = 0;
 }
 
 function showWorkerSuccess(user, dupeResult) {
-  const completion = calcCompletion(user);
+  const assessment = typeof assessWorkerProfile === 'function'
+    ? assessWorkerProfile(user)
+    : { percentage: calcCompletion(user), workReady: false, missingMandatoryItems: [] };
+  const completion = Number(assessment.percentage ?? 0);
   document.getElementById('workerSuccessName').textContent = user.name.split(' ')[0];
   document.getElementById('workerCompletionPct').textContent = completion + '%';
   document.getElementById('workerCompletionBar').style.width = completion + '%';
   renderCompletionChecklist(user);
+  const status = document.getElementById('workerWorkStatus');
+  if (status) status.textContent = (assessment.workReady ?? assessment.isWorkReady) ? 'Work ready' : 'Not work ready';
+  const missing = assessment.missingMandatoryItems || [];
+  const missingEl = document.getElementById('completionMissing');
+  if (missingEl) missingEl.textContent = missing.length
+    ? missing.length + ' required ' + (missing.length === 1 ? 'item' : 'items') + ' remaining before you can apply or be matched: ' +
+      missing.map(function(item) { return item.label; }).join(', ') + '.'
+    : 'Your required profile items are complete.';
   const note = document.getElementById('returningWorkerNote');
   if (note) {
     if (dupeResult && dupeResult.isDuplicate) {
@@ -411,23 +390,30 @@ function deleteWorkerAccount() {
 }
 
 function calcCompletion(user) {
-  let score = 0;
-  if (user.name && user.email && user.phone)          score += 20;
-  if (user.trade && (user.specialism || user.grade))  score += 20;
-  if (user.utr)                                        score += 15;
-  if (user.rightToWork)                               score += 15;
-  if (user.certifications && user.certifications.length > 0) score += 20;
-  return score;
+  const items = [
+    !!(user.name && user.email && user.phone),
+    !!(user.trade && (user.specialism || user.grade)),
+    !!user.location,
+    !!user.utr,
+    !!user.rightToWork,
+    !!user.cscsCard,
+    !!(user.certifications && user.certifications.length),
+    !!user.profilePhoto,
+  ];
+  return Math.round(items.filter(Boolean).length / items.length * 100);
 }
 
 function renderCompletionChecklist(user) {
   const items = [
-    { label: 'Basic Information',  done: !!(user.name && user.email && user.phone) },
-    { label: 'Trade Information',  done: !!(user.trade && (user.specialism || user.grade)) },
-    { label: 'Profile Photo',      done: false                                       },
-    { label: 'UTR Number',         done: !!user.utr                                  },
-    { label: 'Right to Work',      done: !!user.rightToWork                          },
-    { label: 'Qualifications',     done: !!(user.certifications && user.certifications.length) },
+    { label: 'Account details', done: !!(user.name && user.email && user.phone) },
+    { label: 'Trade profile', done: !!(user.trade && (user.specialism || user.grade)) },
+    { label: 'Home location', done: !!user.location },
+    { label: 'CIS / UTR details', done: !!(user.utr && user.cisStatus) },
+    { label: 'Identity information', done: !!(user.dateOfBirth && user.photoId) },
+    { label: 'Right to Work', done: !!user.rightToWork },
+    { label: 'Trade card details', done: !!user.cscsCard },
+    { label: 'Qualifications and certificates', done: !!(user.certifications && user.certifications.length) },
+    { label: 'Profile photo', done: !!user.profilePhoto },
   ];
   const list = document.getElementById('completionChecklist');
   list.innerHTML = items.map(function(item) {
@@ -564,6 +550,12 @@ document.getElementById('workerSuccessContinueBtn').addEventListener('click', fu
   updateTopbarUser(getCurrentUser());
 });
 
+document.getElementById('workerCompleteProfileBtn')?.addEventListener('click', function() {
+  hideAuthOverlay();
+  updateTopbarUser(getCurrentUser());
+  if (typeof switchTab === 'function') switchTab('profile');
+});
+
 document.getElementById('companySuccessContinueBtn').addEventListener('click', function() {
   hideAuthOverlay();
   updateTopbarUser(getCurrentUser());
@@ -595,16 +587,26 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
     // Populate cert checkboxes
     initialisePasswordToggles();
     const certContainer = document.getElementById('certCheckboxes');
-    certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
-      return '<label class="cert-checkbox">' +
-        '<input type="checkbox" value="' + c.id + '" />' +
-        '<span class="cert-name">' + c.label + '</span>' +
-        '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
-        '</label>';
-    }).join('');
+    if (certContainer) {
+      certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
+        return '<label class="cert-checkbox">' +
+          '<input type="checkbox" value="' + c.id + '" />' +
+          '<span class="cert-name">' + c.label + '</span>' +
+          '<input type="date" class="cert-expiry-input" title="Expiry date (optional)" />' +
+          '</label>';
+      }).join('');
+    }
 
     // Populate the shared V1 trade and role taxonomy.
     initialiseWorkerTaxonomyFields();
+    if (window.OnSiteLocations?.initUkLocationPicker) {
+      const locationInput = document.getElementById('regLocation');
+      const picker = window.OnSiteLocations.initUkLocationPicker({ input: locationInput });
+      locationInput?.addEventListener('onsite-location-selected', function(event) {
+        window.workerLocationSelection = event.detail;
+      });
+      window.workerLocationPicker = picker;
+    }
 
     document.getElementById('useCurrentLocationBtn')?.addEventListener('click', async function() {
       const btn = this;

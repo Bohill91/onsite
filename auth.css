@@ -677,6 +677,16 @@ body.auth-is-open {
   display: block;
 }
 
+.registration-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.registration-actions .auth-submit-btn {
+  flex: 1;
+}
+
 /* ─── Cert Checkboxes ───────────────────────────────────── */
 .cert-checkboxes {
   display: flex;
@@ -831,6 +841,46 @@ body.auth-is-open {
   width: 100%;
   margin-bottom: 24px;
   text-align: left;
+}
+
+.work-status-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin: -10px 0 12px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: .82rem;
+}
+
+.work-status-card strong {
+  color: var(--ink);
+  font-size: .84rem;
+}
+
+.completion-missing {
+  width: 100%;
+  margin: 0 0 20px;
+  color: var(--ink-2);
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.success-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 9px;
+}
+
+.success-actions .auth-submit-btn,
+.success-actions .cta-btn {
+  width: 100%;
 }
 
 .completion-header {
