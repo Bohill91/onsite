@@ -16227,9 +16227,9 @@ function companyDailyBriefingHTML(summary, user) {
           </div>
         </div>
         ${isEmpty
-          ? `<div class="company-dashboard-empty-state company-dashboard-empty-state--summary">
-              <strong>No project activity yet</strong>
-              <span>Create your first project to begin tracking labour, attendance and upcoming work.</span>
+           ? `<div class="company-dashboard-empty-state company-dashboard-empty-state--summary">
+               <strong class="company-dashboard-state-title">No project activity yet</strong>
+               <span class="company-dashboard-state-copy">Create your first project to begin tracking labour, attendance and upcoming work.</span>
               <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
             </div>`
           : `<div class="company-briefing-metrics">${briefing.metrics.map(companyDashboardMetricHTML).join("")}</div>`}
@@ -16241,13 +16241,13 @@ function companyDailyBriefingHTML(summary, user) {
         <div>
           <p class="company-home-kicker">LIVE SITES</p>
         </div>
-        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No attendance due today"}</small>
+         <small class="company-dashboard-context-label">${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No attendance due today"}</small>
       </div>
       ${briefing.siteRows.length
         ? `<div class="company-live-site-cards">${briefing.siteRows.map(companyLiveSiteStatusCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state">
-            <strong>No sites active today</strong>
-            <span>Sites with sub-contractors due today will appear here.</span>
+             <strong class="company-dashboard-state-title">No sites active today</strong>
+             <span class="company-dashboard-state-copy">Sites with sub-contractors due today will appear here.</span>
           </div>`}
     </section>
     <section class="company-command-section company-upcoming-panel company-dashboard-section-card jw-card">
@@ -16255,13 +16255,13 @@ function companyDailyBriefingHTML(summary, user) {
         <div>
           <p class="company-home-kicker">UPCOMING SITES</p>
         </div>
-        <small>Next 7 days</small>
+         <small class="company-dashboard-context-label">Next 7 days</small>
       </div>
       ${briefing.upcoming.length
         ? `<div class="company-upcoming-timeline">${briefing.upcoming.map(companyDashboardUpcomingCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state compact">
-            <strong>No upcoming starts</strong>
-            <span>Projects starting in the next 7 days will appear here.</span>
+             <strong class="company-dashboard-state-title">No upcoming starts</strong>
+             <span class="company-dashboard-state-copy">Projects starting in the next 7 days will appear here.</span>
           </div>`}
     </section>
   </section>`;
@@ -16270,10 +16270,10 @@ function companyDailyBriefingHTML(summary, user) {
 function companyDashboardActionHeroHTML(action) {
   if (!action) {
     return `<article class="company-action-hero company-action-hero-clear company-dashboard-section-card jw-card">
-      <div>
+       <div>
         <p class="company-home-kicker">ACTION REQUIRED</p>
-        <h3>No action required</h3>
-        <p>Items requiring your attention will appear here.</p>
+         <h3 class="company-dashboard-state-title">No action required</h3>
+         <p class="company-dashboard-state-copy">Items requiring your attention will appear here.</p>
       </div>
     </article>`;
   }
@@ -16281,8 +16281,8 @@ function companyDashboardActionHeroHTML(action) {
     <span class="company-action-dot" aria-hidden="true"></span>
     <span class="company-action-hero-content">
       <span class="company-home-kicker">ACTION REQUIRED</span>
-      <strong>${escapeHtml(action.title)}</strong>
-      <span>${escapeHtml(action.body)}</span>
+       <strong class="company-dashboard-state-title">${escapeHtml(action.title)}</strong>
+       <span class="company-dashboard-state-copy">${escapeHtml(action.body)}</span>
       ${action.meta ? `<small>${escapeHtml(action.meta)}</small>` : ""}
     </span>
     <button class="primary-btn company-action-hero-cta" type="button" ${action.actionAttr}>${escapeHtml(action.actionLabel)} &rarr;</button>
@@ -16729,9 +16729,9 @@ function companyRecentActivityHTML(summary, user) {
     <div class="company-recent-activity-list">
       ${rows.length
         ? rows.map(companyRecentActivityRowHTML).join("")
-        : `<div class="company-dashboard-empty-state compact">
-            <strong>No recent activity</strong>
-            <span>Project, attendance and offer updates will appear here.</span>
+          : `<div class="company-dashboard-empty-state compact">
+             <strong class="company-dashboard-state-title">No recent activity</strong>
+             <span class="company-dashboard-state-copy">Project, attendance and offer updates will appear here.</span>
           </div>`}
     </div>
   </section>`;
