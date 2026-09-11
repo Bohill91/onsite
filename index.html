@@ -37,26 +37,35 @@
 
       <!-- ── Welcome Screen ─────────────────────────────── -->
       <div class="auth-screen" id="screen-welcome">
+        <div class="auth-header-bar auth-header-bar--welcome">
+          <div class="auth-header-content">
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
+        </div>
         <div class="welcome-inner">
-          <img src="/logo.png" alt="OnSite" class="auth-logo" style="margin-left:0px;margin-top:36px;margin-bottom:36px;" />
+          <div class="welcome-panel">
+            <h1 class="welcome-title">Welcome to OnSite</h1>
           <p class="welcome-tagline">Reliable trades. On demand.</p>
-          <p class="welcome-sub">Join thousands of verified tradespeople and companies already using OnSite.</p>
+          <p class="welcome-sub">Sign in to your account or create a new one.</p>
           <div class="welcome-actions">
             <button class="cta-btn" type="button" onclick="showScreen('login');">
               <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
               Log In
             </button>
-            <div class="welcome-divider"><span>or create an account</span></div>
+            <div class="welcome-divider"><span>New to OnSite?</span></div>
             <div class="welcome-type-row">
               <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('worker-reg'); setWorkerStep(1);">
                 <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Worker
+                <span class="cta-btn-copy"><strong>Sub-contractor</strong><small>Find CIS work</small></span>
               </button>
               <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('company-reg'); setCompanyStep(1);">
                 <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                Company
+                <span class="cta-btn-copy"><strong>Hiring company</strong><small>Hire and manage labour</small></span>
               </button>
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -64,15 +73,17 @@
       <!-- ── Login Screen ────────────────────────────────── -->
       <div class="auth-screen" id="screen-login">
         <div class="auth-header-bar">
-          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Back
-          </button>
-          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
-          <div style="width:60px;"></div>
+          <div class="auth-header-content">
+            <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Back
+            </button>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
         </div>
         <div class="auth-inner">
-          <div class="auth-form-wrap">
+          <div class="auth-form-wrap auth-card auth-card--login">
             <h1 class="auth-title">Welcome back</h1>
             <p class="auth-subtitle">Sign in to your OnSite account</p>
             <div id="loginError" class="auth-error"></div>
@@ -95,9 +106,9 @@
                 Sign In
               </button>
             </form>
-            <p class="auth-link-row" style="margin-top:20px;">
-              Don't have an account?
-              <button class="auth-link" type="button" onclick="showScreen('welcome');">Register</button>
+            <p class="auth-link-row auth-register-row">
+              New to OnSite?
+              <button class="auth-link" type="button" onclick="showScreen('welcome');">Create an account</button>
             </p>
           </div>
         </div>
@@ -106,12 +117,14 @@
       <!-- ── Forgot Password ─────────────────────────────── -->
       <div class="auth-screen" id="screen-forgot">
         <div class="auth-header-bar">
-          <button class="auth-back-btn" type="button" onclick="showScreen('login');">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Back
-          </button>
-          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
-          <div style="width:60px;"></div>
+          <div class="auth-header-content">
+            <button class="auth-back-btn" type="button" onclick="showScreen('login');">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Back
+            </button>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
         </div>
         <div class="auth-inner">
           <div class="auth-form-wrap">
@@ -139,15 +152,17 @@
         </div>
       </div>
 
-      <!-- ── Worker Registration ─────────────────────────── -->
+      <!-- ── Sub-contractor Registration ─────────────────── -->
       <div class="auth-screen" id="screen-worker-reg">
         <div class="auth-header-bar">
-          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Back
-          </button>
-          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
-          <div style="width:60px;"></div>
+          <div class="auth-header-content">
+            <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Back
+            </button>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
         </div>
         <div class="auth-inner">
           <div class="auth-form-wrap">
@@ -168,7 +183,7 @@
 
             <!-- Step 1: Basic Details -->
             <div class="reg-step active" data-step="1">
-              <h1 class="auth-title">Join as a Worker</h1>
+              <h1 class="auth-title">Join as a Sub-contractor</h1>
               <p class="auth-subtitle">Create your profile to start getting matched with jobs.</p>
               <div id="step1Error" class="auth-error"></div>
               <form id="workerStep1Form">
@@ -406,7 +421,7 @@
         </div>
       </div>
 
-      <!-- ── Worker Success Screen ───────────────────────── -->
+      <!-- ── Sub-contractor Success Screen ──────────────── -->
       <div class="auth-screen" id="screen-worker-success">
         <div class="success-inner">
           <div class="success-icon">
@@ -429,15 +444,17 @@
         </div>
       </div>
 
-      <!-- ── Company Registration ────────────────────────── -->
+      <!-- ── Hiring Company Registration ───────────────── -->
       <div class="auth-screen" id="screen-company-reg">
         <div class="auth-header-bar">
-          <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Back
-          </button>
-          <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
-          <div style="width:60px;"></div>
+          <div class="auth-header-content">
+            <button class="auth-back-btn" type="button" onclick="showScreen('welcome');">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Back
+            </button>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
         </div>
         <div class="auth-inner">
           <div class="auth-form-wrap">
@@ -454,7 +471,7 @@
 
             <!-- Step 1: Company Details -->
             <div class="company-step active" data-step="1">
-              <h1 class="auth-title">Join as a Company</h1>
+              <h1 class="auth-title">Join as a Hiring company</h1>
               <p class="auth-subtitle">Post jobs and connect with verified tradespeople.</p>
               <div id="companyStep1Error" class="auth-error"></div>
               <form id="companyStep1Form">
@@ -528,7 +545,7 @@
                 </div>
                 <button class="auth-submit-btn" type="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Create Company Account
+                  Create Hiring company account
                 </button>
                 <button class="auth-submit-btn" type="button" style="margin-top:8px;background:var(--surface);border:1px solid var(--border);color:var(--ink-2);" onclick="setCompanyStep(1);">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -540,7 +557,7 @@
         </div>
       </div>
 
-      <!-- ── Company Success Screen ──────────────────────── -->
+      <!-- ── Hiring Company Success Screen ──────────────── -->
       <div class="auth-screen" id="screen-company-success">
         <div class="success-inner">
           <div class="success-icon">
@@ -568,7 +585,7 @@
         </button>
         <button class="tab-btn" data-tab="workers" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Workers
+           Sub-contractors
           <span class="tab-count" id="workerCount">0</span>
         </button>
         <button class="tab-btn" data-tab="jobs" type="button">
@@ -601,7 +618,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Match Dashboard</h2>
-              <p class="panel-subtitle">Best available workers ranked by reliability score</p>
+           <p class="panel-subtitle">Best available sub-contractors ranked by reliability score</p>
             </div>
           </div>
           <div id="matchResults" class="card-list"></div>
@@ -617,7 +634,7 @@
           <div class="panel-header" style="margin-top:28px;">
             <div>
               <h2 class="panel-title">Cancelled Bookings</h2>
-              <p class="panel-subtitle">Bookings cancelled by companies &amp; any payment owed to workers</p>
+           <p class="panel-subtitle">Bookings cancelled by hiring companies &amp; any payment owed to sub-contractors</p>
             </div>
           </div>
           <div id="cancelledBookingsList" class="card-list"></div>
@@ -627,7 +644,7 @@
         <div class="tab-panel" id="tab-workers">
           <div class="panel-header">
             <div>
-              <h2 class="panel-title">Worker Roster</h2>
+              <h2 class="panel-title">Sub-contractor roster</h2>
               <p class="panel-subtitle">Manage profiles, availability &amp; reliability ratings</p>
             </div>
           </div>
@@ -643,7 +660,7 @@
               <button class="filter-chip"        data-filter="elite"     type="button">Excellent</button>
             </div>
           </div>
-          <div id="workersEmpty" class="empty-state" style="display:none">No workers match your search. Try another name, trade or qualification.</div>
+          <div id="workersEmpty" class="empty-state" style="display:none">No sub-contractors match your search. Try another name, trade or qualification.</div>
           <div id="workersList" class="card-list"></div>
         </div>
 
@@ -652,7 +669,7 @@
           <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div>
               <h2 class="panel-title">Attendance</h2>
-              <p class="panel-subtitle">Record today's workforce — tap a status for each worker</p>
+              <p class="panel-subtitle">Record today's workforce — tap a status for each sub-contractor</p>
             </div>
             <span class="att-today-badge" id="attTodayBadge"></span>
           </div>
@@ -681,7 +698,7 @@
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Job Requests</h2>
-              <p class="panel-subtitle">Company requests awaiting assignment</p>
+              <p class="panel-subtitle">Hiring company requests awaiting assignment</p>
             </div>
           </div>
           <div id="jobsList" class="card-list"></div>
@@ -729,7 +746,7 @@
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </div>
                 <div>
-                  <h3>Register Worker</h3>
+                  <h3>Register Sub-contractor</h3>
                   <p>Add a tradesperson to the matching pool</p>
                 </div>
               </div>
@@ -800,7 +817,7 @@
                 </label>
                 <button class="primary-btn wide" type="submit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Add Worker
+                   Add Sub-contractor
                 </button>
               </form>
             </div>
@@ -910,7 +927,7 @@
                         <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
                       </div>
                       <label class="field-label">
-                        Workers required *
+                        Sub-contractors required *
                         <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
                       </label>
                       <label class="field-label">
@@ -980,7 +997,7 @@
                               </div>
                               <span class="jw-accommodation-night-suffix">/ night</span>
                             </div>
-                            <p class="form-helper">Paid to worker · No OnSite service fee</p>
+                            <p class="form-helper">Paid to sub-contractor · No OnSite service fee</p>
                           </div>
                         </div>
                       </div>
@@ -1004,10 +1021,10 @@
                 <section id="jobPreferredWorkersWrap" class="jw-specific-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
                   <div class="jw-labour-section-head">
                     <div>
-                      <h4 id="jobPreferredWorkersTitle">Specific workers <span>Optional</span></h4>
+                      <h4 id="jobPreferredWorkersTitle">Specific sub-contractors <span>Optional</span></h4>
                       <p>Prioritise people you already know or have worked with.</p>
                     </div>
-                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-haspopup="dialog">Choose workers</button>
+                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-haspopup="dialog">Choose sub-contractors</button>
                   </div>
                   <div id="jobSpecificWorkersSummary" class="jw-specific-workers-summary hidden" aria-live="polite"></div>
                 </section>
@@ -1120,7 +1137,7 @@
                           </select>
                         </label>
                       </div>
-                      <p class="form-helper">Overtime rates are calculated from the worker’s average hourly rate based on the agreed daily rate.</p>
+                        <p class="form-helper">Overtime rates are calculated from the sub-contractor’s average hourly rate based on the agreed daily rate.</p>
                     </div>
                   </section>
                   <p id="jobScheduleStepMessage" class="jw-schedule-message hidden" role="alert"></p>
@@ -1145,17 +1162,22 @@
                       <div>
                         <h5>Arrival point</h5>
                         <p id="jobEntrancePinSummary" class="jw-entrance-pin-summary is-unset">Not confirmed</p>
-                        <p id="jobArrivalPointCopy" class="jw-arrival-point-copy">Set the exact gate or entrance workers should use.</p>
+                      <p id="jobArrivalPointCopy" class="jw-arrival-point-copy">Set the exact gate or entrance sub-contractors should use.</p>
                       </div>
                       <button type="button" id="jobEntrancePinToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobEntrancePinPanel">Set entrance on map</button>
                     </div>
                     <div id="jobEntrancePinPanel" class="jw-entrance-pin-panel hidden">
                       <div id="jobArrivalPointHelper" class="jw-arrival-point-instruction">
                         <strong>Set the exact site entrance</strong>
-                        <span>Move the pin to the gate or entrance workers should use.</span>
+                        <span>Move the pin to the gate or entrance sub-contractors should use.</span>
                       </div>
                       <div class="picker-map-shell">
-                        <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
+                        <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage">
+                          <div id="jobPickerMapLoading" class="picker-map-loading" role="status" aria-live="polite">
+                            <span class="picker-map-loading-indicator" aria-hidden="true"></span>
+                            <span>Loading map…</span>
+                          </div>
+                        </div>
                         <div id="jobPickerMapFailure" class="picker-map-failure hidden" role="status" aria-live="polite" hidden>
                           <strong>Map temporarily unavailable.</strong>
                           <button id="jobPickerMapRetry" class="secondary-btn" type="button">Try again</button>
@@ -1197,7 +1219,7 @@
                   <div class="jw-compact-disclosure-row">
                     <div>
                       <h4 id="jobArrivalDetailsTitle">Arrival details <span>Optional</span></h4>
-                      <p id="jobArrivalDetailsSummary">Add instructions, parking, PPE or worker notes.</p>
+                      <p id="jobArrivalDetailsSummary">Add instructions, parking, PPE or sub-contractor notes.</p>
                     </div>
                     <button type="button" id="jobArrivalDetailsToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobArrivalDetailsPanel">Add details</button>
                   </div>
@@ -1215,7 +1237,7 @@
                       <input id="jobPpe" type="text" placeholder="e.g. Hard hat, hi-vis, safety boots" />
                     </label>
                     <label class="field-label jw-span-2">
-                      Additional Notes for Workers
+                        Additional Notes for Sub-contractors
                       <textarea id="jobGateAccess" rows="2" placeholder="e.g. Fuel cards, parking expenses, required tools or site-specific instructions."></textarea>
                     </label>
                   </div>
@@ -1257,7 +1279,7 @@
                   <div class="jw-compact-disclosure-row">
                     <div>
                       <h4 id="jobAttendanceSetupTitle">Attendance</h4>
-                      <p id="jobAttendanceManagerSummary">Company-managed by default</p>
+                      <p id="jobAttendanceManagerSummary">Managed by hiring company by default</p>
                     </div>
                     <button type="button" id="jobAttendanceManagerToggle" class="secondary-btn" aria-expanded="false" aria-controls="jobAttendanceManagerPanel">Assign attendance manager</button>
                   </div>
@@ -1298,17 +1320,17 @@
                       <label class="jw-prestart-setup-option">
                         <input type="radio" name="jobPreStartSetupStatus" value="configured" />
                         <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
-                        <span><strong>Configure requirements now</strong><small>Add the inductions, documents or other actions workers need before starting.</small></span>
+                        <span><strong>Configure requirements now</strong><small>Add the inductions, documents or other actions sub-contractors need before starting.</small></span>
                       </label>
                       <label class="jw-prestart-setup-option">
                         <input type="radio" name="jobPreStartSetupStatus" value="pending" />
                         <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
-                        <span><strong>I’ll add requirements later</strong><small>Create the project now and finish the setup before workers start.</small></span>
+                        <span><strong>I’ll add requirements later</strong><small>Create the project now and finish the setup before sub-contractors start.</small></span>
                       </label>
                       <label class="jw-prestart-setup-option">
                         <input type="radio" name="jobPreStartSetupStatus" value="none" />
                         <span class="jw-prestart-setup-mark" aria-hidden="true"></span>
-                        <span><strong>No pre-start requirements</strong><small>This project does not require any worker pre-start actions.</small></span>
+                        <span><strong>No pre-start requirements</strong><small>This project does not require any sub-contractor pre-start actions.</small></span>
                       </label>
                     </div>
                   </fieldset>
@@ -1394,7 +1416,7 @@
         </button>
         <button class="bottom-nav-btn" data-tab="workers" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Workers</span>
+           <span>Sub-contractors</span>
         </button>
         <button class="bottom-nav-btn add-btn" data-tab="add" type="button">
           <div class="add-fab">
@@ -1588,11 +1610,11 @@
       </div>
     </div>
 
-    <div id="workerReleaseModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Release or stand down worker">
+    <div id="workerReleaseModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Release or stand down sub-contractor">
       <div class="dispute-sheet">
         <div class="dispute-sheet-header">
           <div>
-            <h3 class="dispute-sheet-title">Release / Stand-down Worker</h3>
+            <h3 class="dispute-sheet-title">Release / Stand-down Sub-contractor</h3>
             <p class="dispute-sheet-sub">Log the assignment change without implying employment.</p>
           </div>
           <button id="closeWorkerReleaseBtn" class="modal-close-btn" type="button" aria-label="Close">

@@ -247,6 +247,25 @@
   min-height: 44px;
 }
 
+.welcome-type-row .cta-btn--type {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cta-btn-copy {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.cta-btn-copy small {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
 .welcome-type-row .cta-btn--type:hover {
   background: var(--surface-3);
   border-color: var(--orange);

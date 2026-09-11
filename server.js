@@ -1,6 +1,7 @@
 const http   = require('http');
 const fs     = require('fs');
 const path   = require('path');
+const crypto = require('crypto');
 const OpenAI = require('openai');
 
 const parsedPort = Number.parseInt(process.env.PORT || '', 10);
@@ -155,11 +156,69 @@ async function handleAiChat(req, res) {
   });
 }
 
+// ─── Canonical company account recovery ─────────────────────────────────────
+// The prototype stores ordinary accounts in browser localStorage. This narrow
+// bridge lets the recovered company account bootstrap a fresh browser profile
+// using the workspace-managed password without ever returning that password.
+function passwordsMatch(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function handleAuthRecovery(req, res) {
+  let body = '';
+  req.on('data', chunk => {
+    body += chunk;
+    if (body.length > 4096) req.destroy();
+  });
+  req.on('end', () => {
+    try {
+      const payload = JSON.parse(body || '{}');
+      const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+      const password = typeof payload.password === 'string' ? payload.password : '';
+      const expectedPassword = process.env.ONSITE_ACCOUNT_PASSWORD;
+
+      if (
+        email !== 'luke_bohill@outlook.com' ||
+        !passwordsMatch(password, expectedPassword)
+      ) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Incorrect email or password.' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        user: {
+          id: 'user-1789138666146-7a64bd748b1e',
+          type: 'company',
+          name: 'Luke Bohill',
+          companyName: 'Bohill Electrical Ltd',
+          email: 'luke_bohill@outlook.com',
+          verificationStatus: 'pending',
+          companyVerificationStatus: 'pending',
+          vatVerificationStatus: 'unverified',
+        },
+      }));
+    } catch (_) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid recovery request.' }));
+    }
+  });
+}
+
 // ─── HTTP server ─────────────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
   // AI chat API
   if (req.method === 'POST' && req.url === '/api/ai-chat') {
     return handleAiChat(req, res);
+  }
+
+  if (req.method === 'POST' && req.url === '/api/auth/recover') {
+    return handleAuthRecovery(req, res);
   }
 
   // Static files

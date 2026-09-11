@@ -113,7 +113,7 @@ function updateTopbarUser(user) {
       statusEl.textContent = map[user.verificationStatus || 'incomplete'];
       statusEl.className   = 'user-status-badge status-' + (user.verificationStatus || 'incomplete');
     } else {
-      statusEl.textContent = 'Company';
+      statusEl.textContent = 'Hiring company';
       statusEl.className   = 'user-status-badge status-company';
     }
   }
@@ -129,13 +129,42 @@ function updateTopbarUser(user) {
 }
 
 // ─── Login ─────────────────────────────────────────────────
-document.getElementById('loginForm').addEventListener('submit', function(e) {
+async function recoverCanonicalCompany(email, password) {
+  if (email !== 'luke_bohill@outlook.com') return null;
+
+  try {
+    const response = await fetch('/api/auth/recover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload.user || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const pass  = document.getElementById('loginPassword').value;
   const err   = document.getElementById('loginError');
 
-  const user = getUsers().find(u => u.email === email && u.password === pass);
+  const existingUser = getUsers().find(u => u.email === email);
+  let user = getUsers().find(u => u.email === email && u.password === pass);
+
+  if (!user) {
+    const recoveredUser = await recoverCanonicalCompany(email, pass);
+    if (recoveredUser) {
+      user = { ...existingUser, ...recoveredUser, password: pass };
+      const users = getUsers().filter(u => u.email !== email);
+      users.push(user);
+      saveUsers(users);
+    }
+  }
+
   if (!user) {
     err.textContent = 'Incorrect email or password.';
     err.style.display = 'block';
@@ -326,7 +355,7 @@ function showWorkerSuccess(user, dupeResult) {
     if (dupeResult && dupeResult.isDuplicate) {
       note.style.display = 'block';
       note.innerHTML =
-        '<strong>Welcome back.</strong> We matched this sign-up to an existing worker profile, ' +
+        '<strong>Welcome back.</strong> We matched this sign-up to an existing sub-contractor profile, ' +
         'so your reliability record (' + (dupeResult.restoredScore != null ? dupeResult.restoredScore + '%' : 'previous score') +
         ') and history have been restored. Our team may review the match.';
     } else {

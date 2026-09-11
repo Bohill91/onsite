@@ -415,7 +415,7 @@ const RELEASE_STAND_DOWN_DAYS = PROTECTION_WINDOW_DAYS;
 
 const RELEASE_REASON_OPTIONS = {
   standard_release: [
-    "Site no longer requires worker",
+    "Site no longer requires sub-contractor",
     "Project phase complete",
     "Reduction in labour required",
     "Performance concern",
@@ -441,7 +441,7 @@ const RELEASE_REASON_OPTIONS = {
     "Conduct issue",
     "Poor workmanship",
     "Qualifications issue",
-    "Site no longer requires worker",
+    "Site no longer requires sub-contractor",
     "Other",
   ],
 };
@@ -462,13 +462,13 @@ function extensionStatusLabel(job) {
   const map = {
     extended: { txt: "Extended", cls: "ext-extended" },
     ending_as_planned: { txt: "Ending as planned", cls: "ext-ending" },
-    declined_by_worker: { txt: "Declined by worker", cls: "ext-declined" },
-    declined_by_company: { txt: "Declined by company", cls: "ext-declined" },
+    declined_by_worker: { txt: "Declined by sub-contractor", cls: "ext-declined" },
+    declined_by_company: { txt: "Declined by hiring company", cls: "ext-declined" },
   };
   if (job.extensionStatus && map[job.extensionStatus])
     return map[job.extensionStatus];
   if (job.extensionRequestedAt)
-    return { txt: "Awaiting worker response", cls: "ext-pending" };
+    return { txt: "Awaiting sub-contractor response", cls: "ext-pending" };
   if (job.extensionJustExtended)
     return { txt: "Extended", cls: "ext-extended" };
   return { txt: "On schedule", cls: "ext-ok" };
@@ -509,7 +509,7 @@ function processExtensionLifecycle() {
     const calDays = calendarDaysUntil(endDate);
     const workDays = workingDaysUntil(endDate);
     const worker = findWorker(job.assignedWorkerId);
-    const wName = worker?.name || "Worker";
+    const wName = worker?.name || "Sub-contractor";
 
     // Once a freshly-extended booking nears its new end date, drop the
     // "confirmed" note so the normal reminder cycle can surface again.
@@ -548,7 +548,7 @@ function processExtensionLifecycle() {
         changed = true;
         logActivity(
           "extension",
-          `Reminder: <strong>${escapeHtml(job.trade)}</strong> booking ends in ${calDays} day${calDays === 1 ? "" : "s"}. Confirm an extension or the worker will be released.`,
+          `Reminder: <strong>${escapeHtml(job.trade)}</strong> booking ends in ${calDays} day${calDays === 1 ? "" : "s"}. Confirm an extension or the sub-contractor will be released.`,
         );
       }
       return;
@@ -565,7 +565,7 @@ function processExtensionLifecycle() {
         changed = true;
         logActivity(
           "extension",
-          `This booking (<strong>${escapeHtml(job.trade)}</strong>) is due to end in ${calDays} days. Do you want to extend these workers?`,
+          `This booking (<strong>${escapeHtml(job.trade)}</strong>) is due to end in ${calDays} days. Do you want to extend these sub-contractors?`,
         );
       }
     }
@@ -593,7 +593,7 @@ function bookingProtectionBanner(job) {
   return `
   <div class="protection-banner${inWindow ? " in-window" : ""}">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-    <span><strong>OnSite Protected Booking:</strong> If this booking is cancelled within ${PROTECTION_WINDOW_DAYS} working days of the start date, the worker will receive 1 day's pay at the agreed rate.${rateStr}</span>
+    <span><strong>OnSite Protected Booking:</strong> If this booking is cancelled within ${PROTECTION_WINDOW_DAYS} working days of the start date, the sub-contractor will receive 1 day's pay at the agreed rate.${rateStr}</span>
   </div>`;
 }
 
@@ -626,11 +626,11 @@ function bindLabourAdjustButtons(container) {
         const job = findJob(btn.dataset.labourAdjust);
         if (!job) return;
         const current = Number(job.quantity || 1);
-        const raw = prompt("Required workers", String(current));
+        const raw = prompt("Required sub-contractors", String(current));
         if (raw == null) return;
         const next = Number(raw);
         if (!Number.isFinite(next) || next < 1) {
-          showToast("Enter at least 1 worker");
+          showToast("Enter at least 1 sub-contractor");
           return;
         }
         const reason =
@@ -667,12 +667,12 @@ function requestExtension(jobId, newEndDate, newRate) {
   const w = findWorker(job.assignedWorkerId);
   logActivity(
     "extension",
-    `Extension requested for <strong>${escapeHtml(w?.name || "worker")}</strong> until ${formatDate(newEndDate)} at ${formatMoney(job.proposedDayRate)}/day — awaiting their response.`,
+    `Extension requested for <strong>${escapeHtml(w?.name || "sub-contractor")}</strong> until ${formatDate(newEndDate)} at ${formatMoney(job.proposedDayRate)}/day — awaiting their response.`,
   );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
     title: "Project extension requested.",
-    description: `${w?.name || "Worker"} asked to confirm extension to ${formatDateOnly(newEndDate)}.`,
+    description: `${w?.name || "Sub-contractor"} asked to confirm extension to ${formatDateOnly(newEndDate)}.`,
     workerId: job.assignedWorkerId,
     timestamp: job.extensionRequestedAt,
     source: "project_extension",
@@ -680,7 +680,7 @@ function requestExtension(jobId, newEndDate, newRate) {
     dedupeKey: `extension_requested:${job.id}:${job.extensionRequestedAt}`,
   });
   saveAndRender();
-  showToast("Extension request sent to worker");
+  showToast("Extension request sent to sub-contractor");
 }
 
 function acceptExtension(jobId) {
@@ -707,7 +707,7 @@ function acceptExtension(jobId) {
   const w = findWorker(job.assignedWorkerId);
   logActivity(
     "extension",
-    `<strong>${escapeHtml(w?.name || "Worker")}</strong> accepted the extension — booking now runs to ${formatDate(job.estimatedEndDate)}.`,
+    `<strong>${escapeHtml(w?.name || "Sub-contractor")}</strong> accepted the extension — booking now runs to ${formatDate(job.estimatedEndDate)}.`,
   );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
@@ -735,12 +735,12 @@ function declineExtension(jobId) {
   const w = findWorker(job.assignedWorkerId);
   logActivity(
     "extension",
-    `<strong>${escapeHtml(w?.name || "Worker")}</strong> declined the extension — booking ends as planned on ${formatDate(job.estimatedEndDate)}; now available for future projects.`,
+    `<strong>${escapeHtml(w?.name || "Sub-contractor")}</strong> declined the extension — booking ends as planned on ${formatDate(job.estimatedEndDate)}; now available for future projects.`,
   );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.PROJECT_EXTENDED,
     title: "Project extension declined.",
-    description: `${w?.name || "Worker"} declined the proposed extension.`,
+    description: `${w?.name || "Sub-contractor"} declined the proposed extension.`,
     workerId: job.assignedWorkerId,
     timestamp: new Date().toISOString(),
     source: "project_extension",
@@ -761,7 +761,7 @@ function endBookingAsPlanned(jobId) {
   const w = findWorker(job.assignedWorkerId);
   logActivity(
     "extension",
-    `Booking for <strong>${escapeHtml(w?.name || "worker")}</strong> set to end as planned on ${formatDate(job.estimatedEndDate)} — worker released for future projects.`,
+    `Booking for <strong>${escapeHtml(w?.name || "sub-contractor")}</strong> set to end as planned on ${formatDate(job.estimatedEndDate)} — sub-contractor released for future projects.`,
   );
   saveAndRender();
   showToast("Booking will end as planned");
@@ -808,15 +808,15 @@ function extensionReminderCard(job) {
 
   let actions = "";
   if (awaiting) {
-    actions = `<div class="ext-await">Awaiting ${escapeHtml(w?.name || "worker")}'s response — proposed end ${formatDate(job.newProposedEndDate)} at ${formatMoney(job.proposedDayRate || dayRate)}/day.</div>`;
+    actions = `<div class="ext-await">Awaiting ${escapeHtml(w?.name || "sub-contractor")}'s response — proposed end ${formatDate(job.newProposedEndDate)} at ${formatMoney(job.proposedDayRate || dayRate)}/day.</div>`;
   } else if (job.extensionJustExtended) {
-    actions = `<div class="ext-await">Worker accepted — booking confirmed to ${formatDate(endDate)}.</div>`;
+    actions = `<div class="ext-await">Sub-contractor accepted — booking confirmed to ${formatDate(endDate)}.</div>`;
   } else {
     const reEngage =
       job.extensionStatus === "ending_as_planned" ||
       job.extensionStatus === "declined_by_worker";
     actions = `<div class="ext-actions">
-      <button class="ext-btn ext-btn-extend" type="button" data-ext-extend="${job.id}">${reEngage ? "Offer Extension" : "Extend Worker"}</button>
+      <button class="ext-btn ext-btn-extend" type="button" data-ext-extend="${job.id}">${reEngage ? "Offer Extension" : "Extend Sub-contractor"}</button>
       ${reEngage ? "" : `<button class="ext-btn ext-btn-end" type="button" data-ext-end="${job.id}">End as Planned</button>`}
     </div>`;
   }
@@ -849,7 +849,7 @@ function extensionPanelHTML(companyId = null) {
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span>Booking Extensions</span>
     </div>
-    <div class="ext-panel-sub">Confirm extensions before bookings end, or workers are released for new projects.</div>
+    <div class="ext-panel-sub">Confirm extensions before bookings end, or sub-contractors are released for new projects.</div>
     ${list.map(extensionReminderCard).join("")}
   </div>`;
 }
@@ -958,7 +958,7 @@ function openExtensionModal(jobId) {
   const rateChoice = document.getElementById("extRateChoice");
   const rateWrap = document.getElementById("extNewRateWrap");
   if (who)
-    who.textContent = `Extend ${w?.name || "this worker"}'s ${job.trade} booking. They must accept before it takes effect.`;
+  who.textContent = `Extend ${w?.name || "this sub-contractor"}'s ${job.trade} booking. They must accept before it takes effect.`;
   if (endIn) endIn.value = job.estimatedEndDate || job.endDate || "";
   if (rateChoice) rateChoice.value = "same";
   if (rateWrap) rateWrap.classList.add("hidden");
@@ -983,7 +983,7 @@ const AGREEMENT_DEFAULTS = {
   siteRules:
     "Follow all site safety rules and signage at all times. Wear the required PPE. Comply with reasonable instructions from the site supervisor.",
   paymentTerms:
-    "Payment is made at the agreed day rate for each confirmed day worked, processed through the company's standard payment cycle.",
+    "Payment is made at the agreed day rate for each confirmed day worked, processed through the hiring company's standard payment cycle.",
 };
 
 function findAgreement(id) {
@@ -1046,8 +1046,8 @@ function buildAgreementRecord(
     generatedAt: new Date().toISOString(),
     status: "pending",
     terms: {
-      workerName: worker?.name || "Worker",
-      companyName: companyName || "Company",
+      workerName: worker?.name || "Sub-contractor",
+      companyName: companyName || "Hiring company",
       siteName: job.siteName || job.location || "Site",
       siteAddress: job.siteAddress || job.location || "—",
       trade: job.trade || "—",
@@ -1115,7 +1115,7 @@ function generateAgreementForBooking(job, opts = {}) {
     job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
   const agr = buildAgreementRecord(job, {
     worker,
-    companyName: job.companyName || "Company",
+     companyName: job.companyName || "Hiring company",
     dayRate,
     docs: getCompanyDocs(job.companyId),
     opts,
@@ -1184,13 +1184,13 @@ function workerAcceptAgreement(agreementId) {
   closeAgreementModal();
   logActivity(
     "agreement",
-    `<strong>${escapeHtml(agr.terms.workerName)}</strong> accepted the job agreement for ${escapeHtml(agr.terms.trade)} at ${escapeHtml(agr.terms.siteName)}${agr.status === "active" ? " — booking is now active." : " — awaiting company confirmation."}`,
+    `<strong>${escapeHtml(agr.terms.workerName)}</strong> accepted the job agreement for ${escapeHtml(agr.terms.trade)} at ${escapeHtml(agr.terms.siteName)}${agr.status === "active" ? " — booking is now active." : " — awaiting hiring company confirmation."}`,
   );
   saveAndRender();
   showToast(
     agr.status === "active"
       ? "Agreement accepted — booking active"
-      : "Agreement accepted — awaiting company",
+       : "Agreement accepted — awaiting hiring company",
   );
 }
 
@@ -1235,13 +1235,13 @@ function companyAcceptAgreement(agreementId) {
   closeAgreementModal();
   logActivity(
     "agreement",
-    `<strong>${escapeHtml(agr.terms.companyName)}</strong> confirmed the job agreement for ${escapeHtml(agr.terms.workerName)}${agr.status === "active" ? " — booking is now active." : " — awaiting worker acceptance."}`,
+    `<strong>${escapeHtml(agr.terms.companyName)}</strong> confirmed the job agreement for ${escapeHtml(agr.terms.workerName)}${agr.status === "active" ? " — booking is now active." : " — awaiting sub-contractor acceptance."}`,
   );
   saveAndRender();
   showToast(
     agr.status === "active"
       ? "Agreement confirmed — booking active"
-      : "Agreement confirmed — awaiting worker",
+       : "Agreement confirmed — awaiting sub-contractor",
   );
 }
 
@@ -1287,7 +1287,7 @@ function ensureAgreementsForState(s) {
         : { workerAccepted: true, companyAccepted: true }; // "active" / legacy
     const agr = buildAgreementRecord(job, {
       worker,
-      companyName: job.companyName || "Company",
+       companyName: job.companyName || "Hiring company",
       dayRate,
       docs: getCompanyDocs(job.companyId, s),
       opts,
@@ -1319,14 +1319,14 @@ function agreementStatusMeta(agr) {
     case "active":
       return { cls: "ok", label: "Active — both parties accepted" };
     case "declined_by_worker":
-      return { cls: "bad", label: "Declined by worker" };
+      return { cls: "bad", label: "Declined by sub-contractor" };
     case "cancelled":
       return { cls: "bad", label: "Booking cancelled" };
     default:
       if (agr.worker?.accepted)
-        return { cls: "warn", label: "Awaiting company confirmation" };
+        return { cls: "warn", label: "Awaiting hiring company confirmation" };
       if (agr.company?.accepted)
-        return { cls: "warn", label: "Awaiting worker acceptance" };
+        return { cls: "warn", label: "Awaiting sub-contractor acceptance" };
       return { cls: "warn", label: "Awaiting both signatures" };
   }
 }
@@ -1372,7 +1372,7 @@ function buildAgreementBody(agr) {
           ? `${formatMoney(t.workerPay)}/day guaranteed`
           : t.payRate || "—"
         : t.workerPay != null || t.companyCharge != null
-          ? `Worker ${t.workerPay != null ? formatMoney(t.workerPay) : "—"} · Charge ${t.companyCharge != null ? formatMoney(t.companyCharge) : "—"}`
+           ? `Sub-contractor ${t.workerPay != null ? formatMoney(t.workerPay) : "—"} · Charge ${t.companyCharge != null ? formatMoney(t.companyCharge) : "—"}`
           : t.payRate || "—";
   const term = (title, body) => `
     <div class="agr-term">
@@ -1412,8 +1412,8 @@ function buildAgreementBody(agr) {
     <div class="agr-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</div>
 
     <div class="agr-parties">
-      <div class="agr-party"><span>Worker</span><strong>${escapeHtml(t.workerName)}</strong></div>
-      <div class="agr-party"><span>Company</span><strong>${escapeHtml(t.companyName)}</strong></div>
+       <div class="agr-party"><span>Sub-contractor</span><strong>${escapeHtml(t.workerName)}</strong></div>
+       <div class="agr-party"><span>Hiring company</span><strong>${escapeHtml(t.companyName)}</strong></div>
     </div>
 
     <div class="agr-facts">
@@ -1438,8 +1438,8 @@ function buildAgreementBody(agr) {
 
     <div class="agr-section">
       <div class="agr-section-title">Digital Signatures</div>
-      ${signatureBlockHtml("Worker", agr.worker)}
-      ${signatureBlockHtml("Company", agr.company)}
+       ${signatureBlockHtml("Sub-contractor", agr.worker)}
+       ${signatureBlockHtml("Hiring company", agr.company)}
     </div>`;
 }
 
@@ -1552,10 +1552,10 @@ function openOfferDecisionModal(role, applicationId) {
   const isCompany = role === "company";
   currentOfferDecision = { role, applicationId };
   if (title)
-    title.textContent = isCompany ? "Decline Worker" : "Decline Job Offer";
+    title.textContent = isCompany ? "Decline Sub-contractor" : "Decline Job Offer";
   if (sub)
     sub.textContent = isCompany
-      ? "Choose a reason before offering the role to the next best worker."
+      ? "Choose a reason before offering the role to the next best sub-contractor."
       : "Choose a reason before declining this job offer.";
   reasonSelect.innerHTML =
     `<option value="">Select a reason...</option>` +
@@ -1708,14 +1708,14 @@ function confirmBooking(job, workerId) {
   if (job.companyId && isCompanySuspended(job.companyId)) {
     return {
       ok: false,
-      reason: "Company account suspended for overdue payments",
+      reason: "Hiring company account suspended for overdue payments",
     };
   }
   if (job.companyId && isCompanyRestricted(job.companyId)) {
     return {
       ok: false,
       reason:
-        "Company restricted for overdue payments — settle outstanding invoices to book labour",
+        "Hiring company restricted for overdue payments — settle outstanding invoices to book labour",
     };
   }
   const worker = findWorker(workerId);
@@ -2135,7 +2135,7 @@ function openCancelBookingModal(jobId) {
        </div>`;
 
   document.getElementById("cancelBookingSummary").innerHTML = `
-    <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "—")}</span></div>
+    <div class="cbk-row"><span class="cbk-label">Sub-contractor</span><span class="cbk-val">${escapeHtml(worker?.name || "—")}</span></div>
     <div class="cbk-row"><span class="cbk-label">Job</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
     <div class="cbk-row"><span class="cbk-label">Job start date</span><span class="cbk-val">${escapeHtml(startFmt)}</span></div>
     <div class="cbk-row"><span class="cbk-label">Agreed day rate</span><span class="cbk-val">${dayRate ? formatMoney(dayRate) : "Not set"}</span></div>
@@ -2256,7 +2256,7 @@ function openWorkerReleaseModal(jobId) {
   populateReleaseReasons(type);
   if (summary) {
     summary.innerHTML = `
-      <div class="cbk-row"><span class="cbk-label">Worker</span><span class="cbk-val">${escapeHtml(worker?.name || "Worker")}</span></div>
+      <div class="cbk-row"><span class="cbk-label">Sub-contractor</span><span class="cbk-val">${escapeHtml(worker?.name || "Sub-contractor")}</span></div>
       <div class="cbk-row"><span class="cbk-label">Assignment</span><span class="cbk-val">${escapeHtml(job.trade)} · ${escapeHtml(job.location)}</span></div>
       <div class="cbk-row"><span class="cbk-label">Default rule</span><span class="cbk-val">${escapeHtml(rule.noticeRule)}</span></div>
       <div class="cancel-window-banner safe">This records the release/stand-down only. It does not perform payment processing or legal automation.</div>`;
@@ -2291,7 +2291,7 @@ function confirmWorkerRelease() {
   const replacement = !!document.getElementById("workerReleaseReplacement")?.checked;
   if (
     type === "immediate_release" &&
-    !confirm("This will immediately release the worker from this assignment. Continue?")
+    !confirm("This will immediately release the sub-contractor from this assignment. Continue?")
   ) {
     return;
   }
@@ -7650,16 +7650,16 @@ function notifyPlannedAbsenceChange(worker, absence, action) {
     id: createId(),
     type: "worker_planned_absence",
     workerId: worker.id,
-    workerName: worker.name || "Worker",
+     workerName: worker.name || "Sub-contractor",
     jobId: job.id,
     companyId: job.companyId || "",
-    companyName: job.companyName || "Company",
+     companyName: job.companyName || "Hiring company",
     attendanceManager: job.attendanceManager || null,
     action,
     startDate: absence.startDate,
     endDate: absence.endDate,
     noticeWarning: !!absence.noticeWarning,
-    message: `${worker.name || "Worker"} ${action} Planned Absence for ${range}.`,
+     message: `${worker.name || "Sub-contractor"} ${action} Planned Absence for ${range}.`,
     createdAt: new Date().toISOString(),
     readAt: "",
   });
@@ -12787,7 +12787,7 @@ function renderSidebarAccount(user) {
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
       <button type="button" data-sidebar-account-action="profile">My Profile</button>
-      <button type="button" data-sidebar-account-action="settings">Company Settings</button>
+      <button type="button" data-sidebar-account-action="settings">Hiring company settings</button>
       <button type="button" data-sidebar-account-action="signout">Sign Out</button>
     </div>`;
   bindSidebarAccountMenu(slot);
@@ -12869,7 +12869,7 @@ function applyRoleView(user) {
     const jobsPanelHeader = document.querySelector("#tab-jobs > .panel-header");
     if (jobsPanelHeader) jobsPanelHeader.style.display = "";
     if (jobsHeader) jobsHeader.textContent = "Job Requests";
-    if (jobsSub) jobsSub.textContent = "Company requests awaiting assignment";
+    if (jobsSub) jobsSub.textContent = "Hiring company requests awaiting assignment";
     render();
     switchTab("dashboard");
   }
@@ -13860,7 +13860,7 @@ function workerPlannedAbsenceFormHTML(plannedAbsences) {
         : guidedEmptyStateHTML({
             kicker: "Planned Absence",
             title: "No planned absence added",
-            body: "Use the form above to add unavailable dates. Companies can see these dates when reviewing your availability for projects.",
+             body: "Use the form above to add unavailable dates. Hiring companies can see these dates when reviewing your availability for projects.",
           })
     }
   </div>`;
@@ -16362,7 +16362,7 @@ function companyDashboardUpcomingItems(summary) {
         jobNumber: job.jobNumber || "",
         openCount: projectSummary.openRoles,
         title: `${projectSummary.pendingOffers.length} offer${projectSummary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
-        body: `${companyProjectTitle(job)} has open worker offer decisions.`,
+         body: `${companyProjectTitle(job)} has open sub-contractor offer decisions.`,
         meta: "Offers",
         actionLabel: "View workers",
         actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
@@ -16377,10 +16377,10 @@ function companyDashboardUpcomingItems(summary) {
         projectTitle: companyProjectTitle(job),
         jobNumber: job.jobNumber || "",
         openCount: projectSummary.openRoles,
-        title: `${projectSummary.reviewWorkers.length} worker${projectSummary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
-        body: `${companyProjectTitle(job)} needs a company decision before assignment is confirmed.`,
-        meta: "Worker approval",
-        actionLabel: "Review workers",
+         title: `${projectSummary.reviewWorkers.length} sub-contractor${projectSummary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
+         body: `${companyProjectTitle(job)} needs a hiring company decision before assignment is confirmed.`,
+         meta: "Sub-contractor approval",
+         actionLabel: "Review sub-contractors",
         actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
         sort: days ?? 98,
       });
@@ -16660,9 +16660,9 @@ function companyDashboardFocusModel(summary, user) {
         }
     : summary.pendingActions
       ? {
-          title: "Workers are waiting for review",
-          body: `${summary.pendingActions} offer or approval item${summary.pendingActions === 1 ? "" : "s"} need a company decision.`,
-          actionLabel: "Review Workers",
+         title: "Sub-contractors are waiting for review",
+         body: `${summary.pendingActions} offer or approval item${summary.pendingActions === 1 ? "" : "s"} need a hiring company decision.`,
+         actionLabel: "Review Sub-contractors",
           actionAttr: approvalItems[0]
             ? `data-company-project-open-section="${escapeHtml(approvalItems[0].summary.job.id)}" data-company-section-target="workers"`
             : `data-empty-tab="dashboard"`,
@@ -17715,7 +17715,7 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
     addIssue({
       priority: 0,
       tone: "urgent",
-      title: `${summary.noShows} worker${summary.noShows === 1 ? "" : "s"} did not attend`,
+       title: `${summary.noShows} sub-contractor${summary.noShows === 1 ? "" : "s"} did not attend`,
       description: "Today’s attendance includes a confirmed no-show that needs review.",
       recommendation: "Review the attendance record and decide whether cover is required.",
       action: "Open attendance",
@@ -17755,7 +17755,7 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
       priority: 1,
       tone: "atRisk",
       title: `${summary.lateReports} late report${summary.lateReports === 1 ? "" : "s"} today`,
-      description: "One or more workers have informed the site that they will arrive late.",
+       description: "One or more sub-contractors have informed the site that they will arrive late.",
       recommendation: "Review expected arrival times in Attendance.",
       action: "Open attendance",
       target: "attendance",
@@ -17770,7 +17770,7 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
       priority: 1,
       tone: "atRisk",
       title: "Today’s attendance needs confirmation",
-      description: "One or more attendance records have not completed the company approval step.",
+       description: "One or more attendance records have not completed the hiring company approval step.",
       recommendation: "Review and confirm today’s attendance.",
       action: "Open attendance",
       target: "attendance",
@@ -17780,9 +17780,9 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
     addIssue({
       priority: 2,
       tone: "neutral",
-      title: `${summary.reviewWorkers.length} worker approval${summary.reviewWorkers.length === 1 ? "" : "s"} outstanding`,
-      description: "Accepted workers are waiting for company review before assignment.",
-      recommendation: "Review the worker details and confirm or decline the placement.",
+       title: `${summary.reviewWorkers.length} sub-contractor approval${summary.reviewWorkers.length === 1 ? "" : "s"} outstanding`,
+       description: "Accepted sub-contractors are waiting for hiring company review before assignment.",
+       recommendation: "Review the sub-contractor details and confirm or decline the placement.",
       action: "Review workforce",
       target: "workforce",
     });
@@ -17792,7 +17792,7 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
       priority: 2,
       tone: "neutral",
       title: `${summary.outstandingPreStart} pre-start acknowledgement${summary.outstandingPreStart === 1 ? "" : "s"} outstanding`,
-      description: "Required pre-start information has not been acknowledged by every assigned worker.",
+       description: "Required pre-start information has not been acknowledged by every assigned sub-contractor.",
       recommendation: "Review project documents and acknowledgement status.",
       action: "Review site information",
       target: "site",
@@ -17803,7 +17803,7 @@ function companyProjectOverviewIssues(job, summary, health, totals) {
       priority: 3,
       tone: "neutral",
       title: `${summary.plannedAbsences.length} planned absence${summary.plannedAbsences.length === 1 ? "" : "s"} recorded`,
-      description: "Upcoming worker availability may affect this project.",
+       description: "Upcoming sub-contractor availability may affect this project.",
       recommendation: "Review workforce availability and planned absences.",
       action: "Review workforce",
       target: "workforce",
@@ -18058,7 +18058,7 @@ function companyProjectWorkersHTML(job, summary, agreements = companyProjectAgre
         ${summary.assignedWorkers.length ? `<span class="company-project-workforce-summary">${summary.assignedWorkers.length} assigned</span>` : ""}
       </header>
       ${summary.assignedWorkers.length ? `<div class="company-project-roster company-project-roster-head" aria-hidden="true">
-        <span>Worker</span><span>Assignment</span><span>Today</span><span>Documents</span><span>Agreement</span><span>Action</span>
+        <span>Sub-contractor</span><span>Assignment</span><span>Today</span><span>Documents</span><span>Agreement</span><span>Action</span>
       </div>` : ""}
       <div class="company-project-roster-list">${rows}</div>
       ${approvals}
@@ -18072,20 +18072,20 @@ function companyProjectPreferredWorkersHTML(job) {
         .map(
           (pref) => `<div class="company-project-preferred-row">
             <div>
-              <button type="button" data-company-worker-profile="${pref.worker.id}" data-company-worker-job="${job.id}">${escapeHtml(pref.worker?.name || pref.workerName || "Worker")}</button>
+              <button type="button" data-company-worker-profile="${pref.worker.id}" data-company-worker-job="${job.id}">${escapeHtml(pref.worker?.name || pref.workerName || "Sub-contractor")}</button>
               <span>${escapeHtml(pref.worker?.trade || pref.workerTrade || "Trade not set")}${pref.worker?.grade ? ` · ${escapeHtml(pref.worker.grade)}` : ""}</span>
             </div>
-            <strong>${(job.preferredWorkerIds || []).includes(pref.worker.id) ? "Requested first" : "Company preferred"}</strong>
+            <strong>${(job.preferredWorkerIds || []).includes(pref.worker.id) ? "Requested first" : "Hiring company preferred"}</strong>
           </div>`,
         )
         .join("")
     : `<div class="company-project-workspace-empty is-compact">
-        <strong>No preferred workers yet.</strong>
-        <span>Trusted workers marked as preferred for this company will appear here.</span>
+        <strong>No preferred sub-contractors yet.</strong>
+        <span>Trusted sub-contractors marked as preferred for this hiring company will appear here.</span>
       </div>`;
   return `<section class="company-project-workspace-card">
     <header class="company-project-workspace-head is-compact">
-      <div><p class="company-project-workspace-kicker">Preferred Workers</p><h2>Trusted workers</h2></div>
+      <div><p class="company-project-workspace-kicker">Preferred Sub-contractors</p><h2>Trusted sub-contractors</h2></div>
     </header>
     ${rows}
   </section>`;
@@ -18107,7 +18107,7 @@ function companyProjectAgreementsHTML(job, agreements = companyProjectAgreements
           const meta = agreementStatusMeta(agreement);
           return `<button class="company-project-agreement-row" type="button" data-agr-open="${escapeHtml(agreement.id)}">
             <div>
-              <strong>${escapeHtml(agreement.terms?.workerName || "Assigned worker")}</strong>
+              <strong>${escapeHtml(agreement.terms?.workerName || "Assigned sub-contractor")}</strong>
               <span>${escapeHtml(agreement.terms?.trade || job.trade || "Agreement")} · ${agreement.generatedAt ? formatDateOnly(agreement.generatedAt) : "Date not set"}</span>
             </div>
             <span class="agr-hist-status agr-status--${meta.cls}">${escapeHtml(meta.label)}</span>
@@ -18116,7 +18116,7 @@ function companyProjectAgreementsHTML(job, agreements = companyProjectAgreements
         .join("");
   return `<section class="company-project-workspace-card">
     <header class="company-project-workspace-head is-compact">
-      <div><p class="company-project-workspace-kicker">Project Agreements</p><h2>Worker agreements</h2><span>Generated agreements for workers on this project.</span></div>
+      <div><p class="company-project-workspace-kicker">Project Agreements</p><h2>Sub-contractor agreements</h2><span>Generated agreements for sub-contractors on this project.</span></div>
     </header>
     <div class="company-project-agreement-list">${rows}</div>
   </section>`;
@@ -18953,7 +18953,7 @@ function renderCompanyPreStartVerification() {
     },
   );
   modal.innerHTML = `<div class="prestart-verification-sheet" role="dialog" aria-modal="true" aria-labelledby="prestartVerificationTitle">
-    <header class="prestart-completion-head"><div><p>Worker completion</p><h2 id="prestartVerificationTitle">${escapeHtml(worker.name || "Worker")}</h2><span>${escapeHtml(companyProjectTitle(job))}</span></div><button class="modal-close-btn" type="button" data-company-prestart-close aria-label="Close">${onsiteIcon("x", 18)}</button></header>
+     <header class="prestart-completion-head"><div><p>Sub-contractor completion</p><h2 id="prestartVerificationTitle">${escapeHtml(worker.name || "Sub-contractor")}</h2><span>${escapeHtml(companyProjectTitle(job))}</span></div><button class="modal-close-btn" type="button" data-company-prestart-close aria-label="Close">${onsiteIcon("x", 18)}</button></header>
     <div class="prestart-verification-list">${requirements.map((requirement) => {
       const record = workerProjectRequirementRecord(job, worker.id, requirement);
       const status = projectRequirementCompletionStatusMeta(record?.status || "not_started");
@@ -19020,18 +19020,18 @@ function openCompanyPreStartVerification(jobId, workerId, trigger = null) {
 function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
   if (!summary.assignedWorkers.length) {
     return `<div class="company-project-requirements-empty is-compact">
-      <strong>No workers to track yet.</strong>
-      <span>Completion status will appear when workers are confirmed for this project.</span>
+       <strong>No sub-contractors to track yet.</strong>
+       <span>Completion status will appear when sub-contractors are confirmed for this project.</span>
     </div>`;
   }
   if (!requirements.length) {
     return `<div class="company-project-requirements-empty is-compact">
       <strong>No project requirements have been added yet.</strong>
-      <span>Worker readiness will appear here after a site requirement is added.</span>
+       <span>Sub-contractor readiness will appear here after a site requirement is added.</span>
     </div>`;
   }
   return `<div class="company-project-worker-completion-list">
-    <div class="company-project-worker-completion-head" aria-hidden="true"><span>Worker</span><span>Pre-start</span><span>On arrival</span><span>Status</span></div>
+     <div class="company-project-worker-completion-head" aria-hidden="true"><span>Sub-contractor</span><span>Pre-start</span><span>On arrival</span><span>Status</span></div>
     ${summary.assignedWorkers
       .map((worker) => {
         const readiness = projectWorkerRequirementReadiness(
@@ -19041,7 +19041,7 @@ function companyProjectWorkerCompletionViewHTML(job, summary, requirements) {
           requirements,
         );
         return `<article class="company-project-worker-completion-row">
-          <div class="company-project-worker-completion-person"><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml([worker.trade, worker.grade || worker.specialism].filter(Boolean).join(" · ") || "Role not set")}</span></div>
+           <div class="company-project-worker-completion-person"><strong>${escapeHtml(worker.name || "Sub-contractor")}</strong><span>${escapeHtml([worker.trade, worker.grade || worker.specialism].filter(Boolean).join(" · ") || "Role not set")}</span></div>
           <span data-label="Pre-start">${readiness.preStartComplete} / ${readiness.beforeStart.length} complete</span>
           <span data-label="On arrival">${readiness.onArrivalOutstanding ? `${readiness.onArrivalOutstanding} required` : "None outstanding"}</span>
           <div class="company-project-worker-completion-action" data-label="Status"><span class="company-project-requirement-state ${readiness.tone}">${escapeHtml(readiness.label)}</span><button class="company-project-inline-action" type="button" data-company-prestart-worker="${escapeHtml(worker.id)}" data-prestart-job="${escapeHtml(job.id)}">Review &rarr;</button></div>
@@ -19081,7 +19081,7 @@ function companyProjectRequirementRecordsViewHTML(job) {
     </div>`;
   }
   return `<div class="company-project-completion-records">
-    <div class="company-project-completion-records-head" aria-hidden="true"><span>Worker</span><span>Requirement</span><span>Completion</span><span>Completed</span></div>
+     <div class="company-project-completion-records-head" aria-hidden="true"><span>Sub-contractor</span><span>Requirement</span><span>Completion</span><span>Completed</span></div>
     ${records
       .map((record) => {
         const worker = findWorker(record.workerId);
@@ -19089,7 +19089,7 @@ function companyProjectRequirementRecordsViewHTML(job) {
           (item) => item.documentId === record.requirementId,
         );
         return `<article class="company-project-completion-record">
-          <div><strong>${escapeHtml(worker?.name || "Worker record")}</strong><span>${escapeHtml(worker?.trade || "Worker")}</span></div>
+           <div><strong>${escapeHtml(worker?.name || "Sub-contractor record")}</strong><span>${escapeHtml(worker?.trade || "Sub-contractor")}</span></div>
           <div><strong>${escapeHtml(requirement?.documentName || "Archived requirement")}</strong><span>${escapeHtml(projectRequirementVersionLabel({ version: record.requirementVersion }))}</span></div>
           <div><strong>${escapeHtml(projectRequirementRecordState(record))}</strong><span>${escapeHtml(projectRequirementActionLabel(record.completionMethod))}</span></div>
           <time datetime="${escapeHtml(record.completedAt || "")}">${record.completedAt ? escapeHtml(formatDate(record.completedAt)) : "Date not recorded"}</time>
@@ -19111,13 +19111,13 @@ function companyProjectDocumentsHTML(job, summary) {
   }[activeView];
   const views = [
     ["requirements", "Requirements"],
-    ["completion", "Worker completion"],
+     ["completion", "Sub-contractor completion"],
     ["records", "Records"],
   ];
   return `<div class="company-project-workspace company-project-documents-workspace">
     <section class="company-project-workspace-card company-project-documents-card">
       <header class="company-project-workspace-head company-project-requirements-head">
-        <div><p class="company-project-workspace-kicker">Pre-start</p><h2>Site requirements</h2><span>Set what workers must read, watch, complete or sign before they can start work on this site.</span></div>
+         <div><p class="company-project-workspace-kicker">Pre-start</p><h2>Site requirements</h2><span>Set what sub-contractors must read, watch, complete or sign before they can start work on this site.</span></div>
         <button class="primary-btn" type="button" data-project-requirement-add="${escapeHtml(job.id)}">Add requirement</button>
       </header>
       <nav class="company-project-requirement-views" aria-label="Project requirement views">
@@ -22044,10 +22044,10 @@ function renderCompanyWorkerDirectory(user) {
   const title = document.querySelector("#tab-workers .panel-title");
   const subtitle = document.querySelector("#tab-workers .panel-subtitle");
   const dupe = document.getElementById("adminDupeReview");
-  if (title) title.textContent = "Workers";
+  if (title) title.textContent = "Sub-contractors";
   if (subtitle)
     subtitle.textContent =
-      "Assigned, preferred, and previous workers linked to your projects";
+      "Assigned, preferred, and previous sub-contractors linked to your projects";
   if (dupe) dupe.innerHTML = "";
   const list = document.getElementById("workersList");
   const empty = document.getElementById("workersEmpty");
@@ -22107,11 +22107,11 @@ function renderCompanyWorkerDirectory(user) {
         .map(({ worker, tags }) => companyDirectoryWorkerCardHTML(worker, tags))
         .join("")}</div>`
     : guidedEmptyStateHTML({
-        kicker: query ? "No Matches" : "Workers",
-        title: query ? "No linked workers match your search" : "No linked workers yet",
+        kicker: query ? "No Matches" : "Sub-contractors",
+        title: query ? "No linked sub-contractors match your search" : "No linked sub-contractors yet",
         body: query
-          ? "Try another worker name, trade, qualification or availability filter."
-          : "Assigned, preferred and previous workers will appear here after projects begin moving through the offer workflow.",
+          ? "Try another sub-contractor name, trade, qualification or availability filter."
+          : "Assigned, preferred and previous sub-contractors will appear here after projects begin moving through the offer workflow.",
         actionLabel: query ? "" : "View Projects",
         actionTab: query ? "" : "dashboard",
       });
@@ -22136,8 +22136,8 @@ function renderCompanyWorkerDirectory(user) {
       saveAndRender();
       showToast(
         res.preferred
-          ? `${res.worker.name} added to Preferred Workers`
-          : `${res.worker.name} removed from Preferred Workers`,
+          ? `${res.worker.name} added to Preferred Sub-contractors`
+          : `${res.worker.name} removed from Preferred Sub-contractors`,
       );
     });
   });
@@ -23520,15 +23520,15 @@ function companyPreferredAccountSection(user) {
         )
         .join("")
     : guidedEmptyStateHTML({
-        kicker: "Preferred Workers",
-        title: "No Preferred Workers yet",
-        body: "Mark trusted workers from project worker profiles. They will appear here and can be requested first on future labour requests.",
+         kicker: "Preferred Sub-contractors",
+         title: "No preferred sub-contractors yet",
+         body: "Mark trusted sub-contractors from project profiles. They will appear here and can be requested first on future labour requests.",
         actionLabel: "View Dashboard",
         actionTab: "dashboard",
       });
   return `
     <div class="prof-section">
-      <div class="prof-section-title">Preferred Workers</div>
+       <div class="prof-section-title">Preferred Sub-contractors</div>
       <p class="prof-section-hint">Preferred status is private to this company and is used to offer future requests first where eligibility allows.</p>
       <div class="doc-list">${rows}</div>
     </div>`;
@@ -24461,10 +24461,10 @@ function renderWorkers() {
     hasAny && filtered.length === 0 ? "block" : "none";
   workersList.innerHTML = !hasAny
     ? guidedEmptyStateHTML({
-        kicker: "Workers",
-        title: "No workers in the roster yet",
-        body: "Add worker profiles to begin matching them to labour requests and tracking attendance history.",
-        actionLabel: "Add Worker",
+         kicker: "Sub-contractors",
+         title: "No sub-contractors in the roster yet",
+         body: "Add sub-contractor profiles to begin matching them to labour requests and tracking attendance history.",
+         actionLabel: "Add Sub-contractor",
         actionTab: "add",
       })
     : filtered.map(workerCard).join("");
@@ -28935,13 +28935,13 @@ function renderAttendance() {
       ? rosterWorkers.map((w) => attendanceCard(w, today)).join("")
       : guidedEmptyStateHTML({
           kicker: selectedProject ? "Attendance Roster" : "Roster",
-          title: selectedProject
-            ? "No workers assigned to this project"
-            : "No workers in the roster",
-          body: selectedProject
-            ? "Assign workers to this project before confirming daily attendance."
-            : "Add worker profiles before using the attendance review tools.",
-          actionLabel: selectedProject ? "Back to Attendance" : "Add Worker",
+       title: selectedProject
+             ? "No sub-contractors assigned to this project"
+             : "No sub-contractors in the roster",
+           body: selectedProject
+             ? "Assign sub-contractors to this project before confirming daily attendance."
+             : "Add sub-contractor profiles before using the attendance review tools.",
+           actionLabel: selectedProject ? "Back to Attendance" : "Add Sub-contractor",
           actionTab: selectedProject ? "attendance" : "add",
         }));
   if (rosterWorkers.length) bindAttendanceEvents(container);

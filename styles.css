@@ -22771,12 +22771,49 @@ button.project-requirement-step-control:focus-visible {
   isolation: isolate;
   margin-top: 0;
   min-height: 300px;
+  position: relative;
 }
 
 #formJob.jw-wizard-mode .jw-site-location-surface .picker-map:focus-visible {
   border-color: var(--orange);
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
   outline: none;
+}
+
+.picker-map-loading {
+  align-items: center;
+  background: #f4f1ea;
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.76rem;
+  gap: 9px;
+  inset: 0;
+  justify-content: center;
+  line-height: 1.35;
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+}
+
+.picker-map-loading.hidden,
+.picker-map-loading[hidden] {
+  display: none;
+}
+
+.picker-map-loading-indicator {
+  border: 2px solid rgba(100, 116, 139, 0.22);
+  border-radius: 50%;
+  border-top-color: var(--ink-3);
+  height: 18px;
+  width: 18px;
+  animation: picker-map-loading-spin 850ms linear infinite;
+}
+
+@keyframes picker-map-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 #formJob.jw-wizard-mode .pin-coords-display {
