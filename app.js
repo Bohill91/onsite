@@ -16212,7 +16212,7 @@ function companyDailyBriefingHTML(summary, user) {
         ${isEmpty
           ? `<div class="company-dashboard-empty-state company-dashboard-empty-state--summary">
               <strong>No project activity yet</strong>
-              <span>Create your first project to start tracking labour, site activity and attendance.</span>
+              <span>Create your first project to begin tracking labour, attendance and upcoming work.</span>
               <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
             </div>`
           : `<div class="company-briefing-metrics">${briefing.metrics.map(companyDashboardMetricHTML).join("")}</div>`}
@@ -16224,13 +16224,13 @@ function companyDailyBriefingHTML(summary, user) {
         <div>
           <p class="company-home-kicker">LIVE SITES</p>
         </div>
-        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
+        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No attendance due today"}</small>
       </div>
       ${briefing.siteRows.length
         ? `<div class="company-live-site-cards">${briefing.siteRows.map(companyLiveSiteStatusCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state">
-            <strong>No live sites yet</strong>
-            <span>Live attendance will appear here when sub-contractors are due on site.</span>
+            <strong>No sites active today</strong>
+            <span>Sites with sub-contractors due today will appear here.</span>
           </div>`}
     </section>
     <section class="company-command-section company-upcoming-panel company-dashboard-section-card jw-card">
@@ -16244,7 +16244,7 @@ function companyDailyBriefingHTML(summary, user) {
         ? `<div class="company-upcoming-timeline">${briefing.upcoming.map(companyDashboardUpcomingCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state compact">
             <strong>No upcoming starts</strong>
-            <span>Upcoming project starts and labour changes will appear here.</span>
+            <span>Projects starting in the next 7 days will appear here.</span>
           </div>`}
     </section>
   </section>`;
@@ -16255,8 +16255,8 @@ function companyDashboardActionHeroHTML(action) {
     return `<article class="company-action-hero company-action-hero-clear company-dashboard-section-card jw-card">
       <div>
         <p class="company-home-kicker">ACTION REQUIRED</p>
-        <h3>Nothing needs attention</h3>
-        <p>Actions will appear here once your projects are underway.</p>
+        <h3>No action required</h3>
+        <p>Items requiring your attention will appear here.</p>
       </div>
     </article>`;
   }
@@ -16713,8 +16713,8 @@ function companyRecentActivityHTML(summary, user) {
       ${rows.length
         ? rows.map(companyRecentActivityRowHTML).join("")
         : `<div class="company-dashboard-empty-state compact">
-            <strong>No activity yet</strong>
-            <span>Project updates, attendance events and offer decisions will appear here.</span>
+            <strong>No recent activity</strong>
+            <span>Project, attendance and offer updates will appear here.</span>
           </div>`}
     </div>
   </section>`;
@@ -22347,8 +22347,7 @@ function renderCompanyProjectsPage(user) {
         <div class="company-project-empty-state" aria-labelledby="projectsEmptyTitle">
           <span class="company-project-empty-icon" aria-hidden="true">${onsiteIcon("briefcase", 22)}</span>
           <h2 id="projectsEmptyTitle">No projects yet</h2>
-          <p>Projects you create will appear here.</p>
-          <small>Add labour, site details and pre-start requirements when creating a project.</small>
+          <p>Create your first project to request labour, add site details and set pre-start requirements.</p>
           <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
         </div>
       </section>`,
