@@ -1846,16 +1846,16 @@ button.is-loading,
     background: transparent;
     border: 0;
     border-radius: var(--radius-xs);
-    color: var(--ink-3);
+    color: var(--ink-2);
     cursor: pointer;
     display: flex;
     font: inherit;
-    height: 32px;
+    height: 34px;
     justify-content: center;
     margin: 0;
     padding: 7px;
     transition: background-color 150ms ease, color 150ms ease;
-    width: 32px;
+    width: 34px;
   }
 
   .sidebar-collapse-control:hover,
@@ -1871,7 +1871,7 @@ button.is-loading,
 
   .sidebar-collapse-icon {
     display: inline-flex;
-    flex: 0 0 16px;
+    flex: 0 0 20px;
     transform: none;
     transition: transform 180ms ease;
   }
@@ -1907,10 +1907,6 @@ button.is-loading,
   .sidebar-collapsed .sidebar-utility-zone {
     align-self: stretch;
     justify-content: center;
-  }
-
-  .sidebar-collapsed .sidebar-collapse-icon {
-    transform: rotate(180deg);
   }
 
   .sidebar-collapsed .sidebar-account-slot {
@@ -2148,6 +2144,31 @@ button.is-loading,
   .content-area:has(#tab-notifications.active .request-labour-page),
   .content-area:has(#tab-account.active .request-labour-page) {
     max-width: var(--page-content-max);
+  }
+
+  .content-area:has(.company-saas-page),
+  .content-area:has(.company-dashboard-page),
+  .content-area:has(#tab-request-labour.active) {
+    max-width: none;
+  }
+
+  .content-area:has(#tab-dashboard.active .request-labour-page),
+  .content-area:has(#tab-dashboard.active .company-dashboard-page),
+  .content-area:has(#tab-jobs.active .request-labour-page),
+  .content-area:has(#tab-jobs.active .company-dashboard-page),
+  .content-area:has(#tab-attendance.active .attendance-page),
+  .content-area:has(#tab-market.active .request-labour-page),
+  .content-area:has(#tab-notifications.active .request-labour-page),
+  .content-area:has(#tab-account.active .request-labour-page) {
+    max-width: none;
+  }
+
+  .content-area:has(.company-saas-page) .company-saas-page,
+  .content-area:has(.company-saas-page) .os-page-content,
+  .content-area:has(.company-dashboard-page) .company-dashboard-page,
+  .content-area:has(#tab-request-labour.active) .request-labour-page {
+    max-width: none;
+    width: 100%;
   }
 }
 
@@ -4108,35 +4129,6 @@ body:has(
   padding: 4px 0 0;
 }
 
-@media (min-width: 860px) {
-  .company-dashboard-body .jw-form:has(.company-dashboard-command--empty) {
-    display: grid;
-    gap: 20px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .company-dashboard-command--empty {
-    display: grid;
-    gap: 20px;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .company-dashboard-command--empty .company-dashboard-hero {
-    grid-column: 1 / -1;
-  }
-
-  .company-dashboard-command--empty .company-live-sites-panel,
-  .company-dashboard-command--empty .company-upcoming-panel {
-    align-self: start;
-    grid-column: span 1;
-  }
-
-  .company-dashboard-body .jw-form:has(.company-dashboard-command--empty) .company-recent-activity {
-    grid-column: 1 / -1;
-  }
-}
-
 .company-dashboard-empty-state strong {
   color: var(--ink);
   font-size: 0.95rem;
@@ -4177,38 +4169,8 @@ body:has(
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 330px;
-  overflow: hidden;
-  padding: 0;
-}
-
-.company-project-directory-empty-head {
-  align-items: center;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--card-divider);
-  color: var(--ink-3);
-  display: grid;
-  font-size: 0.7rem;
-  font-weight: 800;
-  gap: 16px;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.35fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
-  letter-spacing: 0.02em;
-  min-height: 48px;
-  padding: 0 24px;
-  text-transform: uppercase;
-}
-
-.company-project-empty-body {
-  align-items: stretch;
-  display: grid;
-  min-height: 280px;
-}
-
-.company-project-empty-body .company-project-empty-state {
   min-height: 0;
-  padding: 24px;
+  padding: 16px 24px;
 }
 
 .company-project-empty-state {
