@@ -19781,6 +19781,16 @@ function projectRequirementActionFieldHTML(draft) {
   </fieldset>`;
 }
 
+function projectRequirementOnsiteCompletionHTML() {
+  return `<fieldset class="project-requirement-fieldset project-requirement-action-fieldset project-requirement-fixed-completion">
+    <legend>How is completion confirmed?</legend>
+    <div class="project-requirement-fixed-value">
+      <strong>Supervisor sign-off</strong>
+      <span>A supervisor confirms the induction has been completed when the sub-contractor arrives on site.</span>
+    </div>
+  </fieldset>`;
+}
+
 function projectRequirementCompletionEvidenceHTML(draft) {
   if (["external_training", "background_check"].includes(draft.requirementType)) {
     return "";
@@ -19815,12 +19825,13 @@ function projectRequirementCompletionEvidenceHTML(draft) {
 }
 
 function projectRequirementTimingChoicesHTML(draft) {
-  const timings = PROJECT_REQUIREMENT_TIMINGS.filter(
-    (timing) =>
-      timing.value !== "reference_anytime" ||
-      (draft.requirementLevel === "optional" &&
-        draft.requirementType !== "onsite_induction"),
-  );
+  const timings = draft.requirementType === "onsite_induction"
+    ? PROJECT_REQUIREMENT_TIMINGS.filter((timing) => timing.value === "on_arrival")
+    : PROJECT_REQUIREMENT_TIMINGS.filter(
+        (timing) =>
+          timing.value !== "reference_anytime" ||
+          draft.requirementLevel === "optional",
+      );
   return `<fieldset class="project-requirement-fieldset">
     <legend>Completion timing</legend>
     <div class="project-requirement-timing-choices">
@@ -19834,6 +19845,12 @@ function projectRequirementTimingChoicesHTML(draft) {
 }
 
 function projectRequirementStepTwoHTML(draft) {
+  if (draft.requirementType === "onsite_induction") {
+    return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
+      <div class="project-requirement-step-intro"><p>Completion</p><h3 id="projectRequirementStepTitle" tabindex="-1">How is completion confirmed?</h3></div>
+      ${projectRequirementOnsiteCompletionHTML()}
+    </section>`;
+  }
   const comprehension =
     draft.requirementType === "video_induction" &&
     draft.completionAction === "watch_comprehension"
@@ -20084,6 +20101,10 @@ function syncProjectRequirementEditorDraft(modal) {
   if (level) draft.requirementLevel = level;
   const timing = checked("projectRequirementTiming");
   if (timing) draft.timing = timing;
+  if (draft.requirementType === "onsite_induction") {
+    draft.completionAction = "supervisor_signoff";
+    draft.timing = "on_arrival";
+  }
   if (value("[data-project-requirement-pass]") != null) {
     draft.comprehensionCheck.passThreshold = Number(value("[data-project-requirement-pass]"));
   }
@@ -21301,6 +21322,10 @@ function openProjectRequirementEditor({
         pdfTemplate: { sourceResourceId: "", fields: [] },
         comprehensionCheck: { enabled: false, passThreshold: 80, questions: [] },
       };
+  if (draft.requirementType === "onsite_induction") {
+    draft.completionAction = "supervisor_signoff";
+    draft.timing = "on_arrival";
+  }
   if (!String(draft.documentName || "").trim()) {
     if (draft.requirementType === "onsite_induction") {
       draft.documentName = "Site induction";
