@@ -117,7 +117,7 @@
   --ui-weight-semibold: 600;
   --ui-weight-bold: 800;
 
-  --shell-sidebar-width: 220px;
+  --shell-sidebar-width: 232px;
   --shell-content-max: 1120px;
   --shell-desktop-gutter: 32px;
   --shell-tablet-gutter: 20px;
@@ -1719,6 +1719,10 @@ button.is-loading,
       "sidenav content";
     min-height: 100vh;
   }
+
+  .app-root.sidebar-collapsed {
+    --shell-sidebar-width: 72px;
+  }
 }
 
 /* ─── Top Bar ─────────────────────────────────────────── */
@@ -1827,6 +1831,97 @@ button.is-loading,
   .tab-btn svg {
     flex-shrink: 0;
   }
+
+  .sidebar-collapse-control {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-xs);
+    color: var(--ink-3);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    gap: 10px;
+    margin: 8px 0 0;
+    padding: 8px 14px;
+    text-align: left;
+    transition: background-color 150ms ease, color 150ms ease;
+    width: 100%;
+  }
+
+  .sidebar-collapse-control:hover,
+  .sidebar-collapse-control:focus-visible {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .sidebar-collapse-control:focus-visible {
+    outline: 2px solid rgba(249, 115, 22, 0.62);
+    outline-offset: 1px;
+  }
+
+  .sidebar-collapse-icon {
+    display: inline-flex;
+    flex: 0 0 16px;
+    transform: rotate(180deg);
+    transition: transform 180ms ease;
+  }
+
+  .sidebar-collapse-icon svg {
+    display: block;
+  }
+
+  .sidebar-collapsed .tab-nav {
+    align-items: center;
+    padding-inline: 10px;
+  }
+
+  .sidebar-collapsed .tab-btn {
+    justify-content: center;
+    padding-inline: 10px;
+    position: relative;
+    width: 48px;
+  }
+
+  .sidebar-collapsed .tab-btn > span:not(.nav-unread-badge),
+  .sidebar-collapsed .sidebar-collapse-label,
+  .sidebar-collapsed .sidebar-company-text,
+  .sidebar-collapsed .sidebar-account-chevron {
+    display: none;
+  }
+
+  .sidebar-collapsed .tab-btn .nav-unread-badge {
+    position: absolute;
+    right: 3px;
+    top: 4px;
+  }
+
+  .sidebar-collapsed .sidebar-collapse-control {
+    justify-content: center;
+    padding-inline: 10px;
+    width: 48px;
+  }
+
+  .sidebar-collapsed .sidebar-collapse-icon {
+    transform: none;
+  }
+
+  .sidebar-collapsed .sidebar-account-slot {
+    align-self: stretch;
+    padding-top: 12px;
+  }
+
+  .sidebar-collapsed .sidebar-account-card {
+    justify-content: center;
+    padding-inline: 6px;
+  }
+
+  .sidebar-collapsed .sidebar-account-menu {
+    bottom: 8px;
+    left: calc(100% + 8px);
+    right: auto;
+    width: 220px;
+  }
 }
 
 .tab-count {
@@ -1928,6 +2023,12 @@ button.is-loading,
     white-space: nowrap;
   }
 
+  .sidebar-account-identity {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+  }
+
   .sidebar-user-role {
     color: var(--ink-3);
     font-size: 0.72rem;
@@ -1979,6 +2080,27 @@ button.is-loading,
   .sidebar-account-menu button:hover {
     background: var(--surface-2);
     color: var(--ink);
+  }
+
+  .sidebar-account-menu-summary {
+    border-bottom: 1px solid var(--border-light);
+    display: grid;
+    gap: 2px;
+    margin: -2px 0 2px;
+    padding: 6px 10px 9px;
+  }
+
+  .sidebar-account-menu-summary strong {
+    color: var(--ink);
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+
+  .sidebar-account-menu-summary span,
+  .sidebar-account-menu-summary small {
+    color: var(--ink-2);
+    font-size: 0.74rem;
+    line-height: 1.25;
   }
 }
 
@@ -10395,6 +10517,23 @@ body:has(
   padding: 10px 0 0;
 }
 
+.company-page-head--standard .os-date-pill,
+.company-page-head--compact .os-date-pill,
+.request-labour-page-head--unboxed .os-date-pill {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+@media (min-width: 641px) {
+  .company-page-head--standard .os-date-pill {
+    margin-top: 6px;
+  }
+
+  .request-labour-page-head--unboxed .os-date-pill {
+    margin-top: 0;
+  }
+}
+
 .request-labour-page-head.company-page-head--standard {
   background: transparent;
   border: 0;
@@ -11880,7 +12019,10 @@ body.modal-open {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  display: block;
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
   padding: 10px 0 0;
 }
 
@@ -24575,5 +24717,33 @@ button.project-requirement-step-control:focus-visible {
   .jw-wizard-dot,
   .jw-wizard-progress-track > span {
     transition: none;
+  }
+}
+
+/* Keep the shared title/date row intact on narrow company pages. */
+@media (max-width: 640px) {
+  .request-labour-page-head.company-page-head--standard {
+    align-items: center;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 10px 0 0;
+  }
+
+  .request-labour-page-head.company-page-head--standard > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .request-labour-page-head.company-page-head--standard .os-date-pill {
+    margin-left: auto;
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 860px) and (max-width: 1279px) {
+  .company-dashboard-shell > .company-page-head--compact {
+    width: calc(100% + 15px);
   }
 }

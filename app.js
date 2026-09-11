@@ -12818,6 +12818,72 @@ const CONTRACTOR_TABS = [
   { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
+const SIDEBAR_PREFERENCE_KEY = "onsite_sidebar_collapsed_v1";
+
+function defaultSidebarCollapsedForViewport() {
+  return window.innerWidth >= 860 && window.innerWidth < 1280;
+}
+
+function storedSidebarPreference() {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
+    if (stored === "collapsed") return true;
+    if (stored === "expanded") return false;
+  } catch {
+    // The sidebar still works when local storage is unavailable.
+  }
+  return defaultSidebarCollapsedForViewport();
+}
+
+function setSidebarCollapsed(collapsed, { persist = false } = {}) {
+  const app = document.getElementById("main-app");
+  if (!app) return;
+  app.classList.toggle("sidebar-collapsed", collapsed);
+  app.dataset.sidebarState = collapsed ? "collapsed" : "expanded";
+  if (persist) {
+    try {
+      localStorage.setItem(SIDEBAR_PREFERENCE_KEY, collapsed ? "collapsed" : "expanded");
+    } catch {
+      // Keep the current state for this session if storage is unavailable.
+    }
+  }
+  const control = document.querySelector("[data-sidebar-collapse]");
+  if (control) {
+    const nextLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    control.setAttribute("aria-label", nextLabel);
+    control.setAttribute("title", nextLabel);
+    control.setAttribute("aria-pressed", String(collapsed));
+    control.querySelector(".sidebar-collapse-label").textContent = collapsed ? "Expand" : "Collapse";
+  }
+}
+
+function syncSidebarState() {
+  setSidebarCollapsed(storedSidebarPreference());
+}
+
+function ensureSidebarCollapseControl() {
+  const nav = document.querySelector(".tab-nav");
+  if (!nav) return;
+  let control = nav.querySelector("[data-sidebar-collapse]");
+  if (!control) {
+    nav.insertAdjacentHTML(
+      "beforeend",
+      `<button class="sidebar-collapse-control" type="button" data-sidebar-collapse aria-pressed="false">
+        <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("chevronRight", 16)}</span>
+        <span class="sidebar-collapse-label">Collapse</span>
+      </button>`,
+    );
+    control = nav.querySelector("[data-sidebar-collapse]");
+    control?.addEventListener("click", () => {
+      const collapsed = !document.getElementById("main-app")?.classList.contains("sidebar-collapsed");
+      setSidebarCollapsed(collapsed, { persist: true });
+    });
+  }
+  syncSidebarState();
+}
+
+window.addEventListener("resize", syncSidebarState);
+
 function companyUnreadNotificationCount(user = getSessionUser()) {
   return companyVisibleNotifications(user).filter((n) => !n.readAt).length;
 }
@@ -12855,6 +12921,7 @@ function rebuildNav(tabDefs, activeId) {
     )
     .join("");
   bindTabEvents();
+  ensureSidebarCollapseControl();
   renderSidebarAccount(getSessionUser());
 }
 
@@ -12862,6 +12929,7 @@ function restoreNav() {
   document.querySelector(".tab-nav").innerHTML = ORIG_TOP_NAV;
   document.querySelector(".bottom-nav").innerHTML = ORIG_BOTTOM_NAV;
   bindTabEvents();
+  ensureSidebarCollapseControl();
 }
 
 function companySidebarName(user) {
@@ -12915,11 +12983,19 @@ function renderSidebarAccount(user) {
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
         <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
-        <span class="sidebar-user-meta">${escapeHtml(userName)} · ${escapeHtml(userRole)}</span>
+        <span class="sidebar-account-identity">
+          <span class="sidebar-user-meta">${escapeHtml(userName)}</span>
+          <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
+        </span>
       </span>
       <span class="sidebar-account-chevron" aria-hidden="true">⌄</span>
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
+      <div class="sidebar-account-menu-summary">
+        <strong>${escapeHtml(companyName)}</strong>
+        <span>${escapeHtml(userName)}</span>
+        <small>${escapeHtml(userRole)}</small>
+      </div>
       <button type="button" data-sidebar-account-action="profile">My Profile</button>
       <button type="button" data-sidebar-account-action="settings">Hiring company settings</button>
       <button type="button" data-sidebar-account-action="signout">Sign Out</button>
@@ -22266,7 +22342,7 @@ function renderCompanyProjectsPage(user) {
     el.innerHTML = companyPageShellHTML({
       title: "Projects",
       compactHeader: true,
-      showDate: false,
+      showDate: true,
       className: "company-dashboard-shell company-projects-shell company-projects-empty-shell",
       bodyClass: "company-dashboard-body company-projects-body",
       body: `<section class="company-project-directory company-project-directory--empty">
@@ -22285,7 +22361,7 @@ function renderCompanyProjectsPage(user) {
   el.innerHTML = companyPageShellHTML({
     title: "Projects",
     compactHeader: true,
-    showDate: false,
+    showDate: true,
     className: "company-dashboard-shell company-projects-shell",
     bodyClass: "company-dashboard-body company-projects-body",
     body: `
@@ -23347,6 +23423,7 @@ function renderCompanyNotificationsPage() {
     kicker: "NOTIFICATIONS",
     title: "Notifications",
     subtitle: "Activity and actions requiring your attention.",
+    showDate: true,
     className: "company-notifications-shell",
     bodyClass: "company-notifications-body",
     body: `
@@ -23503,6 +23580,7 @@ function renderCompanyMarketPage() {
     kicker: "LABOUR INSIGHTS",
     title: "Labour Insights",
     subtitle: "Understand worker availability, demand and rates.",
+    showDate: true,
     className: "company-market-shell",
     bodyClass: "company-market-body",
     body: `
@@ -27550,6 +27628,7 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
     kicker: "ATTENDANCE",
     title: "Attendance",
     subtitle: "Confirm and manage daily project attendance.",
+    showDate: true,
     className: "attendance-page",
     bodyClass: "attendance-page-body",
     body: `
