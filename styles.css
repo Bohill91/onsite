@@ -1844,6 +1844,7 @@ button.is-loading,
     gap: 10px;
     margin: 8px 0 0;
     padding: 8px 14px;
+    justify-content: flex-end;
     text-align: left;
     transition: background-color 150ms ease, color 150ms ease;
     width: 100%;
@@ -1948,7 +1949,7 @@ button.is-loading,
     border-top: 1px solid var(--border-light);
     display: block;
     margin-top: auto;
-    padding-top: 12px;
+    padding-top: 10px;
     position: relative;
   }
 
@@ -1960,7 +1961,7 @@ button.is-loading,
     cursor: pointer;
     display: flex;
     gap: 10px;
-    padding: 10px 6px;
+    padding: 8px 6px;
     text-align: left;
     width: 100%;
   }
@@ -4089,6 +4090,17 @@ body:has(
   padding: 10px 0 2px;
 }
 
+.company-dashboard-body .company-dashboard-section-card:has(.company-dashboard-empty-state) {
+  gap: 10px;
+  padding: 20px;
+}
+
+.company-dashboard-body .company-dashboard-section-card:has(.company-dashboard-empty-state)
+  .company-dashboard-empty-state {
+  min-height: 0;
+  padding: 4px 0 0;
+}
+
 .company-dashboard-empty-state strong {
   color: var(--ink);
   font-size: 0.95rem;
@@ -4123,8 +4135,8 @@ body:has(
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
-  min-height: 262px;
-  padding: 24px;
+  min-height: 0;
+  padding: 16px 24px;
 }
 
 .company-project-empty-state {
@@ -4132,7 +4144,7 @@ body:has(
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 214px;
+  min-height: 210px;
   text-align: center;
 }
 

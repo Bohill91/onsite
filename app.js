@@ -12849,11 +12849,10 @@ function setSidebarCollapsed(collapsed, { persist = false } = {}) {
   }
   const control = document.querySelector("[data-sidebar-collapse]");
   if (control) {
-    const nextLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    const nextLabel = collapsed ? "Show sidebar" : "Hide sidebar";
     control.setAttribute("aria-label", nextLabel);
     control.setAttribute("title", nextLabel);
     control.setAttribute("aria-pressed", String(collapsed));
-    control.querySelector(".sidebar-collapse-label").textContent = collapsed ? "Expand" : "Collapse";
   }
 }
 
@@ -12870,7 +12869,6 @@ function ensureSidebarCollapseControl() {
       "beforeend",
       `<button class="sidebar-collapse-control" type="button" data-sidebar-collapse aria-pressed="false">
         <span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("chevronRight", 16)}</span>
-        <span class="sidebar-collapse-label">Collapse</span>
       </button>`,
     );
     control = nav.querySelector("[data-sidebar-collapse]");
