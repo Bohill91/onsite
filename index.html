@@ -90,19 +90,23 @@
             <form id="loginForm">
               <div class="auth-field-group">
                 <div class="auth-field">
-                  <label class="auth-label" for="loginEmail">Email Address</label>
+                    <label class="auth-label" for="loginEmail">Email address</label>
                   <input class="auth-input" id="loginEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
                 </div>
                 <div class="auth-field">
                   <label class="auth-label" for="loginPassword">Password</label>
-                  <input class="auth-input" id="loginPassword" type="password" placeholder="Your password" required autocomplete="current-password" />
+                    <div class="auth-password-wrap">
+                      <input class="auth-input" id="loginPassword" type="password" placeholder="Your password" required autocomplete="current-password" />
+                      <button class="auth-password-toggle" type="button" data-password-toggle="loginPassword" aria-label="Show password" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
                 </div>
                 <div class="auth-forgot-row">
                   <button class="auth-link" type="button" onclick="showScreen('forgot');">Forgot password?</button>
                 </div>
               </div>
               <button class="auth-submit-btn" type="submit">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                 Sign In
               </button>
             </form>
@@ -127,26 +131,26 @@
           </div>
         </div>
         <div class="auth-inner">
-          <div class="auth-form-wrap">
-            <h1 class="auth-title">Reset password</h1>
-            <p class="auth-subtitle">Enter your email and we'll send you a reset link.</p>
+          <div class="auth-form-wrap auth-card">
+            <h1 class="auth-title">Reset your password</h1>
+            <p class="auth-subtitle">Enter your email address and we'll help you regain access.</p>
             <div id="forgotFormWrap">
               <form id="forgotForm">
                 <div class="auth-field-group">
                   <div class="auth-field">
-                    <label class="auth-label" for="forgotEmail">Email Address</label>
-                    <input class="auth-input" id="forgotEmail" type="email" placeholder="your@email.com" required />
+                    <label class="auth-label" for="forgotEmail">Email address</label>
+                    <input class="auth-input" id="forgotEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
                   </div>
                 </div>
-                <button class="auth-submit-btn" type="submit">Send Reset Link</button>
+                <button class="auth-submit-btn" type="submit">Continue</button>
               </form>
             </div>
             <div id="forgotMsg" style="display:none;">
-              <div class="verify-banner">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                If that email is registered, a reset link has been sent. Check your inbox.
+              <div class="auth-info-banner">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                Password reset is not connected yet. Return to sign in or contact your OnSite administrator for access.
               </div>
-              <button class="auth-submit-btn" type="button" onclick="showScreen('login');">Back to Sign In</button>
+              <button class="auth-submit-btn auth-submit-btn--secondary" type="button" onclick="showScreen('login');">Back to sign in</button>
             </div>
           </div>
         </div>
@@ -165,7 +169,7 @@
           </div>
         </div>
         <div class="auth-inner">
-          <div class="auth-form-wrap">
+          <div class="auth-form-wrap auth-card auth-card--registration">
             <div class="stepper" id="workerStepper">
               <div class="stepper-item">
                 <div class="stepper-dot active">1</div>
@@ -183,8 +187,8 @@
 
             <!-- Step 1: Basic Details -->
             <div class="reg-step active" data-step="1">
-              <h1 class="auth-title">Join as a Sub-contractor</h1>
-              <p class="auth-subtitle">Create your profile to start getting matched with jobs.</p>
+              <h1 class="auth-title">Create a Sub-contractor account</h1>
+              <p class="auth-subtitle">Set up your profile to find CIS work through OnSite.</p>
               <div id="step1Error" class="auth-error"></div>
               <form id="workerStep1Form">
                 <div class="auth-field-group">
@@ -202,11 +206,21 @@
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="regPassword">Password</label>
-                    <input class="auth-input" id="regPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                    <div class="auth-password-wrap">
+                      <input class="auth-input" id="regPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                      <button class="auth-password-toggle" type="button" data-password-toggle="regPassword" aria-label="Show password" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="regPassword2">Confirm Password</label>
-                    <input class="auth-input" id="regPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                    <div class="auth-password-wrap">
+                      <input class="auth-input" id="regPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                      <button class="auth-password-toggle" type="button" data-password-toggle="regPassword2" aria-label="Show password" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button class="auth-submit-btn" type="submit">
@@ -457,7 +471,7 @@
           </div>
         </div>
         <div class="auth-inner">
-          <div class="auth-form-wrap">
+          <div class="auth-form-wrap auth-card auth-card--registration">
             <div class="stepper" id="companyStepper">
               <div class="stepper-item">
                 <div class="stepper-dot active">1</div>
@@ -471,8 +485,8 @@
 
             <!-- Step 1: Company Details -->
             <div class="company-step active" data-step="1">
-              <h1 class="auth-title">Join as a Hiring company</h1>
-              <p class="auth-subtitle">Post jobs and connect with verified tradespeople.</p>
+              <h1 class="auth-title">Create a Hiring company account</h1>
+              <p class="auth-subtitle">Set up your company to request and manage labour through OnSite.</p>
               <div id="companyStep1Error" class="auth-error"></div>
               <form id="companyStep1Form">
                 <div class="auth-field-group">
@@ -494,11 +508,21 @@
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="companyPassword">Password</label>
-                    <input class="auth-input" id="companyPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                    <div class="auth-password-wrap">
+                      <input class="auth-input" id="companyPassword" type="password" placeholder="Choose a password" required autocomplete="new-password" minlength="8" />
+                      <button class="auth-password-toggle" type="button" data-password-toggle="companyPassword" aria-label="Show password" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="companyPassword2">Confirm Password</label>
-                    <input class="auth-input" id="companyPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                    <div class="auth-password-wrap">
+                      <input class="auth-input" id="companyPassword2" type="password" placeholder="Repeat your password" required autocomplete="new-password" />
+                      <button class="auth-password-toggle" type="button" data-password-toggle="companyPassword2" aria-label="Show password" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <button class="auth-submit-btn" type="submit">

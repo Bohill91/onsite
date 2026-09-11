@@ -76,10 +76,12 @@ function setMainAppAvailable(isAvailable) {
 
 function showAuthOverlay() {
   setMainAppAvailable(false);
+  document.body.classList.add('auth-is-open');
   authOverlay.style.display = 'flex';
   authOverlay.setAttribute('aria-hidden', 'false');
 }
 function hideAuthOverlay() {
+  document.body.classList.remove('auth-is-open');
   authOverlay.style.display = 'none';
   authOverlay.setAttribute('aria-hidden', 'true');
 }
@@ -91,6 +93,19 @@ function showScreen(id) {
     el.classList.add('active');
     authOverlay.scrollTop = 0;
   }
+}
+
+function initialisePasswordToggles() {
+  document.querySelectorAll('[data-password-toggle]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      if (!input) return;
+      const shouldShow = input.type === 'password';
+      input.type = shouldShow ? 'text' : 'password';
+      button.setAttribute('aria-label', shouldShow ? 'Hide password' : 'Show password');
+      button.setAttribute('aria-pressed', String(shouldShow));
+    });
+  });
 }
 
 // ─── Topbar User ───────────────────────────────────────────
@@ -578,6 +593,7 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
 (function init() {
   try {
     // Populate cert checkboxes
+    initialisePasswordToggles();
     const certContainer = document.getElementById('certCheckboxes');
     certContainer.innerHTML = CERT_OPTIONS.map(function(c) {
       return '<label class="cert-checkbox">' +
