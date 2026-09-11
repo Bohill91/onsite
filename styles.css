@@ -4108,6 +4108,35 @@ body:has(
   padding: 4px 0 0;
 }
 
+@media (min-width: 860px) {
+  .company-dashboard-body .jw-form:has(.company-dashboard-command--empty) {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-dashboard-command--empty {
+    display: grid;
+    gap: 20px;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-dashboard-command--empty .company-dashboard-hero {
+    grid-column: 1 / -1;
+  }
+
+  .company-dashboard-command--empty .company-live-sites-panel,
+  .company-dashboard-command--empty .company-upcoming-panel {
+    align-self: start;
+    grid-column: span 1;
+  }
+
+  .company-dashboard-body .jw-form:has(.company-dashboard-command--empty) .company-recent-activity {
+    grid-column: 1 / -1;
+  }
+}
+
 .company-dashboard-empty-state strong {
   color: var(--ink);
   font-size: 0.95rem;
@@ -4142,8 +4171,38 @@ body:has(
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 330px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.company-project-directory-empty-head {
+  align-items: center;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--card-divider);
+  color: var(--ink-3);
+  display: grid;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.35fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  letter-spacing: 0.02em;
+  min-height: 48px;
+  padding: 0 24px;
+  text-transform: uppercase;
+}
+
+.company-project-empty-body {
+  align-items: stretch;
+  display: grid;
+  min-height: 280px;
+}
+
+.company-project-empty-body .company-project-empty-state {
   min-height: 0;
-  padding: 16px 24px;
+  padding: 24px;
 }
 
 .company-project-empty-state {

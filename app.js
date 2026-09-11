@@ -37,7 +37,8 @@ const ICON_PATHS = {
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
   moreHorizontal: `<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>`,
   minusCircle: `<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>`,
-  panelLeft: `<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/><polyline points="15 9 12 12 15 15"/>`,
+  panelLeftClose: `<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m15 9-3 3 3 3"/>`,
+  panelLeftOpen: `<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m12 9 3 3-3 3"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   qrCode: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="18" y1="18" x2="21" y2="18"/>`,
   search: `<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>`,
@@ -12855,6 +12856,7 @@ function setSidebarCollapsed(collapsed, { persist = false } = {}) {
     control.setAttribute("aria-label", nextLabel);
     control.setAttribute("title", nextLabel);
     control.setAttribute("aria-pressed", String(collapsed));
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon(collapsed ? "panelLeftOpen" : "panelLeftClose", 19)}</span>`;
   }
 }
 
@@ -12890,7 +12892,7 @@ function ensureSidebarCollapseControl() {
     utility?.append(control);
   }
   if (control) {
-    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("panelLeft", 16)}</span>`;
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon("panelLeftClose", 19)}</span>`;
   }
   syncSidebarState();
 }
@@ -16215,7 +16217,7 @@ function firstNameForUser(user) {
 function companyDailyBriefingHTML(summary, user) {
   const briefing = companyDailyBriefingModel(summary, user);
   const isEmpty = !summary.companyJobs.length;
-  return `<section class="company-dashboard-command">
+  return `<section class="company-dashboard-command${isEmpty ? " company-dashboard-command--empty" : ""}">
     <div class="company-dashboard-hero">
       <article class="company-ops-summary company-dashboard-section-card jw-card">
         <div class="company-ops-summary-head">
@@ -22359,11 +22361,20 @@ function renderCompanyProjectsPage(user) {
       className: "company-dashboard-shell company-projects-shell company-projects-empty-shell",
       bodyClass: "company-dashboard-body company-projects-body",
       body: `<section class="company-project-directory company-project-directory--empty">
-        <div class="company-project-empty-state" aria-labelledby="projectsEmptyTitle">
-          <span class="company-project-empty-icon" aria-hidden="true">${onsiteIcon("briefcase", 22)}</span>
-          <h2 id="projectsEmptyTitle">No projects yet</h2>
-          <p>Create your first project to request labour, add site details and set pre-start requirements.</p>
-          <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
+        <div class="company-project-directory-empty-head" role="row" aria-label="Project directory columns">
+          <span role="columnheader">Project</span>
+          <span role="columnheader">Location</span>
+          <span role="columnheader">Labour</span>
+          <span role="columnheader">Start</span>
+          <span role="columnheader">Status</span>
+        </div>
+        <div class="company-project-empty-body">
+          <div class="company-project-empty-state" aria-labelledby="projectsEmptyTitle">
+            <span class="company-project-empty-icon" aria-hidden="true">${onsiteIcon("briefcase", 22)}</span>
+            <h2 id="projectsEmptyTitle">No projects yet</h2>
+            <p>Create your first project to request labour, add site details and set pre-start requirements.</p>
+            <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
+          </div>
         </div>
       </section>`,
     });
