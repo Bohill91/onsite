@@ -19605,7 +19605,6 @@ button.project-requirement-step-control:focus-visible {
 
 .project-requirement-step-intro > p,
 .project-requirement-fieldset > legend,
-.project-requirement-fixed-value > span,
 .project-requirement-comprehension > p,
 .project-requirement-resources-head > p,
 .project-requirement-resource-composer > div:first-child > p,
@@ -20217,6 +20216,7 @@ button.project-requirement-step-control:focus-visible {
 }
 
 .project-requirement-fixed-value small,
+.project-requirement-fixed-value > span,
 .project-requirement-choice-help {
   color: var(--ink-3);
   font-size: 0.72rem;
