@@ -1962,8 +1962,8 @@ button.is-loading,
     border-radius: var(--radius-xs);
     cursor: pointer;
     display: flex;
-    gap: 10px;
-    padding: 8px 6px;
+    gap: 4px;
+    padding: 8px 2px;
     text-align: left;
     width: 100%;
   }
@@ -2020,7 +2020,7 @@ button.is-loading,
   .sidebar-account-identity {
     color: var(--ink-3);
     display: block;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 600;
     min-width: 0;
     overflow: hidden;
@@ -2032,8 +2032,8 @@ button.is-loading,
     align-items: center;
     color: var(--ink-3);
     display: inline-flex;
-    flex: 0 0 18px;
-    margin-left: auto;
+    flex: 0 0 16px;
+    margin-left: 0;
   }
 
   .sidebar-account-menu {
