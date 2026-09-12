@@ -973,11 +973,61 @@
                     <div class="jw-grid jw-schedule-grid">
                       <label class="field-label">
                         Start time *
-                        <input id="jobShiftStart" type="time" required />
+                        <div class="jw-time-picker" data-time-picker data-time-input-id="jobShiftStart">
+                          <input
+                            id="jobShiftStart"
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            required
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                            aria-controls="jobShiftStartTimeOptions"
+                            pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+                          />
+                          <span class="jw-time-picker-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                              <circle cx="12" cy="12" r="8.25"></circle>
+                              <path d="M12 7.5v4.8l3.1 1.8"></path>
+                            </svg>
+                          </span>
+                          <div
+                            id="jobShiftStartTimeOptions"
+                            class="jw-time-picker-popover"
+                            role="listbox"
+                            aria-label="Start time options"
+                            hidden
+                          ></div>
+                        </div>
                       </label>
                       <label class="field-label">
                         Finish time *
-                        <input id="jobShiftFinish" type="time" required />
+                        <div class="jw-time-picker" data-time-picker data-time-input-id="jobShiftFinish">
+                          <input
+                            id="jobShiftFinish"
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            required
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                            aria-controls="jobShiftFinishTimeOptions"
+                            pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+                          />
+                          <span class="jw-time-picker-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                              <circle cx="12" cy="12" r="8.25"></circle>
+                              <path d="M12 7.5v4.8l3.1 1.8"></path>
+                            </svg>
+                          </span>
+                          <div
+                            id="jobShiftFinishTimeOptions"
+                            class="jw-time-picker-popover"
+                            role="listbox"
+                            aria-label="Finish time options"
+                            hidden
+                          ></div>
+                        </div>
                       </label>
                     </div>
                   </section>

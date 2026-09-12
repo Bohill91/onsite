@@ -22794,6 +22794,123 @@ button.project-requirement-step-control:focus-visible {
   cursor: pointer;
 }
 
+.jw-time-picker {
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+#formJob.jw-wizard-mode .jw-time-picker input {
+  cursor: text;
+  padding-right: 40px;
+}
+
+.jw-time-picker-icon {
+  align-items: center;
+  color: var(--ink-3);
+  display: inline-flex;
+  height: 18px;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: color 150ms ease;
+  width: 18px;
+}
+
+.jw-time-picker-icon svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 18px;
+}
+
+.jw-time-picker.is-open .jw-time-picker-icon,
+.jw-time-picker:focus-within .jw-time-picker-icon {
+  color: var(--orange);
+}
+
+.jw-time-picker-popover {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  left: 0;
+  max-height: 246px;
+  overflow-y: auto;
+  padding: 7px;
+  position: absolute;
+  right: 0;
+  scrollbar-width: thin;
+  top: calc(100% + 6px);
+  z-index: 12000;
+}
+
+.jw-time-picker-popover[hidden] {
+  display: none;
+}
+
+.jw-time-picker-option {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 6px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  width: 100%;
+}
+
+.jw-time-picker-option:hover,
+.jw-time-picker-option:focus-visible,
+.jw-time-picker-option.is-active {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #c2410c;
+  outline: none;
+}
+
+.jw-time-picker-option.is-selected {
+  background: #f97316;
+  border-color: #f97316;
+  color: #fff;
+  font-weight: 750;
+}
+
+.jw-time-picker-option.is-selected:hover,
+.jw-time-picker-option.is-selected:focus-visible,
+.jw-time-picker-option.is-selected.is-active {
+  background: #ea580c;
+  border-color: #ea580c;
+  color: #fff;
+}
+
+.jw-time-picker-option-note {
+  color: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin-left: 4px;
+  opacity: 0.78;
+}
+
 .jw-end-date-field {
   display: grid;
   gap: 9px;

@@ -9913,6 +9913,8 @@ function initializeNewRequestShiftDefaults() {
   if (!shiftStart || !shiftFinish) return;
   if (!shiftStart.value) shiftStart.value = "07:30";
   if (!shiftFinish.value) shiftFinish.value = "17:00";
+  setJobTimePickerValidity(shiftStart);
+  setJobTimePickerValidity(shiftFinish);
   jobWizardShiftDefaultsInitialized = true;
 }
 
@@ -10994,6 +10996,7 @@ function renderJobWizardChrome() {
 }
 
 function goToJobWizardStep(step, { scroll = true } = {}) {
+  closeJobTimePicker();
   const previousStep = jobWizardStep;
   jobWizardStep = Math.min(Math.max(step, 1), JOB_WIZARD_STEPS.length);
   renderJobWizardChrome();
@@ -11858,12 +11861,7 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
   return true;
 }
 
-const JOB_SCHEDULE_PICKER_IDS = [
-  "jobStart",
-  "jobEndDate",
-  "jobShiftStart",
-  "jobShiftFinish",
-];
+const JOB_SCHEDULE_PICKER_IDS = ["jobStart", "jobEndDate"];
 
 function openNativePickerFromField(input, event) {
   if (
@@ -11884,14 +11882,14 @@ function openNativePickerFromField(input, event) {
   }
 }
 
-const JOB_SCHEDULE_PICKER_SELECTOR = JOB_SCHEDULE_PICKER_IDS
+const JOB_SCHEDULE_DATE_PICKER_SELECTOR = JOB_SCHEDULE_PICKER_IDS
   .map((id) => `#${id}`)
   .join(", ");
 
 jobForm?.addEventListener(
   "pointerdown",
   (event) => {
-    const input = event.target.closest?.(JOB_SCHEDULE_PICKER_SELECTOR);
+    const input = event.target.closest?.(JOB_SCHEDULE_DATE_PICKER_SELECTOR);
     if (!input?.closest('.jw-step[data-wizard-step="3"]')) return;
     openNativePickerFromField(input, event);
   },
@@ -11904,28 +11902,238 @@ JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
     input?.addEventListener("input", clearSchedulePayValidation);
   }
 });
-const JOB_SHIFT_TIME_IDS = ["jobShiftStart", "jobShiftFinish"];
 
-jobForm?.addEventListener("change", (event) => {
-  const control = event.target;
+const JOB_TIME_PICKER_IDS = ["jobShiftStart", "jobShiftFinish"];
+const JOB_TIME_PICKER_INTERVAL_MINUTES = 15;
+let openJobTimePicker = null;
+
+function jobTimeValueIsValid(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || "").trim());
+}
+
+function jobTimeValueToMinutes(value) {
+  if (!jobTimeValueIsValid(value)) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function jobTimePickerOptions(input) {
+  const options = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += JOB_TIME_PICKER_INTERVAL_MINUTES) {
+    options.push({
+      value: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
+      custom: false,
+    });
+  }
+  const currentValue = String(input.value || "").trim();
+  const currentMinutes = jobTimeValueToMinutes(currentValue);
   if (
-    !(control instanceof HTMLInputElement) ||
-    !JOB_SHIFT_TIME_IDS.includes(control.id) ||
-    !control.value ||
-    !control.closest('#formJob .jw-step[data-wizard-step="3"]')
+    currentMinutes !== null &&
+    currentMinutes % JOB_TIME_PICKER_INTERVAL_MINUTES !== 0
   ) {
+    options.push({ value: currentValue, custom: true });
+    options.sort(
+      (first, second) =>
+        jobTimeValueToMinutes(first.value) - jobTimeValueToMinutes(second.value),
+    );
+  }
+  return options;
+}
+
+function setJobTimePickerValidity(input) {
+  const value = String(input.value || "").trim();
+  input.setCustomValidity(
+    !value || jobTimeValueIsValid(value)
+      ? ""
+      : "Enter a valid time in 24-hour HH:mm format.",
+  );
+}
+
+function jobTimePickerOptionId(input, value) {
+  return `${input.id}TimeOption${value.replace(":", "")}`;
+}
+
+function setJobTimePickerActiveOption(picker, index) {
+  const input = picker.querySelector("input");
+  const options = Array.from(
+    picker.querySelectorAll("[data-time-picker-option]"),
+  );
+  if (!input || !options.length) return;
+  const nextIndex = Math.min(Math.max(index, 0), options.length - 1);
+  options.forEach((option, optionIndex) => {
+    const active = optionIndex === nextIndex;
+    option.classList.toggle("is-active", active);
+    option.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  const activeOption = options[nextIndex];
+  picker.dataset.activeOptionIndex = String(nextIndex);
+  input.setAttribute("aria-activedescendant", activeOption.id);
+}
+
+function renderJobTimePickerOptions(picker) {
+  const input = picker.querySelector("input");
+  const listbox = picker.querySelector(".jw-time-picker-popover");
+  if (!input || !listbox) return;
+  const options = jobTimePickerOptions(input);
+  const currentValue = String(input.value || "").trim();
+  listbox.innerHTML = options
+    .map(
+      ({ value, custom }) => `
+        <button
+          class="jw-time-picker-option${value === currentValue ? " is-selected" : ""}"
+          type="button"
+          role="option"
+          id="${jobTimePickerOptionId(input, value)}"
+          data-time-picker-option="${value}"
+          aria-selected="${value === currentValue ? "true" : "false"}"
+        >${value}${custom ? '<span class="jw-time-picker-option-note">Current</span>' : ""}</button>
+      `,
+    )
+    .join("");
+  const selectedIndex = Math.max(
+    options.findIndex(({ value }) => value === currentValue),
+    0,
+  );
+  setJobTimePickerActiveOption(picker, selectedIndex);
+}
+
+function closeJobTimePicker() {
+  const picker = openJobTimePicker;
+  if (!picker) return;
+  const input = picker.querySelector("input");
+  picker.classList.remove("is-open");
+  picker.querySelector(".jw-time-picker-popover")?.setAttribute("hidden", "");
+  input?.setAttribute("aria-expanded", "false");
+  input?.removeAttribute("aria-activedescendant");
+  openJobTimePicker = null;
+}
+
+function openJobTimePickerForInput(input) {
+  const picker = input.closest("[data-time-picker]");
+  if (!picker) return;
+  if (openJobTimePicker === picker) {
+    renderJobTimePickerOptions(picker);
     return;
   }
+  closeJobTimePicker();
+  renderJobTimePickerOptions(picker);
+  picker.classList.add("is-open");
+  picker.querySelector(".jw-time-picker-popover")?.removeAttribute("hidden");
+  input.setAttribute("aria-expanded", "true");
+  openJobTimePicker = picker;
   requestAnimationFrame(() => {
-    if (
-      control.isConnected &&
-      JOB_SHIFT_TIME_IDS.includes(control.id) &&
-      control.closest('#formJob .jw-step[data-wizard-step="3"]')
-    ) {
-      control.blur();
-    }
+    const selected = picker.querySelector(".jw-time-picker-option.is-selected");
+    selected?.scrollIntoView({ block: "nearest" });
   });
-});
+}
+
+function commitJobTimePickerInput(input) {
+  input.value = String(input.value || "").trim();
+  setJobTimePickerValidity(input);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function selectJobTimePickerOption(input, value) {
+  input.value = value;
+  commitJobTimePickerInput(input);
+  closeJobTimePicker();
+  input.focus({ preventScroll: true });
+}
+
+function bindJobTimePickers() {
+  const pickers = Array.from(document.querySelectorAll("[data-time-picker]"));
+  pickers.forEach((picker) => {
+    const input = picker.querySelector("input");
+    const listbox = picker.querySelector(".jw-time-picker-popover");
+    if (!input || !listbox) return;
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    setJobTimePickerValidity(input);
+
+    input.addEventListener("click", () => openJobTimePickerForInput(input));
+    input.addEventListener("input", () => {
+      setJobTimePickerValidity(input);
+      if (openJobTimePicker === picker) renderJobTimePickerOptions(picker);
+    });
+    input.addEventListener("change", () => setJobTimePickerValidity(input));
+    input.addEventListener("keydown", (event) => {
+      const isOpen = openJobTimePicker === picker;
+      if (event.key === "Escape") {
+        if (!isOpen) return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeJobTimePicker();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (!isOpen) {
+          if (jobTimeValueIsValid(input.value)) {
+            commitJobTimePickerInput(input);
+            closeJobTimePicker();
+          } else {
+            openJobTimePickerForInput(input);
+          }
+          return;
+        }
+        if (jobTimeValueIsValid(input.value)) {
+          commitJobTimePickerInput(input);
+          closeJobTimePicker();
+          return;
+        }
+        const activeIndex = Number(picker.dataset.activeOptionIndex || 0);
+        const option = listbox.querySelectorAll("[data-time-picker-option]")[activeIndex];
+        if (option) selectJobTimePickerOption(input, option.dataset.timePickerOption);
+        return;
+      }
+      if (event.key === "Tab") {
+        if (isOpen) {
+          commitJobTimePickerInput(input);
+          closeJobTimePicker();
+        }
+        return;
+      }
+      if (!isOpen || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        return;
+      }
+      event.preventDefault();
+      const options = listbox.querySelectorAll("[data-time-picker-option]");
+      const activeIndex = Number(picker.dataset.activeOptionIndex || 0);
+      const nextIndex =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? options.length - 1
+            : activeIndex + (event.key === "ArrowDown" ? 1 : -1);
+      setJobTimePickerActiveOption(picker, nextIndex);
+      options[Math.min(Math.max(nextIndex, 0), options.length - 1)]?.scrollIntoView({
+        block: "nearest",
+      });
+    });
+    input.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (!picker.contains(document.activeElement)) closeJobTimePicker();
+      }, 0);
+    });
+    picker.addEventListener("click", (event) => {
+      const option = event.target.closest?.("[data-time-picker-option]");
+      if (!option) return;
+      selectJobTimePickerOption(input, option.dataset.timePickerOption);
+    });
+  });
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (openJobTimePicker && !openJobTimePicker.contains(event.target)) {
+        closeJobTimePicker();
+      }
+    },
+    true,
+  );
+}
+
+bindJobTimePickers();
 document.getElementById("jobNoFixedEndDate")?.addEventListener("change", () => {
   clearSchedulePayValidation();
 });
