@@ -115,6 +115,78 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function placementSlotsEngine() {
+  return typeof window !== "undefined" ? window.OnSitePlacementSlots : null;
+}
+
+function normalizeProjectPlacements(job, store) {
+  const engine = placementSlotsEngine();
+  if (!engine || !job) return job;
+  const source = store || (typeof state !== "undefined" ? state : {});
+  const context = {
+    applications: source.applications || [],
+    workers: source.workers || [],
+    agreements: source.agreements || [],
+    releases: source.workerReleases || [],
+    cancellations: source.cancellations || [],
+    replacementTasks: source.replacementTasks || [],
+  };
+  return engine.linkLegacyHistory
+    ? engine.linkLegacyHistory(job, context)
+    : engine.ensureProject(job, context);
+}
+
+function assignedWorkerIdsForJob(job) {
+  const engine = placementSlotsEngine();
+  return engine
+    ? engine.assignedWorkerIds(job)
+    : Array.from(
+        new Set(
+          [
+            ...(Array.isArray(job?.assignedWorkerIds)
+              ? job.assignedWorkerIds
+              : []),
+            job?.assignedWorkerId,
+            job?.workerId,
+          ].filter(Boolean),
+        ),
+      );
+}
+
+function jobHasAssignedWorker(job, workerId = "") {
+  const ids = assignedWorkerIdsForJob(job);
+  return workerId ? ids.includes(workerId) : ids.length > 0;
+}
+
+function jobHasOpenPlacement(job, requirementId = "") {
+  const engine = placementSlotsEngine();
+  if (!engine) return !jobHasAssignedWorker(job) && !job?.completed;
+  normalizeProjectPlacements(job);
+  return !job?.completed && engine.hasOpenSlot(job, requirementId);
+}
+
+function placementJobForRequirement(job, requirement) {
+  if (!job || !requirement) return job;
+  return {
+    ...job,
+    ...requirement,
+    id: job.id,
+    projectName: job.projectName,
+    companyId: job.companyId,
+    companyName: job.companyName,
+    labourRequirements: job.labourRequirements,
+    placementSlots: job.placementSlots,
+    assignedWorkerId: "",
+    assignedWorkerIds: [],
+    start: job.start,
+    startDate: job.startDate,
+    estimatedEndDate: job.estimatedEndDate,
+    endDate: job.endDate,
+    location: job.location,
+    locationData: job.locationData,
+  };
+}
+
 const OFFER_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const MISSED_OFFERS_LIMIT = 2;
 const MISSED_OFFERS_NOTICE =
@@ -500,7 +572,7 @@ function initExtensionFields(job) {
 function processExtensionLifecycle() {
   let changed = false;
   state.jobs.forEach((job) => {
-    if (!job.assignedWorkerId || job.completed) return;
+    if (!jobHasAssignedWorker(job) || job.completed) return;
     if (!(job.estimatedEndDate || job.endDate)) return;
     const endDate = job.estimatedEndDate || job.endDate;
 
@@ -617,7 +689,10 @@ function bindWorkerReleaseButtons(container) {
     .querySelectorAll("[data-worker-release]")
     .forEach((btn) => {
       btn.addEventListener("click", () =>
-        openWorkerReleaseModal(btn.dataset.workerRelease),
+        openWorkerReleaseModal(
+          btn.dataset.workerRelease,
+          btn.dataset.workerId || "",
+        ),
       );
     });
 }
@@ -774,7 +849,7 @@ function endBookingAsPlanned(jobId) {
 // ─── Extension reminder panel (company / admin) ───────────
 function bookingsNeedingExtension() {
   return state.jobs.filter((j) => {
-    if (!j.assignedWorkerId || j.completed) return false;
+    if (!jobHasAssignedWorker(j) || j.completed) return false;
     const endDate = j.estimatedEndDate || j.endDate;
     if (!endDate) return false;
     const cal = calendarDaysUntil(endDate);
@@ -993,8 +1068,21 @@ const AGREEMENT_DEFAULTS = {
 function findAgreement(id) {
   return (state.agreements || []).find((a) => a.id === id) || null;
 }
-function agreementForJob(job) {
-  return job && job.agreementId ? findAgreement(job.agreementId) : null;
+function agreementForJob(job, workerId = "", placementSlotId = "") {
+  if (!job) return null;
+  const slot = placementSlotId
+    ? job.placementSlots?.find((item) => item.slotId === placementSlotId)
+    : workerId
+      ? placementSlotsEngine()?.slotForWorker(job, workerId)
+      : null;
+  if (slot?.bookingId) return findAgreement(slot.bookingId);
+  if (workerId) {
+    const workerAgreement = (state.agreements || []).find(
+      (agreement) => agreement.jobId === job.id && agreement.workerId === workerId,
+    );
+    if (workerAgreement) return workerAgreement;
+  }
+  return job.agreementId ? findAgreement(job.agreementId) : null;
 }
 
 // Company-specific documents (site rules, induction, H&S, project requirements).
@@ -1040,12 +1128,24 @@ function captureSignature(name) {
 // being loaded), so it must not touch the global `state`.
 function buildAgreementRecord(
   job,
-  { worker, companyName, dayRate, docs, opts = {} },
+  {
+    worker,
+    companyName,
+    dayRate,
+    docs,
+    placementSlot = null,
+    application = null,
+    opts = {},
+  },
 ) {
+  const bookingPricing = placementSlot?.pricing || job.pricing || {};
   const agr = {
     id: createId(),
     jobId: job.id,
-    workerId: job.assignedWorkerId,
+    workerId: worker?.id || placementSlot?.workerId || job.assignedWorkerId,
+    requirementId: placementSlot?.requirementId || application?.requirementId || "",
+    placementSlotId: placementSlot?.slotId || application?.placementSlotId || "",
+    applicationId: application?.id || placementSlot?.applicationId || "",
     companyId: job.companyId || "",
     generatedAt: new Date().toISOString(),
     status: "pending",
@@ -1058,15 +1158,17 @@ function buildAgreementRecord(
       role: job.workActivity || job.trade || "-",
       payRate: dayRate ? `${formatMoney(dayRate)}/day` : job.payRate || "—",
       workerPay:
-        job.pricing?.workerPay != null
-          ? job.pricing.workerPay
+        bookingPricing.workerPay != null
+          ? bookingPricing.workerPay
           : dayRate || null,
       companyCharge:
-        job.companyCharge != null
-          ? job.companyCharge
-          : job.pricing?.companyCharge != null
-            ? job.pricing.companyCharge
-            : jobBudget(job) || null,
+        placementSlot?.companyCharge != null
+          ? placementSlot.companyCharge
+          : bookingPricing.companyCharge != null
+            ? bookingPricing.companyCharge
+            : job.companyCharge != null
+              ? job.companyCharge
+              : jobBudget(job) || null,
       startDate: job.startDate || job.start || "",
       duration: job.duration || "—",
       attendanceRequirements: AGREEMENT_DEFAULTS.attendanceRequirements,
@@ -1090,14 +1192,21 @@ function buildAgreementRecord(
 // fresh agreement is created for the newly assigned worker (the old record is
 // preserved in state.agreements as history).
 function generateAgreementForBooking(job, opts = {}) {
-  if (!job || !job.assignedWorkerId) return null;
+  const workerId = opts.workerId || opts.placementSlot?.workerId || job?.assignedWorkerId;
+  if (!job || !workerId) return null;
   if (!Array.isArray(state.agreements)) state.agreements = [];
-  const existing = agreementForJob(job);
+  const placementSlot = opts.placementSlot ||
+    placementSlotsEngine()?.slotForWorker(job, workerId) || null;
+  const existing = placementSlot
+    ? placementSlot.bookingId
+      ? findAgreement(placementSlot.bookingId)
+      : null
+    : agreementForJob(job, workerId);
   if (
     existing &&
     existing.status !== "declined_by_worker" &&
     existing.status !== "cancelled" &&
-    existing.workerId === job.assignedWorkerId
+    existing.workerId === workerId
   ) {
     return existing;
   }
@@ -1112,20 +1221,25 @@ function generateAgreementForBooking(job, opts = {}) {
   ) {
     existing.status = "cancelled";
   }
-  job.agreementId = "";
-  job.bookingActive = false;
-  const worker = findWorker(job.assignedWorkerId);
+  const worker = findWorker(workerId);
   const dayRate =
-    job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
+    placementSlot?.agreedDayRate != null
+      ? placementSlot.agreedDayRate
+      : job.agreedDayRate != null
+        ? job.agreedDayRate
+        : parseDayRate(job.payRate);
   const agr = buildAgreementRecord(job, {
     worker,
     companyName: job.companyName || "Company",
     dayRate,
     docs: getCompanyDocs(job.companyId),
+    placementSlot,
+    application: opts.application || null,
     opts,
   });
   state.agreements.push(agr);
-  job.agreementId = agr.id;
+  if (placementSlot) placementSlot.bookingId = agr.id;
+  if (!job.agreementId) job.agreementId = agr.id;
   recomputeAgreement(agr);
   return agr;
 }
@@ -1136,25 +1250,38 @@ function recomputeAgreement(agr) {
   const job = findJob(agr.jobId);
   // Only the job's *current* agreement may drive its active flag. A stale,
   // detached agreement kept as history must never toggle a live booking.
-  const isCurrent = !!job && job.agreementId === agr.id;
+  const slot = job?.placementSlots?.find(
+    (item) => item.slotId === agr.placementSlotId || item.bookingId === agr.id,
+  );
+  const isCurrent = !!job && (slot?.bookingId === agr.id || job.agreementId === agr.id);
   if (agr.status === "declined_by_worker" || agr.status === "cancelled") {
-    if (isCurrent) job.bookingActive = false;
+    if (isCurrent && slot && slot.status !== "released") slot.status = "confirmed";
+    placementSlotsEngine()?.syncLegacyAssignmentFields(job);
     return;
   }
   if (agr.worker?.accepted && agr.company?.accepted) {
     agr.status = "active";
-    if (isCurrent) job.bookingActive = true;
+    if (isCurrent && slot) {
+      slot.status = "active";
+      slot.startedAt = slot.startedAt || new Date().toISOString();
+    }
   } else {
     agr.status = "pending";
-    if (isCurrent) job.bookingActive = false;
+    if (isCurrent && slot) slot.status = "confirmed";
   }
+  placementSlotsEngine()?.syncLegacyAssignmentFields(job);
 }
 
 // A booking can be worked only when its agreement is active. Bookings created
 // before this feature (no agreementId) are treated as active so legacy flows
 // keep working.
-function bookingAgreementActive(job) {
+function bookingAgreementActive(job, workerId = "") {
   if (!job) return false;
+  const slot = workerId ? placementSlotsEngine()?.slotForWorker(job, workerId) : null;
+  if (slot) {
+    if (!slot.bookingId) return true;
+    return slot.status === "active";
+  }
   if (!job.agreementId) return true;
   return !!job.bookingActive;
 }
@@ -1177,7 +1304,10 @@ function agreementIsActionable(agr) {
   if (agr.status === "declined_by_worker" || agr.status === "cancelled")
     return false;
   const job = findJob(agr.jobId);
-  return !!job && job.agreementId === agr.id;
+  const slot = job?.placementSlots?.find(
+    (item) => item.slotId === agr.placementSlotId || item.bookingId === agr.id,
+  );
+  return !!job && (slot?.bookingId === agr.id || job.agreementId === agr.id);
 }
 
 function workerAcceptAgreement(agreementId) {
@@ -1207,13 +1337,16 @@ function workerDeclineAgreement(agreementId) {
   agr.status = "declined_by_worker";
   const job = findJob(agr.jobId);
   if (job) {
-    job.bookingActive = false;
-    job.assignedWorkerId = "";
-    job.workerId = "";
-    job.bookingStatus = "pending";
-    // Detach the (now terminal) agreement so a re-booking generates a fresh one.
-    // The declined record stays in state.agreements as history.
-    job.agreementId = "";
+    const application = (state.applications || []).find(
+      (item) => item.id === agr.applicationId,
+    );
+    if (application) {
+      application.status = "declined_by_worker";
+      application.workerRespondedAt = new Date().toISOString();
+    }
+    placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
+      status: "agreement_declined",
+    });
   }
   closeAgreementModal();
   logActivity(
@@ -1255,13 +1388,16 @@ function companyCancelAgreementBooking(agreementId) {
   agr.status = "cancelled";
   const job = findJob(agr.jobId);
   if (job) {
-    job.bookingActive = false;
-    job.assignedWorkerId = "";
-    job.workerId = "";
-    job.bookingStatus = "pending";
-    // Detach the (now terminal) agreement so a re-booking generates a fresh one.
-    // The cancelled record stays in state.agreements as history.
-    job.agreementId = "";
+    const application = (state.applications || []).find(
+      (item) => item.id === agr.applicationId,
+    );
+    if (application) {
+      application.status = "cancelled_by_company";
+      application.companyReviewedAt = new Date().toISOString();
+    }
+    placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
+      status: "agreement_cancelled",
+    });
   }
   closeAgreementModal();
   logActivity(
@@ -1280,32 +1416,61 @@ function ensureAgreementsForState(s) {
   if (!s.companyDocuments || typeof s.companyDocuments !== "object")
     s.companyDocuments = {};
   (s.jobs || []).forEach((job) => {
-    if (!job.assignedWorkerId || job.completed || job.agreementId) return;
-    const worker = (s.workers || []).find((w) => w.id === job.assignedWorkerId);
-    const dayRate =
-      job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
-    const seed = job.agreementSeed;
-    const opts =
-      seed === "pending_worker"
-        ? { companyAccepted: true } // company done, worker still to accept
-        : { workerAccepted: true, companyAccepted: true }; // "active" / legacy
-    const agr = buildAgreementRecord(job, {
-      worker,
-      companyName: job.companyName || "Company",
-      dayRate,
-      docs: getCompanyDocs(job.companyId, s),
-      opts,
+    if (job.completed) return;
+    normalizeProjectPlacements(job, s);
+    const engine = placementSlotsEngine();
+    const bookedSlots = (job.placementSlots || []).filter(
+      (slot) => engine?.FILLED_STATUSES.has(slot.status) && slot.workerId,
+    );
+    bookedSlots.forEach((slot) => {
+      const worker = (s.workers || []).find((item) => item.id === slot.workerId);
+      const application = (s.applications || []).find(
+        (item) => item.id === slot.applicationId,
+      );
+      let agr = s.agreements.find(
+        (item) =>
+          item.jobId === job.id &&
+          item.workerId === slot.workerId &&
+          (item.placementSlotId === slot.slotId ||
+            (!item.placementSlotId && item.workerId === slot.workerId)),
+      );
+      if (!agr) {
+        const requirement = (job.labourRequirements || []).find(
+          (item) => item.requirementId === slot.requirementId,
+        );
+        const agreementJob = placementJobForRequirement(job, requirement);
+        const dayRate =
+          slot.agreedDayRate != null
+            ? slot.agreedDayRate
+            : agreementJob.agreedDayRate != null
+              ? agreementJob.agreedDayRate
+              : jobBudget(agreementJob);
+        const seed = job.agreementSeed;
+        const opts =
+          seed === "pending_worker"
+            ? { companyAccepted: true }
+            : { workerAccepted: true, companyAccepted: true };
+        agr = buildAgreementRecord(agreementJob, {
+          worker,
+          companyName: job.companyName || "Company",
+          dayRate,
+          docs: getCompanyDocs(job.companyId, s),
+          placementSlot: slot,
+          application,
+          opts,
+        });
+        s.agreements.push(agr);
+      }
+      agr.placementSlotId = slot.slotId;
+      agr.requirementId = slot.requirementId;
+      agr.applicationId = agr.applicationId || slot.applicationId || "";
+      slot.bookingId = agr.id;
+      slot.status = agr.worker?.accepted && agr.company?.accepted
+        ? "active"
+        : "confirmed";
+      agr.status = slot.status === "active" ? "active" : "pending";
     });
-    s.agreements.push(agr);
-    job.agreementId = agr.id;
-    // Inline recompute against `s` (recomputeAgreement uses global state).
-    if (agr.worker.accepted && agr.company.accepted) {
-      agr.status = "active";
-      job.bookingActive = true;
-    } else {
-      agr.status = "pending";
-      job.bookingActive = false;
-    }
+    engine?.syncLegacyAssignmentFields(job);
   });
   // One-time cleanup for state persisted before the detach fix: terminalize any
   // pending agreement that is no longer its job's current one, so stale records
@@ -1313,7 +1478,10 @@ function ensureAgreementsForState(s) {
   (s.agreements || []).forEach((agr) => {
     if (agr.status !== "pending") return;
     const job = (s.jobs || []).find((j) => j.id === agr.jobId);
-    if (!job || job.agreementId !== agr.id) agr.status = "cancelled";
+    const slot = job?.placementSlots?.find(
+      (item) => item.slotId === agr.placementSlotId || item.bookingId === agr.id,
+    );
+    if (!job || (!slot && job.agreementId !== agr.id)) agr.status = "cancelled";
   });
 }
 
@@ -1690,12 +1858,18 @@ function companyChargeDisplay(job) {
 // is the stored worker pay; for an open job it's derived from the viewing
 // worker's private minimum against the company budget.
 function workerPayDisplay(job, worker) {
+  const placementSlot = worker?.id
+    ? placementSlotsEngine()?.slotForWorker(job, worker.id)
+    : null;
+  if (placementSlot?.pricing?.workerPay != null)
+    return placementSlot.pricing.workerPay;
+  if (placementSlot?.agreedDayRate != null) return placementSlot.agreedDayRate;
   if (
     job?.pricing?.workerPay != null &&
-    (job.assignedWorkerId === worker?.id || !worker)
+    (jobHasAssignedWorker(job, worker?.id) || !worker)
   )
     return job.pricing.workerPay;
-  if (job?.agreedDayRate != null && job.assignedWorkerId === worker?.id)
+  if (job?.agreedDayRate != null && jobHasAssignedWorker(job, worker?.id))
     return job.agreedDayRate;
   const p = computeBookingPricing({
     workerMin: workerMinRate(worker),
@@ -1707,7 +1881,7 @@ function workerPayDisplay(job, worker) {
 // Confirm a worker onto a job — this is the moment a Protected Booking begins.
 // Returns { ok, reason, pricing }. A booking is refused when the company's
 // budget cannot cover the worker's private minimum plus the 15% margin floor.
-function confirmBooking(job, workerId) {
+function confirmBooking(job, workerId, options = {}) {
   if (!job) return { ok: false, reason: "No job" };
   if (job.companyId && isCompanySuspended(job.companyId)) {
     return {
@@ -1723,14 +1897,40 @@ function confirmBooking(job, workerId) {
     };
   }
   const worker = findWorker(workerId);
+  const application = options.application ||
+    (state.applications || []).find(
+      (item) => item.jobId === job.id && item.workerId === workerId,
+    );
+  const requirement = placementSlotsEngine()?.requirementForWorker(
+    job,
+    worker,
+    application?.requirementId || "",
+  );
+  const pricingJob = placementJobForRequirement(job, requirement);
   const pricing = computeBookingPricing({
     workerMin: workerMinRate(worker),
-    budget: jobBudget(job),
+    budget: jobBudget(pricingJob),
   });
   if (!pricing.viable) return { ok: false, reason: pricing.reason, pricing };
+  const placement = placementSlotsEngine()?.confirmSlot(
+    job,
+    worker,
+    application,
+    state.jobs,
+  );
+  if (placement && !placement.ok) return placement;
 
-  job.assignedWorkerId = workerId;
-  job.workerId = workerId;
+  if (placement?.slot) {
+    placement.slot.pricing = {
+      workerPay: pricing.workerPay,
+      companyCharge: pricing.companyCharge,
+      margin: pricing.margin,
+      marginPct: pricing.marginPct,
+    };
+    placement.slot.agreedDayRate = pricing.workerPay;
+    placement.slot.companyCharge = pricing.companyCharge;
+  }
+
   job.bookingStatus = "confirmed";
   job.confirmedAt = new Date().toISOString();
   job.startDate = job.start;
@@ -1757,15 +1957,32 @@ function confirmBooking(job, workerId) {
   delete job.cancellationPaymentAmount;
   // Generate the Job Agreement — the booking stays inactive until both the
   // worker and company accept it.
-  generateAgreementForBooking(job);
+  const agreement = generateAgreementForBooking(job, {
+    workerId,
+    application,
+    placementSlot: placement?.slot,
+  });
+  if (application && agreement) application.bookingId = agreement.id;
+  return { ok: true, pricing, slot: placement?.slot, agreement };
 }
 
 // Apply a cancellation to a confirmed booking and log it for the admin view.
 function cancelBooking(job, reason) {
   if (!job) return null;
   const worker = job.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const placementSlot = worker
+    ? placementSlotsEngine()?.slotForWorker(job, worker.id)
+    : null;
   const sess = getSessionUser();
   const outcome = computeCancellation(job);
+  const agreement = agreementForJob(
+    job,
+    worker?.id || "",
+    placementSlot?.slotId || "",
+  );
+  const application = (state.applications || []).find(
+    (item) => item.id === placementSlot?.applicationId,
+  );
 
   const record = {
     id: createId(),
@@ -1773,6 +1990,8 @@ function cancelBooking(job, reason) {
     jobTrade: job.trade,
     jobLocation: job.location,
     workerId: job.assignedWorkerId || job.workerId || "",
+    requirementId: placementSlot?.requirementId || "",
+    placementSlotId: placementSlot?.slotId || "",
     workerName: worker?.name || "—",
     companyId: job.companyId || (sess?.type === "company" ? sess.id : ""),
     companyName: sess?.companyName || sess?.name || "Company",
@@ -1793,15 +2012,21 @@ function cancelBooking(job, reason) {
   job.cancellationReason = record.cancellationReason;
   job.cancellationPaymentDue = outcome.paymentDue;
   job.cancellationPaymentAmount = outcome.amount;
-  job.assignedWorkerId = "";
+  if (record.workerId) {
+    if (application) {
+      application.status = "cancelled_by_company";
+      application.companyReviewedAt = record.cancelledAt;
+    }
+    placementSlotsEngine()?.releaseWorker(job, record.workerId, {
+      status: "booking_cancelled",
+      reason: record.cancellationReason,
+    }, record.cancelledAt);
+  }
 
   // Detach the agreement: mark a still-pending one cancelled and clear the
   // job's linkage/active flag so a re-booking generates a fresh agreement. The
   // agreement record itself stays in state.agreements as history.
-  const agr = agreementForJob(job);
-  if (agr && agr.status === "pending") agr.status = "cancelled";
-  job.agreementId = "";
-  job.bookingActive = false;
+  if (agreement && agreement.status === "pending") agreement.status = "cancelled";
 
   logActivity(
     "job",
@@ -1871,7 +2096,14 @@ function computeReleaseRule(job, releaseType) {
   return { started, noticeDays, effectiveDate, noticeRule };
 }
 
-function createReplacementTask(job, worker, reason, source, linkedReleaseId = "") {
+function createReplacementTask(
+  job,
+  worker,
+  reason,
+  source,
+  linkedReleaseId = "",
+  placement = {},
+) {
   if (!Array.isArray(state.replacementTasks)) state.replacementTasks = [];
   const task = {
     id: createId(),
@@ -1884,6 +2116,8 @@ function createReplacementTask(job, worker, reason, source, linkedReleaseId = ""
     reason: reason || "Replacement requested",
     source,
     linkedReleaseId,
+    requirementId: placement.requirementId || "",
+    placementSlotId: placement.placementSlotId || "",
     replacementNeeded: true,
     createdAt: new Date().toISOString(),
     status: "open",
@@ -1901,28 +2135,38 @@ function createReplacementTask(job, worker, reason, source, linkedReleaseId = ""
       timestamp: task.createdAt,
       source: source || "replacement",
       severity: "warning",
-      metadata: { replacementTaskId: task.id, linkedReleaseId },
+      metadata: {
+        replacementTaskId: task.id,
+        linkedReleaseId,
+        requirementId: task.requirementId,
+        placementSlotId: task.placementSlotId,
+      },
       dedupeKey: `replacement_requested:${task.id}`,
     });
   }
   return task;
 }
 
-function detachReleasedAssignment(job, status) {
+function detachReleasedAssignment(job, status, workerId = "") {
   if (!job) return;
-  const agr = agreementForJob(job);
+  const releasedWorkerId = workerId || job.assignedWorkerId;
+  const slot = placementSlotsEngine()?.slotForWorker(job, releasedWorkerId);
+  const agr = agreementForJob(job, releasedWorkerId);
   if (agr && agr.status === "pending") agr.status = "cancelled";
-  job.assignedWorkerId = "";
-  job.workerId = "";
-  job.bookingActive = false;
-  job.agreementId = "";
-  job.bookingStatus = status;
+  const application = (state.applications || []).find(
+    (item) => item.id === slot?.applicationId,
+  );
+  if (application) {
+    application.status = "released";
+    application.endedAt = new Date().toISOString();
+  }
+  placementSlotsEngine()?.releaseWorker(job, releasedWorkerId, { status });
 }
 
 function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
   const job = findJob(jobId);
   const sess = getSessionUser();
-  if (!job || !sess?.id || job.assignedWorkerId !== sess.id)
+  if (!job || !sess?.id || !jobHasAssignedWorker(job, sess.id))
     return { ok: false, reason: "Assignment not found" };
   const worker = findWorker(sess.id) || sess;
   const notice = {
@@ -1979,11 +2223,14 @@ function submitWorkerRelease(
   reason,
   notes = "",
   replacementRequired = false,
+  workerId = "",
 ) {
   const job = findJob(jobId);
-  if (!job || !job.assignedWorkerId)
+  const assignedWorkerId = workerId || job?.assignedWorkerId || "";
+  if (!job || !assignedWorkerId || !jobHasAssignedWorker(job, assignedWorkerId))
     return { ok: false, reason: "Assigned job not found" };
-  const worker = findWorker(job.assignedWorkerId);
+  const worker = findWorker(assignedWorkerId);
+  const placementSlot = placementSlotsEngine()?.slotForWorker(job, assignedWorkerId);
   if (!reason) return { ok: false, reason: "Release reason is required" };
   const rule = computeReleaseRule(job, releaseType);
   const sess = getSessionUser();
@@ -1991,7 +2238,7 @@ function submitWorkerRelease(
   const isImmediate = releaseType === "immediate_release";
   const record = {
     id: createId(),
-    workerId: job.assignedWorkerId,
+    workerId: assignedWorkerId,
     workerName: worker?.name || "Worker",
     jobId: job.id,
     companyId: job.companyId || "",
@@ -2006,6 +2253,8 @@ function submitWorkerRelease(
     notes: notes.trim(),
     replacementRequired: !!replacementRequired,
     replacementNeeded: !!replacementRequired,
+    requirementId: placementSlot?.requirementId || "",
+    placementSlotId: placementSlot?.slotId || "",
     noticeWorkingDays: rule.noticeDays,
     noticeRule: rule.noticeRule,
     releaseStatus:
@@ -2033,7 +2282,10 @@ function submitWorkerRelease(
     });
   }
   if (replacementRequired)
-    createReplacementTask(job, worker, reason, `release:${releaseType}`, record.id);
+    createReplacementTask(job, worker, reason, `release:${releaseType}`, record.id, {
+      requirementId: record.requirementId,
+      placementSlotId: record.placementSlotId,
+    });
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.PROJECT_UPDATED,
     title: `${releaseTypeLabel(releaseType)} logged.`,
@@ -2042,7 +2294,12 @@ function submitWorkerRelease(
     timestamp: record.releaseGivenAt,
     source: "worker_release",
     severity: isImmediate ? "critical" : "warning",
-    metadata: { releaseId: record.id, replacementRequired: !!replacementRequired },
+    metadata: {
+      releaseId: record.id,
+      requirementId: record.requirementId,
+      placementSlotId: record.placementSlotId,
+      replacementRequired: !!replacementRequired,
+    },
     dedupeKey: `worker_release:${record.id}`,
   });
   if (
@@ -2050,7 +2307,7 @@ function submitWorkerRelease(
     releaseType === "pre_start_stand_down" ||
     releaseType === "site_not_ready"
   ) {
-    detachReleasedAssignment(job, releaseType);
+    detachReleasedAssignment(job, releaseType, assignedWorkerId);
   }
   logActivity(
     "notice",
@@ -2059,17 +2316,27 @@ function submitWorkerRelease(
   return { ok: true, release: record };
 }
 
-function adjustJobQuantity(jobId, nextQuantity, reason = "") {
+function adjustJobQuantity(jobId, nextQuantity, reason = "", requirementId = "") {
   const job = findJob(jobId);
   if (!job) return { ok: false, reason: "Job not found" };
-  const fromQuantity = Number(job.quantity || 1);
-  const toQuantity = Math.max(1, Number(nextQuantity) || fromQuantity);
-  if (toQuantity === fromQuantity)
-    return { ok: false, reason: "Quantity is unchanged" };
+  normalizeProjectPlacements(job);
+  const requirement = labourRequirementsForJob(job).find(
+    (item) => !requirementId || item.requirementId === requirementId,
+  );
+  if (!requirement) return { ok: false, reason: "Labour requirement not found" };
+  const adjustment = placementSlotsEngine()?.adjustRequirementQuantity(
+    job,
+    requirement.requirementId,
+    nextQuantity,
+  );
+  if (adjustment && !adjustment.ok) return adjustment;
+  const fromQuantity = adjustment?.fromQuantity ?? Number(requirement.quantity || 1);
+  const toQuantity = adjustment?.toQuantity ?? Math.max(1, Number(nextQuantity) || fromQuantity);
   const adjustmentType = toQuantity > fromQuantity ? "increase" : "decrease";
   const record = {
     id: createId(),
     jobId: job.id,
+    requirementId: requirement.requirementId,
     companyId: job.companyId || "",
     companyName: job.companyName || "Company",
     fromQuantity,
@@ -2086,10 +2353,11 @@ function adjustJobQuantity(jobId, nextQuantity, reason = "") {
   };
   if (!Array.isArray(state.labourAdjustments)) state.labourAdjustments = [];
   state.labourAdjustments.unshift(record);
-  job.quantity = toQuantity;
   job.quantityChangePending = adjustmentType === "decrease";
   if (adjustmentType === "increase")
-    createReplacementTask(job, null, record.reason, "labour_increase");
+    createReplacementTask(job, null, record.reason, "labour_increase", "", {
+      requirementId: requirement.requirementId,
+    });
   addProjectActivity(job, {
     type:
       adjustmentType === "increase"
@@ -2100,7 +2368,12 @@ function adjustJobQuantity(jobId, nextQuantity, reason = "") {
     timestamp: record.createdAt,
     source: "labour_adjustment",
     severity: adjustmentType === "increase" ? "warning" : "info",
-    metadata: { adjustmentId: record.id, fromQuantity, toQuantity },
+    metadata: {
+      adjustmentId: record.id,
+      requirementId: requirement.requirementId,
+      fromQuantity,
+      toQuantity,
+    },
     dedupeKey: `labour_adjustment:${record.id}`,
   });
   logActivity(
@@ -2196,7 +2469,7 @@ document
 function openWorkerNoticeModal(jobId) {
   const job = findJob(jobId);
   const sess = getSessionUser();
-  if (!job || !sess?.id || job.assignedWorkerId !== sess.id) return;
+  if (!job || !sess?.id || !jobHasAssignedWorker(job, sess.id)) return;
   const lastDay = defaultNoticeDate(DEFAULT_NOTICE_DAYS);
   const summary = document.getElementById("workerNoticeSummary");
   document.getElementById("workerNoticeJobId").value = job.id;
@@ -2245,10 +2518,14 @@ function populateReleaseReasons(type) {
     .join("");
 }
 
-function openWorkerReleaseModal(jobId) {
+let pendingWorkerReleaseId = "";
+
+function openWorkerReleaseModal(jobId, workerId = "") {
   const job = findJob(jobId);
-  if (!job || !job.assignedWorkerId) return;
-  const worker = findWorker(job.assignedWorkerId);
+  const assignedWorkerId = workerId || job?.assignedWorkerId || "";
+  if (!job || !assignedWorkerId || !jobHasAssignedWorker(job, assignedWorkerId)) return;
+  pendingWorkerReleaseId = assignedWorkerId;
+  const worker = findWorker(assignedWorkerId);
   const type = "standard_release";
   const rule = computeReleaseRule(job, type);
   const summary = document.getElementById("workerReleaseSummary");
@@ -2272,6 +2549,7 @@ function openWorkerReleaseModal(jobId) {
 function closeWorkerReleaseModal() {
   hideWithMotion(document.getElementById("workerReleaseModal"), () => {
     document.body.style.overflow = "";
+    pendingWorkerReleaseId = "";
   });
 }
 
@@ -2306,6 +2584,7 @@ function confirmWorkerRelease() {
     reason,
     notes,
     replacement,
+    pendingWorkerReleaseId,
   );
   if (!res.ok) {
     showToast(res.reason);
@@ -2419,6 +2698,7 @@ document
     const jobId = document.getElementById("shiftChangeJobId")?.value || "";
     const revisedRateRaw = Number(document.getElementById("shiftChangeRate")?.value);
     const res = createShiftChangeOffer(jobId, {
+      workerId: document.getElementById("shiftChangeWorkerId")?.value || "",
       proposedShiftPattern: document.getElementById("shiftChangePattern")?.value || "Days",
       proposedShiftStartTime: document.getElementById("shiftChangeStart")?.value || "",
       proposedShiftFinishTime: document.getElementById("shiftChangeFinish")?.value || "",
@@ -5151,6 +5431,7 @@ function normalizeProjectRequirementCompletion(record) {
     projectId,
     workerId,
     assignmentId: record?.assignmentId || "",
+    placementSlotId: record?.placementSlotId || "",
     labourRequirementId: record?.labourRequirementId || "",
     preStartRequirementId: requirementId,
     requirementId,
@@ -5342,7 +5623,7 @@ function loadState() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return migrateState(JSON.parse(saved));
   } catch (_) {}
-  return structuredClone(demoData);
+  return migrateState(structuredClone(demoData));
 }
 
 // Backfill booking-protection fields on data saved before this feature existed.
@@ -5433,6 +5714,8 @@ function migrateState(s) {
     if (!task.taskType) task.taskType = "replacement_needed";
     if (task.replacementNeeded == null) task.replacementNeeded = true;
     if (task.linkedReleaseId == null) task.linkedReleaseId = "";
+    if (task.requirementId == null) task.requirementId = "";
+    if (task.placementSlotId == null) task.placementSlotId = "";
   });
   (s.workerReleases || []).forEach((release) => {
     if (release.immediateRelease == null)
@@ -5442,6 +5725,12 @@ function migrateState(s) {
     if (release.releasedBy == null) release.releasedBy = "";
     if (release.replacementNeeded == null)
       release.replacementNeeded = !!release.replacementRequired;
+    if (release.requirementId == null) release.requirementId = "";
+    if (release.placementSlotId == null) release.placementSlotId = "";
+  });
+  (s.cancellations || []).forEach((cancellation) => {
+    if (cancellation.requirementId == null) cancellation.requirementId = "";
+    if (cancellation.placementSlotId == null) cancellation.placementSlotId = "";
   });
   (s.workers || []).forEach((w) => {
     if (w.consecutiveMissedOffers == null) w.consecutiveMissedOffers = 0;
@@ -5561,13 +5850,25 @@ function migrateState(s) {
       if (r) j.budgetMax = r;
     }
   });
+  // Placement slots are the canonical allocation model. Normalization is
+  // idempotent and keeps singular assignment fields as compatibility mirrors.
+  (s.jobs || []).forEach((job) => normalizeProjectPlacements(job, s));
   // Historic completion records pre-date assignment identity. Backfill only
   // when the worker is still unambiguously assigned to this same project.
   s.projectRequirementCompletions = (s.projectRequirementCompletions || []).map(
     (record) => {
       const job = (s.jobs || []).find((item) => item.id === record.projectId);
+      const placementSlot = job?.placementSlots?.find(
+        (slot) => slot.workerId === record.workerId,
+      );
       if (record.assignmentId) {
-        return { ...record, companyId: record.companyId || job?.companyId || "" };
+        return {
+          ...record,
+          companyId: record.companyId || job?.companyId || "",
+          placementSlotId: record.placementSlotId || placementSlot?.slotId || "",
+          labourRequirementId:
+            record.labourRequirementId || placementSlot?.requirementId || "",
+        };
       }
       const application = (s.applications || []).find(
         (item) =>
@@ -5575,10 +5876,8 @@ function migrateState(s) {
           item.workerId === record.workerId &&
           item.status === "confirmed",
       );
-      const directlyAssigned = !!job &&
-        (job.assignedWorkerId === record.workerId ||
-          (Array.isArray(job.assignedWorkerIds) &&
-            job.assignedWorkerIds.includes(record.workerId)));
+      const directlyAssigned =
+        !!job && assignedWorkerIdsForJob(job).includes(record.workerId);
       if (!application && !directlyAssigned) return record;
       return {
         ...record,
@@ -5586,11 +5885,21 @@ function migrateState(s) {
         assignmentId:
           application?.id ||
           `legacy-assignment:${record.projectId}:${record.workerId}`,
+        placementSlotId:
+          record.placementSlotId ||
+          application?.placementSlotId ||
+          placementSlot?.slotId ||
+          "",
+        labourRequirementId:
+          record.labourRequirementId ||
+          application?.requirementId ||
+          placementSlot?.requirementId ||
+          "",
       };
     },
   );
   (s.jobs || []).forEach((j) => {
-    if (j.assignedWorkerId && !j.bookingStatus) {
+    if (jobHasAssignedWorker(j) && !j.bookingStatus) {
       j.bookingStatus = "confirmed";
       j.confirmedAt = j.confirmedAt || new Date().toISOString();
       j.workerId = j.assignedWorkerId;
@@ -5598,7 +5907,7 @@ function migrateState(s) {
       if (j.agreedDayRate == null) j.agreedDayRate = parseDayRate(j.payRate);
     }
     // Backfill extension/reallocation fields on confirmed bookings.
-    if (j.assignedWorkerId && (j.estimatedEndDate || j.endDate)) {
+    if (jobHasAssignedWorker(j) && (j.estimatedEndDate || j.endDate)) {
       if (j.noticePeriodDays == null) j.noticePeriodDays = DEFAULT_NOTICE_DAYS;
       if (!j.extensionStatus) j.extensionStatus = "pending";
       if (!j.workerAvailabilityStatus) j.workerAvailabilityStatus = "booked";
@@ -6103,10 +6412,7 @@ function projectRequirementAssignmentContext(job, workerId, requirement) {
     (item) => item.jobId === job.id && item.workerId === workerId,
   );
   const application = applications.find((item) => item.status === "confirmed");
-  const directlyAssigned =
-    job.assignedWorkerId === workerId ||
-    (Array.isArray(job.assignedWorkerIds) &&
-      job.assignedWorkerIds.includes(workerId));
+  const directlyAssigned = jobHasAssignedWorker(job, workerId);
   if (!application && !directlyAssigned) return null;
   const worker = findWorker(workerId);
   const labourRequirements = labourRequirementsForJob(job);
@@ -6116,6 +6422,7 @@ function projectRequirementAssignmentContext(job, workerId, requirement) {
         labourRequirements,
       })
     : null;
+  const placementSlot = placementSlotsEngine()?.slotForWorker(job, workerId);
   const assignedRequirementIds = projectRequirementAudienceIds(requirement);
   if (
     assignedRequirementIds.length &&
@@ -6129,6 +6436,9 @@ function projectRequirementAssignmentContext(job, workerId, requirement) {
     workerId: String(workerId),
     assignmentId: String(
       application?.id || `legacy-assignment:${job.id}:${workerId}`,
+    ),
+    placementSlotId: String(
+      placementSlot?.slotId || application?.placementSlotId || "",
     ),
     labourRequirementId: String(
       assignedRequirementIds.length
@@ -6147,6 +6457,7 @@ function projectRequirementCompletionIdentityKey(record) {
     record?.projectId || "",
     record?.workerId || "",
     record?.assignmentId || "",
+    record?.placementSlotId || "",
     record?.labourRequirementId || "",
     record?.preStartRequirementId || record?.requirementId || "",
     String(record?.requirementVersion || "1"),
@@ -7821,7 +8132,9 @@ function ensureWorkerProfileForUser(user) {
 }
 
 function notifyPlannedAbsenceChange(worker, absence, action) {
-  const job = state.jobs.find((j) => j.assignedWorkerId === worker?.id && !j.completed);
+  const job = state.jobs.find(
+    (candidate) => jobHasAssignedWorker(candidate, worker?.id) && !candidate.completed,
+  );
   if (!worker || !job || !absence) return;
   if (!Array.isArray(state.notifications)) state.notifications = [];
   const range =
@@ -7934,7 +8247,7 @@ function applicationFor(jobId, workerId) {
 function registerInterest(jobId, user) {
   const job = findJob(jobId);
   if (!job || !user?.id) return { ok: false, reason: "Job not found" };
-  if (job.assignedWorkerId || job.completed)
+  if (!jobHasOpenPlacement(job) || job.completed)
     return { ok: false, reason: "This job is no longer open" };
   if (!Array.isArray(state.applications)) state.applications = [];
 
@@ -8582,16 +8895,17 @@ function tryPreferredWorkerOffers(job) {
   return { ok: false, reason: "No selected specific worker is currently eligible" };
 }
 
-function openProjectTransferModal(jobId) {
+function openProjectTransferModal(jobId, workerId = "") {
   const fromJob = findJob(jobId);
-  if (!fromJob || !fromJob.assignedWorkerId) return;
-  const worker = findWorker(fromJob.assignedWorkerId);
+  const assignedWorkerId = workerId || fromJob?.assignedWorkerId || "";
+  if (!fromJob || !jobHasAssignedWorker(fromJob, assignedWorkerId)) return;
+  const worker = findWorker(assignedWorkerId);
   const targetSelect = document.getElementById("projectTransferTargetJob");
   const summary = document.getElementById("projectTransferSummary");
   const targets = (state.jobs || []).filter(
     (job) =>
       job.id !== fromJob.id &&
-      !job.assignedWorkerId &&
+      jobHasOpenPlacement(job) &&
       !job.completed &&
       companyOwnsJob(job, fromJob.companyId || getSessionUser()?.id || ""),
   );
@@ -8630,9 +8944,9 @@ function createProjectTransferOffer(fromJobId, toJobId, workerId) {
     return { ok: false, reason: "Transfer details are incomplete" };
   if (fromJob.companyId && toJob.companyId && fromJob.companyId !== toJob.companyId)
     return { ok: false, reason: "Target job must belong to the same company" };
-  if (fromJob.assignedWorkerId !== worker.id)
+  if (!jobHasAssignedWorker(fromJob, worker.id))
     return { ok: false, reason: "Worker is not assigned to the source job" };
-  if (toJob.assignedWorkerId || toJob.completed)
+  if (!jobHasOpenPlacement(toJob) || toJob.completed)
     return { ok: false, reason: "Target job is not open" };
 
   const matches = getMatches(toJob);
@@ -8669,10 +8983,11 @@ function createProjectTransferOffer(fromJobId, toJobId, workerId) {
   return { ok: true, transfer, application: offered.application };
 }
 
-function openShiftChangeModal(jobId) {
+function openShiftChangeModal(jobId, workerId = "") {
   const job = findJob(jobId);
-  if (!job || !job.assignedWorkerId) return;
-  const worker = findWorker(job.assignedWorkerId);
+  const assignedWorkerId = workerId || job?.assignedWorkerId || "";
+  if (!job || !jobHasAssignedWorker(job, assignedWorkerId)) return;
+  const worker = findWorker(assignedWorkerId);
   const summary = document.getElementById("shiftChangeSummary");
   document.getElementById("shiftChangeJobId").value = job.id;
   document.getElementById("shiftChangeWorkerId").value = worker?.id || "";
@@ -8699,7 +9014,8 @@ function closeShiftChangeModal() {
 
 function createShiftChangeOffer(jobId, fields) {
   const job = findJob(jobId);
-  const worker = job?.assignedWorkerId ? findWorker(job.assignedWorkerId) : null;
+  const workerId = fields.workerId || job?.assignedWorkerId || "";
+  const worker = jobHasAssignedWorker(job, workerId) ? findWorker(workerId) : null;
   if (!job || !worker) return { ok: false, reason: "Assigned worker not found" };
   if (!fields.effectiveDate)
     return { ok: false, reason: "Choose an effective date" };
@@ -8820,9 +9136,16 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
   };
 }
 
-function ensureApplicationForOffer(job, worker) {
+function ensureApplicationForOffer(job, worker, requirementId = "") {
   if (!Array.isArray(state.applications)) state.applications = [];
-  let app = applicationFor(job.id, worker.id);
+  let app = state.applications.find(
+    (item) =>
+      item.jobId === job.id &&
+      item.workerId === worker.id &&
+      ["interested", "offered", "accepted_by_worker", "under_company_review"].includes(
+        item.status,
+      ),
+  );
   if (!app) {
     app = {
       id: createId(),
@@ -8833,6 +9156,8 @@ function ensureApplicationForOffer(job, worker) {
       companyId: job.companyId || "",
       companyName: job.companyName || "Company",
       status: "interested",
+      requirementId,
+      labourRequirementId: requirementId,
       createdAt: new Date().toISOString(),
     };
     state.applications.push(app);
@@ -8840,28 +9165,41 @@ function ensureApplicationForOffer(job, worker) {
   return app;
 }
 
-function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) {
+function createJobOffer(
+  jobId,
+  workerId,
+  source = "manual",
+  rankAtOffer = null,
+  options = {},
+) {
   const job = findJob(jobId);
   const worker = findWorker(workerId);
   if (!job || !worker) return { ok: false, reason: "Job or worker not found" };
-  if (job.assignedWorkerId || job.completed)
+  normalizeProjectPlacements(job);
+  const requirement = placementSlotsEngine()?.requirementForWorker(
+    job,
+    worker,
+    options.requirementId || "",
+  );
+  if (!requirement || !jobHasOpenPlacement(job, requirement.requirementId) || job.completed)
     return { ok: false, reason: "This job is no longer open" };
+  const matchingJob = placementJobForRequirement(job, requirement);
   if (worker.availability !== "available")
     return { ok: false, reason: "Worker is unavailable" };
   if (
     ["manual", "preferred_worker", "requested_worker", "project_transfer"].includes(source) &&
-    !getMatches(job).some((match) => match.id === worker.id)
+    !getMatches(matchingJob).some((match) => match.id === worker.id)
   ) {
     return { ok: false, reason: "Worker is not eligible for this job offer" };
   }
   const pricing = computeBookingPricing({
     workerMin: workerMinRate(worker),
-    budget: jobBudget(job),
+    budget: jobBudget(matchingJob),
   });
   if (!pricing.viable) return { ok: false, reason: pricing.reason };
 
   const now = new Date();
-  const app = ensureApplicationForOffer(job, worker);
+  const app = ensureApplicationForOffer(job, worker, requirement.requirementId);
   if (
     ["offered", "accepted_by_worker", "under_company_review", "confirmed"].includes(
       app.status,
@@ -8869,6 +9207,15 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
   ) {
     return { ok: true, application: app, duplicate: true };
   }
+  if (options.placementSlotId) app.placementSlotId = options.placementSlotId;
+  const reserved = placementSlotsEngine()?.reserveSlot(
+    job,
+    worker,
+    app,
+    state.jobs,
+    now.toISOString(),
+  );
+  if (reserved && !reserved.ok) return reserved;
 
   Object.assign(app, {
     status: "offered",
@@ -8885,7 +9232,14 @@ function createJobOffer(jobId, workerId, source = "manual", rankAtOffer = null) 
     companyDeclineComment: "",
     confirmedAt: "",
     supersededAt: "",
-    matchSnapshot: buildOfferMatchSnapshot(job, worker, rankAtOffer),
+    requirementId: requirement.requirementId,
+    labourRequirementId: requirement.requirementId,
+    placementSlotId: reserved?.slot?.slotId || app.placementSlotId || "",
+    matchSnapshot: {
+      ...buildOfferMatchSnapshot(matchingJob, worker, rankAtOffer),
+      requirementId: requirement.requirementId,
+      placementSlotId: reserved?.slot?.slotId || app.placementSlotId || "",
+    },
   });
   if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
   const notice = {
@@ -8915,6 +9269,13 @@ function expireJobOffers() {
     if (new Date(app.expiresAt).getTime() > now) return;
     app.status = "expired";
     app.expiredAt = new Date().toISOString();
+    const expiredJob = applicationJob(app);
+    placementSlotsEngine()?.reopenApplicationSlot(
+      expiredJob,
+      app,
+      "offer_expired",
+      app.expiredAt,
+    );
     changed = true;
 
     const worker = applicationWorker(app);
@@ -8938,7 +9299,11 @@ function expireJobOffers() {
         `<strong>${escapeHtml(worker.name)}</strong> missed 2 job offers and was set to unavailable.`,
       );
     }
-    const next = offerNextBestWorker(app.jobId);
+    const next = offerNextBestWorker(
+      app.jobId,
+      app.requirementId || "",
+      app.placementSlotId || "",
+    );
     if (next.ok) {
       logActivity(
         "assign",
@@ -8994,6 +9359,11 @@ function workerAcceptOffer(applicationId) {
     timestamp: app.workerRespondedAt,
     source: "job_offer",
     severity: "success",
+    metadata: {
+      applicationId: app.id,
+      requirementId: app.requirementId || "",
+      placementSlotId: app.placementSlotId || "",
+    },
     dedupeKey: `worker_offer_accepted:${app.id}`,
   });
   saveAndRender();
@@ -9016,7 +9386,19 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
     if (transfer) transfer.status = "declined_by_worker";
   }
   if (worker) worker.consecutiveMissedOffers = 0;
-  const next = job ? offerNextBestWorker(job.id) : { ok: false };
+  placementSlotsEngine()?.reopenApplicationSlot(
+    job,
+    app,
+    "declined_by_worker",
+    app.workerRespondedAt,
+  );
+  const next = job
+    ? offerNextBestWorker(
+        job.id,
+        app.requirementId || "",
+        app.placementSlotId || "",
+      )
+    : { ok: false };
   if (job) {
     addProjectActivity(job, {
       type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
@@ -9026,6 +9408,11 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
       timestamp: app.workerRespondedAt,
       source: "job_offer",
       severity: "info",
+      metadata: {
+        applicationId: app.id,
+        requirementId: app.requirementId || "",
+        placementSlotId: app.placementSlotId || "",
+      },
       dedupeKey: `worker_offer_declined:${app.id}`,
     });
   }
@@ -9047,7 +9434,7 @@ function companyAcceptWorker(applicationId) {
   const worker = applicationWorker(app);
   if (!app || !job || !worker) return;
   if (app.status !== "under_company_review") return;
-  const res = confirmBooking(job, worker.id);
+  const res = confirmBooking(job, worker.id, { application: app });
   if (!res.ok) {
     showToast(res.reason);
     return;
@@ -9056,6 +9443,18 @@ function companyAcceptWorker(applicationId) {
   app.companyDecision = "accepted";
   app.companyReviewedAt = new Date().toISOString();
   app.confirmedAt = app.companyReviewedAt;
+  (state.replacementTasks || []).forEach((task) => {
+    if (
+      task.status === "open" &&
+      task.jobId === job.id &&
+      task.placementSlotId &&
+      task.placementSlotId === app.placementSlotId
+    ) {
+      task.status = "completed";
+      task.replacementWorkerId = worker.id;
+      task.completedAt = app.confirmedAt;
+    }
+  });
   if (app.projectTransferId) {
     const transfer = (state.projectTransfers || []).find(
       (item) => item.id === app.projectTransferId,
@@ -9063,7 +9462,11 @@ function companyAcceptWorker(applicationId) {
     if (transfer) transfer.status = "confirmed";
   }
   (state.applications || []).forEach((other) => {
-    if (other.jobId !== job.id || other.id === app.id) return;
+    if (
+      other.jobId !== job.id ||
+      other.id === app.id ||
+      other.placementSlotId !== app.placementSlotId
+    ) return;
     if (
       ["interested", "offered", "under_company_review", "accepted_by_worker"].includes(
         other.status,
@@ -9085,18 +9488,38 @@ function companyAcceptWorker(applicationId) {
     timestamp: app.confirmedAt,
     source: "company_offer_review",
     severity: "success",
+    metadata: {
+      applicationId: app.id,
+      requirementId: app.requirementId || "",
+      placementSlotId: app.placementSlotId || "",
+      bookingId: res.agreement?.id || "",
+    },
     dedupeKey: `worker_assignment:${app.id}`,
   });
-  const postConfirmSummary = companyProjectSummary(job, getSessionUser() || {});
-  if (postConfirmSummary.openRoles === 0) {
+  const requirementCounts = placementSlotsEngine()?.counts(
+    job,
+    app.requirementId || "",
+  );
+  if (
+    requirementCounts &&
+    requirementCounts.required > 0 &&
+    requirementCounts.filled >= requirementCounts.required
+  ) {
+    const requirement = labourRequirementsForJob(job).find(
+      (item) => item.requirementId === app.requirementId,
+    );
     addProjectActivity(job, {
       type: PROJECT_ACTIVITY_TYPES.LABOUR_REQUIREMENT_FILLED,
-      title: "Labour requirement filled.",
-      description: "All current labour requirements are filled.",
+      title: `${requirement?.specialism || requirement?.trade || "Labour"} requirement filled.`,
+      description: `All ${requirementCounts.required} placement${requirementCounts.required === 1 ? " is" : "s are"} filled.`,
       timestamp: app.confirmedAt,
       source: "company_offer_review",
       severity: "success",
-      dedupeKey: `labour_requirement_filled:${job.id}`,
+      metadata: {
+        requirementId: app.requirementId || "",
+        placementSlotId: app.placementSlotId || "",
+      },
+      dedupeKey: `labour_requirement_filled:${job.id}:${app.requirementId}`,
     });
   }
   saveAndRender();
@@ -9118,7 +9541,17 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
     );
     if (transfer) transfer.status = "declined_by_company";
   }
-  const next = offerNextBestWorker(job.id);
+  placementSlotsEngine()?.reopenApplicationSlot(
+    job,
+    app,
+    "declined_by_company",
+    app.companyReviewedAt,
+  );
+  const next = offerNextBestWorker(
+    job.id,
+    app.requirementId || "",
+    app.placementSlotId || "",
+  );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
     title: `${app.workerName || "Worker"} declined by company.`,
@@ -9127,6 +9560,11 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
     timestamp: app.companyReviewedAt,
     source: "company_offer_review",
     severity: "info",
+    metadata: {
+      applicationId: app.id,
+      requirementId: app.requirementId || "",
+      placementSlotId: app.placementSlotId || "",
+    },
     dedupeKey: `company_declined_worker:${app.id}`,
   });
   logActivity(
@@ -9137,16 +9575,16 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
   showToast(next.ok ? "Worker declined — next best worker offered" : "Worker declined — no other match available");
 }
 
-function offerNextBestWorker(jobId) {
+function offerNextBestWorker(jobId, requirementId = "", placementSlotId = "") {
   const job = findJob(jobId);
-  if (!job || job.assignedWorkerId || job.completed)
-    return { ok: false, reason: "Job unavailable" };
-  const activeOffer = (state.applications || []).find(
-    (a) =>
-      a.jobId === jobId &&
-      ["offered", "under_company_review", "confirmed"].includes(a.status),
+  normalizeProjectPlacements(job);
+  const requirement = labourRequirementsForJob(job).find(
+    (item) =>
+      (!requirementId || item.requirementId === requirementId) &&
+      jobHasOpenPlacement(job, item.requirementId),
   );
-  if (activeOffer) return { ok: false, reason: "Offer already active" };
+  if (!job || !requirement || job.completed)
+    return { ok: false, reason: "Job unavailable" };
   const usedWorkerIds = new Set(
     (state.applications || [])
       .filter(
@@ -9164,26 +9602,35 @@ function offerNextBestWorker(jobId) {
       )
       .map((a) => a.workerId),
   );
-  const rankedMatches = getMatches(job);
+  const rankedMatches = getMatches(placementJobForRequirement(job, requirement));
   const next = rankedMatches.find((w) => !usedWorkerIds.has(w.id));
   if (!next) return { ok: false, reason: "No matched worker available" };
-  return createJobOffer(job.id, next.id, "next_best", rankedMatches.indexOf(next) + 1);
+  return createJobOffer(
+    job.id,
+    next.id,
+    "next_best",
+    rankedMatches.indexOf(next) + 1,
+    { requirementId: requirement.requirementId, placementSlotId },
+  );
 }
 
-function autoOfferBestMatch(jobId, source = "auto_match") {
+function autoOfferBestMatch(jobId, source = "auto_match", requirementId = "") {
   const job = findJob(jobId);
-  if (!job || job.assignedWorkerId || job.completed)
-    return { ok: false, reason: "Job unavailable" };
-  const activeOffer = (state.applications || []).find(
-    (a) =>
-      a.jobId === jobId &&
-      ["offered", "under_company_review", "confirmed"].includes(a.status),
+  normalizeProjectPlacements(job);
+  const requirement = labourRequirementsForJob(job).find(
+    (item) =>
+      (!requirementId || item.requirementId === requirementId) &&
+      jobHasOpenPlacement(job, item.requirementId),
   );
-  if (activeOffer) return { ok: false, reason: "Offer already active" };
-  const matches = getMatches(job);
+  if (!job || !requirement || job.completed)
+    return { ok: false, reason: "Job unavailable" };
+  const matchingJob = placementJobForRequirement(job, requirement);
+  const matches = getMatches(matchingJob);
   const [best] = matches;
   if (!best) return { ok: false, reason: "No matched worker available" };
-  const res = createJobOffer(job.id, best.id, source, 1);
+  const res = createJobOffer(job.id, best.id, source, 1, {
+    requirementId: requirement.requirementId,
+  });
   return { ...res, worker: best };
 }
 
@@ -9651,7 +10098,8 @@ function clearRepeatProjectTemplate() {
 
 function cloneRepeatLabourRequirements(job) {
   return uniqueLabourRequirements(labourRequirementsForJob(job)).map((req) => {
-    const copied = { ...req, id: createId() };
+    const requirementId = createId();
+    const copied = { ...req, id: requirementId, requirementId };
     delete copied.labourSchedule;
     delete copied.overtimeAvailable;
     delete copied.overtimeRates;
@@ -12098,8 +12546,10 @@ function readTradeReqInputs() {
       : null;
   const trade = document.getElementById("jobTrade")?.value || "";
   const specialism = document.getElementById("jobSpecialism")?.value || "";
+  const requirementId = createId();
   return {
-    id: createId(),
+    id: requirementId,
+    requirementId,
     trade,
     tradeKey: window.OnSiteTaxonomy?.tradeKeyFor(trade) || "",
     specialism,
@@ -12161,7 +12611,8 @@ function sameTradeRequirement(a, b) {
 function dedupeLabourRequirements(requirements) {
   const seen = new Map();
   (requirements || []).forEach((req) => {
-    const key = labourRequirementKey(req);
+    const identity = String(req?.requirementId || req?.id || "").trim();
+    const key = identity ? `id:${identity}` : `content:${labourRequirementKey(req)}`;
     if (!seen.has(key)) seen.set(key, req);
   });
   return Array.from(seen.values());
@@ -12391,41 +12842,55 @@ function buildLabourRequirementsFromForm(shared = {}) {
   const base = requirements.length ? requirements : [current];
   return dedupeLabourRequirements(base)
     .filter((req) => req.trade || req.specialism || req.workActivity)
-    .map((req, index) => ({
-      id: req.id || `${createId()}-${index}`,
-      trade: req.trade || "",
-      tradeKey:
-        req.tradeKey || window.OnSiteTaxonomy?.tradeKeyFor(req.trade) || "",
-      specialism: req.specialism || "",
-      roleKey:
-        req.roleKey ||
-        window.OnSiteTaxonomy?.roleKeyFor(req.trade, req.specialism) ||
-        "",
-      grade: req.grade || "",
-      requiredQualifications: req.requiredQualifications || "",
-      requiredCredentialIds: canonicalCredentialIds(req.requiredCredentialIds),
-      workActivity: req.workActivity || "",
-      quantity: Math.max(1, Number(req.quantity) || 1),
-      budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
-      budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
-      saturdayRate: req.saturdayRate ?? shared.saturdayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
-      sundayRate: req.sundayRate ?? shared.sundayRate ?? req.budgetMax ?? shared.budgetMax ?? null,
-      workerReceivesFullAdvertisedRate:
-        req.workerReceivesFullAdvertisedRate ??
-        shared.workerReceivesFullAdvertisedRate ??
-        true,
-      ...normalizedAccommodationState({
-        accommodationPaid: req.accommodationPaid ?? shared.accommodationPaid,
-        accommodationArrangement:
-          req.accommodationArrangement ?? shared.accommodationArrangement,
-        accommodationAllowancePerNight:
-          req.accommodationAllowancePerNight ??
-          shared.accommodationAllowancePerNight,
-      }),
-      workingDays: normalizeWorkingDays(shared.workingDays),
-      shiftStartTime: shared.shiftStartTime || "",
-      shiftFinishTime: shared.shiftFinishTime || "",
-    }));
+    .map((req, index) => {
+      const requirementId = req.requirementId || req.id || `${createId()}-${index}`;
+      return {
+        id: requirementId,
+        requirementId,
+        trade: req.trade || "",
+        tradeKey:
+          req.tradeKey || window.OnSiteTaxonomy?.tradeKeyFor(req.trade) || "",
+        specialism: req.specialism || "",
+        roleKey:
+          req.roleKey ||
+          window.OnSiteTaxonomy?.roleKeyFor(req.trade, req.specialism) ||
+          "",
+        grade: req.grade || "",
+        requiredQualifications: req.requiredQualifications || "",
+        requiredCredentialIds: canonicalCredentialIds(req.requiredCredentialIds),
+        workActivity: req.workActivity || "",
+        quantity: Math.max(1, Number(req.quantity) || 1),
+        budgetMin: req.budgetMin ?? req.budgetMax ?? shared.budgetMin ?? null,
+        budgetMax: req.budgetMax ?? shared.budgetMax ?? null,
+        saturdayRate:
+          req.saturdayRate ??
+          shared.saturdayRate ??
+          req.budgetMax ??
+          shared.budgetMax ??
+          null,
+        sundayRate:
+          req.sundayRate ??
+          shared.sundayRate ??
+          req.budgetMax ??
+          shared.budgetMax ??
+          null,
+        workerReceivesFullAdvertisedRate:
+          req.workerReceivesFullAdvertisedRate ??
+          shared.workerReceivesFullAdvertisedRate ??
+          true,
+        ...normalizedAccommodationState({
+          accommodationPaid: req.accommodationPaid ?? shared.accommodationPaid,
+          accommodationArrangement:
+            req.accommodationArrangement ?? shared.accommodationArrangement,
+          accommodationAllowancePerNight:
+            req.accommodationAllowancePerNight ??
+            shared.accommodationAllowancePerNight,
+        }),
+        workingDays: normalizeWorkingDays(shared.workingDays),
+        shiftStartTime: shared.shiftStartTime || "",
+        shiftFinishTime: shared.shiftFinishTime || "",
+      };
+    });
 }
 
 function applyTradeReqToInputs(req) {
@@ -12636,7 +13101,9 @@ function saveTradeRequirement() {
     : -1;
   const wasEditing = editIndex >= 0;
   if (wasEditing) {
-    req.id = pendingTradeRequirements[editIndex].id;
+    req.id = pendingTradeRequirements[editIndex].requirementId ||
+      pendingTradeRequirements[editIndex].id;
+    req.requirementId = req.id;
     pendingTradeRequirements[editIndex] = req;
   } else {
     pendingTradeRequirements.push(req);
@@ -13145,7 +13612,7 @@ function renderWorkerHome(user) {
   const pct = calcWorkerCompletion(user);
 
   // Active booking
-  const booking = state.jobs.find((j) => j.assignedWorkerId === user.id);
+  const booking = state.jobs.find((job) => jobHasAssignedWorker(job, user.id));
 
   // Recommended jobs (trade-matched, up to 3)
   const trade = canonicalTrade(user.trade);
@@ -13173,9 +13640,9 @@ function renderWorkerHome(user) {
       ? booking.agreedDayRate
       : parseDayRate(booking.payRate)
     : 0;
-  const bookingAgr = booking ? agreementForJob(booking) : null;
+  const bookingAgr = booking ? agreementForJob(booking, user.id) : null;
   const agrState = bookingAgr ? agreementWorkerState(bookingAgr) : "none";
-  const bookingLive = booking ? bookingAgreementActive(booking) : false;
+  const bookingLive = booking ? bookingAgreementActive(booking, user.id) : false;
   const currentWorkerNotice = booking
     ? latestWorkerNoticeForJob(booking.id, user.id)
     : null;
@@ -13778,7 +14245,7 @@ function workerNotificationItems(user, workerProfile, booking) {
     .filter((n) => !n.readAt)
     .forEach((n) => items.push({ title: "Notification", body: n.message || n.type }));
   if (booking) {
-    const agr = agreementForJob(booking);
+    const agr = agreementForJob(booking, user.id);
     if (agr && agreementWorkerState(agr) === "pending_worker") {
       items.push({
         title: "Agreement reminder",
@@ -13945,7 +14412,7 @@ function workerOpenJobs(user) {
   return [...state.jobs]
     .filter(
       (job) =>
-        !job.assignedWorkerId &&
+        jobHasOpenPlacement(job) &&
         !job.completed &&
         (!trade || canonicalTrade(job.trade) === trade),
     )
@@ -14019,7 +14486,9 @@ function renderWorkerCalendarPage(user) {
     const iso = new Date(todayMs + i * 86400000).toISOString().slice(0, 10);
     return { iso, unavailable: unavailableDates.has(iso) };
   });
-  const commitments = state.jobs.filter((job) => job.assignedWorkerId === user.id && !job.completed);
+  const commitments = state.jobs.filter(
+    (job) => jobHasAssignedWorker(job, user.id) && !job.completed,
+  );
   el.innerHTML = `
     <div class="worker-page">
       <section class="worker-page-section">
@@ -14851,32 +15320,26 @@ function companyAccountTabsHTML(activeView) {
 
 function companyAssignedWorkers(job) {
   const workers = [];
-  const assignedIds = Array.isArray(job?.assignedWorkerIds)
-    ? job.assignedWorkerIds
-    : [];
+  normalizeProjectPlacements(job);
+  const assignedIds = assignedWorkerIdsForJob(job);
   assignedIds.forEach((id) => {
     const worker = findWorker(id);
     if (worker && !workers.some((w) => w.id === worker.id)) workers.push(worker);
   });
-  if (job?.assignedWorkerId) {
-    const worker = findWorker(job.assignedWorkerId);
-    if (worker && !workers.some((w) => w.id === worker.id)) workers.push(worker);
-  }
   return workers;
 }
 
 function assignedJobForWorker(workerId) {
-  return state.jobs.find(
-    (j) =>
-      j.assignedWorkerId === workerId ||
-      (Array.isArray(j.assignedWorkerIds) && j.assignedWorkerIds.includes(workerId)),
-  );
+  return state.jobs.find((job) => jobHasAssignedWorker(job, workerId));
 }
 
 function labourRequirementsForJob(job) {
+  placementSlotsEngine()?.ensureRequirementIds(job);
   if (Array.isArray(job?.labourRequirements) && job.labourRequirements.length) {
     return dedupeLabourRequirements(job.labourRequirements).map((req, index) => ({
-      id: req.id || `${job.id || "job"}-req-${index}`,
+      id: req.requirementId || req.id || `${job.id || "job"}-req-${index}`,
+      requirementId:
+        req.requirementId || req.id || `${job.id || "job"}-req-${index}`,
       trade: req.trade || job.trade || "",
       specialism: req.specialism || job.specialism || "",
       grade: req.grade || job.grade || "",
@@ -14918,6 +15381,7 @@ function labourRequirementsForJob(job) {
   return [
     {
       id: `${job?.id || "job"}-req-0`,
+      requirementId: `${job?.id || "job"}-req-0`,
       trade: job?.trade || "",
       specialism: job?.specialism || "",
       grade: job?.grade || "",
@@ -15039,6 +15503,36 @@ function companyRequirementApplicationCount(req, summary, statuses) {
 }
 
 function companyRequirementStats(req, summary) {
+  const engine = placementSlotsEngine();
+  const requirementId = req?.requirementId || req?.id || "";
+  if (engine && summary?.job && Array.isArray(summary.job.placementSlots)) {
+    const slotCounts = engine.counts(summary.job, requirementId);
+    const requirementApps = (summary.apps || []).filter(
+      (app) =>
+        app.requirementId === requirementId ||
+        app.labourRequirementId === requirementId ||
+        app.matchSnapshot?.requirementId === requirementId,
+    );
+    const pendingOffers = requirementApps.filter(
+      (app) => app.status === "offered",
+    ).length;
+    const awaitingApproval = requirementApps.filter(
+      (app) => app.status === "under_company_review",
+    ).length;
+    return {
+      required: slotCounts.required,
+      filled: slotCounts.filled,
+      offered: pendingOffers,
+      accepted: Math.min(
+        slotCounts.required,
+        slotCounts.filled + awaitingApproval,
+      ),
+      remaining: slotCounts.open,
+      pendingOffers,
+      awaitingApproval,
+      peak: labourRequirementPeakQuantity(req),
+    };
+  }
   const required = labourRequirementQuantityOnDate(req, todayDateStr());
   const filled = Math.min(required, companyRequirementFilledCount(req, summary));
   const pendingOffers = companyRequirementApplicationCount(req, summary, ["offered"]);
@@ -15866,14 +16360,18 @@ function companyProjectEmptyStateHTML(message = "Create your first labour reques
 function companyProjectSummary(job, user) {
   const today = todayDateStr();
   const startDays = projectStartDays(job);
+  normalizeProjectPlacements(job);
   const labourRequirements = labourRequirementsForJob(job);
   const assignedWorkers = companyAssignedWorkers(job);
   const assignedWorker = assignedWorkers[0] || null;
-  const required = labourRequirements.reduce(
-    (sum, req) => sum + Math.max(1, Number(req.quantity) || 1),
-    0,
-  );
-  const filled = assignedWorkers.length;
+  const slotCounts = placementSlotsEngine()?.counts(job);
+  const required = slotCounts
+    ? slotCounts.required
+    : labourRequirements.reduce(
+        (sum, req) => sum + Math.max(1, Number(req.quantity) || 1),
+        0,
+      );
+  const filled = slotCounts ? slotCounts.filled : assignedWorkers.length;
   const apps = (state.applications || []).filter((a) => a.jobId === job.id);
   const pendingOffers = apps.filter((a) => a.status === "offered");
   const reviewWorkers = apps.filter((a) => a.status === "under_company_review");
@@ -15922,7 +16420,7 @@ function companyProjectSummary(job, user) {
     labourRequirements,
     required,
     filled,
-    openRoles: Math.max(0, required - filled),
+    openRoles: slotCounts ? slotCounts.open : Math.max(0, required - filled),
     apps,
     pendingOffers,
     reviewWorkers,
@@ -17757,7 +18255,7 @@ function projectEditPhotoCards() {
 
 function companyProjectEditHTML(job, user) {
   const hasOffersOrWorkers =
-    !!job.assignedWorkerId ||
+    jobHasAssignedWorker(job) ||
     (state.applications || []).some((app) => app.jobId === job.id);
   return `
     <section class="company-project-detail-page">
@@ -18528,9 +19026,9 @@ function companyProjectWorkerRowHTML(worker, job, summary, agreements = companyP
         <summary aria-label="More actions for ${escapeHtml(worker.name)}">More</summary>
         <div>
           <button type="button" data-worker-calendar="${worker.id}">Calendar</button>
-          <button type="button" data-worker-release="${job.id}">Release / replace</button>
-          <button type="button" data-project-transfer="${job.id}">Offer transfer</button>
-          <button type="button" data-shift-change="${job.id}">Shift change</button>
+          <button type="button" data-worker-release="${job.id}" data-worker-id="${worker.id}">Release / replace</button>
+          <button type="button" data-project-transfer="${job.id}" data-worker-id="${worker.id}">Offer transfer</button>
+          <button type="button" data-shift-change="${job.id}" data-worker-id="${worker.id}">Shift change</button>
         </div>
       </details>
     </div>
@@ -22276,7 +22774,7 @@ function saveProjectEdit(jobId) {
   const oldPin = job.sitePin ? { ...job.sitePin } : null;
   const newPin = { ...projectEditPin };
   const assignmentLocked =
-    !!job.assignedWorkerId ||
+    jobHasAssignedWorker(job) ||
     (state.applications || []).some((app) => app.jobId === job.id);
   const nextAssignmentType = assignmentLocked
     ? normalizeAssignmentType(job.assignmentType || job.jobType)
@@ -22642,7 +23140,7 @@ function renderCompanyWorkerDirectory(user) {
   const query = (workerSearch?.value || "").trim().toLowerCase();
   const companyJobs = state.jobs.filter((job) => companyOwnsJob(job, user.id));
   const assignedIds = new Set(
-    companyJobs.map((job) => job.assignedWorkerId).filter(Boolean),
+    companyJobs.flatMap((job) => assignedWorkerIdsForJob(job)),
   );
   const preferredIds = new Set(
     preferredWorkersForCompany(user.id).map((pref) => pref.workerId),
@@ -22996,7 +23494,10 @@ function bindCompanyOfferButtons(scope) {
 function bindProjectTransferButtons(scope) {
   scope.querySelectorAll("[data-project-transfer]").forEach((btn) => {
     btn.addEventListener("click", () =>
-      openProjectTransferModal(btn.dataset.projectTransfer),
+      openProjectTransferModal(
+        btn.dataset.projectTransfer,
+        btn.dataset.workerId || "",
+      ),
     );
   });
 }
@@ -23004,7 +23505,7 @@ function bindProjectTransferButtons(scope) {
 function bindShiftChangeButtons(scope) {
   scope.querySelectorAll("[data-shift-change]").forEach((btn) => {
     btn.addEventListener("click", () =>
-      openShiftChangeModal(btn.dataset.shiftChange),
+      openShiftChangeModal(btn.dataset.shiftChange, btn.dataset.workerId || ""),
     );
   });
 }
@@ -24263,7 +24764,7 @@ function renderWorkerJobBoard(user) {
   const sorted = [...state.jobs]
     .filter(
       (job) =>
-        !job.assignedWorkerId &&
+        jobHasOpenPlacement(job) &&
         !job.completed &&
         (!trade || canonicalTrade(job.trade) === trade),
     )
@@ -24808,6 +25309,7 @@ jobForm.addEventListener("submit", (e) => {
     )
     .filter(Boolean);
 
+  normalizeProjectPlacements(job, state);
   state.jobs.push(job);
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.LABOUR_REQUEST_POSTED,
@@ -24996,8 +25498,8 @@ function renderStats() {
   const available = state.workers.filter(
     (w) => w.availability === "available",
   ).length;
-  const open = state.jobs.filter((j) => !j.assignedWorkerId).length;
-  const assigned = state.jobs.filter((j) => j.assignedWorkerId).length;
+  const open = state.jobs.filter((job) => jobHasOpenPlacement(job)).length;
+  const assigned = state.jobs.filter((job) => jobHasAssignedWorker(job)).length;
   statsRow.innerHTML = `
     <div class="stat-card">
       <span class="stat-label">Total Workers</span>
@@ -25066,7 +25568,11 @@ function renderWorkers() {
       );
       state.workers = state.workers.filter((x) => x.id !== w.id);
       state.jobs.forEach((j) => {
-        if (j.assignedWorkerId === w.id) j.assignedWorkerId = "";
+        if (jobHasAssignedWorker(j, w.id)) {
+          placementSlotsEngine()?.releaseWorker(j, w.id, {
+            status: "worker_record_removed",
+          });
+        }
       });
       saveAndRender();
       showToast(`${w.name} removed`);
@@ -25741,7 +26247,7 @@ function previousDeclinePenalty(workerId, job) {
 }
 
 function getMatches(job) {
-  if (!job || job.assignedWorkerId || job.completed) return [];
+  if (!job || !jobHasOpenPlacement(job) || job.completed) return [];
   const { startMs } = jobDateWindow(job);
 
   return state.workers
@@ -25754,7 +26260,10 @@ function getMatches(job) {
       if (!pricing.viable) return null;
 
       const otherBooking = state.jobs.find(
-        (j) => j.id !== job.id && j.assignedWorkerId === w.id && !j.completed,
+        (candidate) =>
+          candidate.id !== job.id &&
+          jobHasAssignedWorker(candidate, w.id) &&
+          !candidate.completed,
       );
       let availabilityLabel = "";
       let availabilityScore = 8;
@@ -26697,11 +27206,11 @@ function openSiteMap(jobId) {
   const sess = getSessionUser();
   if (
     sess?.type === "worker" &&
-    job.assignedWorkerId === sess.id &&
-    !bookingAgreementActive(job)
+    jobHasAssignedWorker(job, sess.id) &&
+    !bookingAgreementActive(job, sess.id)
   ) {
     showToast("Accept your Job Agreement to unlock site navigation");
-    const agr = agreementForJob(job);
+    const agr = agreementForJob(job, sess.id);
     if (agr) openAgreementModal(agr.id);
     return;
   }
@@ -27962,7 +28471,7 @@ function getWorkerStats(workerId) {
       .filter(Boolean),
   );
   state.jobs
-    .filter((j) => j.assignedWorkerId === workerId && j.completed)
+    .filter((job) => jobHasAssignedWorker(job, workerId) && job.completed)
     .forEach((j) => completedProjectIds.add(j.id));
   return {
     totalShifts: countable.length,
@@ -28607,7 +29116,9 @@ function renderWorkerAttendance(user) {
 
 function workerSelfAttCard(worker, today) {
   const stats = getWorkerStats(worker.id);
-  const job = state.jobs.find((j) => j.assignedWorkerId === worker.id);
+  const job = state.jobs.find((candidate) =>
+    jobHasAssignedWorker(candidate, worker.id),
+  );
   const rec = attendanceRecords.find(
     (r) => r.workerId === worker.id && r.date === today,
   );
@@ -28641,8 +29152,8 @@ function workerSelfAttCard(worker, today) {
   const siteLine = `<div class="wsa-site">${escapeHtml(job.trade)} · <span style="color:var(--ink-2)">${escapeHtml(job.location)}</span></div>`;
 
   // Booking agreement must be active before check-in / attendance is available.
-  if (!bookingAgreementActive(job)) {
-    const agr = agreementForJob(job);
+  if (!bookingAgreementActive(job, worker.id)) {
+    const agr = agreementForJob(job, worker.id);
     return `
     <article class="attendance-card wsa-card" id="att-card-${worker.id}">
       <div class="wsa-date-row"><span class="wsa-date-label">${formatAttDate(today)}</span></div>
@@ -28799,9 +29310,9 @@ async function workerScanCheckIn(uid, workerObj) {
   }
   const dailyJob = dailyJobForDate(job, today);
 
-  if (!bookingAgreementActive(job)) {
+  if (!bookingAgreementActive(job, uid)) {
     showToast("Accept your Job Agreement before checking in");
-    const agr = agreementForJob(job);
+    const agr = agreementForJob(job, uid);
     if (agr) openAgreementModal(agr.id);
     return;
   }
@@ -28940,7 +29451,9 @@ function renderWorkerTimesheet(uid, user, histEl) {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const stats = getWorkerStats(uid);
-  const currentAssignment = state.jobs.find((job) => job.assignedWorkerId === uid && !job.completed);
+  const currentAssignment = state.jobs.find(
+    (job) => jobHasAssignedWorker(job, uid) && !job.completed,
+  );
   const lateReports = myRecs.filter((rec) => rec.lateReport);
   const confirmedDays = myRecs.filter((rec) => rec.supervisorConfirmed || ["onTime", "late", "noShow"].includes(rec.status));
 
@@ -29023,7 +29536,7 @@ function renderWorkerTimesheet(uid, user, histEl) {
       const stars = rec.rating
         ? `<span class="ts-stars">${"★".repeat(rec.rating)}${"☆".repeat(5 - rec.rating)}</span>`
         : "";
-      const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+      const job = state.jobs.find((candidate) => jobHasAssignedWorker(candidate, uid));
       const siteLabel =
         rec.clientSiteName ||
         rec.dailySiteAddress ||
@@ -29479,7 +29992,9 @@ function renderAdminAttendanceReview() {
     .map((r) => {
       const w = findWorker(r.workerId);
       if (!w) return "";
-      const job = state.jobs.find((j) => j.assignedWorkerId === r.workerId);
+      const job = state.jobs.find((candidate) =>
+        jobHasAssignedWorker(candidate, r.workerId),
+      );
       const cfg = ATT_CFG[r.status] || ATT_CFG.notRequired;
       const exc = getExceptionInfo(r.workerId);
       const scan = r.checkInTime
@@ -30163,7 +30678,7 @@ function submitReport() {
     return;
   }
 
-  const job = state.jobs.find((j) => j.assignedWorkerId === uid);
+  const job = state.jobs.find((candidate) => jobHasAssignedWorker(candidate, uid));
   if (!job) {
     showToast("You're not assigned to a site today");
     return;
