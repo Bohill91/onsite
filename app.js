@@ -220,7 +220,7 @@ function closeAppPopovers(except = null) {
 }
 
 const DISMISSIBLE_FORM_CONTROL_SELECTOR =
-  "select, input[type='date'], input[type='time'], input[type='datetime-local']";
+  "select, input[type='date'], input[type='datetime-local']";
 
 function blurActiveFormControlIfOutside(target) {
   const active = document.activeElement;
@@ -9911,7 +9911,7 @@ function initializeNewRequestShiftDefaults() {
   const shiftStart = document.getElementById("jobShiftStart");
   const shiftFinish = document.getElementById("jobShiftFinish");
   if (!shiftStart || !shiftFinish) return;
-  if (!shiftStart.value) shiftStart.value = "07:00";
+  if (!shiftStart.value) shiftStart.value = "07:30";
   if (!shiftFinish.value) shiftFinish.value = "17:00";
   jobWizardShiftDefaultsInitialized = true;
 }
@@ -11911,11 +11911,20 @@ jobForm?.addEventListener("change", (event) => {
   if (
     !(control instanceof HTMLInputElement) ||
     !JOB_SHIFT_TIME_IDS.includes(control.id) ||
-    !control.value
+    !control.value ||
+    !control.closest('#formJob .jw-step[data-wizard-step="3"]')
   ) {
     return;
   }
-  requestAnimationFrame(() => control.blur());
+  requestAnimationFrame(() => {
+    if (
+      control.isConnected &&
+      JOB_SHIFT_TIME_IDS.includes(control.id) &&
+      control.closest('#formJob .jw-step[data-wizard-step="3"]')
+    ) {
+      control.blur();
+    }
+  });
 });
 document.getElementById("jobNoFixedEndDate")?.addEventListener("change", () => {
   clearSchedulePayValidation();
