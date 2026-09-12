@@ -1,3 +1,62 @@
+}
+
+function projectRequirementReviewConsequence(draft) {
+  if (draft.requirementLevel === "optional") {
+    return "Does not block sub-contractor readiness.";
+  }
+  if (draft.timing === "on_arrival") {
+    return "Completed on arrival before the sub-contractor is cleared to start.";
+  }
+  if (draft.timing === "reference_anytime") {
+    return "Available as a reference without blocking sub-contractor readiness.";
+  }
+  return "Required before sub-contractors are considered pre-start ready.";
+}
+
+function projectRequirementReviewHTML(editor, draft) {
+  const action = projectRequirementConfiguredActionLabel(draft);
+  const version = String(draft.version || "").trim();
+  const rows = [
+    ["Type", projectRequirementTypeLabel(draft.requirementType)],
+    ["Content", draft.contentToFollow ? "Content to follow" : "Configured"],
+    ["Resources", projectRequirementContentSummary(draft)],
+    ["Requirement level", draft.requirementLevel === "optional" ? "Optional" : "Required"],
+    ["Sub-contractor action", action],
+    ["Completion timing", projectRequirementTimingLabel(draft.timing)],
+    ["Audience", projectRequirementEditorAudienceLabel(editor, draft)],
+    ["Version", version || "Not set"],
+  ];
+  if (draft.requirementType === "external_training") {
+    const training = normalizeProjectRequirementExternalTraining(draft);
+    rows.splice(
+      1,
+      0,
+      ["Training provider", training.provider || "Not specified"],
+      [
+        "Access method",
+        projectRequirementOptionLabel(
+          PROJECT_EXTERNAL_TRAINING_ACCESS_METHODS,
+          training.accessMethod,
+        ),
+      ],
+      ...(training.accessMethod === "web_link"
+        ? [["Training URL", training.url || "Not set"]]
+        : []),
+    );
+  }
+  if (draft.requirementType === "background_check") {
+    const check = normalizeProjectRequirementBackgroundCheck(draft);
+    rows.splice(
+      1,
+      0,
+      [
+        "Check type",
+        projectRequirementOptionLabel(
+          PROJECT_BACKGROUND_CHECK_TYPES,
+          check.checkType,
+        ),
+      ],
+      ["DBS level", projectRequirementOptionLabel(PROJECT_DBS_LEVELS, check.level)],
       [
         "Initiated by",
         projectRequirementOptionLabel(
@@ -895,67 +954,7 @@ function bindProjectRequirementEditorControls(modal) {
           sourceResourceId: resource.id,
           fields: existingPdf?.id === resource.id
             ? normalizeProjectRequirementPdfTemplate(
-                projectRequirementEditorState.draft,
-              ).fields
-            : [],
-        };
-        renderProjectRequirementEditor({ focusHeading: false });
-      } catch (error) {
-        showToast(error.message || "The PDF could not be added");
-      }
-    });
-  modal
-    .querySelectorAll("[data-project-requirement-step]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        syncProjectRequirementEditorDraft(modal);
-        const step = Number(button.dataset.projectRequirementStep);
-        if (!Number.isInteger(step) || step >= projectRequirementEditorState.step) {
-          return;
-        }
-        projectRequirementEditorState.step = step;
-        projectRequirementEditorState.resourceEditor = null;
-        renderProjectRequirementEditor();
-      });
-    });
-  modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
-    button.addEventListener("click", () => requestProjectRequirementEditorExit()),
-  );
-  modal.querySelector(".project-requirement-sheet")?.addEventListener("click", (event) => {
-    if (
-      projectRequirementEditorState?.resourceEditor?.type !== "choose" ||
-      event.target.closest(".project-requirement-resource-add-wrap")
-    ) {
-      return;
-    }
-    syncProjectRequirementEditorDraft(modal);
-    projectRequirementEditorState.resourceEditor = null;
-    renderProjectRequirementEditor({ focusHeading: false });
-  });
-  modal
-    .querySelector("[data-project-requirement-resource-add]")
-    ?.addEventListener("click", () => {
-      syncProjectRequirementEditorDraft(modal);
-      projectRequirementEditorState.resourceEditor =
-        projectRequirementEditorState.resourceEditor?.type === "choose"
-          ? null
-          : { type: "choose", resourceId: "" };
-      renderProjectRequirementEditor({ focusHeading: false });
-    });
-  modal
-    .querySelectorAll("[data-project-requirement-resource-type]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        syncProjectRequirementEditorDraft(modal);
-        projectRequirementEditorState.resourceEditor = {
-          type: button.dataset.projectRequirementResourceType,
-          resourceId: "",
-        };
-        renderProjectRequirementEditor({ focusHeading: false });
-      });
-    });
-  modal
-    .querySelector("[data-project    .map(
+                projectRequirementEdi    .map(
       (j) =>
         `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`,
     )
