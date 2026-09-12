@@ -10,6 +10,7 @@
     "openai": "^6.39.1",
     "p-limit": "^7.3.0",
     "p-retry": "^7.1.1",
+    "pdfjs-dist": "^6.3.289",
     "zod": "^4.4.3",
     "zod-validation-error": "^5.0.0"
   }
