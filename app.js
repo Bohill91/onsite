@@ -1,2078 +1,961 @@
-;
-  return guidedEmptyStateHTML({
-    kicker: "No Matches",
-    title: "No projects match these filters.",
-    body: filtered
-      ? "Clear the selected filters to see more projects. Your search term will be kept."
-      : "Try a different project name, job number, location, trade or specialism.",
-    actionLabel: filtered ? "Clear filters" : "Clear search",
-    actionAttr: filtered
-      ? "data-company-project-clear-filters"
-      : "data-company-project-clear-search",
-  });
-}
-
-function companyAttendanceProjects(user) {
-  if (!user?.id) return state.jobs.filter((j) => !j.completed);
-  return state.jobs.filter((j) => companyOwnsJob(j, user.id) && !j.completed);
-}
-
-function attendanceProjectSearchText(job) {
-  const summary = companyProjectSummary(job, getSessionUser() || {});
-  return [
-    companyProjectTitle(job),
-    job.jobNumber,
-    job.location,
-    job.siteAddress,
-    job.trade,
-    job.specialism,
-    ...(summary.labourRequirements || []).flatMap((req) => [
-      req.trade,
-      req.specialism,
-      req.grade,
-      req.workActivity,
-    ]),
-  ]
+      [
+        "Initiated by",
+        projectRequirementOptionLabel(
+          PROJECT_BACKGROUND_CHECK_INITIATION,
+          check.initiation,
+        ),
+      ],
+      ["Provider", check.provider || "Not specified"],
+      ...(check.applicationUrl
+        ? [["Application URL", check.applicationUrl]]
+        : []),
+    );
+  }
+  const evidence = normalizeProjectRequirementCompletionEvidence(draft)
+    .map(
+      (value) =>
+        PROJECT_REQUIREMENT_COMPLETION_EVIDENCE.find(
+          (option) => option.value === value,
+        )?.label,
+    )
     .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function filterAttendanceProjects(projects) {
-  const query = activeAttendanceProjectSearch.trim().toLowerCase();
-  return projects
-    .filter((job) => {
-      if (query && !attendanceProjectSearchText(job).includes(query)) return false;
-      if (
-        activeAttendanceOperationalFilter === "workers_expected_today" &&
-        companyExpectedWorkersToday({
-          job,
-          expectedToday: attendanceProjectWorkers(job).length,
-        }) === 0
-      ) {
-        return false;
-      }
-      if (!activeAttendanceProjectFilters.length) return true;
-      const state = attendanceProjectState(job);
-      return activeAttendanceProjectFilters.some((filter) => !!state[filter]);
-    })
-    .sort(sortAttendanceProjects);
-}
-
-function attendanceProjectWorkers(job) {
-  return job ? companyAssignedWorkers(job) : [];
-}
-
-function attendanceRecordMatchesProject(record, job, workerIds) {
-  if (!job || !record) return false;
-  return record.jobId ? record.jobId === job.id : workerIds.has(record.workerId);
-}
-
-function attendanceProjectRecords(job, { includeToday = true } = {}) {
-  if (!job) return [];
-  const workerIds = new Set(attendanceProjectWorkers(job).map((w) => w.id));
-  return attendanceRecords.filter((record) => {
-    if (!includeToday && record.date === todayDateStr()) return false;
-    return attendanceRecordMatchesProject(record, job, workerIds);
-  });
-}
-
-function attendanceTodayRecordForWorker(workerId, job, today = todayDateStr()) {
-  return attendanceRecords.find(
-    (r) =>
-      r.workerId === workerId &&
-      r.date === today &&
-      (!job || attendanceRecordMatchesProject(r, job, new Set([workerId]))),
-  );
-}
-
-function attendanceStatusForWorker(worker, job, today = todayDateStr()) {
-  const saved = todayAttendanceMap[worker.id] || {};
-  const rec = attendanceTodayRecordForWorker(worker.id, job, today);
-  const status = saved.status || rec?.status || "";
-  const lateReport = rec?.lateReport || null;
-  const signedIn = ["checkedIn", "onTime", "late", "sentHome"].includes(status) || !!rec?.checkInTime;
-  const reportingLate = !!lateReport || status === "reportedIssue";
-  return {
-    rec,
-    status,
-    lateReport,
-    signedIn,
-    reportingLate,
-    unconfirmed: !signedIn && !reportingLate && !saved.status && !rec?.status,
-  };
-}
-
-function projectAttendanceSummary(workers, job, today = todayDateStr()) {
-  const rows = workers.map((worker) => attendanceStatusForWorker(worker, job, today));
-  const signedIn = rows.filter((row) => row.signedIn).length;
-  const reportingLate = rows.filter((row) => row.reportingLate && !row.signedIn).length;
-  return {
-    expected: workers.length,
-    signedIn,
-    reportingLate,
-    unconfirmed: rows.filter((row) => row.unconfirmed).length,
-  };
-}
-
-function attendanceProjectBreakdownRowsHTML(workers, job, today = todayDateStr()) {
-  if (!workers.length) {
-    return `<div class="company-inline-empty">
-      <strong>No workers assigned yet.</strong>
-      <span>Today's attendance breakdown will appear once workers are confirmed for this project.</span>
-    </div>`;
+    .join(" + ");
+  if (evidence) {
+    const evidenceLabel = ["external_training", "background_check"].includes(
+      draft.requirementType,
+    )
+      ? "Completion evidence"
+      : "External evidence";
+    rows.splice(4, 0, [evidenceLabel, evidence]);
   }
-  return groupedAttendanceWorkers(workers)
-    .map((group) => {
-      const first = group.workers[0] || {};
-      const summary = projectAttendanceSummary(group.workers, job, today);
-      return `<div class="company-project-req-line">
-        <div>
-          <strong>${escapeHtml(first.trade || "Trade")}</strong>
-          <span>${escapeHtml(first.grade || first.specialism || "Experience level not set")}</span>
-        </div>
-        <dl>
-          <div><dt>Total attending today</dt><dd>${summary.signedIn}/${summary.expected}</dd></div>
-        </dl>
-      </div>`;
-    })
-    .join("");
-}
-
-function attendanceProjectState(job) {
-  const workers = attendanceProjectWorkers(job);
-  const summary = projectAttendanceSummary(workers, job);
-  const today = todayDateStr();
-  const workerIds = new Set(workers.map((worker) => worker.id));
-  const records = attendanceRecords.filter(
-    (record) =>
-      record.date === today &&
-      attendanceRecordMatchesProject(record, job, workerIds),
-  );
-  const noShows = records.some((record) => record.status === "noShow");
-  const requiresReview = records.some(
-    (record) => record.manualReviewRequired || record.approvalStatus === "draft",
-  );
-  return {
-    attendance_required: summary.unconfirmed > 0 || summary.reportingLate > 0 || requiresReview,
-    fully_confirmed: summary.expected > 0 && summary.unconfirmed === 0 && summary.reportingLate === 0 && !requiresReview,
-    reporting_late: summary.reportingLate > 0,
-    no_shows: noShows,
-    requires_review: requiresReview,
-    summary,
-  };
-}
-
-function sortAttendanceProjects(a, b) {
-  if (activeAttendanceProjectSort === "project_name") {
-    return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
-  }
-  if (activeAttendanceProjectSort === "site_start_time") {
-    return jobExpectedStartTime(a).localeCompare(jobExpectedStartTime(b));
-  }
-  if (activeAttendanceProjectSort === "location") {
-    return String(a.location || a.siteAddress || "").localeCompare(String(b.location || b.siteAddress || ""));
-  }
-  const aState = attendanceProjectState(a);
-  const bState = attendanceProjectState(b);
-  if (aState.attendance_required !== bState.attendance_required) {
-    return aState.attendance_required ? -1 : 1;
-  }
-  if (aState.summary.unconfirmed !== bState.summary.unconfirmed) {
-    return bState.summary.unconfirmed - aState.summary.unconfirmed;
-  }
-  return companyProjectTitle(a).localeCompare(companyProjectTitle(b));
-}
-
-function attendanceGroupKey(worker) {
-  return [worker.trade || "Trade", worker.grade || worker.specialism || "Experience level not set"].join("||");
-}
-
-function attendanceGroupLabel(worker) {
-  const trade = worker.trade || "Trade";
-  const grade = worker.grade || worker.specialism || "Experience level not set";
-  return grade.toLowerCase().includes(trade.toLowerCase()) ? grade : `${trade} ${grade}`;
-}
-
-function groupedAttendanceWorkers(workers) {
-  const groups = new Map();
-  workers.forEach((worker) => {
-    const key = attendanceGroupKey(worker);
-    if (!groups.has(key)) {
-      groups.set(key, {
-        label: attendanceGroupLabel(worker),
-        workers: [],
-      });
-    }
-    groups.get(key).workers.push(worker);
-  });
-  return Array.from(groups.values()).map((group) => ({
-    ...group,
-    workers: group.workers.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
-  }));
-}
-
-function attendanceLiveSummaryHTML(workers, job, today = todayDateStr()) {
-  const summary = projectAttendanceSummary(workers, job, today);
-  return `<section class="attendance-live-overview" id="attendanceLiveOverview">
-    <div class="attendance-live-head">
-      <p class="company-home-kicker">Today&apos;s Attendance</p>
-      <h3>Live attendance overview</h3>
+  return `<section class="project-requirement-review" data-project-requirement-review aria-labelledby="projectRequirementReviewTitle">
+    <div class="project-requirement-review-head">
+      <p>Review</p>
+      <h4 id="projectRequirementReviewTitle">${escapeHtml(draft.documentName || "Untitled requirement")}</h4>
     </div>
-    <div class="attendance-live-grid">
-      <div class="attendance-live-stat"><span>Expected Today</span><strong>${summary.signedIn}/${summary.expected}</strong></div>
-      <div class="attendance-live-stat"><span>Signed In</span><strong>${summary.signedIn}</strong></div>
-      <div class="attendance-live-stat"><span>Reporting Late</span><strong>${summary.reportingLate}</strong></div>
-      <div class="attendance-live-stat"><span>Unconfirmed</span><strong>${summary.unconfirmed}</strong></div>
-    </div>
+    <dl>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>
+    <p class="project-requirement-review-consequence">${escapeHtml(projectRequirementReviewConsequence(draft))}</p>
+    ${draft.requireRecompletionOnUpdate ? `<p class="project-requirement-review-note">Sub-contractors must complete future issued versions again.</p>` : ""}
   </section>`;
 }
 
-function hasAttendanceConfirmationChanges(workers, job, today = todayDateStr()) {
-  if (!workers.length) return false;
-  return workers.some((worker) => {
-    const draft = todayAttendanceMap[worker.id];
-    if (draft?.status) return true;
-    const record = attendanceTodayRecordForWorker(worker.id, job, today);
-    return record?.status === "checkedIn" || record?.status === "reportedIssue" || record?.manualReviewRequired;
-  });
-}
-
-function groupedAttendanceCardsHTML(workers, job, today = todayDateStr()) {
-  if (!workers.length) return `<div class="company-inline-empty attendance-inline-empty">
-    <strong>No workers assigned yet.</strong>
-    <span>Confirmed workers will appear here grouped by trade and role / level. Once assigned, they can scan the project QR or be updated manually.</span>
-  </div>`;
-  return groupedAttendanceWorkers(workers)
-    .map((group) => {
-      const summary = projectAttendanceSummary(group.workers, job, today);
-      return `<section class="attendance-worker-group">
-        <div class="attendance-worker-group-head">
-          <h3>${escapeHtml(group.label)} <span>(${summary.signedIn}/${summary.expected})</span></h3>
-        </div>
-        <div class="attendance-worker-group-list">
-          ${group.workers.map((worker) => attendanceCard(worker, today, job)).join("")}
-        </div>
-      </section>`;
-    })
-    .join("");
-}
-
-function attendanceProjectSearchHTML() {
-  return `<label class="company-project-search attendance-project-search" for="attendanceProjectSearch">
-    <input id="attendanceProjectSearch" type="search" value="${escapeHtml(activeAttendanceProjectSearch)}" placeholder="Search by Project Name, Job Number, Location or Trade" autocomplete="off" aria-label="Search projects" />
-  </label>`;
-}
-
-function attendanceProjectResultCountLabel(projects) {
-  if (activeAttendanceOperationalFilter === "workers_expected_today") {
-    const workers = projects.reduce(
-      (sum, job) =>
-        sum +
-        companyExpectedWorkersToday({
-          job,
-          expectedToday: attendanceProjectWorkers(job).length,
-        }),
-      0,
-    );
-    return `${workers} worker${workers === 1 ? "" : "s"} expected today`;
-  }
-  return `${projects.length} result${projects.length === 1 ? "" : "s"}`;
-}
-
-function attendanceFilteredEmptyStateHTML() {
-  if (activeAttendanceOperationalFilter !== "workers_expected_today") return "";
-  return guidedEmptyStateHTML({
-    kicker: "Filtered View",
-    title: "No workers expected today",
-    body: "No assigned workers are scheduled to attend today. Clear the filter to view every attendance project.",
-    actionLabel: "Clear filter",
-    actionAttr: "data-attendance-operational-clear",
-  });
-}
-
-function attendanceProjectToolbarControlsHTML() {
-  const filters = [
-    ["attendance_required", "Attendance required"],
-    ["fully_confirmed", "Fully confirmed"],
-    ["reporting_late", "Reporting late"],
-    ["no_shows", "No shows"],
-    ["requires_review", "Requires review"],
-  ];
-  return `
-    <details class="company-project-filter attendance-project-filter">
-      <summary>Filter</summary>
-      <div class="company-project-filter-menu">
-        <div class="company-project-filter-group">
-          <span>Attendance status</span>
-          ${filters
-            .map(
-              ([value, label]) => `<label class="checkbox-row compact"><input type="checkbox" value="${value}" data-attendance-filter${activeAttendanceProjectFilters.includes(value) ? " checked" : ""} /> <span>${label}</span></label>`,
-            )
-            .join("")}
-        </div>
-      </div>
-    </details>
-    <details class="company-project-filter attendance-project-sort">
-      <summary>Sort By</summary>
-      <div class="company-project-filter-menu">
-        <label class="field-label">
-          Sort by
-          <select id="attendanceProjectSort">
-            <option value="attendance_required"${activeAttendanceProjectSort === "attendance_required" ? " selected" : ""}>Attendance required</option>
-            <option value="project_name"${activeAttendanceProjectSort === "project_name" ? " selected" : ""}>Project name</option>
-            <option value="site_start_time"${activeAttendanceProjectSort === "site_start_time" ? " selected" : ""}>Site start time</option>
-            <option value="location"${activeAttendanceProjectSort === "location" ? " selected" : ""}>Location</option>
-          </select>
+function projectRequirementStepThreeHTML(editor, draft) {
+  return `<section class="project-requirement-step" aria-labelledby="projectRequirementStepTitle">
+    <div class="project-requirement-step-intro"><p>Assignment</p><h3 id="projectRequirementStepTitle" tabindex="-1">Who does this apply to?</h3></div>
+    ${projectRequirementAudienceSelectionHTML(editor, draft.audience)}
+    ${projectRequirementLevelChoicesHTML(draft)}
+    <div class="project-requirement-completion-grid">
+      ${projectRequirementTimingChoicesHTML(draft)}
+    </div>
+    ${editor.mode === "draft" ? "" : `<details class="project-requirement-advanced">
+      <summary>Advanced settings</summary>
+      <div class="project-requirement-advanced-body">
+        <label class="field-label">Version / revision
+          <input data-project-requirement-version type="text" required value="${escapeHtml(draft.version || "1")}" />
+        </label>
+        <label class="checkbox-row project-requirement-recompletion">
+          <input data-project-requirement-recompletion type="checkbox"${draft.requireRecompletionOnUpdate ? " checked" : ""} />
+          <span>Require re-completion when a new version is issued</span>
         </label>
       </div>
-    </details>`;
-}
-
-function attendanceProjectCardHTML(job, user) {
-  const selected = activeAttendanceProjectId === job.id;
-  const workers = attendanceProjectWorkers(job);
-  const todaySummary = projectAttendanceSummary(workers, job);
-  const endDate = job.noFixedEndDate
-    ? "No fixed end date"
-    : job.end || job.estimatedEndDate
-      ? formatDateOnly(job.end || job.estimatedEndDate)
-      : "TBC";
-  return `<article class="company-project-card jw-card attendance-project-card${selected ? " active" : ""}" tabindex="0" role="button" data-attendance-project="${job.id}">
-    <div class="company-project-top">
-      <div>
-        <div class="company-project-kicker">PROJECT</div>
-        <div class="company-project-title">${escapeHtml(companyProjectTitle(job))}</div>
-        <div class="company-project-meta">${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</div>
-      </div>
-    </div>
-    <div class="company-project-facts">
-      <span><strong>Assignment type</strong> ${escapeHtml(assignmentTypeLabel(job))}</span>
-      <span><strong>Start date</strong> ${job.start ? formatDateOnly(job.start) : "TBC"}</span>
-      <span><strong>End date</strong> ${escapeHtml(endDate)}</span>
-    </div>
-    <div class="company-project-attendance attendance-project-card-attendance">
-      <span class="company-project-requirements-label">TODAY&apos;S ATTENDANCE</span>
-      <div class="attendance-project-total">
-        <span>Total attending today</span>
-        <strong>${todaySummary.signedIn}/${todaySummary.expected}</strong>
-      </div>
-      <div class="company-project-req-list attendance-project-breakdown">
-        ${attendanceProjectBreakdownRowsHTML(workers, job)}
-      </div>
-    </div>
-    <div class="company-project-action-row">
-      <div class="primary-btn company-project-open">View Attendance</div>
-    </div>
-  </article>`;
-}
-
-function attendanceSelectedProjectHeaderHTML(job) {
-  if (!job) return "";
-  return `<header class="request-labour-page-head company-page-head os-page-header os-page-header--square attendance-project-detail-head">
-    <div>
-      <p class="company-home-kicker">PROJECT ATTENDANCE</p>
-      <h3>${escapeHtml(companyProjectTitle(job))}</h3>
-      <p>${escapeHtml(job.jobNumber || "No job number")} · ${escapeHtml(job.location || job.siteAddress || "Location not set")}</p>
-    </div>
-  </header>`;
-}
-
-function companyProjectSearchHTML(id, { showInlineLabel = true } = {}) {
-  return `<label class="company-project-search" for="${id}">
-    ${showInlineLabel ? "<span>Search projects</span>" : ""}
-    <input id="${id}" type="search" value="${escapeHtml(activeCompanyProjectSearch)}" placeholder="Search by project name, job number, location or trade" autocomplete="off" aria-label="Search projects" />
-  </label>`;
-}
-
-function companyProjectFilterOptions() {
-  return {
-    assignments: Object.entries(ASSIGNMENT_TYPES),
-    trades: window.OnSiteTaxonomy?.trades.map((trade) => trade.name) || [],
-  };
-}
-
-function companyProjectAppliedFilterCount() {
-  return (
-    (activeCompanyProjectHealthFilters.length ? 1 : 0) +
-    (activeCompanyProjectAssignmentFilters.length ? 1 : 0) +
-    (activeCompanyProjectTradeFilters.length ? 1 : 0) +
-    (activeCompanyProjectLocationFilter ? 1 : 0) +
-    (activeCompanyProjectOpenLabourOnly ? 1 : 0) +
-    (activeCompanyProjectStartFrom || activeCompanyProjectStartTo ? 1 : 0)
-  );
-}
-
-function companyProjectFilterCheckboxHTML({
-  value,
-  label,
-  attribute,
-  selected = false,
-}) {
-  return `<label class="checkbox-row compact company-project-filter-check">
-    <input type="checkbox" value="${escapeHtml(value)}" ${attribute}${selected ? " checked" : ""} />
-    <span>${escapeHtml(label)}</span>
-  </label>`;
-}
-
-function companyProjectFilterHTML() {
-  const options = companyProjectFilterOptions();
-  const appliedCount = companyProjectAppliedFilterCount();
-  const healthOptions = [
-    ["urgent", "Urgent"],
-    ["atRisk", "At Risk"],
-    ["filled", "Healthy"],
-    ["matching", "Neutral"],
-  ];
-  return `<details class="company-project-filter company-project-directory-filter" data-keep-open-on-change>
-    <summary>Filter${appliedCount ? ` <span class="company-project-filter-count">${appliedCount}</span>` : ""}</summary>
-    <div class="company-project-filter-menu company-project-directory-filter-menu">
-      <div class="company-project-filter-group">
-        <span>Project health</span>
-        <div class="company-project-filter-options">
-          ${healthOptions
-          .map(
-            ([value, label]) => companyProjectFilterCheckboxHTML({
-              value,
-              label,
-              attribute: "data-company-health-filter",
-              selected: activeCompanyProjectHealthFilters.includes(value),
-            }),
-          )
-          .join("")}
-        </div>
-      </div>
-      <div class="company-project-filter-group">
-        <span>Assignment type</span>
-        <div class="company-project-filter-options">
-          ${options.assignments
-          .map(
-            ([value, label]) => companyProjectFilterCheckboxHTML({
-              value,
-              label,
-              attribute: "data-company-assignment-filter",
-              selected: activeCompanyProjectAssignmentFilters.includes(value),
-            }),
-          )
-          .join("")}
-        </div>
-      </div>
-      <div class="company-project-filter-columns">
-        <div class="company-project-filter-group">
-          <div class="company-project-filter-group-heading">
-            <span>Trade</span>
-            <small data-company-trade-selection-summary>${activeCompanyProjectTradeFilters.length ? `${activeCompanyProjectTradeFilters.length} selected` : "All trades"}</small>
-          </div>
-          <label class="company-project-filter-search">
-            <span class="sr-only">Search trades</span>
-            <input type="search" placeholder="Search trades" autocomplete="off" data-company-trade-search />
-          </label>
-          <div class="company-project-filter-options company-project-filter-options--scroll company-project-trade-options" data-company-trade-options>
-            ${options.trades
-              .map((value) => companyProjectFilterCheckboxHTML({
-                value,
-                label: value,
-                attribute: "data-company-trade-filter",
-                selected: activeCompanyProjectTradeFilters.includes(value),
-              }))
-              .join("")}
-          </div>
-          <span class="company-project-filter-empty" data-company-trade-empty hidden>No trades match that search.</span>
-        </div>
-        <div class="company-project-filter-group">
-          <span>Location</span>
-          <label class="company-project-filter-search">
-            <span class="sr-only">Location</span>
-            <input type="search" value="${escapeHtml(pendingCompanyProjectLocationFilter !== null ? pendingCompanyProjectLocationFilter : activeCompanyProjectLocationFilter)}" placeholder="Town, city or postcode" autocomplete="postal-code" data-company-location-filter aria-label="Location" />
-          </label>
-        </div>
-      </div>
-      ${companyProjectFilterCheckboxHTML({
-        value: "open",
-        label: "Has open labour requirements",
-        attribute: "data-company-open-labour-filter",
-        selected: activeCompanyProjectOpenLabourOnly,
-      })}
-      <div class="company-project-filter-group">
-        <span>Project start date</span>
-        <div class="company-project-filter-date-range">
-          <label>From<input type="date" value="${escapeHtml(activeCompanyProjectStartFrom)}" data-company-start-from /></label>
-          <label>To<input type="date" value="${escapeHtml(activeCompanyProjectStartTo)}" data-company-start-to /></label>
-        </div>
-      </div>
-      <div class="company-project-filter-actions">
-        <button class="secondary-btn" type="button" data-company-filter-clear>Clear all</button>
-        <button class="primary-btn" type="button" data-company-filter-apply>Apply filters</button>
-      </div>
-    </div>
-  </details>`;
-}
-
-function companyProjectSortHTML() {
-  const options = [
-    ["health_priority", "Health priority"],
-    ["start_asc", "Start date — soonest"],
-    ["start_desc", "Start date — latest"],
-    ["name_asc", "Project name — A–Z"],
-    ["open_desc", "Open positions — highest"],
-    ["updated_desc", "Recently updated"],
-  ];
-  const selectedLabel = options.find(([value]) => value === activeCompanyProjectSort)?.[1] || "Health priority";
-  return `<details class="company-project-filter company-project-sort">
-    <summary aria-label="Sort projects, currently ${escapeHtml(selectedLabel)}">Sort: <span class="company-project-sort-current">${escapeHtml(selectedLabel)}</span></summary>
-    <div class="company-project-filter-menu">
-      <div class="company-project-filter-group">
-        <span>Sort by</span>
-        ${options
-          .map(
-            ([value, label]) => `<button class="company-project-sort-option${activeCompanyProjectSort === value ? " active" : ""}" type="button" data-company-sort-option="${value}" aria-pressed="${activeCompanyProjectSort === value ? "true" : "false"}">${escapeHtml(label)}</button>`,
-          )
-          .join("")}
-      </div>
-    </div>
-  </details>`;
-}
-
-function companyProjectEmptyStateHTML(message = "Create your first labour request and it will appear here as a Live Project.") {
-  return guidedEmptyStateHTML({
-    kicker: "No Projects",
-    title: "No projects yet",
-    body: message,
-    actionLabel: "Request labour",
-    actionAttr: "data-company-request-labour",
-  });
-}
-
-function companyProjectSummary(job, user) {
-  const today = todayDateStr();
-  const startDays = projectStartDays(job);
-  const labourRequirements = labourRequirementsForJob(job);
-  const assignedWorkers = companyAssignedWorkers(job);
-  const assignedWorker = assignedWorkers[0] || null;
-  const required = labourRequirements.reduce(
-    (sum, req) => sum + Math.max(1, Number(req.quantity) || 1),
-    0,
-  );
-  const filled = assignedWorkers.length;
-  const apps = (state.applications || []).filter((a) => a.jobId === job.id);
-  const pendingOffers = apps.filter((a) => a.status === "offered");
-  const reviewWorkers = apps.filter((a) => a.status === "under_company_review");
-  const projectAttendanceRecords = attendanceRecords.filter(
-    (r) => r.jobId === job.id && (!user?.id || r.companyId === user.id || !r.companyId),
-  );
-  const todayRecords = attendanceRecords.filter(
-    (r) => r.jobId === job.id && r.companyId === user.id && r.date === today,
-  );
-  const attendanceIssues = attendanceRecords.filter(
-    (r) =>
-      r.jobId === job.id &&
-      r.companyId === user.id &&
-      r.date === today &&
-      ["late", "noShow", "reportedIssue", "unconfirmed"].includes(r.status),
-  );
-  const plannedAbsences = (state.notifications || []).filter(
-    (n) =>
-      n.type === "worker_planned_absence" &&
-      n.jobId === job.id &&
-      (n.companyId === user.id || !n.companyId),
-  );
-  const replacements = (state.replacementTasks || []).filter(
-    (task) =>
-      task.status === "open" &&
-      task.jobId === job.id &&
-      (task.companyId === user.id || !task.companyId),
-  );
-  const preStart = preStartRequirementSummary(job, assignedWorker?.id || "");
-  const outstandingPreStart = assignedWorkers.reduce(
-    (sum, worker) =>
-      sum + preStartRequirementSummary(job, worker.id).outstanding.length,
-    0,
-  );
-  const status = job.completed
-    ? "Completed"
-    : job.bookingStatus === "confirmed" || assignedWorker
-      ? "Active"
-      : pendingOffers.length || reviewWorkers.length
-        ? "Offers in progress"
-        : "Open";
-  return {
-    job,
-    assignedWorker,
-    assignedWorkers,
-    labourRequirements,
-    required,
-    filled,
-    openRoles: Math.max(0, required - filled),
-    apps,
-    pendingOffers,
-    reviewWorkers,
-    projectAttendanceRecords,
-    todayRecords,
-    expectedToday: assignedWorkers.length,
-    signedInToday: todayRecords.filter((r) =>
-      ["checkedIn", "onTime", "late"].includes(r.status),
-    ).length,
-    confirmedToday: todayRecords.filter((r) =>
-      ["onTime", "late", "noShow"].includes(r.status),
-    ).length,
-    lateReports: todayRecords.filter((r) => r.lateReport).length,
-    noShows: todayRecords.filter((r) => r.status === "noShow").length,
-    attendanceIssues,
-    plannedAbsences,
-    replacements,
-    preStart,
-    outstandingPreStart,
-    status,
-    startDays,
-  };
-}
-
-function companyDashboardSummary(user) {
-  const companyJobs = state.jobs.filter((j) => companyOwnsJob(j, user.id));
-  const activeJobs = companyJobs.filter((j) => !j.completed);
-  const summaries = activeJobs.map((job) => companyProjectSummary(job, user));
-  const openRequirements = companyOpenLabourRequirementCount(summaries);
-  const upcomingStarts = companyProjectSummariesStartingNextDays({ summaries }).length;
-  return {
-    companyJobs,
-    activeJobs,
-    summaries,
-    activeProjects: activeJobs.length,
-    activeProjectsToday: summaries.filter((s) => s.startDays !== null && s.startDays <= 0).length,
-    workersExpected: summaries.reduce((sum, s) => sum + s.expectedToday, 0),
-    workersSignedIn: summaries.reduce((sum, s) => sum + s.signedInToday, 0),
-    workersReportingLate: summaries.reduce((sum, s) => sum + s.lateReports, 0),
-    workersUnconfirmed: summaries.reduce(
-      (sum, s) => sum + Math.max(0, s.expectedToday - s.signedInToday),
-      0,
-    ),
-    attendanceConfirmed: summaries.reduce((sum, s) => sum + s.confirmedToday, 0),
-    openRequirements,
-    upcomingStarts,
-    startsTomorrow: summaries.filter((s) => s.startDays === 1).length,
-    pendingActions: summaries.reduce(
-      (sum, s) => sum + s.pendingOffers.length + s.reviewWorkers.length,
-      0,
-    ),
-    lateReports: summaries.reduce((sum, s) => sum + s.lateReports, 0),
-    plannedAbsences: summaries.reduce((sum, s) => sum + s.plannedAbsences.length, 0),
-    replacements: summaries.reduce((sum, s) => sum + s.replacements.length, 0),
-    outstandingPreStart: summaries.reduce((sum, s) => sum + s.outstandingPreStart, 0),
-    upcomingLabourChanges: companyUpcomingLabourChanges(summaries),
-  };
-}
-
-function companyUpcomingLabourChanges(summaries = [], days = 30) {
-  return summaries
-    .flatMap((summary) =>
-      uniqueLabourRequirements(summary.labourRequirements).flatMap((req) =>
-        labourRequirementUpcomingChanges(req, todayDateStr(), days).map((change) => ({
-          job: summary.job,
-          req,
-          change,
-          daysUntil: calendarDaysUntil(change.startDate),
-          delta: (Number(change.quantity) || 1) - (Number(change.previousQuantity) || Number(req.quantity) || 1),
-        })),
-      ),
-    )
-    .filter((item) => item.daysUntil !== null && item.daysUntil >= 0)
-    .sort((a, b) => a.daysUntil - b.daysUntil);
-}
-
-const LABOUR_MARKET_MIN_RATE_SAMPLE = 3;
-
-function normaliseMarketText(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function marketRegionFromLocation(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "Location unverified";
-  const first = raw.split(",")[0].trim();
-  return first || raw;
-}
-
-function marketWorkerLocation(worker) {
-  const label = worker?.location || worker?.homeTown || worker?.postcode || worker?.region || "";
-  const pin = worker?.homePin || worker?.locationPin || worker?.currentLocation || null;
-  return {
-    label: marketRegionFromLocation(label),
-    raw: label,
-    verified: !!(pin?.lat != null && pin?.lng != null),
-  };
-}
-
-function marketJobLocation(job) {
-  const label = job?.location || job?.siteAddress || "";
-  return {
-    label: marketRegionFromLocation(label),
-    raw: label,
-    verified: !!(job?.sitePin?.lat != null && job?.sitePin?.lng != null),
-  };
-}
-
-function marketRequirementSpecialism(req, job) {
-  return req?.specialism || req?.grade || job?.specialism || job?.grade || "";
-}
-
-function marketRequirementRate(req, job) {
-  const value = Number(req?.budgetMax ?? req?.dailyLabourRate ?? job?.budgetMax ?? jobBudget(job));
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
-}
-
-function isWorkerAvailableForMarket(worker, dateFrom = "") {
-  if (worker?.availability !== "available") return false;
-  const next = dateOnlyMs(worker?.nextAvailableDate);
-  const target = dateOnlyMs(dateFrom || todayDateStr());
-  return next === null || target === null || next <= target;
-}
-
-function workerMatchesMarketFilters(worker, filters = activeMarketFilters) {
-  if (!isWorkerAvailableForMarket(worker, filters.dateFrom)) return false;
-  if (filters.trade && canonicalTrade(worker.trade) !== canonicalTrade(filters.trade)) return false;
-  const workerText = workerSearchText(worker);
-  if (filters.specialism && !workerText.includes(normaliseMarketText(filters.specialism))) return false;
-  if (filters.location) {
-    const workerLoc = marketWorkerLocation(worker);
-    if (!normaliseMarketText(workerLoc.label).includes(normaliseMarketText(filters.location))) return false;
-  }
-  return true;
-}
-
-function requirementMatchesMarketFilters(req, job, filters = activeMarketFilters) {
-  if (filters.trade && canonicalTrade(req.trade || job?.trade) !== canonicalTrade(filters.trade)) return false;
-  const specialism = marketRequirementSpecialism(req, job);
-  if (filters.specialism && !normaliseMarketText(specialism).includes(normaliseMarketText(filters.specialism))) return false;
-  const jobLoc = marketJobLocation(job);
-  if (filters.location && !normaliseMarketText(jobLoc.label).includes(normaliseMarketText(filters.location))) return false;
-  const startMs = dateOnlyMs(job?.start || job?.startDate);
-  const fromMs = dateOnlyMs(filters.dateFrom);
-  const toMs = dateOnlyMs(filters.dateTo);
-  if (fromMs !== null && startMs !== null && startMs < fromMs) return false;
-  if (toMs !== null && startMs !== null && startMs > toMs) return false;
-  return true;
-}
-
-function liveMarketRequirements(filters = activeMarketFilters, { excludeJobId = "" } = {}) {
-  return state.jobs
-    .filter((job) => !job.completed && job.id !== excludeJobId)
-    .flatMap((job) =>
-      uniqueLabourRequirements(labourRequirementsForJob(job))
-        .filter((req) => requirementMatchesMarketFilters(req, job, filters))
-        .map((req) => ({
-          job,
-          req,
-          trade: req.trade || job.trade || "",
-          specialism: marketRequirementSpecialism(req, job),
-          location: marketJobLocation(job),
-          required: labourRequirementQuantityOnDate(req, todayDateStr()),
-          rate: marketRequirementRate(req, job),
-        })),
-    );
-}
-
-function availableMarketWorkers(filters = activeMarketFilters) {
-  return state.workers.filter((worker) => workerMatchesMarketFilters(worker, filters));
-}
-
-function medianNumber(values = []) {
-  const sorted = values
-    .map(Number)
-    .filter((value) => Number.isFinite(value))
-    .sort((a, b) => a - b);
-  if (!sorted.length) return null;
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-}
-
-function labourMarketRateStats(filters = activeMarketFilters, opts = {}) {
-  const requirements = liveMarketRequirements(filters, opts);
-  const rates = requirements.map((item) => item.rate).filter((rate) => rate !== null);
-  const median = medianNumber(rates);
-  return {
-    requirements,
-    rates,
-    sampleCount: rates.length,
-    median,
-    min: rates.length ? Math.min(...rates) : null,
-    max: rates.length ? Math.max(...rates) : null,
-    enoughData: rates.length >= LABOUR_MARKET_MIN_RATE_SAMPLE,
-  };
-}
-
-function labourMarketBenchmarkForRequirement(req, job) {
-  const stats = labourMarketRateStats(
-    {
-      trade: req?.trade || job?.trade || "",
-      specialism: "",
-      location: marketJobLocation(job).label,
-      dateFrom: "",
-      dateTo: "",
-    },
-    { excludeJobId: job?.id || "" },
-  );
-  const rate = marketRequirementRate(req, job);
-  if (!stats.enoughData || !rate || !stats.median || rate >= stats.median) return null;
-  return {
-    ...stats,
-    rate,
-    gap: stats.median - rate,
-  };
-}
-
-function addCalendarDaysISO(value, days) {
-  const base = dateOnlyMs(value);
-  if (base === null) return "";
-  const date = new Date(base + days * 86400000);
-  return date.toISOString().slice(0, 10);
-}
-
-function normaliseMarketFilters(filters = activeMarketFilters) {
-  const dateFrom = filters.dateFrom || "";
-  return {
-    ...filters,
-    dateFrom,
-    dateTo: dateFrom ? addCalendarDaysISO(dateFrom, 30) : "",
-  };
-}
-
-function labourMarketSupplyDemandIndicator(workerCount, requirementCount) {
-  if (!requirementCount && workerCount) return { label: "Strong availability", tone: "good" };
-  if (requirementCount > workerCount) return { label: "High demand relative to available workers", tone: "warn" };
-  if (workerCount >= requirementCount * 2 && requirementCount > 0) return { label: "Strong availability", tone: "good" };
-  return { label: "Balanced", tone: "info" };
-}
-
-function labourMarketModel(filters = activeMarketFilters) {
-  filters = normaliseMarketFilters(filters);
-  const workers = availableMarketWorkers(filters);
-  const requirements = liveMarketRequirements(filters);
-  const rateStats = labourMarketRateStats(filters);
-  const regions = new Map();
-  workers.forEach((worker) => {
-    const location = marketWorkerLocation(worker);
-    const key = location.label;
-    const entry = regions.get(key) || {
-      label: key,
-      count: 0,
-      verifiedCount: 0,
-      trades: new Map(),
-      specialisms: new Map(),
-      radiusEligible: 0,
-    };
-    entry.count += 1;
-    if (location.verified) entry.verifiedCount += 1;
-    if (Number(worker.travelRadiusMiles || 0) > 0) entry.radiusEligible += 1;
-    const trade = worker.trade || "Trade unverified";
-    entry.trades.set(trade, (entry.trades.get(trade) || 0) + 1);
-    const spec = worker.specialism || worker.grade || "Specialism unverified";
-    entry.specialisms.set(spec, (entry.specialisms.get(spec) || 0) + 1);
-    regions.set(key, entry);
-  });
-  const regionCards = Array.from(regions.values())
-    .map((entry) => ({
-      ...entry,
-      topTrade: Array.from(entry.trades.entries()).sort((a, b) => b[1] - a[1])[0] || ["Trade unverified", 0],
-      topSpecialism: Array.from(entry.specialisms.entries()).sort((a, b) => b[1] - a[1])[0] || ["Specialism unverified", 0],
-      estimated: entry.verifiedCount < entry.count,
-    }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  const indicator = labourMarketSupplyDemandIndicator(workers.length, requirements.length);
-  const trades = Array.from(new Set([
-    ...state.workers.map((worker) => worker.trade).filter(Boolean),
-    ...state.jobs.flatMap((job) => labourRequirementsForJob(job).map((req) => req.trade || job.trade).filter(Boolean)),
-  ])).sort((a, b) => a.localeCompare(b));
-  const specialisms = Array.from(new Set([
-    ...state.workers.map((worker) => worker.specialism || worker.grade).filter(Boolean),
-    ...state.jobs.flatMap((job) => labourRequirementsForJob(job).map((req) => marketRequirementSpecialism(req, job)).filter(Boolean)),
-  ])).sort((a, b) => a.localeCompare(b));
-  const locations = Array.from(new Set([
-    ...state.workers.map((worker) => marketWorkerLocation(worker).label).filter(Boolean),
-    ...state.jobs.map((job) => marketJobLocation(job).label).filter(Boolean),
-  ])).sort((a, b) => a.localeCompare(b));
-  return {
-    workers,
-    requirements,
-    rateStats,
-    regions: regionCards,
-    indicator,
-    filters: { ...filters },
-    options: { trades, specialisms, locations },
-  };
-}
-
-function firstNameForUser(user) {
-  const value =
-    user?.fullName ||
-    user?.name ||
-    user?.displayName ||
-    user?.contactName ||
-    "";
-  const first = String(value).trim().split(/\s+/)[0] || "";
-  if (first.length < 2) return "";
-  if (first.length <= 3 && first === first.toUpperCase()) return "";
-  return first;
-}
-
-function companyDailyBriefingHTML(summary, user) {
-  const briefing = companyDailyBriefingModel(summary, user);
-  const isEmpty = !summary.companyJobs.length;
-  return `<section class="company-dashboard-command">
-    <div class="company-dashboard-hero">
-      <article class="company-ops-summary company-dashboard-section-card jw-card">
-        <div class="company-ops-summary-head">
-          <div>
-            <p class="company-home-kicker">TODAY'S OPERATIONAL SUMMARY</p>
-            ${!isEmpty ? `<p>${escapeHtml(briefing.summaryCopy)}</p>` : ""}
-          </div>
-        </div>
-        ${isEmpty
-           ? `<div class="company-dashboard-empty-state company-dashboard-empty-state--summary">
-               <strong class="company-dashboard-state-title">No project activity yet</strong>
-               <span class="company-dashboard-state-copy">Create your first project to begin tracking labour, attendance and upcoming work.</span>
-              <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
-            </div>`
-          : `<div class="company-briefing-metrics">${briefing.metrics.map(companyDashboardMetricHTML).join("")}</div>`}
-      </article>
-      ${companyDashboardActionHeroHTML(briefing.action)}
-    </div>
-    <section class="company-command-section company-live-sites-panel company-dashboard-section-card jw-card">
-      <div class="company-command-section-head">
-        <div>
-          <p class="company-home-kicker">LIVE SITES</p>
-        </div>
-         <small class="company-dashboard-context-label">${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No attendance due today"}</small>
-      </div>
-      ${briefing.siteRows.length
-        ? `<div class="company-live-site-cards">${briefing.siteRows.map(companyLiveSiteStatusCardHTML).join("")}</div>`
-        : `<div class="company-dashboard-empty-state">
-             <strong class="company-dashboard-state-title">No sites active today</strong>
-             <span class="company-dashboard-state-copy">Sites with sub-contractors due today will appear here.</span>
-          </div>`}
-    </section>
-    <section class="company-command-section company-upcoming-panel company-dashboard-section-card jw-card">
-      <div class="company-command-section-head">
-        <div>
-          <p class="company-home-kicker">UPCOMING SITES</p>
-        </div>
-         <small class="company-dashboard-context-label">Next 7 days</small>
-      </div>
-      ${briefing.upcoming.length
-        ? `<div class="company-upcoming-timeline">${briefing.upcoming.map(companyDashboardUpcomingCardHTML).join("")}</div>`
-        : `<div class="company-dashboard-empty-state compact">
-             <strong class="company-dashboard-state-title">No upcoming starts</strong>
-             <span class="company-dashboard-state-copy">Projects starting in the next 7 days will appear here.</span>
-          </div>`}
-    </section>
+    </details>`}
+    ${projectRequirementReviewHTML(editor, draft)}
   </section>`;
 }
 
-function companyDashboardActionHeroHTML(action) {
-  if (!action) {
-    return `<article class="company-action-hero company-action-hero-clear company-dashboard-section-card jw-card">
-       <div>
-        <p class="company-home-kicker">ACTION REQUIRED</p>
-         <h3 class="company-dashboard-state-title">No action required</h3>
-         <p class="company-dashboard-state-copy">Items requiring your attention will appear here.</p>
-      </div>
-    </article>`;
+function projectRequirementEditorStepHTML(editor) {
+  if (editor.step === 1) return projectRequirementStepOneHTML(editor);
+  if (editor.step === 2) return projectRequirementStepTwoHTML(editor.draft);
+  return projectRequirementStepThreeHTML(editor, editor.draft);
+}
+
+function projectRequirementEditorFooterHTML(editor) {
+  const isFinal = editor.step === 3;
+  const contentIssue = editor.step === 1
+    ? projectRequirementDraftValidationIssue(editor)
+    : null;
+  const contentContinueDisabled = editor.step === 1 && contentIssue?.step === 1;
+  const remove = isFinal && editor.requirementId
+    ? `<button class="secondary-btn danger" type="button" data-project-requirement-remove="${escapeHtml(editor.requirementId)}">Remove requirement</button>`
+    : "<span></span>";
+  const leftAction = editor.step === 1
+    ? `<button class="secondary-btn" type="button" data-project-requirement-close>Cancel</button>`
+    : `<button class="secondary-btn" type="button" data-project-requirement-back>Back</button>`;
+  const rightAction = isFinal
+    ? `<button class="primary-btn" type="submit">${editor.mode === "draft" ? "Save requirement" : editor.requirementId ? "Save changes" : "Add requirement"}</button>`
+    : `<button class="primary-btn project-requirement-continue" type="button" data-project-requirement-next${contentContinueDisabled ? " disabled" : ""}>Continue</button>`;
+  return `<footer class="project-requirement-sheet-actions">${remove}<div>${leftAction}${rightAction}</div></footer>`;
+}
+
+function syncProjectRequirementEditorDraft(modal) {
+  const editor = projectRequirementEditorState;
+  if (!editor) return;
+  const draft = editor.draft;
+  const externalTraining = normalizeProjectRequirementExternalTraining(draft);
+  const value = (selector) => modal.querySelector(selector)?.value;
+  const checked = (name) => modal.querySelector(`input[name="${name}"]:checked`)?.value;
+  const type = checked("projectRequirementType");
+  if (type) draft.requirementType = type;
+  if (value("[data-project-requirement-title]") != null) draft.documentName = value("[data-project-requirement-title]");
+  if (value("[data-project-requirement-description]") != null) draft.description = value("[data-project-requirement-description]");
+  if (value("[data-project-requirement-training-provider]") != null) {
+    externalTraining.provider = value(
+      "[data-project-requirement-training-provider]",
+    );
   }
-  return `<article class="company-action-hero ${escapeHtml(action.tone)} company-dashboard-section-card jw-card">
-    <span class="company-action-dot" aria-hidden="true"></span>
-    <span class="company-action-hero-content">
-      <span class="company-home-kicker">ACTION REQUIRED</span>
-       <strong class="company-dashboard-state-title">${escapeHtml(action.title)}</strong>
-       <span class="company-dashboard-state-copy">${escapeHtml(action.body)}</span>
-      ${action.meta ? `<small>${escapeHtml(action.meta)}</small>` : ""}
-    </span>
-    <button class="primary-btn company-action-hero-cta" type="button" ${action.actionAttr}>${escapeHtml(action.actionLabel)} &rarr;</button>
-  </article>`;
-}
-
-function companyDashboardMetricHTML(item) {
-  const attrs = item.actionAttr || "";
-  const tag = attrs ? "button" : "div";
-  const accessibleLabel = item.accessibleLabel
-    ? `aria-label="${escapeHtml(item.accessibleLabel)}"`
-    : "";
-  return `<${tag} class="company-briefing-metric ${item.tone}${attrs ? " is-clickable" : ""}" ${attrs} ${accessibleLabel} ${tag === "button" ? 'type="button"' : ""}>
-    <strong>${item.value}</strong>
-    <span>${escapeHtml(item.label)}</span>
-    ${attrs ? `<span class="company-briefing-metric-chevron">${onsiteIcon("chevronRight", 16)}</span>` : ""}
-  </${tag}>`;
-}
-
-function companyDailyBriefingModel(summary, user) {
-  const kpis = companyDashboardKpiData(summary);
-  const { scheduledToday, workersExpectedToday } = kpis;
-  const metrics = [
-    {
-      label: "Projects scheduled today",
-      value: kpis.projectsScheduledToday,
-      tone: kpis.projectsScheduledToday ? "neutral" : "muted",
-      actionAttr: 'data-dashboard-kpi="scheduled_today"',
-      accessibleLabel: `${kpis.projectsScheduledToday} projects scheduled today — open filtered Projects`,
-    },
-    {
-      label: "Workers expected today",
-      value: workersExpectedToday,
-      tone: workersExpectedToday ? "neutral" : "muted",
-      actionAttr: 'data-dashboard-kpi="workers_expected_today"',
-      accessibleLabel: `${workersExpectedToday} workers expected today — open filtered Attendance`,
-    },
-    {
-      label: "Open labour requirements",
-      value: kpis.openLabourRequirements,
-      tone: kpis.openLabourRequirements ? "warn" : "neutral",
-      actionAttr: 'data-dashboard-kpi="open_labour_requirements"',
-      accessibleLabel: `${kpis.openLabourRequirements} open labour requirements — open filtered Projects`,
-    },
-    {
-      label: "Starting next 7 days",
-      value: kpis.startingNext7Days,
-      tone: kpis.startingNext7Days ? "neutral" : "muted",
-      actionAttr: 'data-dashboard-kpi="starting_next_7_days"',
-      accessibleLabel: `${kpis.startingNext7Days} projects starting in the next 7 days — open filtered Projects`,
-    },
-  ];
-  const focus = companyDashboardFocusModel(summary, user);
-  const primaryAction = briefingRecommendedAction(summary, focus);
-  const open = Number(summary.openRequirements || 0);
-  const scheduledCount = scheduledToday.length;
-  const firstName = firstNameForUser(user);
-  return {
-    dayPart: dashboardGreetingPart(),
-    firstName,
-    summaryTitle: scheduledCount
-      ? `${scheduledCount} project${scheduledCount === 1 ? "" : "s"} scheduled today`
-      : open
-        ? `${open} open labour place${open === 1 ? "" : "s"} to resolve`
-        : `Good ${dashboardGreetingPart()}${firstName ? `, ${firstName}` : ""}`,
-    summaryCopy: workersExpectedToday
-      ? `${workersExpectedToday} worker${workersExpectedToday === 1 ? "" : "s"} expected across today's live sites.`
-      : open
-        ? "Start by reviewing the open labour requirements most likely to affect delivery."
-        : "No live site attendance is currently due today.",
-    metrics,
-    action: primaryAction,
-    siteRows: scheduledToday
-      .sort((a, b) => b.expectedToday - a.expectedToday || projectDateValue(a.job.start) - projectDateValue(b.job.start))
-      .slice(0, 5)
-      .map(companyLiveSiteStatusModel),
-    upcoming: companyDashboardUpcomingItems(summary).slice(0, 4),
-  };
-}
-
-function companyScheduledProjectSummariesToday(summary) {
-  return (summary?.summaries || []).filter((projectSummary) =>
-    isProjectScheduledToday(projectSummary.job),
+  if (value("[data-project-requirement-training-access]") != null) {
+    externalTraining.accessMethod = value(
+      "[data-project-requirement-training-access]",
+    );
+  }
+  if (value("[data-project-requirement-training-url]") != null) {
+    externalTraining.url = value("[data-project-requirement-training-url]");
+  }
+  draft.externalTraining = externalTraining;
+  if (value("[data-project-requirement-video-url]") != null) {
+    const videoUrl = value("[data-project-requirement-video-url]").trim();
+    const existingVideo = projectRequirementVideoSourceResource(draft);
+    draft.videoSourceUrl = videoUrl;
+    draft.resources = (draft.resources || []).filter(
+      (resource) => resource.id !== existingVideo?.id,
+    );
+    if (validProjectRequirementExternalUrl(videoUrl)) {
+      draft.resources.push({
+        id: existingVideo?.id || createId(),
+        type: "external_link",
+        label: "Induction video",
+        url: videoUrl,
+        instructions: "",
+        role: "video_source",
+        createdAt: existingVideo?.createdAt || new Date().toISOString(),
+      });
+    }
+  }
+  if (value("[data-project-requirement-background-type]") != null) {
+    draft.backgroundCheck.checkType = value(
+      "[data-project-requirement-background-type]",
+    );
+  }
+  if (value("[data-project-requirement-background-level]") != null) {
+    draft.backgroundCheck.level = value(
+      "[data-project-requirement-background-level]",
+    );
+  }
+  if (value("[data-project-requirement-background-initiation]") != null) {
+    draft.backgroundCheck.initiation = value(
+      "[data-project-requirement-background-initiation]",
+    );
+  }
+  if (value("[data-project-requirement-background-provider]") != null) {
+    draft.backgroundCheck.provider = value(
+      "[data-project-requirement-background-provider]",
+    );
+  }
+  if (value("[data-project-requirement-background-url]") != null) {
+    draft.backgroundCheck.applicationUrl = value(
+      "[data-project-requirement-background-url]",
+    );
+  }
+  const contentToFollow = modal.querySelector(
+    "[data-project-requirement-content-follow]",
   );
-}
-
-function isProjectScheduledToday(job, date = todayDateStr()) {
-  if (!job || job.completed || job.cancelledAt || job.bookingStatus === "cancelled") return false;
-  if (!isDateWithinProjectDates(job, date)) return false;
-  const workingDays = normalizeWorkingDays(job.workingDays || job.defaultWorkingDays);
-  const dayKey = new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "long" }).toLowerCase();
-  return workingDays.includes(dayKey);
-}
-
-function companyProjectOpenLabourRequirementCount(projectSummary) {
-  return Math.max(0, Number(projectSummary?.openRoles || 0));
-}
-
-function companyOpenLabourRequirementCount(projectSummaries = []) {
-  return projectSummaries.reduce(
-    (sum, projectSummary) =>
-      sum + companyProjectOpenLabourRequirementCount(projectSummary),
-    0,
+  if (contentToFollow) draft.contentToFollow = contentToFollow.checked;
+  const action = checked("projectRequirementAction");
+  if (action) draft.completionAction = action;
+  const level = checked("projectRequirementLevel");
+  if (level) draft.requirementLevel = level;
+  const timing = checked("projectRequirementTiming");
+  if (timing) draft.timing = timing;
+  if (draft.requirementType === "onsite_induction") {
+    draft.completionAction = "supervisor_signoff";
+    draft.timing = "on_arrival";
+  }
+  if (value("[data-project-requirement-pass]") != null) {
+    draft.comprehensionCheck.passThreshold = Number(value("[data-project-requirement-pass]"));
+  }
+  if (modal.querySelector('input[name="projectRequirementAudienceScope"]')) {
+    const audienceScope = checked("projectRequirementAudienceScope");
+    const audienceIds = Array.from(
+      modal.querySelectorAll("[data-project-requirement-audience-id]:checked"),
+    )
+      .map((input) => input.value)
+      .filter(Boolean);
+    draft.audience = audienceScope === "requirements"
+      ? {
+          type: "labour_requirements",
+          labourRequirementIds: audienceIds,
+          labourRequirementId: audienceIds[0] || "",
+        }
+      : { type: "all_project_workers", labourRequirementId: "" };
+  }
+  if (value("[data-project-requirement-version]") != null) {
+    draft.version = value("[data-project-requirement-version]");
+  }
+  const recompletion = modal.querySelector("[data-project-requirement-recompletion]");
+  if (recompletion) draft.requireRecompletionOnUpdate = recompletion.checked;
+  const workerConfirmation = modal.querySelector(
+    "[data-project-requirement-worker-confirmation]",
   );
+  if (workerConfirmation) {
+    draft.requireWorkerAcknowledgementSignature = workerConfirmation.checked;
+  }
+  const evidenceInputs = Array.from(
+    modal.querySelectorAll('input[name="projectRequirementEvidence"]'),
+  );
+  if (evidenceInputs.length) {
+    draft.completionEvidence = evidenceInputs
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+  }
 }
 
-function companyExpectedWorkersToday(projectSummary, date = todayDateStr()) {
-  if (!isProjectScheduledToday(projectSummary?.job, date)) return 0;
-  return Math.max(0, Number(projectSummary?.expectedToday || 0));
+function refreshProjectRequirementReview(modal) {
+  const editor = projectRequirementEditorState;
+  const currentReview = modal.querySelector("[data-project-requirement-review]");
+  if (!editor || !currentReview) return;
+  currentReview.outerHTML = projectRequirementReviewHTML(editor, editor.draft);
 }
 
-function isProjectStartingWithinNextDays(job, days = 7, date = todayDateStr()) {
-  if (!job || job.completed || job.cancelledAt || job.bookingStatus === "cancelled") {
+function validateProjectRequirementEditorStep(modal) {
+  if (
+    projectRequirementEditorState?.mode === "draft" &&
+    projectRequirementEditorState.step === 1 &&
+    projectRequirementEditorState.resourceEditor
+  ) {
+    showToast("Finish adding the resource or cancel it before continuing");
     return false;
   }
-  const todayMs = dateOnlyMs(date);
-  const startMs = dateOnlyMs(job.start || job.startDate || "");
-  if (todayMs === null || startMs === null) return false;
-  const daysUntilStart = Math.round((startMs - todayMs) / 86400000);
-  return daysUntilStart > 0 && daysUntilStart <= days;
+  const form = modal.querySelector("[data-project-requirement-form]");
+  if (!form?.reportValidity()) return false;
+  if (
+    projectRequirementEditorState?.step === 1 &&
+    projectRequirementEditorState.resourceEditor
+  ) {
+    showToast("Finish adding the resource or cancel it before continuing");
+    return false;
+  }
+  if (projectRequirementEditorState?.step === 2) {
+    const threshold = modal.querySelector("[data-project-requirement-pass]");
+    if (threshold && (Number(threshold.value) < 1 || Number(threshold.value) > 100)) {
+      threshold.setCustomValidity("Enter a pass threshold between 1 and 100.");
+      threshold.reportValidity();
+      threshold.setCustomValidity("");
+      return false;
+    }
+    const evidenceInputs = Array.from(
+      modal.querySelectorAll('input[name="projectRequirementEvidence"]'),
+    );
+    if (evidenceInputs.length && !evidenceInputs.some((input) => input.checked)) {
+      evidenceInputs[0].setCustomValidity("Choose at least one completion evidence method.");
+      evidenceInputs[0].reportValidity();
+      evidenceInputs[0].setCustomValidity("");
+      return false;
+    }
+  }
+  return true;
 }
 
-function companyProjectSummariesStartingNextDays(summary, days = 7) {
-  return (summary?.summaries || []).filter((projectSummary) =>
-    isProjectStartingWithinNextDays(projectSummary.job, days),
-  );
-}
-
-function companyDashboardKpiData(summary) {
-  const scheduledToday = companyScheduledProjectSummariesToday(summary);
-  const startingNext7Days = companyProjectSummariesStartingNextDays(summary, 7);
-  return {
-    scheduledToday,
-    projectsScheduledToday: scheduledToday.length,
-    workersExpectedToday: scheduledToday.reduce(
-      (sum, projectSummary) =>
-        sum + companyExpectedWorkersToday(projectSummary),
-      0,
-    ),
-    openLabourRequirements: companyOpenLabourRequirementCount(
-      summary?.summaries || [],
-    ),
-    startingNext7Days: startingNext7Days.length,
-    startingNext7DaysProjects: startingNext7Days,
-  };
-}
-
-function dashboardGreetingPart() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "morning";
-  if (hour < 18) return "afternoon";
-  return "evening";
-}
-
-function briefingRecommendedAction(summary, focus) {
-  const first = focus.actionItems[0];
-  if (first) return first;
-  if (summary.openRequirements > 0) {
-    const nextShortage = focus.upcoming.find((projectSummary) => projectSummary.openRoles > 0);
-    if (nextShortage) return companyDashboardShortageAction({ summary: nextShortage, shortage: mostUnderfilledRequirement(nextShortage) });
+function projectRequirementDraftValidationIssue(editor) {
+  const draft = editor?.draft;
+  if (!draft) return null;
+  if (
+    !PROJECT_REQUIREMENT_TYPES.some(
+      (type) => type.value === draft.requirementType,
+    )
+  ) {
+    return {
+      step: 1,
+      selector: 'input[name="projectRequirementType"]',
+      message: "Choose a requirement type.",
+    };
+  }
+  if (
+    !["onsite_induction", "background_check"].includes(
+      draft.requirementType,
+    ) &&
+    !String(draft.documentName || "").trim()
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-title]",
+      message: "Enter a requirement title.",
+    };
+  }
+  if (draft.requirementType === "external_training") {
+    const training = normalizeProjectRequirementExternalTraining(draft);
+    if (
+      training.accessMethod === "web_link" &&
+      !validProjectRequirementExternalUrl(training.url)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-training-url]",
+        message: "Enter a valid external training URL.",
+      };
+    }
+  }
+  if (draft.requirementType === "background_check") {
+    const check = draft.backgroundCheck || {};
+    if (
+      !PROJECT_BACKGROUND_CHECK_TYPES.some(
+        (option) => option.value === check.checkType,
+      )
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-type]",
+        message: "Choose a valid background check type.",
+      };
+    }
+    if (
+      check.checkType === "dbs" &&
+      !PROJECT_DBS_LEVELS.some((option) => option.value === check.level)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-level]",
+        message: "Choose a valid DBS level.",
+      };
+    }
+    if (
+      !PROJECT_BACKGROUND_CHECK_INITIATION.some(
+        (option) => option.value === check.initiation,
+      )
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-initiation]",
+        message: "Choose how the background check is initiated.",
+      };
+    }
+    if (
+      check.applicationUrl &&
+      !validProjectRequirementExternalUrl(check.applicationUrl)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-url]",
+        message: "Enter a valid application or provider URL.",
+      };
+    }
+    if (
+      check.initiation === "company_provider_link" &&
+      !validProjectRequirementExternalUrl(check.applicationUrl)
+    ) {
+      return {
+        step: 1,
+        selector: "[data-project-requirement-background-url]",
+        message: "Add the application or provider URL sent to sub-contractors.",
+      };
+    }
+  }
+  if (
+    !draft.contentToFollow &&
+    draft.requirementType === "document" &&
+    !(draft.resources || []).some((resource) => resource.type === "file")
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-document-upload]",
+      message: "Upload the document sub-contractors must read, or choose Add content later.",
+    };
+  }
+  if (
+    !draft.contentToFollow &&
+    draft.requirementType === "video_induction" &&
+    !validProjectRequirementExternalUrl(projectRequirementVideoSourceUrl(draft))
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-video-url]",
+      message: "Add a valid video URL.",
+    };
+  }
+  if (
+    !draft.contentToFollow &&
+    draft.requirementType === "form_signature" &&
+    !(draft.resources || []).some(
+      (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
+    )
+  ) {
+    return {
+      step: 1,
+      selector: "[data-project-requirement-pdf-upload]",
+      message: "Upload the source PDF, or choose Add content later.",
+    };
+  }
+  const validAction = (PROJECT_REQUIREMENT_ACTIONS[draft.requirementType] || [])
+    .some((action) => action.value === draft.completionAction);
+  if (!validAction) {
+    return {
+      step: 2,
+      selector: "[data-project-requirement-action]",
+      message: "Choose a valid sub-contractor action.",
+    };
+  }
+  if (
+    projectRequirementHasExternalLink(draft) &&
+    !normalizeProjectRequirementCompletionEvidence(draft).length
+  ) {
+    return {
+      step: 2,
+      selector: 'input[name="projectRequirementEvidence"]',
+      message: "Choose at least one completion evidence method.",
+    };
+  }
+  if (
+    draft.requirementType === "video_induction" &&
+    draft.completionAction === "watch_comprehension" &&
+    (Number(draft.comprehensionCheck?.passThreshold) < 1 ||
+      Number(draft.comprehensionCheck?.passThreshold) > 100)
+  ) {
+    return {
+      step: 2,
+      selector: "[data-project-requirement-pass]",
+      message: "Enter a pass threshold between 1 and 100.",
+    };
+  }
+  if (
+    draft.requirementType === "video_induction" &&
+    draft.completionAction === "watch_comprehension" &&
+    !(draft.comprehensionCheck?.questions || []).length
+  ) {
+    return {
+      step: 2,
+      selector: "[data-project-requirement-quiz-prompt]",
+      message: "Add at least one comprehension question.",
+    };
+  }
+  if (!String(draft.version || "").trim()) {
+    return {
+      step: 3,
+      selector: "[data-project-requirement-version]",
+      message: "Enter a version or revision.",
+      revealAdvanced: true,
+    };
+  }
+  if (
+    editor.mode === "draft" &&
+    projectRequirementAudienceIds(draft).some(
+      (id) => !projectRequirementEditorLabourRequirements(editor).some(
+        (requirement) => requirement.id === id,
+      ),
+    )
+  ) {
+    return {
+      step: 3,
+      selector: "[data-project-requirement-audience]",
+      message: "Choose an available labour requirement or all project sub-contractors.",
+    };
+  }
+  if (
+    editor.step === 3 &&
+    draft.audience?.type === "labour_requirements" &&
+    !projectRequirementAudienceIds(draft).length
+  ) {
+    return {
+      step: 3,
+      selector: 'input[name="projectRequirementAudienceScope"][value="requirements"]',
+      message: "Choose at least one labour requirement, or apply this to all project sub-contractors.",
+    };
   }
   return null;
 }
 
-function companyLiveSiteStatusModel(projectSummary) {
-  const unconfirmed = Math.max(0, projectSummary.expectedToday - projectSummary.signedInToday);
-  let stateLabel = "No attendance expected yet";
-  let stateCopy = "";
-  let tone = "muted";
-  if (!projectSummary.expectedToday) {
-    stateLabel = "No workers scheduled today";
-    stateCopy = "Attendance will appear here once workers are confirmed.";
-  } else if (projectSummary.expectedToday > 0 && unconfirmed === 0 && !projectSummary.lateReports && !projectSummary.noShows) {
-    stateLabel = "All signed in";
-    stateCopy = "Everyone expected today has signed in.";
-    tone = "ok";
-  } else if (projectSummary.noShows || unconfirmed || projectSummary.lateReports) {
-    const attention = projectSummary.noShows + unconfirmed + projectSummary.lateReports;
-    stateLabel = projectSummary.noShows || unconfirmed ? `${attention} require attention` : "Attendance in progress";
-    stateCopy = "Review attendance and late reports for this site.";
-    tone = projectSummary.noShows || unconfirmed ? "warn" : "info";
-  } else if (projectSummary.expectedToday > 0) {
-    stateLabel = "Attendance in progress";
-    stateCopy = "Workers are due to sign in today.";
-    tone = "info";
+function updateProjectRequirementContentContinueState(modal) {
+  const editor = projectRequirementEditorState;
+  const button = modal?.querySelector("[data-project-requirement-next]");
+  if (!editor || !button || editor.step !== 1) return;
+  syncProjectRequirementEditorDraft(modal);
+  const issue = projectRequirementDraftValidationIssue(editor);
+  button.disabled = issue?.step === 1;
+}
+
+function showProjectRequirementValidationIssue(issue) {
+  if (!issue || !projectRequirementEditorState) return;
+  showToast(issue.message);
+  projectRequirementEditorState.step = issue.step;
+  renderProjectRequirementEditor({ focusHeading: false });
+  requestAnimationFrame(() => {
+    const modal = document.getElementById("projectRequirementModal");
+    if (issue.revealAdvanced) {
+      const advanced = modal?.querySelector(".project-requirement-advanced");
+      if (advanced) advanced.open = true;
+    }
+    const field = modal?.querySelector(issue.selector);
+    if (!field) return;
+    if (projectRequirementEditorState?.mode === "draft") {
+      field.focus();
+      return;
+    }
+    if (typeof field.setCustomValidity === "function") {
+      field.setCustomValidity(issue.message);
+      field.reportValidity();
+      field.setCustomValidity("");
+    } else {
+      field.focus();
+    }
+  });
+}
+
+function projectRequirementStepperHTML(editor) {
+  return [[1, "Content"], [2, "Completion"], [3, "Assignment"]]
+    .map(([step, label]) => {
+      const active = editor.step === step;
+      const complete = editor.step > step;
+      const marker = complete ? onsiteIcon("check", 12) : step;
+      const content = `<span>${marker}</span><strong>${escapeHtml(label)}</strong>`;
+      return `<li class="${active ? "active" : complete ? "complete" : ""}"${active ? ` aria-current="step"` : ""}>${complete
+        ? `<button class="project-requirement-step-control" type="button" data-project-requirement-step="${step}" aria-label="Return to ${escapeHtml(label)}">${content}</button>`
+        : `<span class="project-requirement-step-control">${content}</span>`}</li>`;
+    })
+    .join("");
+}
+
+function renderProjectRequirementEditor({ focusHeading = true } = {}) {
+  const editor = projectRequirementEditorState;
+  const modal = document.getElementById("projectRequirementModal");
+  const job = findJob(editor?.jobId);
+  if (!editor || !modal || (editor.mode !== "draft" && !job)) return;
+  modal.innerHTML = `<form class="project-requirement-sheet${editor.mode === "draft" ? " is-draft-prestart" : ""}" data-project-requirement-form="${escapeHtml(job?.id || "request-labour-draft")}" role="dialog" aria-modal="true" aria-labelledby="projectRequirementModalTitle">
+    <header class="project-requirement-sheet-head">
+      <div class="project-requirement-sheet-heading"><h2 id="projectRequirementModalTitle">${editor.mode === "draft" ? "Add requirement" : editor.requirementId ? "Manage requirement" : "Add requirement"}</h2></div>
+      <button class="modal-close-btn" type="button" data-project-requirement-close aria-label="Close">${onsiteIcon("x", 18)}</button>
+      <ol class="project-requirement-steps" aria-label="Requirement creation progress">
+        ${projectRequirementStepperHTML(editor)}
+      </ol>
+    </header>
+    <div class="project-requirement-sheet-body">${projectRequirementEditorStepHTML(editor)}</div>
+    ${projectRequirementEditorFooterHTML(editor)}
+  </form>`;
+  bindProjectRequirementEditorControls(modal);
+  if (focusHeading) {
+    requestAnimationFrame(() =>
+      modal.querySelector("#projectRequirementStepTitle")?.focus(),
+    );
   }
-  const health = calculateProjectHealth(projectSummary.job, projectSummary);
-  const hasAttendance =
-    projectSummary.expectedToday > 0 ||
-    (Array.isArray(projectSummary.todayRecords) && projectSummary.todayRecords.length > 0);
-  const action = hasAttendance
-    ? {
-        label: "Open Attendance",
-        attrs: `data-dashboard-attendance-project="${escapeHtml(projectSummary.job.id)}"`,
-      }
-    : projectSummary.openRoles > 0
-      ? {
-          label: "Review requirement",
-          attrs: `data-company-project-open-section="${escapeHtml(projectSummary.job.id)}" data-company-section-target="requirements"`,
-        }
-      : {
-          label: "View project",
-          attrs: `data-company-project-open="${escapeHtml(projectSummary.job.id)}"`,
-        };
-  return {
-    job: projectSummary.job,
-    health,
-    healthTone:
-      health.level === "urgent"
-        ? "urgent"
-        : health.level === "atRisk"
-          ? "at-risk"
-          : health.level === "filled"
-            ? "healthy"
-            : "neutral",
-    expected: projectSummary.expectedToday,
-    signedIn: projectSummary.signedInToday,
-    late: projectSummary.lateReports,
-    unconfirmed,
-    stateLabel,
-    stateCopy,
-    tone,
-    action,
-  };
 }
 
-function companyLiveSiteStatusRowHTML(item) {
-  return `<button class="company-live-site-row" type="button" data-dashboard-attendance-project="${escapeHtml(item.job.id)}">
-    <span class="company-live-site-project">
-      <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
-      <span>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</span>
-    </span>
-    <span data-label="Expected"><strong>${item.expected}</strong></span>
-    <span data-label="Signed in"><strong>${item.signedIn}</strong></span>
-    <span data-label="Late"><strong>${item.late}</strong></span>
-    <span data-label="Unconfirmed"><strong>${item.unconfirmed}</strong></span>
-    <span class="company-live-site-state ${escapeHtml(item.tone)}">${escapeHtml(item.stateLabel)}</span>
-  </button>`;
+function projectRequirementEditorHasUnsavedChanges() {
+  const editor = projectRequirementEditorState;
+  if (!editor) return false;
+  const modal = document.getElementById("projectRequirementModal");
+  if (modal) syncProjectRequirementEditorDraft(modal);
+  return JSON.stringify(editor.draft) !== editor.initialDraftSnapshot;
 }
 
-function companyLiveSiteStatusCardHTML(item) {
-  return `<article class="company-live-site-card ${escapeHtml(item.tone)}">
-    <button class="company-live-site-card-open" type="button" data-company-project-open="${escapeHtml(item.job.id)}" aria-label="Open ${escapeHtml(companyProjectTitle(item.job))} project"></button>
-    <span class="company-live-site-card-top">
-      <span>
-        <span class="company-home-kicker">PROJECT</span>
-        <strong>${escapeHtml(companyProjectTitle(item.job))}</strong>
-        <small>${escapeHtml(item.job.jobNumber || "No job number")} · ${escapeHtml(item.job.location || item.job.siteAddress || "Location TBC")}</small>
-      </span>
-      <span class="company-live-site-state health-${escapeHtml(item.healthTone)}">${escapeHtml(item.health?.label || item.stateLabel)}</span>
-    </span>
-    <span class="company-live-site-card-metrics">
-      ${companyLiveSiteMetricHTML("Expected", item.expected)}
-      ${companyLiveSiteMetricHTML("Signed in", item.signedIn)}
-      ${companyLiveSiteMetricHTML("Late", item.late, item.late ? "warn" : "")}
-      ${companyLiveSiteMetricHTML("Unconfirmed", item.unconfirmed, item.unconfirmed ? "warn" : "")}
-    </span>
-    <span class="company-live-site-card-state">
-      <strong>${escapeHtml(item.stateLabel)}</strong>
-      <small>${escapeHtml(item.stateCopy)}</small>
-    </span>
-    <button class="company-live-site-card-action" type="button" ${item.action.attrs}>${escapeHtml(item.action.label)} &rarr;</button>
-  </article>`;
+function closeProjectRequirementModal({ afterClose = null } = {}) {
+  const modal = document.getElementById("projectRequirementModal");
+  if (!modal) return;
+  const trigger = projectRequirementModalTrigger;
+  projectRequirementModalTrigger = null;
+  projectRequirementEditorState = null;
+  hideWithMotion(modal, () => {
+    if (trigger instanceof HTMLElement && document.body.contains(trigger)) trigger.focus();
+    if (typeof afterClose === "function") afterClose();
+  }, { remove: true });
 }
 
-function companyLiveSiteMetricHTML(label, value, tone = "") {
-  return `<span class="company-live-site-metric ${escapeHtml(tone)}">
-    <strong>${value}</strong>
-    <small>${escapeHtml(label)}</small>
-  </span>`;
-}
-
-function companyDashboardHealthTone(health = {}) {
-  if (health.level === "urgent") return "critical";
-  if (health.level === "atRisk") return "warning";
-  if (health.level === "filled") return "success";
-  return "neutral";
-}
-
-function companyDashboardUpcomingItems(summary) {
-  const items = [];
-  const summariesByProjectId = new Map(
-    (summary.summaries || []).map((projectSummary) => [projectSummary.job?.id, projectSummary]),
+function closeProjectRequirementUnsavedGuard() {
+  hideWithMotion(
+    document.getElementById("projectRequirementUnsavedGuard"),
+    null,
+    { remove: true },
   );
-  (summary.summaries || []).forEach((projectSummary) => {
-    const job = projectSummary.job;
-    const days = projectStartDays(job);
-    const healthTone = companyDashboardHealthTone(calculateProjectHealth(job, projectSummary));
-    if (days !== null && days >= 0 && days <= 7) {
-      items.push({
-        key: `start:${job.id}`,
-        tone: healthTone,
-        timing: startTimingLabel(days),
-        projectTitle: companyProjectTitle(job),
-        jobNumber: job.jobNumber || "",
-        openCount: projectSummary.openRoles,
-        title: `${companyProjectTitle(job)} starts ${relativeProjectDayLabel(days)}`,
-        body: projectSummary.openRoles
-          ? `${projectSummary.openRoles} labour place${projectSummary.openRoles === 1 ? "" : "s"} still open.`
-          : "Site setup and attendance readiness can be reviewed.",
-        meta: job.jobNumber || job.location || "Project",
-        actionLabel: projectSummary.openRoles ? "Review requirement" : "Check setup",
-        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="${projectSummary.openRoles ? "requirements" : "overview"}"`,
-        sort: days,
-      });
-    }
-    if (projectSummary.pendingOffers.length) {
-      items.push({
-        key: `offers:${job.id}`,
-        tone: healthTone,
-        timing: "Awaiting response",
-        projectTitle: companyProjectTitle(job),
-        jobNumber: job.jobNumber || "",
-        openCount: projectSummary.openRoles,
-        title: `${projectSummary.pendingOffers.length} offer${projectSummary.pendingOffers.length === 1 ? "" : "s"} awaiting response`,
-         body: `${companyProjectTitle(job)} has open sub-contractor offer decisions.`,
-        meta: "Offers",
-        actionLabel: "View workers",
-        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
-        sort: days ?? 99,
-      });
-    }
-    if (projectSummary.reviewWorkers.length) {
-      items.push({
-        key: `review:${job.id}`,
-        tone: healthTone,
-        timing: "Company decision",
-        projectTitle: companyProjectTitle(job),
-        jobNumber: job.jobNumber || "",
-        openCount: projectSummary.openRoles,
-         title: `${projectSummary.reviewWorkers.length} sub-contractor${projectSummary.reviewWorkers.length === 1 ? "" : "s"} awaiting approval`,
-         body: `${companyProjectTitle(job)} needs a hiring company decision before assignment is confirmed.`,
-         meta: "Sub-contractor approval",
-         actionLabel: "Review sub-contractors",
-        actionAttr: `data-company-project-open-section="${escapeHtml(job.id)}" data-company-section-target="workforce"`,
-        sort: days ?? 98,
-      });
-    }
-  });
-  (summary.upcomingLabourChanges || []).slice(0, 4).forEach((item) => {
-    const projectSummary = summariesByProjectId.get(item.job.id);
-    items.push({
-      key: `labour:${item.job.id}:${item.change.id || item.change.startDate}`,
-      tone: companyDashboardHealthTone(calculateProjectHealth(item.job, projectSummary)),
-      timing: `Changes ${relativeProjectDayLabel(item.daysUntil ?? 0)}`,
-      projectTitle: companyProjectTitle(item.job),
-      jobNumber: item.job.jobNumber || "",
-      openCount: Number(item.change.quantity) || 0,
-      title: labourForecastTitle(item),
-      body: `${formatDateOnly(item.change.startDate)} · ${item.change.previousQuantity} to ${item.change.quantity} required${item.change.phase ? ` · ${item.change.phase}` : ""}`,
-      meta: item.job.jobNumber || item.job.location || "Labour schedule",
-      actionLabel: "Review schedule",
-      actionAttr: `data-company-project-open-section="${escapeHtml(item.job.id)}" data-company-section-target="requirements"`,
-      sort: item.daysUntil ?? 97,
-    });
-  });
-  return items
-    .filter((item, index, arr) => arr.findIndex((candidate) => candidate.key === item.key) === index)
-    .sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99));
 }
 
-function relativeProjectDayLabel(days) {
-  if (days === 0) return "today";
-  if (days === 1) return "tomorrow";
-  return `in ${days} days`;
-}
-
-function startTimingLabel(days) {
-  if (days === 0) return "Starts today";
-  if (days === 1) return "Starts tomorrow";
-  return `Starts in ${days} days`;
-}
-
-function labourForecastTitle(item) {
-  const delta = Number(item.delta) || 0;
-  const amount = Math.abs(delta);
-  const trade = pluralizeTradeLabel(item.req?.trade || "worker", amount || 1);
-  if (delta > 0) return `${companyProjectTitle(item.job)} needs ${amount} additional ${trade}`;
-  if (delta < 0) return `${companyProjectTitle(item.job)} requirement reduces by ${amount} ${trade}`;
-  return `${companyProjectTitle(item.job)} labour schedule changes`;
-}
-
-function companyDashboardUpcomingRowHTML(item) {
-  return `<button class="company-upcoming-row ${escapeHtml(item.tone || "info")}" type="button" ${item.actionAttr}>
-    <span class="company-action-dot" aria-hidden="true"></span>
-    <span class="company-upcoming-main">
-      <strong>${escapeHtml(item.title)}</strong>
-      <small>${escapeHtml(item.body || "")}</small>
-    </span>
-    <span class="company-upcoming-meta">
-      <small>${escapeHtml(item.meta || "")}</small>
-      <strong>${escapeHtml(item.actionLabel || "Open")}</strong>
-    </span>
-  </button>`;
-}
-
-function companyDashboardUpcomingCardHTML(item) {
-  return `<button class="company-upcoming-card ${escapeHtml(item.tone || "info")}" type="button" ${item.actionAttr}>
-    <span class="company-upcoming-marker" aria-hidden="true"></span>
-    <span class="company-upcoming-card-main">
-      <small>${escapeHtml(item.timing || item.meta || "Upcoming")}</small>
-      <strong>${escapeHtml(item.projectTitle || item.title)}</strong>
-      <span>${escapeHtml(item.jobNumber || item.meta || "Project")}${item.openCount ? ` · ${item.openCount} labour place${item.openCount === 1 ? "" : "s"} open` : ""}</span>
-    </span>
-    <span class="company-upcoming-card-action">${escapeHtml(item.actionLabel || "Open")} &rarr;</span>
-  </button>`;
-}
-
-function companyLabourForecastRowHTML(item) {
-  const change = item.change;
-  const delta = Number(item.delta) || 0;
-  const direction = delta > 0 ? "needs" : "reduces by";
-  const amount = Math.abs(delta);
-  const when = item.daysUntil === 0
-    ? "today"
-    : item.daysUntil === 1
-      ? "tomorrow"
-      : `in ${item.daysUntil} days`;
-  const label = delta
-    ? `${companyProjectTitle(item.job)} ${direction} ${amount} ${pluralizeTradeLabel(item.req.trade || "worker", amount)} ${when}.`
-    : `${companyProjectTitle(item.job)} changes ${item.req.trade || "labour"} requirement ${when}.`;
-  return `<button class="company-recent-activity-row warning" type="button" data-company-project-open-section="${escapeHtml(item.job.id)}" data-company-section-target="requirements">
-    <span class="company-action-dot" aria-hidden="true"></span>
-    <div>
-      <strong>${escapeHtml(label)}</strong>
-      <p>${escapeHtml(formatDateOnly(change.startDate))} to ${escapeHtml(formatDateOnly(change.endDate))} · ${change.previousQuantity} to ${change.quantity} required${change.phase ? ` · ${escapeHtml(change.phase)}` : ""}</p>
+function openProjectRequirementUnsavedGuard(afterExit = null) {
+  document.getElementById("projectRequirementUnsavedGuard")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "projectRequirementUnsavedGuard";
+  modal.className = "modal-overlay";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "projectRequirementUnsavedTitle");
+  modal.innerHTML = `<div class="dispute-sheet jw-requirement-guard-sheet">
+    <div class="dispute-sheet-header">
+      <div><h3 class="dispute-sheet-title" id="projectRequirementUnsavedTitle">Unsaved pre-start requirement</h3></div>
+      <button class="modal-close-btn" type="button" aria-label="Close and keep editing" data-project-requirement-guard-keep>×</button>
     </div>
-  </button>`;
-}
-
-function companyDashboardFocusHTML(summary, user) {
-  return companyDailyBriefingHTML(summary, user);
-}
-
-function companyRecentActivityHTML(summary, user) {
-  const rows = companyRecentActivityItems(user, summary).slice(0, 5);
-  return `<section class="company-recent-activity company-dashboard-section-card jw-card">
-    <div class="company-recent-activity-head">
-      <div>
-        <p class="company-home-kicker">RECENT ACTIVITY</p>
+    <div class="dispute-sheet-body">
+      <p class="jw-requirement-guard-copy">Save or discard this requirement before leaving the editor.</p>
+      <div class="jw-requirement-guard-actions">
+        <button class="secondary-btn" type="button" data-project-requirement-guard-keep>Keep editing</button>
+        <button class="secondary-btn" type="button" data-project-requirement-guard-discard>Discard changes</button>
+        <button class="primary-btn" type="button" data-project-requirement-guard-save>Save requirement</button>
       </div>
-      ${rows.length ? `<button class="company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity &rarr;</button>` : ""}
     </div>
-    <div class="company-recent-activity-list">
-      ${rows.length
-        ? rows.map(companyRecentActivityRowHTML).join("")
-          : `<div class="company-dashboard-empty-state compact">
-             <strong class="company-dashboard-state-title">No recent activity</strong>
-             <span class="company-dashboard-state-copy">Project, attendance and offer updates will appear here.</span>
-          </div>`}
-    </div>
-  </section>`;
-}
-
-function companyRecentActivityItems(user, summary = companyDashboardSummary(user)) {
-  const companyProjectIds = new Set(summary.companyJobs.map((job) => job.id));
-  const fromStore = (state.projectActivities || []).filter(
-    (item) => comIn QR</button>
-      </div>
-    </div>`;
+  </div>`;
   document.body.appendChild(modal);
-  modal.querySelectorAll("[data-qr-scan-close]").forEach((btn) =>
-    btn.addEventListener("click", closeWorkerQrScanner),
+  modal.querySelectorAll("[data-project-requirement-guard-keep]").forEach(
+    (button) => button.addEventListener("click", closeProjectRequirementUnsavedGuard),
   );
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeWorkerQrScanner();
+  modal.querySelector("[data-project-requirement-guard-discard]")?.addEventListener("click", () => {
+    closeProjectRequirementUnsavedGuard();
+    closeProjectRequirementModal({ afterClose: afterExit });
   });
-  modal.querySelector("[data-qr-scan-use]")?.addEventListener("click", async () => {
-    await workerScanCheckIn(uid, workerObj);
-    closeWorkerQrScanner();
+  modal.querySelector("[data-project-requirement-guard-save]")?.addEventListener("click", () => {
+    closeProjectRequirementUnsavedGuard();
+    saveProjectRequirementEditor({ afterSave: afterExit });
   });
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeProjectRequirementUnsavedGuard();
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeProjectRequirementUnsavedGuard();
+  });
+  modal.querySelector("[data-project-requirement-guard-keep]")?.focus();
 }
 
-// camera-scanner-ready / future QR camera integration:
-// validates the active project sign-in token without opening a real camera yet.
-async function workerScanCheckIn(uid, workerObj) {
-  const today = todayDateStr();
-  const job = assignedJobForWorker(uid);
-  if (!job) {
-    showToast("You're not assigned to a site today");
+function requestProjectRequirementEditorExit(afterExit = null) {
+  if (!projectRequirementEditorState) {
+    if (typeof afterExit === "function") afterExit();
     return;
   }
-  const dailyJob = dailyJobForDate(job, today);
+  if (projectRequirementEditorHasUnsavedChanges()) {
+    openProjectRequirementUnsavedGuard(afterExit);
+    return;
+  }
+  closeProjectRequirementModal({ afterClose: afterExit });
+}
 
-  if (!bookingAgreementActive(job)) {
-    showToast("Accept your Job Agreement before checking in");
-    const agr = agreementForJob(job);
-    if (agr) openAgreementModal(agr.id);
-    return;
+function saveProjectRequirementEditor({ afterSave = null } = {}) {
+  const editor = projectRequirementEditorState;
+  const modal = document.getElementById("projectRequirementModal");
+  if (!editor || !modal) return false;
+  syncProjectRequirementEditorDraft(modal);
+  const validationIssue = projectRequirementDraftValidationIssue(editor);
+  if (validationIssue) {
+    showProjectRequirementValidationIssue(validationIssue);
+    return false;
   }
-
-  const code = activeSiteCode(job.id);
-  if (!code) {
-    showToast(
-      "No active site sign-in QR is available for this project today",
-    );
-    return;
-  }
-  if (!companyAssignedWorkers(job).some((worker) => worker.id === uid)) {
-    showToast("You're not assigned to this project");
-    return;
-  }
-  if (!isDateWithinProjectDates(job, today)) {
-    showToast("This project QR is not active today");
-    return;
-  }
-
-  const scanMs = Date.now();
-  const startMs = siteStartMs(code.startTime);
-  const suggested = suggestStatusForScan(scanMs, startMs);
-  let gps = null;
-  let gpsDistance = null;
-  try {
-    gps = await getGPS();
-    if (gps && job.sitePin?.lat != null && job.sitePin?.lng != null) {
-      gpsDistance = haversine(gps.lat, gps.lng, job.sitePin.lat, job.sitePin.lng);
-    }
-  } catch (_) {
-    gps = null;
-  }
-  const previous = attendanceRecords.find(
-    (r) => r.workerId === uid && r.jobId === job.id && r.date === today,
-  );
-  if (previous?.status === "checkedIn" || previous?.scanToken || previous?.checkInTime) {
-    showToast("You're already signed in for this project today");
-    return;
-  }
-  const lateReport = previous?.lateReport
-    ? {
-        ...previous.lateReport,
-        actualArrivalTime: new Date(scanMs).toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      }
-    : null;
-
-  const rec = {
-    id: createId(),
-    workerId: uid,
-    jobId: job.id,
-    companyId: job.companyId || "",
-    companyName: job.companyName || "",
-    jobTrade: job.trade || "",
-    jobLocation: dailyJob?.siteAddress || dailyJob?.location || job.location || "",
-    projectName: job.projectName || job.siteName || "",
-    siteName: dailyJob?.clientSiteName || job.siteName || "",
-    jobNumber: dailyJob?.companyJobNumber || job.jobNumber || "",
-    dailyJobId: dailyJob?.id || "",
-    clientSiteName: dailyJob?.clientSiteName || "",
-    dailySiteAddress: dailyJob?.siteAddress || "",
-    dailyClientReference: dailyJob?.clientReference || "",
-    invoiceReference: dailyJob?.invoiceReference || "",
-    workNotes: dailyJob?.workNotes || "",
-    date: today,
-    scanDate: today,
-    status: "checkedIn",
-    rating: 0,
-    recordedAt: scanMs,
-    selfReported: true,
-    supervisorConfirmed: false,
-    checkInTime: scanMs,
-    suggestedStatus: suggested,
-    expectedStartTime: code.startTime || jobExpectedStartTime(job),
-    scanTime: new Date(scanMs).toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    qrCodeId: code.id,
-    qrScope: code.scope || "project",
-    qrDate: today,
-    scanToken: code.token,
-  };
-  rec.commercial = attendanceCommercialSnapshot(rec, job);
-  if (gps) {
-    rec.gpsLat = gps.lat;
-    rec.gpsLng = gps.lng;
-    rec.gpsTimestamp = scanMs;
-    if (gpsDistance != null) rec.gpsDistance = gpsDistance;
-  }
-  if (lateReport) {
-    rec.lateReport = lateReport;
-    rec.reportedIssue = previous.reportedIssue;
-    upsertWorkerLateReport(uid, lateReport, today);
-    saveState();
-  }
-  attendanceRecords = attendanceRecords.filter(
-    (r) => !(r.workerId === uid && r.jobId === job.id && r.date === today),
-  );
-  attendanceRecords.unshift(rec);
-  saveAttendanceRecords();
-
-  logActivity(
-    "attend",
-    `<strong>${escapeHtml(workerObj.name)}</strong> scanned in at ${escapeHtml(job.location)} — pending approval`,
-  );
-  addProjectActivity(job, {
-    type: PROJECT_ACTIVITY_TYPES.WORKER_SIGNED_IN,
-    title: `${workerObj.name} signed in.`,
-    description: `Sign-in time ${rec.scanTime || formatUKTime(scanMs)}.`,
-    workerId: uid,
-    timestamp: new Date(scanMs).toISOString(),
-    source: "site_sign_in_qr",
-    severity: "success",
-    metadata: {
-      attendanceRecordId: rec.id,
-      date: today,
-      status: suggested,
+  if (!validateProjectRequirementEditorStep(modal)) return false;
+  const draft = editor.draft;
+  const requirementPayload = {
+    ...editor.original,
+    documentId: editor.requirementId || undefined,
+    documentName: draft.documentName,
+    requirementType: draft.requirementType,
+    description: draft.description,
+    contentToFollow: draft.contentToFollow,
+    sourceReference: "",
+    resources: draft.resources,
+    completionAction: draft.completionAction,
+    completionEvidence: normalizeProjectRequirementCompletionEvidence(draft),
+    requirementLevel: draft.requirementLevel,
+    timing: draft.timing,
+    audience: draft.audience,
+    version: draft.version || "1",
+    requireRecompletionOnUpdate: draft.requireRecompletionOnUpdate,
+    requireWorkerAcknowledgementSignature:
+      draft.requirementType === "onsite_induction" &&
+      draft.requireWorkerAcknowledgementSignature,
+    externalTraining:
+      draft.requirementType === "external_training"
+        ? normalizeProjectRequirementExternalTraining(draft)
+        : null,
+    backgroundCheck:
+      draft.requirementType === "background_check"
+        ? normalizeProjectRequirementBackgroundCheck(draft)
+        : null,
+    formDefinition:
+      draft.requirementType === "form_signature"
+        ? normalizeProjectRequirementFormDefinition(draft)
+        : { fields: [] },
+    pdfTemplate:
+      draft.requirementType === "form_signature"
+        ? normalizeProjectRequirementPdfTemplate(draft)
+        : { sourceResourceId: "", fields: [] },
+    comprehensionCheck: {
+      enabled: draft.requirementType === "video_induction" && draft.completionAction === "watch_comprehension",
+      passThreshold: draft.comprehensionCheck?.passThreshold || 80,
+      questions: (draft.comprehensionCheck?.questions || [])
+        .map(normalizeProjectRequirementQuizQuestion)
+        .filter(Boolean),
     },
-    dedupeKey: `worker_signed_in:${job.id}:${uid}:${today}`,
-  });
-  saveState();
-  showToast("Checked in — pending supervisor approval");
-  refreshWorkerAttCard(uid, workerObj);
-}
-
-// ─── Worker Timesheet ─────────────────────────────────────
-function renderWorkerTimesheet(uid, user, histEl) {
-  if (!histEl) return;
-
-  const myRecs = attendanceRecords
-    .filter((r) => r.workerId === uid)
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  const stats = getWorkerStats(uid);
-  const currentAssignment = state.jobs.find((job) => job.assignedWorkerId === uid && !job.completed);
-  const lateReports = myRecs.filter((rec) => rec.lateReport);
-  const confirmedDays = myRecs.filter((rec) => rec.supervisorConfirmed || ["onTime", "late", "noShow"].includes(rec.status));
-
-  const tsHeader = document.querySelector("#tab-attendance .ts-header");
-  const assignmentPanel = `
-    <div class="worker-timesheet-panel">
-      <div class="worker-section-head">
-        <h2>Current assignment</h2>
-        <span>${currentAssignment ? "Active" : "None"}</span>
-      </div>
-      ${
-        currentAssignment
-          ? `<div class="worker-flow-card">
-              <h3>${escapeHtml(currentAssignment.trade)} · ${escapeHtml(currentAssignment.location)}</h3>
-              <div class="worker-flow-meta">${currentAssignment.start ? formatDate(currentAssignment.start) : "Start TBC"} · ${escapeHtml(jobExpectedStartTime(currentAssignment))}${currentAssignment.shiftFinishTime ? ` to ${escapeHtml(currentAssignment.shiftFinishTime)}` : ""}</div>
-              <div class="worker-flow-actions">
-                <button class="secondary-btn" type="button" data-map-job="${currentAssignment.id}">Site Details</button>
-              </div>
-            </div>`
-          : guidedEmptyStateHTML({
-              kicker: "Assignment",
-              title: "No active assignment",
-              body: "Confirmed work will appear here once a company accepts you and the agreement is ready.",
-              actionLabel: "View Offers",
-              actionTab: "offers",
-            })
-      }
-    </div>`;
-
-  if (!myRecs.length) {
-    histEl.innerHTML =
-      assignmentPanel +
-      guidedEmptyStateHTML({
-        kicker: "Timesheet",
-        title: "No attendance history yet",
-        body: "Your signed-in days, late reports and weekly confirmations will appear here after your first confirmed shift.",
-      }) +
-      workerPaymentsSection(user);
-    histEl.querySelectorAll("[data-map-job]").forEach((btn) => {
-      btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
-    });
-    return;
+  };
+  const result = editor.mode === "draft"
+    ? upsertDraftPreStartRequirement(requirementPayload)
+    : upsertProjectRequirement(editor.jobId, requirementPayload);
+  if (!result.ok) {
+    showToast(result.reason);
+    return false;
   }
-
-  const summaryBar = `
-    <div class="ts-summary">
-      <div class="ts-summary-item">
-        <div class="ts-summary-val" style="color:${stats.reliability >= 90 ? "var(--orange)" : stats.reliability >= 75 ? "var(--green-text)" : "var(--red-text)"}">${stats.reliability ?? "—"}%</div>
-        <div class="ts-summary-lbl">Reliability</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${stats.punctuality ?? "—"}%</div>
-        <div class="ts-summary-lbl">Punctuality</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${stats.performance ? `★${stats.performance}` : "—"}</div>
-        <div class="ts-summary-lbl">Avg Rating</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${stats.totalShifts}</div>
-        <div class="ts-summary-lbl">Shifts</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${stats.noShow}</div>
-        <div class="ts-summary-lbl">No Shows</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${lateReports.length}</div>
-        <div class="ts-summary-lbl">Late Reports</div>
-      </div>
-      <div class="ts-summary-item">
-        <div class="ts-summary-val">${confirmedDays.length}</div>
-        <div class="ts-summary-lbl">Confirmed</div>
-      </div>
-    </div>`;
-
-  const rows = myRecs
-    .map((rec) => {
-      const cfg = ATT_CFG[rec.status] || ATT_CFG.notRequired;
-      const stars = rec.rating
-        ? `<span class="ts-stars">${"★".repeat(rec.rating)}${"☆".repeat(5 - rec.rating)}</span>`
-        : "";
-      const job = state.jobs.find((j) => j.assignedWorkerId === uid);
-      const siteLabel =
-        rec.clientSiteName ||
-        rec.dailySiteAddress ||
-        rec.jobLocation ||
-        job?.location ||
-        "";
-      const site = siteLabel
-        ? `<span class="ts-site">${escapeHtml(siteLabel)}</span>`
-        : "";
-      const gps = rec.gpsLat
-        ? `<span class="ts-gps" title="GPS recorded">📍</span>`
-        : "";
-      const coMarked = !rec.selfReported;
-      const source = coMarked
-        ? `<span class="ts-co-badge">Company</span>`
-        : `<span class="ts-self-badge">Self</span>`;
-
-      // Dispute: only for company-marked late or no-show records
-      const canDispute =
-        coMarked && (rec.status === "late" || rec.status === "noShow");
-      const disputed = rec.disputeStatus === "pending";
-      const resolved = rec.disputeStatus === "resolved";
-      const disputeEl = canDispute
-        ? disputed
-          ? `<span class="att-dispute-badge att-dispute-badge--pending ts-dispute-badge">⏳ Under Review</span>`
-          : resolved
-            ? `<span class="att-dispute-badge att-dispute-badge--resolved ts-dispute-badge">✓ Resolved</span>`
-            : `<button class="ts-raise-dispute" data-dispute-record="${rec.id}" type="button">Raise Dispute</button>`
-        : "";
-
-      return `
-      <div class="ts-row${canDispute && !disputed && !resolved ? " ts-row--co-neg" : ""}">
-        <div class="ts-row-date">${formatAttDate(rec.date)}</div>
-        <div class="ts-row-status">
-          <span class="ts-status-dot" style="background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.border}">${cfg.icon}</span>
-          <span class="ts-status-lbl" style="color:${cfg.color}">${cfg.label}</span>
-        </div>
-        <div class="ts-row-right">${site}${stars}${gps}${source}${disputeEl}</div>
-      </div>`;
-    })
-    .join("");
-
-  const lateReportRows = lateReports.length
-    ? `<div class="worker-timesheet-panel">
-        <div class="worker-section-head"><h2>Late reports submitted</h2><span>${lateReports.length}</span></div>
-        ${lateReports
-          .slice(0, 5)
-          .map((rec) => `<div class="worker-flow-card"><h3>${formatAttDate(rec.date)}</h3><div class="worker-flow-meta">${escapeHtml(rec.lateReport.reason || "Other")} · ETA ${escapeHtml(rec.lateReport.estimatedArrivalTime || "—")}${rec.lateReport.supervisorDecision ? ` · ${escapeHtml(LATE_CLASSIFICATION[rec.lateReport.supervisorDecision] || rec.lateReport.supervisorDecision)}` : ""}</div></div>`)
-          .join("")}
-      </div>`
-    : "";
-
-  histEl.innerHTML =
-    assignmentPanel +
-    summaryBar +
-    `<div class="ts-rows">${rows}</div>` +
-    lateReportRows +
-    workerPaymentsSection(user);
-
-  // Wire dispute buttons for workers
-  histEl.querySelectorAll("[data-dispute-record]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      openDisputeModal(btn.dataset.disputeRecord),
-    );
+  closeProjectRequirementModal({
+    afterClose: () => {
+      if (editor.mode === "draft") renderDraftPreStartStep();
+      else render();
+      if (typeof afterSave === "function") afterSave();
+    },
   });
-  histEl.querySelectorAll("[data-map-job]").forEach((btn) => {
-    btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
-  });
-}
-
-// ─── Render Attendance Tab ─────────────────────────────────
-function renderAttendance() {
-  const user = getSessionUser();
-  const isAdmin = !user;
-  if (user?.type === "company") {
-    if (window.location.hash.startsWith("#attendance/project/")) {
-      syncAttendanceProjectFromHash();
-      switchTab("attendance", { scroll: false });
-    }
-    const projects = companyAttendanceProjects(user);
-    if (
-      activeAttendanceProjectId &&
-      !projects.some((job) => job.id === activeAttendanceProjectId)
-    ) {
-      activeAttendanceProjectId = "";
-    }
-    const visibleProjects = filterAttendanceProjects(projects);
-    const selectedProject = projects.find((job) => job.id === activeAttendanceProjectId) || null;
-    if (selectedProject) qrSelectedJobId = selectedProject.id;
-    renderCompanyAttendanceShell(user, selectedProject, visibleProjects, projects);
-    const badge = document.getElementById("attTodayBadge");
-    if (badge) badge.textContent = formatAttDate(todayDateStr());
-    bindCompanyAttendanceProjectControls(document.getElementById("tab-attendance"));
-    bindLabourRequestWorkflow(document.getElementById("tab-attendance"));
-    renderAttendanceDemoControls();
-    if (!selectedProject) return;
-  }
-
-  const container = document.getElementById("attendanceCards");
-  const histEl = document.getElementById("attendanceHistory");
-  const badge = document.getElementById("attTodayBadge");
-  if (!container) return;
-
-  // Reset labels for company/admin (worker view may have changed these)
-  const attTitle = document.querySelector("#tab-attendance .panel-title");
-  const attSub = document.querySelector("#tab-attendance .panel-subtitle");
-  if (attTitle)
-    attTitle.textContent = isAdmin ? "Attendance" : "Site Attendance";
-  if (attSub)
-    attSub.textContent = isAdmin
-      ? "Required daily — mark every worker's status before end of day"
-      : "Confirm each worker's attendance — reliability updates only once you confirm";
-  const histTitle = document.getElementById("attHistoryTitle");
-  const histSub = document.getElementById("attHistorySub");
-  if (histTitle) histTitle.textContent = "History";
-  if (histSub) histSub.textContent = "Past attendance records by day";
-  const submitBtn = document.getElementById("submitAttendanceBtn");
-  const submitWrap = document.querySelector(".att-submit-wrap");
-  if (submitWrap) submitWrap.style.display = "";
-  if (submitBtn) {
-    submitBtn.textContent = isAdmin
-      ? "Submit Attendance"
-      : "Confirm Attendance";
-    submitBtn.onclick = submitDayAttendance;
-  }
-
-  if (badge) badge.textContent = formatAttDate(todayDateStr());
-
-  const today = todayDateStr();
-  const selectedProject =
-    user?.type === "company" && activeAttendanceProjectId
-      ? findJob(activeAttendanceProjectId)
-      : null;
-  const rosterWorkers = selectedProject
-    ? attendanceProjectWorkers(selectedProject)
-    : state.workers;
-  const workerIdSet = selectedProject
-    ? new Set(rosterWorkers.map((worker) => worker.id))
-    : null;
-  const scopedTodayRecords = attendanceRecords.filter(
-    (r) =>
-      r.date === today &&
-      (!selectedProject ||
-        attendanceRecordMatchesProject(r, selectedProject, workerIdSet)),
+  showToast(
+    result.updated
+      ? "Pre-start requirement updated"
+      : "Pre-start requirement added",
   );
+  return true;
+}
 
-  renderAttendanceDemoControls();
+function readProjectRequirementFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected file could not be read."));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
 
-  // Daily site QR generator (supervisor / admin)
-  renderSiteQrPanel();
+function projectRequirementFileExtensionAllowed(fileName) {
+  const extension = `.${String(fileName || "").split(".").pop().toLowerCase()}`;
+  return PROJECT_REQUIREMENT_FILE_ACCEPT.split(",").includes(extension);
+}
 
-  // Pre-fill todayAttendanceMap from saved records (skip pure check-in /
-  // reported-issue records so the supervisor still chooses a final status).
-  attendanceRecords
+function projectRequirementFileBytes(resources, excludedId = "") {
+  return (resources || [])
     .filter(
-      (r) =>
-        r.date === today &&
-        (!selectedProject ||
-          attendanceRecordMatchesProject(r, selectedProject, workerIdSet))
+      (resource) =>
+        resource.type === "file" && resource.id !== excludedId,
     )
-    .forEach((r) => {
-      if (todayAttendanceMap[r.workerId]) return;
-      if (r.lateReport?.supervisorDecision) {
-        todayAttendanceMap[r.workerId] = {
-          status:
-            r.lateReport.supervisorDecision === "worker_did_not_arrive"
-              ? "noShow"
-              : "late",
-          rating: r.rating || 0,
-          lateSupervisorDecision: r.lateReport.supervisorDecision,
-        };
-        return;
-      }
-      if (
-        r.status === "checkedIn" ||
-        r.status === "reportedIssue" ||
-        r.status === "unconfirmed"
-      )
-        return;
-      todayAttendanceMap[r.workerId] = { status: r.status, rating: r.rating };
-    });
+    .reduce((total, resource) => total + (Number(resource.size) || 0), 0);
+}
 
-  // Required banner — count workers without a company-marked record today
-  const companyMarkedToday = new Set(
-    scopedTodayRecords
-      .filter((r) => !r.selfReported)
-      .map((r) => r.workerId),
+async function createProjectRequirementFileResources(
+  files,
+  resources,
+  replacedResource = null,
+) {
+  const selected = Array.from(files || []);
+  if (!selected.length) return [];
+  const invalidType = selected.find(
+    (file) => !projectRequirementFileExtensionAllowed(file.name),
   );
-  const unmarkedCount = rosterWorkers.filter(
-    (w) => !companyMarkedToday.has(w.id),
-  ).length;
-  const requiredBanner =
-    rosterWorkers.length > 0
-      ? `
-    <div class="att-required-banner ${unmarkedCount === 0 ? "att-req-complete" : "att-req-pending"}">
-      ${
-        unmarkedCount === 0
-          ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-           All ${rosterWorkers.length} workers marked for today`
-          : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-           <strong>${unmarkedCount} worker${unmarkedCount !== 1 ? "s" : ""} not yet marked today</strong> — attendance is required daily`
-      }
-    </div>`
-      : "";
-
-  // Bulk-approve checked-in workers (apply each suggested status, then confirm)
-  const checkedInToday = scopedTodayRecords.filter(
-    (r) => r.status === "checkedIn",
+  if (invalidType) {
+    throw new Error("Choose a supported project document, office file or image.");
+  }
+  const oversized = selected.find(
+    (file) => file.size > PROJECT_REQUIREMENT_FILE_MAX_BYTES,
   );
-  const bulkBar = checkedInToday.length
-    ? `
-    <div class="att-bulk-bar">
-      <span>${checkedInToday.length} worker${checkedInToday.length !== 1 ? "s" : ""} checked in awaiting confirmation</span>
-      <button class="att-bulk-btn" id="bulkApproveBtn" type="button">Approve all checked-in</button>
-    </div>`
-    : "";
-
-  container.innerHTML =
-    (selectedProject ? attendanceLiveSummaryHTML(rosterWorkers, selectedProject, today) : "") +
-    (!selectedProject && rosterWorkers.length > 0 ? requiredBanner : "") +
-    bulkBar +
-    (selectedProject
-      ? groupedAttendanceCardsHTML(rosterWorkers, selectedProject, today)
-      : rosterWorkers.length
-      ? rosterWorkers.map((w) => attendanceCard(w, today)).join("")
-      : guidedEmptyStateHTML({
-          kicker: selectedProject ? "Attendance Roster" : "Roster",
-       title: selectedProject
-             ? "No sub-contractors assigned to this project"
-             : "No sub-contractors in the roster",
-           body: selectedProject
-             ? "Assign sub-contractors to this project before confirming daily attendance."
-             : "Add sub-contractor profiles before using the attendance review tools.",
-           actionLabel: selectedProject ? "Back to Attendance" : "Add Sub-contractor",
-          actionTab: selectedProject ? "attendance" : "add",
-        }));
-  if (rosterWorkers.length) bindAttendanceEvents(container);
-
-  const bulkBtn = document.getElementById("bulkApproveBtn");
-  if (bulkBtn)
-    bulkBtn.addEventListener("click", () => {
-      checkedInToday.forEach((r) => {
-        todayAttendanceMap[r.workerId] = {
-          status: r.suggestedStatus || "onTime",
-          rating: todayAttendanceMap[r.workerId]?.rating || 0,
-        };
-      });
-      submitDayAttendance();
-    });
-
-  if (submitBtn) {
-    const hasChanges = hasAttendanceConfirmationChanges(rosterWorkers, selectedProject, today);
-    submitBtn.classList.toggle("primary-btn", hasChanges);
-    submitBtn.classList.toggle("secondary-btn", !hasChanges);
-    submitBtn.disabled = rosterWorkers.length === 0;
+  if (oversized) {
+    throw new Error(`${oversized.name} is larger than the 1 MB local prototype limit.`);
   }
-
-  // Admin-only attendance review (full audit incl. exception counters)
-  renderAdminAttendanceReview();
-
-  // ── History ──
-  const pastDates = [
-    ...new Set(
-      (selectedProject
-        ? attendanceProjectRecords(selectedProject, { includeToday: false })
-        : attendanceRecords)
-        .map((r) => r.date)
-        .filter((d) => d !== today),
-    ),
-  ]
-    .sort()
-    .reverse()
-    .slice(0, 7);
-
-  if (!pastDates.length) {
-    histEl.innerHTML = `<div class="attendance-history-inline-empty">
-      <strong>No attendance history yet.</strong>
-      <span>Records will appear after the first confirmed attendance submission.</span>
-    </div>`;
-    return;
+  const existingBytes = projectRequirementFileBytes(
+    resources,
+    replacedResource?.id || "",
+  );
+  const selectedBytes = selected.reduce((total, file) => total + file.size, 0);
+  if (existingBytes + selectedBytes > PROJECT_REQUIREMENT_FILES_TOTAL_MAX_BYTES) {
+    throw new Error("Requirement files exceed the 2 MB local prototype limit.");
   }
-  histEl.innerHTML = pastDates
-    .map((date) => {
-      const recs = attendanceRecords.filter((r) => r.date === date);
-      const scopedRecs = selectedProject
-        ? recs.filter(
-            (r) =>
-              attendanceRecordMatchesProject(r, selectedProject, workerIdSet),
-          )
-        : recs;
-      const c = {
-        on: scopedRecs.filter((r) => r.status === "onTime").length,
-        late: scopedRecs.filter((r) => r.status === "late").length,
-        ns: scopedRecs.filter((r) => r.status === "noShow").length,
-      };
-      return `
-    <div class="att-history-group">
-      <div class="att-history-header">
-        <span class="att-history-date">${formatAttDate(date)}</span>
-        <div class="att-history-counts">
-          <span class="att-hc on-time">✓ ${c.on}</span>
-          <span class="att-hc late">⏱ ${c.late}</span>
-          <span class="att-hc no-show">✗ ${c.ns}</span>
-        </div>
-      </div>
-      <div class="att-history-rows">
-        ${scopedRecs
-          .map((r) => {
-            const w = findWorker(r.workerId);
-            if (!w) return "";
-            const cfg = ATT_CFG[r.status] || ATT_CFG.notRequired;
-            const stars = r.rating
-              ? "★".repeat(r.rating) + "☆".repeat(5 - r.rating)
-              : "";
-            const disputed = r.disputeStatus === "pending";
-            const resolved = r.disputeStatus === "resolved";
-            return `<div class="att-history-row ${disputed ? "att-hist-disputed" : ""}">
-            <span class="att-history-dot" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</span>
-            <span class="att-history-worker">${escapeHtml(w.name)}</span>
-            <span class="att-history-trade">${escapeHtml(w.trade)}</span>
-            ${stars ? `<span class="att-stars">${stars}</span>` : ""}
-            ${r.gpsLat ? `<span class="att-gps-badge" title="GPS recorded">📍</span>` : ""}
-            ${
-              disputed
-                ? `<span class="att-dispute-badge att-dispute-badge--pending">⏳ Under Review</span>`
-                : resolved
-                  ? `<span class="att-dispute-badge att-dispute-badge--resolved">✓ Resolved</span>`
-                  : r.status === "late" || r.status === "noShow"
-                    ? `<button class="att-raise-dispute" data-dispute-record="${r.id}" type="button">Raise Dispute</button>`
-                    : ""
-            }
-          </div>`;
-          })
-          .join("")}
-      </div>
-    </div>`;
-    })
-    .join("");
+  const createdAt = replacedResource?.createdAt || new Date().toISOString();
+  return Promise.all(
+    selected.map(async (file, index) => ({
+      id:
+        replacedResource && index === 0
+          ? replacedResource.id
+          : createId(),
+      type: "file",
+      label: file.name,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      dataUrl: await readProjectRequirementFile(file),
+      createdAt,
+    })),
+  );
+}
 
-  // Wire dispute buttons
-  histEl.querySelectorAll("[data-dispute-record]").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      openDisputeModal(btn.dataset.disputeRecord),
-    );
+function syncProjectRequirementEvidenceDefaults(draft) {
+  draft.completionEvidence = normalizeProjectRequirementCompletionEvidence({
+    ...draft,
+    completionEvidence: draft.completionEvidence,
   });
 }
 
-// ─── Project Site Sign-In QR Panel (supervisor / admin) ───
-function renderSiteQrPanel() {
-  const panel = document.getElementById("siteQrPanel");
-  if (!panel) return;
-  const user = getSessionUser();
-  const scopedProject =
-    user?.type === "company" && activeAttendanceProjectId
-      ? findJob(activeAttendanceProjectId)
-      : null;
-
-  const liveJobs = (scopedProject
-    ? [scopedProject]
-    : state.jobs.filter((j) => !user?.id || companyOwnsJob(j, user.id))
+function saveProjectRequirementResource(modal) {
+  const editor = projectRequirementEditorState;
+  const resourceEditor = editor?.resourceEditor;
+  if (!editor || !resourceEditor) return;
+  const composer = modal.querySelector(".project-requirement-resource-composer");
+  const requiredFields = Array.from(
+    composer?.querySelectorAll("input[required], textarea[required]") || [],
   );
-  if (!liveJobs.length) {
-    panel.innerHTML = `
-      <div class="qr-panel">
-        <div class="qr-panel-head">
-          <h3 class="qr-panel-title">Site Sign-In QR</h3>
-        </div>
-        <div class="qr-empty">Select a project to view its site sign-in QR.</div>
-      </div>`;
+  const invalidField = requiredFields.find((field) => !field.checkValidity());
+  if (invalidField) {
+    invalidField.reportValidity();
     return;
   }
-
-  if (scopedProject) qrSelectedJobId = scopedProject.id;
-  if (!qrSelectedJobId || !liveJobs.some((j) => j.id === qrSelectedJobId)) {
-    qrSelectedJobId = liveJobs[0].id;
+  const existingIndex = editor.draft.resources.findIndex(
+    (resource) => resource.id === resourceEditor.resourceId,
+  );
+  const existing = editor.draft.resources[existingIndex];
+  const label = modal
+    .querySelector("[data-project-requirement-resource-label]")
+    ?.value.trim();
+  let resource = null;
+  if (resourceEditor.type === "external_link") {
+    const urlField = modal.querySelector(
+      "[data-project-requirement-resource-url]",
+    );
+    const url = urlField?.value.trim();
+    if (!validProjectRequirementExternalUrl(url)) {
+      urlField.setCustomValidity("Enter a valid http or https URL.");
+      urlField.reportValidity();
+      urlField.setCustomValidity("");
+      return;
+    }
+    resource = {
+      id: existing?.id || createId(),
+      type: "external_link",
+      label,
+      url,
+      instructions:
+        modal
+          .querySelector("[data-project-requirement-resource-instructions]")
+          ?.value.trim() || "",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
+  } else if (resourceEditor.type === "reference") {
+    resource = {
+      id: existing?.id || createId(),
+      type: "reference",
+      label,
+      details:
+        modal
+          .querySelector("[data-project-requirement-resource-details]")
+          ?.value.trim() || "",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+    };
   }
-  const job = findJob(qrSelectedJobId);
-  const code = ensureSiteCode(qrSelectedJobId);
+  const normalized = normalizeProjectRequirementResource(resource);
+  if (!normalized) return;
+  if (existingIndex >= 0) editor.draft.resources[existingIndex] = normalized;
+  else editor.draft.resources.push(normalized);
+  syncProjectRequirementEvidenceDefaults(editor.draft);
+  editor.resourceEditor = null;
+  renderProjectRequirementEditor({ focusHeading: false });
+}
 
-  const options = liveJobs
-    .map(
+function bindProjectRequirementEditorControls(modal) {
+  modal
+    .querySelector("[data-project-requirement-document-upload]")
+    ?.addEventListener("change", async (event) => {
+      syncProjectRequirementEditorDraft(modal);
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      const existingFile = projectRequirementEditorState.draft.resources.find(
+        (resource) => resource.type === "file",
+      );
+      try {
+        const [resource] = await createProjectRequirementFileResources(
+          [file],
+          projectRequirementEditorState.draft.resources,
+          existingFile || null,
+        );
+        if (!resource) return;
+        projectRequirementEditorState.draft.resources = [
+          ...projectRequirementEditorState.draft.resources.filter(
+            (item) => item.id !== existingFile?.id,
+          ),
+          resource,
+        ];
+        renderProjectRequirementEditor({ focusHeading: false });
+      } catch (error) {
+        showToast(error.message || "The document could not be added");
+      }
+    });
+  modal
+    .querySelector("[data-project-requirement-pdf-upload]")
+    ?.addEventListener("change", async (event) => {
+      syncProjectRequirementEditorDraft(modal);
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        showToast("Choose a PDF source document");
+        return;
+      }
+      const existingPdf = projectRequirementEditorState.draft.resources.find(
+        (resource) => resource.type === "file" && resource.mimeType === "application/pdf",
+      );
+      try {
+        const [resource] = await createProjectRequirementFileResources(
+          [file],
+          projectRequirementEditorState.draft.resources,
+          existingPdf || null,
+        );
+        if (!resource) return;
+        projectRequirementEditorState.draft.resources = [
+          ...projectRequirementEditorState.draft.resources.filter(
+            (item) => item.id !== existingPdf?.id,
+          ),
+          resource,
+        ];
+        projectRequirementEditorState.draft.pdfTemplate = {
+          sourceResourceId: resource.id,
+          fields: existingPdf?.id === resource.id
+            ? normalizeProjectRequirementPdfTemplate(
+                projectRequirementEditorState.draft,
+              ).fields
+            : [],
+        };
+        renderProjectRequirementEditor({ focusHeading: false });
+      } catch (error) {
+        showToast(error.message || "The PDF could not be added");
+      }
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-step]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        const step = Number(button.dataset.projectRequirementStep);
+        if (!Number.isInteger(step) || step >= projectRequirementEditorState.step) {
+          return;
+        }
+        projectRequirementEditorState.step = step;
+        projectRequirementEditorState.resourceEditor = null;
+        renderProjectRequirementEditor();
+      });
+    });
+  modal.querySelectorAll("[data-project-requirement-close]").forEach((button) =>
+    button.addEventListener("click", () => requestProjectRequirementEditorExit()),
+  );
+  modal.querySelector(".project-requirement-sheet")?.addEventListener("click", (event) => {
+    if (
+      projectRequirementEditorState?.resourceEditor?.type !== "choose" ||
+      event.target.closest(".project-requirement-resource-add-wrap")
+    ) {
+      return;
+    }
+    syncProjectRequirementEditorDraft(modal);
+    projectRequirementEditorState.resourceEditor = null;
+    renderProjectRequirementEditor({ focusHeading: false });
+  });
+  modal
+    .querySelector("[data-project-requirement-resource-add]")
+    ?.addEventListener("click", () => {
+      syncProjectRequirementEditorDraft(modal);
+      projectRequirementEditorState.resourceEditor =
+        projectRequirementEditorState.resourceEditor?.type === "choose"
+          ? null
+          : { type: "choose", resourceId: "" };
+      renderProjectRequirementEditor({ focusHeading: false });
+    });
+  modal
+    .querySelectorAll("[data-project-requirement-resource-type]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        syncProjectRequirementEditorDraft(modal);
+        projectRequirementEditorState.resourceEditor = {
+          type: button.dataset.projectRequirementResourceType,
+          resourceId: "",
+        };
+        renderProjectRequirementEditor({ focusHeading: false });
+      });
+    });
+  modal
+    .querySelector("[data-project    .map(
       (j) =>
         `<option value="${j.id}" ${j.id === qrSelectedJobId ? "selected" : ""}>${escapeHtml(j.trade)} · ${escapeHtml(j.location)}</option>`,
     )

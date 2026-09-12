@@ -1,262 +1,3 @@
--requirement-group-head">
-                      <h5 id="jobRoleScopeTitle">Role &amp; scope</h5>
-                    </div>
-                    <div class="jw-grid jw-labour-role-grid">
-                      <label class="field-label">
-                        Trade *
-                        <select id="jobTrade" required>
-                          <option value="">Select trade</option>
-                        </select>
-                      </label>
-                      <label class="field-label">
-                        Role / Specialism *
-                        <select id="jobSpecialism" required disabled>
-                          <option value="">Select a trade first</option>
-                        </select>
-                      </label>
-                      <div class="jw-taxonomy-action-row jw-span-2">
-                        <button class="taxonomy-missing-action" type="button" data-taxonomy-suggestion="company">Can't find the trade or role you need?</button>
-                      </div>
-                      <label class="field-label">
-                        Sub-contractors required *
-                        <input id="jobQuantity" type="number" min="1" value="1" placeholder="e.g. 2" required />
-                      </label>
-                      <label class="field-label">
-                        Work Activity *
-                        <input id="workActivity" type="text" placeholder="e.g. Lighting 2nd Fix" required />
-                      </label>
-                      <div class="field-label jw-span-2">
-                        <label for="jobCredentialSearch">Additional cards, tickets &amp; qualifications <span class="jw-field-optional">Optional</span></label>
-                        <div class="credential-multiselect" data-job-credential-picker>
-                          <div class="credential-search-control">
-                            <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                            <div id="jobCredentialChips" class="credential-chips" aria-live="polite"></div>
-                            <input id="jobCredentialSearch" type="search" autocomplete="off" placeholder="Search cards, tickets or qualifications..." aria-autocomplete="list" aria-controls="jobCredentialResults" aria-expanded="false" />
-                          </div>
-                          <input id="jobReqQuals" type="hidden" />
-                          <div id="jobCredentialResults" class="credential-results hidden"></div>
-                        </div>
-                        <p id="jobCredentialMessage" class="form-error hidden" aria-live="polite"></p>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section class="jw-requirement-group jw-rate-group" aria-labelledby="jobPayTermsTitle">
-                    <div class="jw-requirement-group-head">
-                      <h5 id="jobPayTermsTitle">Daily rate</h5>
-                    </div>
-                    <input id="jobBudgetMin" type="hidden" />
-                    <div class="jw-grid jw-labour-pay-grid">
-                      <label class="field-label">
-                        Daily Labour Rate (£/day) *
-                        <input id="jobBudgetMax" type="number" min="0" placeholder="e.g. 300" required />
-                      </label>
-                      <div class="jw-rate-option">
-                        <label class="checkbox-row jw-check">
-                          <input id="jobWorkerReceivesFullRate" type="checkbox" checked />
-                          <span class="jw-rate-option-label">Worker receives the full advertised rate <small>Recommended</small></span>
-                        </label>
-                        <p class="form-helper">OnSite’s service fee is added separately.</p>
-                      </div>
-                    </div>
-
-                    <div id="jobLabourMoreOptionsPanel" class="jw-labour-more-options">
-                      <div class="jw-labour-terms">
-                      <div class="jw-labour-term">
-                        <label class="checkbox-row jw-check">
-                          <input id="jobAccommodationPaid" type="checkbox" />
-                          <span>Working away / accommodation</span>
-                        </label>
-                        <div id="jobAccommodationArrangementWrap" class="jw-accommodation-settings hidden">
-                          <fieldset class="jw-accommodation-arrangement" aria-label="Accommodation arrangement">
-                            <div class="jw-accommodation-choices">
-                              <label>
-                                <input type="radio" name="jobAccommodationArrangement" value="company_provided" />
-                                <span>Company provided</span>
-                              </label>
-                              <label>
-                                <input type="radio" name="jobAccommodationArrangement" value="nightly_allowance" />
-                                <span>Nightly allowance</span>
-                              </label>
-                            </div>
-                          </fieldset>
-                          <div id="jobAccommodationAllowanceWrap" class="jw-accommodation-allowance hidden">
-                            <div class="jw-accommodation-allowance-control">
-                              <div class="jw-accommodation-money-input">
-                                <span aria-hidden="true">£</span>
-                                <input id="jobAccommodationAllowance" type="number" min="1" step="0.01" inputmode="decimal" aria-label="Accommodation allowance per night" />
-                              </div>
-                              <span class="jw-accommodation-night-suffix">/ night</span>
-                            </div>
-                            <p class="form-helper">Paid to sub-contractor · No OnSite service fee</p>
-                          </div>
-                        </div>
-                      </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <div id="jobRequirementEditorMessage" class="jw-requirement-message hidden" role="alert"></div>
-                  <div class="jw-requirement-actions">
-                    <button type="button" id="jobDiscardTradeRequirement" class="secondary-btn hidden">Discard changes</button>
-                    <button type="button" id="jobAddTradeBtn" class="primary-btn jw-requirement-save">Save requirement</button>
-                  </div>
-                </section>
-
-                <div id="jobPricingBreakdownLegacyMount" class="jw-pricing-legacy-mount">
-                  <div id="jobPricingBreakdown" class="jw-pricing-panel" aria-live="polite"></div>
-                </div>
-
-                <div id="jobPricingBreakdownWizardMount" class="jw-pricing-wizard-mount"></div>
-
-                <section id="jobPreferredWorkersWrap" class="jw-specific-workers-section hidden" aria-labelledby="jobPreferredWorkersTitle">
-                  <div class="jw-labour-section-head">
-                    <div>
-                      <h4 id="jobPreferredWorkersTitle">Specific sub-contractors <span>Optional</span></h4>
-                      <p>Prioritise people you already know or have worked with.</p>
-                    </div>
-                    <button type="button" id="jobPreferredWorkersToggle" class="secondary-btn" aria-haspopup="dialog">Choose sub-contractors</button>
-                  </div>
-                  <div id="jobSpecificWorkersSummary" class="jw-specific-workers-summary hidden" aria-live="polite"></div>
-                </section>
-              </section>
-              </div>
-
-              <div class="jw-step" data-wizard-step="3">
-              <!-- ── SCHEDULE ────────────────────────────────── -->
-              <section class="jw-card jw-schedule-step-card">
-                <section class="jw-schedule-surface" aria-labelledby="jobProjectScheduleTitle">
-                  <div class="jw-schedule-surface-head">
-                    <h4 id="jobProjectScheduleTitle">Project schedule</h4>
-                  </div>
-
-                  <section class="jw-schedule-group" aria-labelledby="jobProjectDatesTitle">
-                    <div class="jw-schedule-group-head">
-                      <h5 id="jobProjectDatesTitle">Project dates</h5>
-                    </div>
-                    <div class="jw-grid jw-schedule-grid">
-                      <label class="field-label">
-                        Project Start Date *
-                        <div class="jw-date-picker" data-date-picker data-date-input-id="jobStart">
-                          <input id="jobStart" type="date" required />
-                          <span class="jw-date-picker-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" focusable="false">
-                              <rect x="3.75" y="5.5" width="16.5" height="15" rx="2"></rect>
-                              <path d="M7.5 3.75v3.5M16.5 3.75v3.5M3.75 9.25h16.5"></path>
-                            </svg>
-                          </span>
-                          <div
-                            id="jobStartDateOptions"
-                            class="jw-date-picker-popover"
-                            role="dialog"
-                            aria-label="Project start date calendar"
-                            hidden
-                          ></div>
-                        </div>
-                      </label>
-                      <div class="jw-end-date-field">
-                        <label class="field-label">
-                          <span>Estimated End Date <span id="jobEndDateRequired">*</span></span>
-                          <div class="jw-date-picker" data-date-picker data-date-input-id="jobEndDate">
-                            <input id="jobEndDate" type="date" required />
-                            <span class="jw-date-picker-icon" aria-hidden="true">
-                              <svg viewBox="0 0 24 24" focusable="false">
-                                <rect x="3.75" y="5.5" width="16.5" height="15" rx="2"></rect>
-                                <path d="M7.5 3.75v3.5M16.5 3.75v3.5M3.75 9.25h16.5"></path>
-                              </svg>
-                            </span>
-                            <div
-                              id="jobEndDateOptions"
-                              class="jw-date-picker-popover"
-                              role="dialog"
-                              aria-label="Estimated end date calendar"
-                              hidden
-                            ></div>
-                          </div>
-                        </label>
-                        <label class="checkbox-row jw-check" id="jobNoFixedEndWrap">
-                          <input id="jobNoFixedEndDate" type="checkbox" />
-                          <span>No fixed end date</span>
-                        </label>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section class="jw-schedule-group" aria-labelledby="jobStandardShiftTitle">
-                    <div class="jw-schedule-group-head">
-                      <h5 id="jobStandardShiftTitle">Standard shift</h5>
-                    </div>
-                    <div class="jw-grid jw-schedule-grid">
-                      <label class="field-label">
-                        Start time *
-                        <div class="jw-time-picker" data-time-picker data-time-input-id="jobShiftStart">
-                          <input
-                            id="jobShiftStart"
-                            type="text"
-                            inputmode="numeric"
-                            autocomplete="off"
-                            required
-                            aria-haspopup="listbox"
-                            aria-expanded="false"
-                            aria-controls="jobShiftStartTimeOptions"
-                            pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
-                          />
-                          <span class="jw-time-picker-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" focusable="false">
-                              <circle cx="12" cy="12" r="8.25"></circle>
-                              <path d="M12 7.5v4.8l3.1 1.8"></path>
-                            </svg>
-                          </span>
-                          <div
-                            id="jobShiftStartTimeOptions"
-                            class="jw-time-picker-popover"
-                            role="listbox"
-                            aria-label="Start time options"
-                            hidden
-                          ></div>
-                        </div>
-                      </label>
-                      <label class="field-label">
-                        Finish time *
-                        <div class="jw-time-picker" data-time-picker data-time-input-id="jobShiftFinish">
-                          <input
-                            id="jobShiftFinish"
-                            type="text"
-                            inputmode="numeric"
-                            autocomplete="off"
-                            required
-                            aria-haspopup="listbox"
-                            aria-expanded="false"
-                            aria-controls="jobShiftFinishTimeOptions"
-                            pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
-                          />
-                          <span class="jw-time-picker-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" focusable="false">
-                              <circle cx="12" cy="12" r="8.25"></circle>
-                              <path d="M12 7.5v4.8l3.1 1.8"></path>
-                            </svg>
-                          </span>
-                          <div
-                            id="jobShiftFinishTimeOptions"
-                            class="jw-time-picker-popover"
-                            role="listbox"
-                            aria-label="Finish time options"
-                            hidden
-                          ></div>
-                        </div>
-                      </label>
-                    </div>
-                  </section>
-
-                  <section class="jw-schedule-group" aria-labelledby="jobWorkingDaysTitle">
-                    <div class="jw-schedule-group-head">
-                      <h5 id="jobWorkingDaysTitle">Working days</h5>
-                    </div>
-                    <div class="field-label jw-days-wrap">
-                      <span class="jw-working-days-legacy-label">Working Days *</span>
-                      <div class="jw-days" role="group" aria-label="Working days" aria-describedby="jobWorkingDaysMessage">
-                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="monday" checked /><span>Monday</span></label>
-                        <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="tuesday" checked /><span>Tuesday</span></label>
                         <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="wednesday" checked /><span>Wednesday</span></label>
                         <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="thursday" checked /><span>Thursday</span></label>
                         <label class="jw-day-chip"><input type="checkbox" name="jobWorkingDays" value="friday" checked /><span>Friday</span></label>
@@ -522,9 +263,14 @@
               </div>
 
               <div class="jw-wizard-nav">
-                <button type="button" id="jobWizardBack" class="secondary-btn jw-wizard-back">Back</button>
-                <button type="button" id="jobWizardContinue" class="primary-btn jw-wizard-continue">Continue</button>
-                <button type="button" id="jobWizardSubmit" class="primary-btn jw-wizard-submit hidden">Find Labour</button>
+                <div class="jw-wizard-nav-leading">
+                  <button type="button" id="jobWizardBack" class="secondary-btn jw-wizard-back">Back</button>
+                  <button type="button" id="discardRequestLabourDraft" class="jw-draft-discard">Discard draft</button>
+                </div>
+                <div class="jw-wizard-nav-actions">
+                  <button type="button" id="jobWizardContinue" class="primary-btn jw-wizard-continue">Continue</button>
+                  <button type="button" id="jobWizardSubmit" class="primary-btn jw-wizard-submit hidden">Find Labour</button>
+                </div>
               </div>
 
               <button type="submit" class="primary-btn full-width jw-submit">Find Labour</button>
@@ -538,7 +284,10 @@
               <div>
                 <h1>Request Labour</h1>
               </div>
-              <span class="att-today-badge os-date-pill" id="requestLabourTodayBadge"></span>
+              <div class="request-labour-head-meta">
+                <span class="request-labour-draft-status" id="requestLabourDraftStatus" aria-live="polite"></span>
+                <span class="att-today-badge os-date-pill" id="requestLabourTodayBadge"></span>
+              </div>
             </header>
             <div id="requestLabourPageBody" class="request-labour-page-body os-card company-saas-body"></div>
           </section>
