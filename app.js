@@ -119,6 +119,193 @@ function placementSlotsEngine() {
   return typeof window !== "undefined" ? window.OnSitePlacementSlots : null;
 }
 
+function marketplaceEventsEngine() {
+  return typeof window !== "undefined" ? window.OnSiteMarketplaceEvents : null;
+}
+
+function marketplaceActor() {
+  const user = typeof getSessionUser === "function" ? getSessionUser() : null;
+  if (!user?.id) return { actorType: "system", actorId: "" };
+  return {
+    actorType:
+      user.type === "company"
+        ? "company_user"
+        : user.type === "worker"
+          ? "worker"
+          : "admin",
+    actorId: user.id,
+  };
+}
+
+function appendMarketplaceEvent(event, idempotencyKey) {
+  const engine = marketplaceEventsEngine();
+  if (!engine || typeof state === "undefined") return null;
+  const actor = marketplaceActor();
+  return engine.append(
+    state,
+    {
+      ...actor,
+      ...event,
+      actorType: event.actorType || actor.actorType,
+      actorId: event.actorId || actor.actorId,
+    },
+    { idempotencyKey },
+  );
+}
+
+function marketplaceCalendarLeadDays(fromValue, toValue) {
+  const from = String(fromValue || "").slice(0, 10);
+  const to = String(toValue || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return null;
+  }
+  const fromParts = from.split("-").map(Number);
+  const toParts = to.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(toParts[0], toParts[1] - 1, toParts[2]) -
+      Date.UTC(fromParts[0], fromParts[1] - 1, fromParts[2])) /
+      86400000,
+  );
+}
+
+function marketplaceRequirementSnapshot(job, requirement = {}) {
+  const startDate = String(job?.startDate || job?.start || "").slice(0, 10);
+  const requestedAt = job?.postedAt || job?.createdAt || "";
+  const labourRate = Number(requirement.budgetMax ?? job?.budgetMax);
+  const companyCharge = Number(requirement.companyCharge ?? job?.companyCharge);
+  const locationData = job?.locationData || {};
+  const credentials = Array.isArray(requirement.requiredCredentialIds)
+    ? requirement.requiredCredentialIds
+    : [];
+  return {
+    tradeKey: requirement.tradeKey || job?.tradeKey || "",
+    roleKey: requirement.roleKey || job?.roleKey || "",
+    trade: requirement.trade || job?.trade || "",
+    role: requirement.specialism || requirement.role || job?.specialism || "",
+    grade: requirement.grade || "",
+    workActivity: requirement.workActivity || job?.workActivity || "",
+    quantity: Math.max(1, Number(requirement.quantity) || 1),
+    requestedStartDate: startDate,
+    estimatedEndDate: String(job?.estimatedEndDate || job?.endDate || "").slice(0, 10),
+    leadTimeCalendarDays: marketplaceCalendarLeadDays(requestedAt, startDate),
+    advertisedWorkerRate: Number.isFinite(labourRate) && labourRate > 0
+      ? labourRate
+      : null,
+    companyCharge: Number.isFinite(companyCharge) && companyCharge > 0
+      ? companyCharge
+      : null,
+    workerReceivesFullAdvertisedRate:
+      requirement.workerReceivesFullAdvertisedRate !== false,
+    accommodationProvided: !!(
+      requirement.accommodationPaid ?? job?.accommodationPaid
+    ),
+    accommodationArrangement:
+      requirement.accommodationArrangement || job?.accommodationArrangement || "",
+    accommodationAllowancePerNight:
+      requirement.accommodationAllowancePerNight ??
+      job?.accommodationAllowancePerNight ??
+      null,
+    requiredQualificationIds: [...credentials],
+    locationId: locationData.id || "",
+    locationName: locationData.name || job?.location || "",
+    locationRegion: locationData.adminArea || "",
+    workingDays: Array.isArray(requirement.workingDays)
+      ? [...requirement.workingDays]
+      : Array.isArray(job?.workingDays)
+        ? [...job.workingDays]
+        : [],
+    shift: {
+      start: requirement.shiftStartTime || job?.shiftStartTime || "",
+      finish: requirement.shiftFinishTime || job?.shiftFinishTime || "",
+    },
+    overtimeAvailable: !!(
+      requirement.overtimeAvailable ?? job?.overtimeAvailable
+    ),
+    overtimeRates:
+      requirement.overtimeRates && typeof requirement.overtimeRates === "object"
+        ? { ...requirement.overtimeRates }
+        : job?.overtimeRates && typeof job.overtimeRates === "object"
+          ? { ...job.overtimeRates }
+          : null,
+  };
+}
+
+function marketplaceRequestSnapshot(job) {
+  const requirements = Array.isArray(job?.labourRequirements)
+    ? job.labourRequirements
+    : [];
+  return {
+    requestVersion: Math.max(1, Number(job?.requestVersion) || 1),
+    assignmentType: job?.assignmentType || job?.jobType || "",
+    projectStartDate: String(job?.startDate || job?.start || "").slice(0, 10),
+    estimatedEndDate: String(job?.estimatedEndDate || job?.endDate || "").slice(0, 10),
+    noFixedEndDate: !!job?.noFixedEndDate,
+    requirements: requirements.map((requirement) => ({
+      requirementId: requirement.requirementId || requirement.id || "",
+      slotIds: (job?.placementSlots || [])
+        .filter((slot) => slot.requirementId === (requirement.requirementId || requirement.id))
+        .map((slot) => slot.slotId),
+      ...marketplaceRequirementSnapshot(job, requirement),
+    })),
+  };
+}
+
+function ensureOfferAttemptIdentity(application, job, occurredAt = "") {
+  if (!application || !job) return null;
+  if (
+    application.offerAttemptId &&
+    application.offerChainId &&
+    application.offerAttemptNumber
+  ) {
+    return {
+      offerAttemptId: application.offerAttemptId,
+      offerChainId: application.offerChainId,
+      attemptNumber: application.offerAttemptNumber,
+    };
+  }
+  const engine = marketplaceEventsEngine();
+  if (!engine) return null;
+  const identity = engine.offerAttemptIdentity(
+    (state.applications || []).filter((item) => item !== application),
+    {
+      projectId: job.id,
+      requirementId: application.requirementId || "",
+      slotId: application.placementSlotId || application.id,
+      applicationId: application.id,
+      occurredAt: occurredAt || application.offeredAt || application.createdAt || "",
+      offerAttemptId: application.offerAttemptId || "",
+      offerChainId: application.offerChainId || "",
+    },
+  );
+  application.offerAttemptId = identity.offerAttemptId;
+  application.offerChainId = identity.offerChainId;
+  application.offerAttemptNumber = identity.attemptNumber;
+  return identity;
+}
+
+function recordMarketplaceRequestUpdate(job, details = {}, source = "request_edit") {
+  const engine = marketplaceEventsEngine();
+  if (!job || !engine) return null;
+  job.requestVersion = engine.nextRequestVersion(job.requestVersion);
+  return appendMarketplaceEvent(
+    {
+      eventType: engine.EVENT_TYPES.REQUEST_UPDATED,
+      occurredAt: details.occurredAt || new Date().toISOString(),
+      companyId: job.companyId || "",
+      projectId: job.id,
+      requirementId: details.requirementId || "",
+      source,
+      metadata: {
+        requestVersion: job.requestVersion,
+        changedFields: details.changedFields || [],
+        previousValues: details.previousValues || {},
+        snapshot: marketplaceRequestSnapshot(job),
+      },
+    },
+    `request_updated:${job.id}:v${job.requestVersion}`,
+  );
+}
+
 function normalizeProjectPlacements(job, store) {
   const engine = placementSlotsEngine();
   if (!engine || !job) return job;
@@ -765,6 +952,11 @@ function requestExtension(jobId, newEndDate, newRate) {
 function acceptExtension(jobId) {
   const job = findJob(jobId);
   if (!job) return;
+  const acceptedAt = new Date().toISOString();
+  const extensionRequestedAt = job.extensionRequestedAt || "";
+  const previousEndDate = job.estimatedEndDate || job.endDate || "";
+  const previousDayRate =
+    job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
   if (job.newProposedEndDate) job.estimatedEndDate = job.newProposedEndDate;
   if (job.proposedDayRate) {
     job.agreedDayRate = job.proposedDayRate;
@@ -784,6 +976,46 @@ function acceptExtension(jobId) {
   job._remind14 = false;
   job._remind7 = false; // allow a fresh cycle before the new end date
   const w = findWorker(job.assignedWorkerId);
+  const slot = placementSlotsEngine()?.slotForWorker(job, job.assignedWorkerId);
+  const changedFields = ["estimatedEndDate"];
+  if (Number(previousDayRate) !== Number(job.agreedDayRate)) {
+    changedFields.push("agreedDayRate");
+  }
+  recordMarketplaceRequestUpdate(
+    job,
+    {
+      occurredAt: acceptedAt,
+      requirementId: slot?.requirementId || "",
+      changedFields,
+      previousValues: {
+        estimatedEndDate: previousEndDate,
+        agreedDayRate: previousDayRate,
+      },
+    },
+    "project_extension",
+  );
+  appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.PROJECT_EXTENDED,
+      occurredAt: acceptedAt,
+      actorType: "worker",
+      actorId: job.assignedWorkerId,
+      companyId: job.companyId || "",
+      projectId: job.id,
+      requirementId: slot?.requirementId || "",
+      slotId: slot?.slotId || "",
+      workerId: job.assignedWorkerId,
+      source: "project_extension",
+      metadata: {
+        requestVersion: job.requestVersion,
+        previousEndDate,
+        newEndDate: job.estimatedEndDate || "",
+        previousDayRate,
+        newDayRate: job.agreedDayRate ?? null,
+      },
+    },
+    `project_extended:${job.id}:${extensionRequestedAt || job.estimatedEndDate}`,
+  );
   logActivity(
     "extension",
     `<strong>${escapeHtml(w?.name || "Worker")}</strong> accepted the extension — booking now runs to ${formatDate(job.estimatedEndDate)}.`,
@@ -793,7 +1025,7 @@ function acceptExtension(jobId) {
     title: "Project extension accepted.",
     description: `Booking now runs to ${formatDateOnly(job.estimatedEndDate)}.`,
     workerId: job.assignedWorkerId,
-    timestamp: new Date().toISOString(),
+    timestamp: acceptedAt,
     source: "project_extension",
     severity: "success",
     dedupeKey: `extension_accepted:${job.id}:${job.estimatedEndDate}`,
@@ -1310,11 +1542,53 @@ function agreementIsActionable(agr) {
   return !!job && (slot?.bookingId === agr.id || job.agreementId === agr.id);
 }
 
+function recordMarketplaceAgreementActive(agreement, occurredAt, actor = {}) {
+  if (!agreement || agreement.status !== "active") return null;
+  const job = findJob(agreement.jobId);
+  if (!job) return null;
+  const slot = job.placementSlots?.find(
+    (item) =>
+      item.slotId === agreement.placementSlotId || item.bookingId === agreement.id,
+  );
+  const application = (state.applications || []).find(
+    (item) => item.id === (agreement.applicationId || slot?.applicationId),
+  );
+  const offerIdentity = application
+    ? ensureOfferAttemptIdentity(application, job, application.offeredAt)
+    : null;
+  return appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.AGREEMENT_ACTIVE,
+      occurredAt,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      companyId: agreement.companyId || job.companyId || "",
+      projectId: job.id,
+      requirementId: agreement.requirementId || slot?.requirementId || "",
+      slotId: agreement.placementSlotId || slot?.slotId || "",
+      workerId: agreement.workerId || slot?.workerId || "",
+      applicationId: agreement.applicationId || slot?.applicationId || "",
+      offerAttemptId: offerIdentity?.offerAttemptId || "",
+      source: "job_agreement",
+      metadata: {
+        agreementId: agreement.id,
+        offerChainId: offerIdentity?.offerChainId || "",
+        attemptNumber: offerIdentity?.attemptNumber || null,
+      },
+    },
+    `agreement_active:${agreement.id}`,
+  );
+}
+
 function workerAcceptAgreement(agreementId) {
   const agr = findAgreement(agreementId);
   if (!agr || agr.worker?.accepted || !agreementIsActionable(agr)) return;
   agr.worker = captureSignature(agr.terms.workerName);
   recomputeAgreement(agr);
+  recordMarketplaceAgreementActive(agr, agr.worker.at, {
+    actorType: "worker",
+    actorId: agr.workerId || "",
+  });
   closeAgreementModal();
   logActivity(
     "agreement",
@@ -1337,6 +1611,9 @@ function workerDeclineAgreement(agreementId) {
   agr.status = "declined_by_worker";
   const job = findJob(agr.jobId);
   if (job) {
+    const slot = job.placementSlots?.find(
+      (item) => item.slotId === agr.placementSlotId || item.bookingId === agr.id,
+    );
     const application = (state.applications || []).find(
       (item) => item.id === agr.applicationId,
     );
@@ -1344,9 +1621,29 @@ function workerDeclineAgreement(agreementId) {
       application.status = "declined_by_worker";
       application.workerRespondedAt = new Date().toISOString();
     }
-    placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
+    const releasedAt = new Date().toISOString();
+    const released = placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
       status: "agreement_declined",
-    });
+    }, releasedAt);
+    if (released?.ok) {
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.SLOT_RELEASED,
+          occurredAt: releasedAt,
+          actorType: "worker",
+          actorId: agr.workerId || "",
+          companyId: job.companyId || agr.companyId || "",
+          projectId: job.id,
+          requirementId: agr.requirementId || slot?.requirementId || "",
+          slotId: agr.placementSlotId || slot?.slotId || "",
+          workerId: agr.workerId || "",
+          applicationId: agr.applicationId || slot?.applicationId || "",
+          source: "agreement_declined",
+          metadata: { agreementId: agr.id, releaseReason: "agreement_declined" },
+        },
+        `slot_released:agreement_declined:${agr.id}`,
+      );
+    }
   }
   closeAgreementModal();
   logActivity(
@@ -1369,6 +1666,10 @@ function companyAcceptAgreement(agreementId) {
   }
   agr.company = captureSignature(agr.terms.companyName);
   recomputeAgreement(agr);
+  recordMarketplaceAgreementActive(agr, agr.company.at, {
+    actorType: "company_user",
+    actorId: sess?.id || "",
+  });
   closeAgreementModal();
   logActivity(
     "agreement",
@@ -1388,6 +1689,9 @@ function companyCancelAgreementBooking(agreementId) {
   agr.status = "cancelled";
   const job = findJob(agr.jobId);
   if (job) {
+    const slot = job.placementSlots?.find(
+      (item) => item.slotId === agr.placementSlotId || item.bookingId === agr.id,
+    );
     const application = (state.applications || []).find(
       (item) => item.id === agr.applicationId,
     );
@@ -1395,9 +1699,42 @@ function companyCancelAgreementBooking(agreementId) {
       application.status = "cancelled_by_company";
       application.companyReviewedAt = new Date().toISOString();
     }
-    placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
+    const cancelledAt = new Date().toISOString();
+    const released = placementSlotsEngine()?.releaseWorker(job, agr.workerId, {
       status: "agreement_cancelled",
-    });
+    }, cancelledAt);
+    appendMarketplaceEvent(
+      {
+        eventType: marketplaceEventsEngine()?.EVENT_TYPES.CANCELLATION_CREATED,
+        occurredAt: cancelledAt,
+        companyId: job.companyId || agr.companyId || "",
+        projectId: job.id,
+        requirementId: agr.requirementId || slot?.requirementId || "",
+        slotId: agr.placementSlotId || slot?.slotId || "",
+        workerId: agr.workerId || "",
+        applicationId: agr.applicationId || slot?.applicationId || "",
+        source: "agreement_cancelled",
+        metadata: { agreementId: agr.id, cancellationStage: "pre_activation" },
+      },
+      `cancellation_created:agreement:${agr.id}`,
+    );
+    if (released?.ok) {
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.SLOT_RELEASED,
+          occurredAt: cancelledAt,
+          companyId: job.companyId || agr.companyId || "",
+          projectId: job.id,
+          requirementId: agr.requirementId || slot?.requirementId || "",
+          slotId: agr.placementSlotId || slot?.slotId || "",
+          workerId: agr.workerId || "",
+          applicationId: agr.applicationId || slot?.applicationId || "",
+          source: "agreement_cancelled",
+          metadata: { agreementId: agr.id, releaseReason: "agreement_cancelled" },
+        },
+        `slot_released:agreement_cancelled:${agr.id}`,
+      );
+    }
   }
   closeAgreementModal();
   logActivity(
@@ -1973,6 +2310,13 @@ function cancelBooking(job, reason) {
   const placementSlot = worker
     ? placementSlotsEngine()?.slotForWorker(job, worker.id)
     : null;
+  const placementContext = placementSlot
+    ? {
+        requirementId: placementSlot.requirementId || "",
+        slotId: placementSlot.slotId || "",
+        applicationId: placementSlot.applicationId || "",
+      }
+    : { requirementId: "", slotId: "", applicationId: "" };
   const sess = getSessionUser();
   const outcome = computeCancellation(job);
   const agreement = agreementForJob(
@@ -2017,16 +2361,53 @@ function cancelBooking(job, reason) {
       application.status = "cancelled_by_company";
       application.companyReviewedAt = record.cancelledAt;
     }
-    placementSlotsEngine()?.releaseWorker(job, record.workerId, {
+    const released = placementSlotsEngine()?.releaseWorker(job, record.workerId, {
       status: "booking_cancelled",
       reason: record.cancellationReason,
     }, record.cancelledAt);
+    if (released?.ok) {
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.SLOT_RELEASED,
+          occurredAt: record.cancelledAt,
+          companyId: record.companyId,
+          projectId: job.id,
+          requirementId: placementContext.requirementId,
+          slotId: placementContext.slotId,
+          workerId: record.workerId,
+          applicationId: placementContext.applicationId,
+          source: "booking_cancellation",
+          metadata: { cancellationId: record.id, releaseReason: record.cancellationReason },
+        },
+        `slot_released:booking_cancellation:${record.id}`,
+      );
+    }
   }
 
   // Detach the agreement: mark a still-pending one cancelled and clear the
   // job's linkage/active flag so a re-booking generates a fresh agreement. The
   // agreement record itself stays in state.agreements as history.
   if (agreement && agreement.status === "pending") agreement.status = "cancelled";
+
+  appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.CANCELLATION_CREATED,
+      occurredAt: record.cancelledAt,
+      companyId: record.companyId,
+      projectId: job.id,
+      requirementId: placementContext.requirementId,
+      slotId: placementContext.slotId,
+      workerId: record.workerId,
+      applicationId: placementContext.applicationId,
+      source: "booking_cancellation",
+      metadata: {
+        cancellationId: record.id,
+        cancellationReason: record.cancellationReason,
+        paymentDue: record.cancellationPaymentDue,
+      },
+    },
+    `cancellation_created:${record.id}`,
+  );
 
   logActivity(
     "job",
@@ -2143,14 +2524,39 @@ function createReplacementTask(
       },
       dedupeKey: `replacement_requested:${task.id}`,
     });
+    appendMarketplaceEvent(
+      {
+        eventType: marketplaceEventsEngine()?.EVENT_TYPES.REPLACEMENT_REQUESTED,
+        occurredAt: task.createdAt,
+        companyId: task.companyId || "",
+        projectId: job.id,
+        requirementId: task.requirementId,
+        slotId: task.placementSlotId,
+        workerId: task.workerId,
+        source: source || "replacement",
+        metadata: {
+          replacementTaskId: task.id,
+          linkedReleaseId,
+          reason: task.reason,
+        },
+      },
+      `replacement_requested:${task.id}`,
+    );
   }
   return task;
 }
 
 function detachReleasedAssignment(job, status, workerId = "") {
-  if (!job) return;
+  if (!job) return null;
   const releasedWorkerId = workerId || job.assignedWorkerId;
   const slot = placementSlotsEngine()?.slotForWorker(job, releasedWorkerId);
+  const placement = slot
+    ? {
+        requirementId: slot.requirementId || "",
+        placementSlotId: slot.slotId || "",
+        applicationId: slot.applicationId || "",
+      }
+    : { requirementId: "", placementSlotId: "", applicationId: "" };
   const agr = agreementForJob(job, releasedWorkerId);
   if (agr && agr.status === "pending") agr.status = "cancelled";
   const application = (state.applications || []).find(
@@ -2160,7 +2566,12 @@ function detachReleasedAssignment(job, status, workerId = "") {
     application.status = "released";
     application.endedAt = new Date().toISOString();
   }
-  placementSlotsEngine()?.releaseWorker(job, releasedWorkerId, { status });
+  const released = placementSlotsEngine()?.releaseWorker(
+    job,
+    releasedWorkerId,
+    { status },
+  );
+  return { released, ...placement };
 }
 
 function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
@@ -2307,7 +2718,28 @@ function submitWorkerRelease(
     releaseType === "pre_start_stand_down" ||
     releaseType === "site_not_ready"
   ) {
-    detachReleasedAssignment(job, releaseType, assignedWorkerId);
+    const detached = detachReleasedAssignment(job, releaseType, assignedWorkerId);
+    if (detached?.released?.ok) {
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.SLOT_RELEASED,
+          occurredAt: record.releasedAt || record.releaseGivenAt,
+          companyId: job.companyId || "",
+          projectId: job.id,
+          requirementId: detached.requirementId || record.requirementId,
+          slotId: detached.placementSlotId || record.placementSlotId,
+          workerId: assignedWorkerId,
+          applicationId: detached.applicationId || "",
+          source: "worker_release",
+          metadata: {
+            releaseId: record.id,
+            releaseType,
+            replacementRequired: !!replacementRequired,
+          },
+        },
+        `slot_released:worker_release:${record.id}`,
+      );
+    }
   }
   logActivity(
     "notice",
@@ -2376,6 +2808,16 @@ function adjustJobQuantity(jobId, nextQuantity, reason = "", requirementId = "")
     },
     dedupeKey: `labour_adjustment:${record.id}`,
   });
+  recordMarketplaceRequestUpdate(
+    job,
+    {
+      occurredAt: record.createdAt,
+      requirementId: requirement.requirementId,
+      changedFields: ["quantity"],
+      previousValues: { quantity: fromQuantity },
+    },
+    "labour_adjustment",
+  );
   logActivity(
     "job",
     `${escapeHtml(job.trade)} labour requirement ${adjustmentType}d from ${fromQuantity} to ${toQuantity}.${adjustmentType === "increase" ? " Replacement task created." : ""}`,
@@ -5602,6 +6044,7 @@ const demoData = {
   applications: [],
   notifications: [],
   projectActivities: [],
+  marketplaceEvents: [],
   taxonomySuggestions: [],
   preferredWorkers: [],
   projectTransfers: [],
@@ -5642,6 +6085,7 @@ function migrateState(s) {
   if (!Array.isArray(s.applications)) s.applications = [];
   if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!Array.isArray(s.projectActivities)) s.projectActivities = [];
+  if (!Array.isArray(s.marketplaceEvents)) s.marketplaceEvents = [];
   if (!Array.isArray(s.taxonomySuggestions)) s.taxonomySuggestions = [];
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
   if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
@@ -5853,6 +6297,45 @@ function migrateState(s) {
   // Placement slots are the canonical allocation model. Normalization is
   // idempotent and keeps singular assignment fields as compatibility mirrors.
   (s.jobs || []).forEach((job) => normalizeProjectPlacements(job, s));
+  // Legacy records receive stable identities for future transitions, but no
+  // historical marketplace events are fabricated during migration.
+  const marketplaceEngine = marketplaceEventsEngine();
+  (s.jobs || []).forEach((job) => {
+    job.requestVersion = Math.max(1, Number(job.requestVersion) || 1);
+  });
+  if (marketplaceEngine) {
+    (s.applications || [])
+      .filter((application) => application.offeredAt || application.offerAttemptId)
+      .sort(
+        (left, right) =>
+          new Date(left.offeredAt || left.createdAt || 0) -
+          new Date(right.offeredAt || right.createdAt || 0),
+      )
+      .forEach((application) => {
+        if (
+          application.offerAttemptId &&
+          application.offerChainId &&
+          application.offerAttemptNumber
+        ) return;
+        const job = (s.jobs || []).find((item) => item.id === application.jobId);
+        if (!job) return;
+        const identity = marketplaceEngine.offerAttemptIdentity(
+          (s.applications || []).filter((item) => item !== application),
+          {
+            projectId: job.id,
+            requirementId: application.requirementId || "",
+            slotId: application.placementSlotId || application.id,
+            applicationId: application.id,
+            occurredAt: application.offeredAt || application.createdAt || "",
+            offerAttemptId: application.offerAttemptId || "",
+            offerChainId: application.offerChainId || "",
+          },
+        );
+        application.offerAttemptId = identity.offerAttemptId;
+        application.offerChainId = identity.offerChainId;
+        application.offerAttemptNumber = identity.attemptNumber;
+      });
+  }
   // Historic completion records pre-date assignment identity. Backfill only
   // when the worker is still unambiguously assigned to this same project.
   s.projectRequirementCompletions = (s.projectRequirementCompletions || []).map(
@@ -9241,6 +9724,7 @@ function createJobOffer(
       placementSlotId: reserved?.slot?.slotId || app.placementSlotId || "",
     },
   });
+  const offerIdentity = ensureOfferAttemptIdentity(app, job, app.offeredAt);
   if (!Array.isArray(worker.offerNotifications)) worker.offerNotifications = [];
   const notice = {
     id: createId(),
@@ -9258,6 +9742,78 @@ function createJobOffer(
     "assign",
     `Job offer sent to <strong>${escapeHtml(worker.name)}</strong> for ${escapeHtml(job.trade)} in ${escapeHtml(job.location)}.`,
   );
+  const marketplaceTypes = marketplaceEventsEngine()?.EVENT_TYPES;
+  const offerActor = ["auto_match", "next_best"].includes(source)
+    ? { actorType: "system", actorId: "" }
+    : marketplaceActor();
+  const offerEventContext = {
+    ...offerActor,
+    companyId: job.companyId || "",
+    projectId: job.id,
+    requirementId: requirement.requirementId,
+    slotId: app.placementSlotId || "",
+    workerId: worker.id,
+    applicationId: app.id,
+    offerAttemptId: offerIdentity?.offerAttemptId || "",
+    source,
+  };
+  appendMarketplaceEvent(
+    {
+      ...offerEventContext,
+      eventType: marketplaceTypes?.MATCH_GENERATED,
+      occurredAt: app.offeredAt,
+      actorType: "system",
+      actorId: "",
+      metadata: {
+        matchScore: app.matchSnapshot?.matchScore ?? null,
+        rankAtOffer,
+        requirement: marketplaceRequirementSnapshot(job, requirement),
+      },
+    },
+    `match_generated:${offerIdentity?.offerAttemptId || app.id}`,
+  );
+  appendMarketplaceEvent(
+    {
+      ...offerEventContext,
+      eventType: marketplaceTypes?.OFFER_SENT,
+      occurredAt: app.offeredAt,
+      metadata: {
+        offerChainId: offerIdentity?.offerChainId || "",
+        attemptNumber: offerIdentity?.attemptNumber || 1,
+        expiresAt: app.expiresAt,
+        advertisedWorkerRate: pricing.workerPay,
+        companyCharge: pricing.companyCharge,
+        matchScore: app.matchSnapshot?.matchScore ?? null,
+        rankAtOffer,
+        requirement: marketplaceRequirementSnapshot(job, requirement),
+      },
+    },
+    `offer_sent:${offerIdentity?.offerAttemptId || app.id}`,
+  );
+  const replacementTask = (state.replacementTasks || []).find(
+    (task) =>
+      task.status === "open" &&
+      task.jobId === job.id &&
+      (!task.placementSlotId || task.placementSlotId === app.placementSlotId) &&
+      (!task.requirementId || task.requirementId === requirement.requirementId),
+  );
+  if (replacementTask) {
+    replacementTask.requirementId ||= requirement.requirementId;
+    replacementTask.placementSlotId ||= app.placementSlotId || "";
+    appendMarketplaceEvent(
+      {
+        ...offerEventContext,
+        eventType: marketplaceTypes?.REPLACEMENT_OFFERED,
+        occurredAt: app.offeredAt,
+        metadata: {
+          replacementTaskId: replacementTask.id,
+          offerChainId: offerIdentity?.offerChainId || "",
+          attemptNumber: offerIdentity?.attemptNumber || 1,
+        },
+      },
+      `replacement_offered:${replacementTask.id}:${offerIdentity?.offerAttemptId || app.id}`,
+    );
+  }
   return { ok: true, application: app };
 }
 
@@ -9270,12 +9826,38 @@ function expireJobOffers() {
     app.status = "expired";
     app.expiredAt = new Date().toISOString();
     const expiredJob = applicationJob(app);
+    const offerIdentity = expiredJob
+      ? ensureOfferAttemptIdentity(app, expiredJob, app.offeredAt)
+      : null;
     placementSlotsEngine()?.reopenApplicationSlot(
       expiredJob,
       app,
       "offer_expired",
       app.expiredAt,
     );
+    if (expiredJob) {
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.OFFER_EXPIRED,
+          occurredAt: app.expiredAt,
+          actorType: "system",
+          actorId: "",
+          companyId: expiredJob.companyId || "",
+          projectId: expiredJob.id,
+          requirementId: app.requirementId || "",
+          slotId: app.placementSlotId || "",
+          workerId: app.workerId || "",
+          applicationId: app.id,
+          offerAttemptId: offerIdentity?.offerAttemptId || "",
+          source: "offer_expiry",
+          metadata: {
+            offerChainId: offerIdentity?.offerChainId || "",
+            attemptNumber: offerIdentity?.attemptNumber || 1,
+          },
+        },
+        `offer_expired:${offerIdentity?.offerAttemptId || app.id}`,
+      );
+    }
     changed = true;
 
     const worker = applicationWorker(app);
@@ -9366,6 +9948,28 @@ function workerAcceptOffer(applicationId) {
     },
     dedupeKey: `worker_offer_accepted:${app.id}`,
   });
+  const offerIdentity = ensureOfferAttemptIdentity(app, job, app.offeredAt);
+  appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.OFFER_ACCEPTED_WORKER,
+      occurredAt: app.workerRespondedAt,
+      actorType: "worker",
+      actorId: worker.id,
+      companyId: job.companyId || app.companyId || "",
+      projectId: job.id,
+      requirementId: app.requirementId || "",
+      slotId: app.placementSlotId || "",
+      workerId: worker.id,
+      applicationId: app.id,
+      offerAttemptId: offerIdentity?.offerAttemptId || "",
+      source: "worker_offer_response",
+      metadata: {
+        offerChainId: offerIdentity?.offerChainId || "",
+        attemptNumber: offerIdentity?.attemptNumber || 1,
+      },
+    },
+    `offer_accepted_worker:${offerIdentity?.offerAttemptId || app.id}`,
+  );
   saveAndRender();
   showToast("Offer accepted — awaiting company review");
 }
@@ -9392,13 +9996,6 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
     "declined_by_worker",
     app.workerRespondedAt,
   );
-  const next = job
-    ? offerNextBestWorker(
-        job.id,
-        app.requirementId || "",
-        app.placementSlotId || "",
-      )
-    : { ok: false };
   if (job) {
     addProjectActivity(job, {
       type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
@@ -9415,7 +10012,37 @@ function workerDeclineOffer(applicationId, reason, comment = "") {
       },
       dedupeKey: `worker_offer_declined:${app.id}`,
     });
+    const offerIdentity = ensureOfferAttemptIdentity(app, job, app.offeredAt);
+    appendMarketplaceEvent(
+      {
+        eventType: marketplaceEventsEngine()?.EVENT_TYPES.OFFER_DECLINED_WORKER,
+        occurredAt: app.workerRespondedAt,
+        actorType: "worker",
+        actorId: worker?.id || app.workerId || "",
+        companyId: job.companyId || app.companyId || "",
+        projectId: job.id,
+        requirementId: app.requirementId || "",
+        slotId: app.placementSlotId || "",
+        workerId: worker?.id || app.workerId || "",
+        applicationId: app.id,
+        offerAttemptId: offerIdentity?.offerAttemptId || "",
+        source: "worker_offer_response",
+        metadata: {
+          offerChainId: offerIdentity?.offerChainId || "",
+          attemptNumber: offerIdentity?.attemptNumber || 1,
+          declineReason: reason,
+        },
+      },
+      `offer_declined_worker:${offerIdentity?.offerAttemptId || app.id}`,
+    );
   }
+  const next = job
+    ? offerNextBestWorker(
+        job.id,
+        app.requirementId || "",
+        app.placementSlotId || "",
+      )
+    : { ok: false };
   logActivity(
     "assign",
     `<strong>${escapeHtml(app.workerName)}</strong> declined the offer for ${escapeHtml(job?.trade || "the job")} — ${escapeHtml(reason)}. Reliability is unaffected.${next.ok ? " Next best worker offered." : ""}`,
@@ -9443,6 +10070,7 @@ function companyAcceptWorker(applicationId) {
   app.companyDecision = "accepted";
   app.companyReviewedAt = new Date().toISOString();
   app.confirmedAt = app.companyReviewedAt;
+  const completedReplacementTasks = [];
   (state.replacementTasks || []).forEach((task) => {
     if (
       task.status === "open" &&
@@ -9453,6 +10081,7 @@ function companyAcceptWorker(applicationId) {
       task.status = "completed";
       task.replacementWorkerId = worker.id;
       task.completedAt = app.confirmedAt;
+      completedReplacementTasks.push(task);
     }
   });
   if (app.projectTransferId) {
@@ -9474,6 +10103,35 @@ function companyAcceptWorker(applicationId) {
     ) {
       other.status = "superseded";
       other.supersededAt = new Date().toISOString();
+      if (other.offeredAt || other.offerAttemptId) {
+        const supersededIdentity = ensureOfferAttemptIdentity(
+          other,
+          job,
+          other.offeredAt,
+        );
+        appendMarketplaceEvent(
+          {
+            eventType: marketplaceEventsEngine()?.EVENT_TYPES.OFFER_SUPERSEDED,
+            occurredAt: other.supersededAt,
+            actorType: "system",
+            actorId: "",
+            companyId: job.companyId || other.companyId || "",
+            projectId: job.id,
+            requirementId: other.requirementId || "",
+            slotId: other.placementSlotId || "",
+            workerId: other.workerId || "",
+            applicationId: other.id,
+            offerAttemptId: supersededIdentity?.offerAttemptId || "",
+            source: "booking_confirmation",
+            metadata: {
+              supersededByApplicationId: app.id,
+              offerChainId: supersededIdentity?.offerChainId || "",
+              attemptNumber: supersededIdentity?.attemptNumber || 1,
+            },
+          },
+          `offer_superseded:${supersededIdentity?.offerAttemptId || other.id}`,
+        );
+      }
     }
   });
   logActivity(
@@ -9495,6 +10153,66 @@ function companyAcceptWorker(applicationId) {
       bookingId: res.agreement?.id || "",
     },
     dedupeKey: `worker_assignment:${app.id}`,
+  });
+  const offerIdentity = ensureOfferAttemptIdentity(app, job, app.offeredAt);
+  const bookingEventContext = {
+    occurredAt: app.confirmedAt,
+    companyId: job.companyId || app.companyId || "",
+    projectId: job.id,
+    requirementId: app.requirementId || "",
+    slotId: app.placementSlotId || res.slot?.slotId || "",
+    workerId: worker.id,
+    applicationId: app.id,
+    offerAttemptId: offerIdentity?.offerAttemptId || "",
+    source: "company_offer_review",
+  };
+  appendMarketplaceEvent(
+    {
+      ...bookingEventContext,
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.COMPANY_ACCEPTED,
+      metadata: {
+        bookingId: res.agreement?.id || "",
+        offerChainId: offerIdentity?.offerChainId || "",
+        attemptNumber: offerIdentity?.attemptNumber || 1,
+      },
+    },
+    `company_accepted:${offerIdentity?.offerAttemptId || app.id}`,
+  );
+  appendMarketplaceEvent(
+    {
+      ...bookingEventContext,
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.BOOKING_CONFIRMED,
+      metadata: {
+        bookingId: res.agreement?.id || "",
+        agreedWorkerRate: res.pricing?.workerPay ?? null,
+        companyCharge: res.pricing?.companyCharge ?? null,
+      },
+    },
+    `booking_confirmed:${app.id}`,
+  );
+  appendMarketplaceEvent(
+    {
+      ...bookingEventContext,
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.SLOT_FILLED,
+      metadata: {
+        bookingId: res.agreement?.id || "",
+        filledCount: placementSlotsEngine()?.counts(job, app.requirementId || "")?.filled ?? null,
+      },
+    },
+    `slot_filled:${job.id}:${app.placementSlotId || res.slot?.slotId}:${app.id}`,
+  );
+  completedReplacementTasks.forEach((task) => {
+    appendMarketplaceEvent(
+      {
+        ...bookingEventContext,
+        eventType: marketplaceEventsEngine()?.EVENT_TYPES.REPLACEMENT_FILLED,
+        metadata: {
+          replacementTaskId: task.id,
+          linkedReleaseId: task.linkedReleaseId || "",
+        },
+      },
+      `replacement_filled:${task.id}`,
+    );
   });
   const requirementCounts = placementSlotsEngine()?.counts(
     job,
@@ -9547,11 +10265,6 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
     "declined_by_company",
     app.companyReviewedAt,
   );
-  const next = offerNextBestWorker(
-    job.id,
-    app.requirementId || "",
-    app.placementSlotId || "",
-  );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.WORKER_DECLINED_OFFER,
     title: `${app.workerName || "Worker"} declined by company.`,
@@ -9567,6 +10280,32 @@ function companyDeclineWorker(applicationId, reason, comment = "") {
     },
     dedupeKey: `company_declined_worker:${app.id}`,
   });
+  const offerIdentity = ensureOfferAttemptIdentity(app, job, app.offeredAt);
+  appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.COMPANY_DECLINED,
+      occurredAt: app.companyReviewedAt,
+      companyId: job.companyId || app.companyId || "",
+      projectId: job.id,
+      requirementId: app.requirementId || "",
+      slotId: app.placementSlotId || "",
+      workerId: app.workerId || "",
+      applicationId: app.id,
+      offerAttemptId: offerIdentity?.offerAttemptId || "",
+      source: "company_offer_review",
+      metadata: {
+        offerChainId: offerIdentity?.offerChainId || "",
+        attemptNumber: offerIdentity?.attemptNumber || 1,
+        declineReason: reason,
+      },
+    },
+    `company_declined:${offerIdentity?.offerAttemptId || app.id}`,
+  );
+  const next = offerNextBestWorker(
+    job.id,
+    app.requirementId || "",
+    app.placementSlotId || "",
+  );
   logActivity(
     "assign",
     `${escapeHtml(app.companyName || "Company")} declined <strong>${escapeHtml(app.workerName)}</strong> for ${escapeHtml(job.trade)} — ${escapeHtml(reason)}.${next.ok ? " Next best worker offered." : ""}`,
@@ -22849,6 +23588,13 @@ function saveProjectEdit(jobId) {
 
   recordProjectEditActivity(job, changes, user);
   if (changes.length) {
+    recordMarketplaceRequestUpdate(
+      job,
+      {
+        changedFields: changes.map((change) => change.field),
+      },
+      "company_project_edit",
+    );
     logActivity("job", `<strong>${escapeHtml(companyProjectTitle(job))}</strong> project details updated`);
   }
   activeCompanyProjectEditId = "";
@@ -25224,6 +25970,7 @@ jobForm.addEventListener("submit", (e) => {
     accommodationPaid,
     accommodationArrangement,
     repeatedFromProjectId: pendingRepeatProjectTemplate?.sourceProjectId || "",
+    requestVersion: 1,
     createdAt: postedAt,
     postedAt,
   };
@@ -25311,6 +26058,17 @@ jobForm.addEventListener("submit", (e) => {
 
   normalizeProjectPlacements(job, state);
   state.jobs.push(job);
+  appendMarketplaceEvent(
+    {
+      eventType: marketplaceEventsEngine()?.EVENT_TYPES.REQUEST_POSTED,
+      occurredAt: postedAt,
+      companyId: job.companyId || "",
+      projectId: job.id,
+      source: "request_labour",
+      metadata: marketplaceRequestSnapshot(job),
+    },
+    `request_posted:${job.id}:v${job.requestVersion}`,
+  );
   addProjectActivity(job, {
     type: PROJECT_ACTIVITY_TYPES.LABOUR_REQUEST_POSTED,
     title: "Project created.",
@@ -28708,6 +29466,40 @@ function submitDayAttendance() {
       (r) => !(r.workerId === wid && r.date === today),
     );
     attendanceRecords.unshift(rec);
+    if (linkedJob && ["onTime", "late"].includes(finalStatus)) {
+      const slot = placementSlotsEngine()?.slotForWorker(linkedJob, wid);
+      const application = (state.applications || []).find(
+        (item) =>
+          item.id === slot?.applicationId ||
+          (item.jobId === linkedJob.id && item.workerId === wid && item.status === "confirmed"),
+      );
+      const verifiedByWorkerScan = !!rec.checkInTime;
+      const attendanceActor = verifiedByWorkerScan
+        ? { actorType: "worker", actorId: wid }
+        : marketplaceActor();
+      appendMarketplaceEvent(
+        {
+          eventType: marketplaceEventsEngine()?.EVENT_TYPES.ASSIGNMENT_STARTED,
+          occurredAt: new Date(rec.checkInTime || rec.confirmedAt).toISOString(),
+          ...attendanceActor,
+          companyId: linkedJob.companyId || "",
+          projectId: linkedJob.id,
+          requirementId: slot?.requirementId || application?.requirementId || "",
+          slotId: slot?.slotId || application?.placementSlotId || "",
+          workerId: wid,
+          applicationId: application?.id || "",
+          offerAttemptId: application?.offerAttemptId || "",
+          source: verifiedByWorkerScan
+            ? "verified_qr_attendance"
+            : "company_attendance_confirmation",
+          metadata: {
+            attendanceRecordId: rec.id,
+            attendanceDate: today,
+          },
+        },
+        `assignment_started:${linkedJob.id}:${slot?.slotId || "legacy"}:${application?.id || wid}`,
+      );
+    }
     if (linkedJob && finalStatus === "noShow") {
       const workerName = findWorker(wid)?.name || "Worker";
       addProjectActivity(linkedJob, {
