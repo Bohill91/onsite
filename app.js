@@ -3815,6 +3815,7 @@ function showToast(msg) {
     el.className = "toast";
     document.body.appendChild(el);
   }
+  el.removeAttribute("data-toast-context");
   el.textContent = msg;
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 2200);
@@ -11658,6 +11659,7 @@ function clearRequestLabourDraft() {
 function resetRequestLabourFormState({ clearPreStartStorage = false } = {}) {
   const wasRestoring = requestLabourDraftRestoring;
   requestLabourDraftRestoring = true;
+  clearJobGeocodingStatus({ clearInline: true });
   closeJobSchedulePicker();
   document.getElementById("projectRequirementModal")?.remove();
   projectRequirementEditorState = null;
@@ -15372,6 +15374,7 @@ function switchTab(tab, { scroll = true } = {}) {
   if (leavingRequestLabour) {
     flushRequestLabourDraft();
     setRequestLabourPageSessionActive(false);
+    clearJobGeocodingStatus({ clearInline: true });
   }
   closeAppPopovers();
   document
@@ -26792,7 +26795,7 @@ function labourInsightsOverviewHTML(model) {
         ${marketFilterSelectHTML("marketTradeFilter", "Trade", model.options.trades, activeMarketFilters.trade)}
         ${marketFilterSelectHTML("marketSpecialismFilter", "Role / specialism", model.options.specialisms, activeMarketFilters.specialism)}
         ${marketFilterSelectHTML("marketLocationFilter", "Location / region", model.options.locations, activeMarketFilters.location)}
-        <label class="field-label market-filter-field">Availability from<input id="marketDateFrom" type="date" value="${escapeHtml(activeMarketFilters.dateFrom)}" /></label>
+        <label class="field-label market-filter-field">Availability from<input id="marketDateFrom" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/yyyy" aria-label="Availability from, day month year" value="${escapeHtml(jobDateDisplayValue(activeMarketFilters.dateFrom))}" /></label>
         <button class="secondary-btn" type="button" data-market-reset>Reset</button>
       </div>
     </section>
@@ -26901,7 +26904,7 @@ function labourInsightsExplorerControlsHTML(model) {
       <label class="field-label">Trade<select id="marketExplorerTrade" data-market-scenario-control>${labourInsightsTradeOptionsHTML(input)}</select></label>
       <label class="field-label">Role / specialism<select id="marketExplorerRole" data-market-scenario-control ${input.trade ? "" : "disabled"}>${labourInsightsRoleOptionsHTML(input)}</select></label>
       <label class="field-label">Workers required<input id="marketExplorerWorkers" data-market-scenario-control type="number" min="1" value="${input.workersRequired}" /></label>
-      <label class="field-label">Start date<input id="marketExplorerStart" data-market-scenario-control type="date" value="${escapeHtml(input.startDate)}" /></label>
+      <label class="field-label">Start date<input id="marketExplorerStart" data-market-scenario-control data-market-date-control type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/yyyy" aria-label="Start date, day month year" value="${escapeHtml(jobDateDisplayValue(input.startDate))}" /></label>
       <label class="field-label">Daily rate (£/day)<input id="marketExplorerRate" data-market-scenario-control type="number" min="1" value="${input.dailyRate || ""}" placeholder="e.g. 250" /></label>
       <label class="field-label market-explorer-span-2">Work activity <span class="jw-field-optional">Optional</span><input id="marketExplorerActivity" data-market-scenario-control type="text" value="${escapeHtml(input.workActivity)}" placeholder="e.g. Lighting second fix" /></label>
     </div>
@@ -26909,7 +26912,7 @@ function labourInsightsExplorerControlsHTML(model) {
       <summary>Schedule and constraints <span>Optional detail</span></summary>
       <div class="market-explorer-more-content">
         <div class="market-explorer-schedule-grid">
-          <label class="field-label">End date<input id="marketExplorerEnd" data-market-scenario-control type="date" value="${escapeHtml(input.endDate)}" ${input.noFixedEndDate ? "disabled" : ""} /></label>
+          <label class="field-label">End date<input id="marketExplorerEnd" data-market-scenario-control data-market-date-control type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/yyyy" aria-label="End date, day month year" value="${escapeHtml(jobDateDisplayValue(input.endDate))}" ${input.noFixedEndDate ? "disabled" : ""} /></label>
           <label class="checkbox-row market-explorer-inline-check"><input id="marketExplorerNoFixedEnd" data-market-scenario-control type="checkbox" ${input.noFixedEndDate ? "checked" : ""} /><span>No fixed end date</span></label>
           <label class="field-label">Shift start<input id="marketExplorerShiftStart" data-market-scenario-control type="time" value="${escapeHtml(input.shiftStartTime)}" /></label>
           <label class="field-label">Shift finish<input id="marketExplorerShiftFinish" data-market-scenario-control type="time" value="${escapeHtml(input.shiftFinishTime)}" /></label>
@@ -27035,6 +27038,8 @@ function readLabourInsightsControls(scope) {
   const trade = scope.querySelector("#marketExplorerTrade")?.value || "";
   const selectedRole = scope.querySelector("#marketExplorerRole")?.value || "";
   const role = window.OnSiteTaxonomy?.findRole(trade, selectedRole);
+  const startDateRaw = String(scope.querySelector("#marketExplorerStart")?.value || "").trim();
+  const endDateRaw = String(scope.querySelector("#marketExplorerEnd")?.value || "").trim();
   return labourInsightsEngine().normalizeInput({
     location: locationInput?.value || "",
     locationData,
@@ -27042,8 +27047,8 @@ function readLabourInsightsControls(scope) {
     specialism: role?.name || "",
     workersRequired: scope.querySelector("#marketExplorerWorkers")?.value || 1,
     requiredCredentialIds: current.requiredCredentialIds,
-    startDate: scope.querySelector("#marketExplorerStart")?.value || "",
-    endDate: scope.querySelector("#marketExplorerEnd")?.value || "",
+    startDate: startDateRaw ? jobDateIsoValue(startDateRaw) || current.startDate : "",
+    endDate: endDateRaw ? jobDateIsoValue(endDateRaw) || current.endDate : "",
     noFixedEndDate: !!scope.querySelector("#marketExplorerNoFixedEnd")?.checked,
     dailyRate: scope.querySelector("#marketExplorerRate")?.value || "",
     shiftStartTime: scope.querySelector("#marketExplorerShiftStart")?.value || "",
@@ -27158,6 +27163,15 @@ function bindCompanyMarketControls(scope) {
     });
   });
   if (activeMarketMode === "explorer") {
+    const validateScenarioDate = (control, { report = false } = {}) => {
+      const raw = String(control?.value || "").trim();
+      const valid = !raw || !!jobDateIsoValue(raw);
+      control?.setCustomValidity(
+        valid ? "" : "Enter a valid date in dd/mm/yyyy format.",
+      );
+      if (!valid && report) control?.reportValidity();
+      return valid;
+    };
     const refreshScenario = () => {
       labourInsightsDraft = readLabourInsightsControls(scope);
       labourInsightsUpdatedAt = new Date().toISOString();
@@ -27204,7 +27218,14 @@ function bindCompanyMarketControls(scope) {
       });
     }
     scope.querySelectorAll("[data-market-scenario-control], [data-market-working-day]")
-      .forEach((control) => control.addEventListener("change", refreshScenario));
+      .forEach((control) => control.addEventListener("change", () => {
+        if (control.matches("[data-market-date-control]") &&
+            !validateScenarioDate(control, { report: true })) return;
+        refreshScenario();
+      }));
+    scope.querySelectorAll("[data-market-date-control]").forEach((control) => {
+      control.addEventListener("input", () => validateScenarioDate(control));
+    });
     scope
       .querySelectorAll(
         "#marketExplorerWorkers, #marketExplorerRate, #marketExplorerActivity, #marketExplorerAccommodationRate",
@@ -27257,11 +27278,23 @@ function bindCompanyMarketControls(scope) {
     return;
   }
   const update = () => {
+    const dateFromControl = document.getElementById("marketDateFrom");
+    const dateFromRaw = String(dateFromControl?.value || "").trim();
+    const dateFrom = jobDateIsoValue(dateFromRaw);
+    dateFromControl?.setCustomValidity(
+      !dateFromRaw || dateFrom
+        ? ""
+        : "Enter a valid date in dd/mm/yyyy format.",
+    );
+    if (dateFromRaw && !dateFrom) {
+      dateFromControl?.reportValidity();
+      return;
+    }
     activeMarketFilters = {
       trade: document.getElementById("marketTradeFilter")?.value || "",
       specialism: document.getElementById("marketSpecialismFilter")?.value || "",
       location: document.getElementById("marketLocationFilter")?.value || "",
-      dateFrom: document.getElementById("marketDateFrom")?.value || "",
+      dateFrom,
       dateTo: "",
     };
     labourInsightsUpdatedAt = new Date().toISOString();
@@ -27269,6 +27302,19 @@ function bindCompanyMarketControls(scope) {
   };
   scope.querySelectorAll("#marketTradeFilter, #marketSpecialismFilter, #marketLocationFilter, #marketDateFrom")
     .forEach((control) => control.addEventListener("change", update));
+  scope.querySelector("#marketDateFrom")?.addEventListener("input", (event) => {
+    const raw = String(event.currentTarget.value || "").trim();
+    event.currentTarget.setCustomValidity(
+      !raw || jobDateIsoValue(raw)
+        ? ""
+        : "Enter a valid date in dd/mm/yyyy format.",
+    );
+  });
+  scope.querySelector("#marketDateFrom")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    update();
+  });
   scope.querySelector("[data-market-reset]")?.addEventListener("click", () => {
     activeMarketFilters = { trade: "", specialism: "", location: "", dateFrom: "", dateTo: "" };
     labourInsightsUpdatedAt = new Date().toISOString();
@@ -29760,6 +29806,7 @@ document.getElementById("jobEntrancePinConfirm")?.addEventListener("click", () =
   }
   jobArrivalPointConfirmed = true;
   jobArrivalPointAddress = normalizedJobSiteAddress();
+  clearJobGeocodingStatus({ clearInline: true });
   document.getElementById("jobPickerMap")?.setAttribute("aria-invalid", "false");
   if (message) {
     message.textContent = "";
@@ -29825,8 +29872,35 @@ function setJobSiteAddressMessage(message = "") {
   messageElement.classList.toggle("hidden", !hasMessage);
 }
 
-document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
+const JOB_GEOCODING_TOAST_CONTEXT = "request-labour-geocoding";
+
+function showJobGeocodingToast(message) {
+  showToast(message);
+  document
+    .querySelector(".toast")
+    ?.setAttribute("data-toast-context", JOB_GEOCODING_TOAST_CONTEXT);
+}
+
+function clearJobGeocodingStatus({ clearInline = false } = {}) {
+  const toast = document.querySelector(
+    `.toast[data-toast-context="${JOB_GEOCODING_TOAST_CONTEXT}"]`,
+  );
+  if (toast) {
+    toast.classList.remove("show");
+    toast.textContent = "";
+    toast.removeAttribute("data-toast-context");
+  }
+  if (!clearInline) return;
   setJobSiteAddressMessage("");
+  const entranceMessage = document.getElementById("jobEntrancePinMessage");
+  if (entranceMessage) {
+    entranceMessage.textContent = "";
+    entranceMessage.classList.add("hidden");
+  }
+}
+
+document.getElementById("jobSiteAddress")?.addEventListener("input", () => {
+  clearJobGeocodingStatus({ clearInline: true });
   pickerMapSiteCenter = null;
   if (!currentJobHasEntrancePin()) return;
   const nextAddress = normalizedJobSiteAddress();
@@ -30138,16 +30212,16 @@ async function geocodeJobSiteAddress(trigger) {
         resizePickerMap();
       });
       scheduleRequestLabourDraftSave();
-      showToast("Site found — confirm the exact entrance point");
+      showJobGeocodingToast("Site found — confirm the exact entrance point");
       return true;
     } else {
       setJobSiteAddressMessage("We couldn't find this address. Check it and try again.");
-      showToast("Address not found");
+      showJobGeocodingToast("Address not found");
       return false;
     }
   } catch (_) {
     setJobSiteAddressMessage("Address search failed. Check the address and try again.");
-    showToast("Address search failed");
+    showJobGeocodingToast("Address search failed");
     return false;
   } finally {
     setButtonLoading(trigger, false);
@@ -30940,15 +31014,12 @@ const ATTENDANCE_DEMO_MARK = "dev-attendance-demo";
 function attendanceDemoDevEnabled() {
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("devAttendance") === "1") {
-      localStorage.setItem("onsite_dev_tools", "1");
-    }
     const host = window.location.hostname;
-    return (
-      localStorage.getItem("onsite_dev_tools") === "1" ||
+    const developmentHost =
       window.location.protocol === "file:" ||
-      ["", "localhost", "127.0.0.1", "0.0.0.0"].includes(host)
-    );
+      ["", "localhost", "127.0.0.1", "0.0.0.0"].includes(host) ||
+      host.endsWith(".replit.dev");
+    return developmentHost && params.get("devAttendance") === "1";
   } catch (_) {
     return false;
   }
