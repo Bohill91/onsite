@@ -25,6 +25,7 @@ const ICON_PATHS = {
   briefcase: `<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/>`,
   calendar: `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
   check: `<polyline points="20 6 9 17 4 12"/>`,
+  chevronLeft: `<polyline points="15 18 9 12 15 6"/>`,
   chevronRight: `<polyline points="9 18 15 12 9 6"/>`,
   chevronsLeft: `<polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>`,
   chevronsRight: `<polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>`,
@@ -531,6 +532,7 @@ document.addEventListener("DOMContentLoaded", setupTradeSpecialismDropdowns);
 
 function closeAppPopovers(except = null) {
   window.OnSiteUI?.closeSelects?.(except);
+  closeJobSchedulePicker(except);
   if (!except || !document.querySelector("[data-job-credential-picker]")?.contains(except)) {
     closeJobCredentialPicker();
   }
@@ -603,6 +605,7 @@ function bindGlobalDropdownBehaviour() {
       target.closest("#workerNotificationPanel") ||
       target.closest(".os-select") ||
       target.closest(".os-select-listbox") ||
+      target.closest("[data-job-schedule-picker]") ||
       target.closest(".credential-multiselect")
     ) {
       return;
@@ -617,12 +620,14 @@ function bindGlobalDropdownBehaviour() {
     const openSidebarMenu = target.closest("[data-sidebar-account-menu]");
     const openWorkerPanel = target.closest("#workerNotificationPanel");
     const openCustomSelect = target.closest(".os-select, .os-select-listbox");
+    const openSchedulePicker = target.closest("[data-job-schedule-picker]");
     const openCredentialPicker = target.closest(".credential-multiselect");
     if (
       openDetails ||
       openSidebarMenu ||
       openWorkerPanel ||
       openCustomSelect ||
+      openSchedulePicker ||
       openCredentialPicker
     ) return;
     closeAppPopovers();
@@ -11165,7 +11170,12 @@ function setSelectValue(select, value) {
 
 function setInputValue(id, value) {
   const el = document.getElementById(id);
-  if (el) el.value = value == null ? "" : String(value);
+  if (!el) return;
+  if (["jobStart", "jobEndDate"].includes(id)) {
+    setJobDatePickerValue(el, value);
+    return;
+  }
+  el.value = value == null ? "" : String(value);
 }
 
 function setCheckboxValue(id, checked) {
@@ -12086,6 +12096,7 @@ function enterJobWizardMode({ reset = false } = {}) {
     projectStart.type = "date";
     projectStart.value = startDate;
   }
+  configureJobDatePickerMode(true);
   mountJobPricingBreakdown("jobPricingBreakdownWizardMount");
   // Context-specific novalidate: only while the form operates as the
   // company wizard. Removed again in exitJobWizardMode().
@@ -12111,6 +12122,7 @@ function enterJobWizardMode({ reset = false } = {}) {
 }
 
 function exitJobWizardMode() {
+  closeJobSchedulePicker();
   jobWizardActive = false;
   document.getElementById("formJob")?.classList.remove("jw-wizard-mode");
   const projectStart = document.getElementById("jobStart");
@@ -12120,6 +12132,7 @@ function exitJobWizardMode() {
     projectStart.type = "datetime-local";
     projectStart.value = composeProjectStartValue(startDate, startTime);
   }
+  configureJobDatePickerMode(false);
   mountJobPricingBreakdown("jobPricingBreakdownLegacyMount");
   jobForm?.removeAttribute("novalidate");
   syncJobLabourDisclosureState();
@@ -13227,6 +13240,7 @@ function updateAssignmentTypeForm() {
   );
   const ongoing = type === "ongoing_placement";
   const endInput = document.getElementById("jobEndDate");
+  const endDisplayInput = jobDatePickerDisplayInput(endInput);
   const endRequired = document.getElementById("jobEndDateRequired");
   const siteAddress = document.getElementById("jobSiteAddress");
   const noFixedEnd = document.getElementById("jobNoFixedEndDate");
@@ -13236,12 +13250,16 @@ function updateAssignmentTypeForm() {
   if (vehicleWrap) vehicleWrap.classList.toggle("hidden", !ongoing);
   if (endInput) {
     const noFixed = !!noFixedEnd?.checked;
-    endInput.required = !noFixed;
+    endInput.required = !jobWizardActive && !noFixed;
     endInput.disabled = noFixed;
     endInput.classList.remove("hidden");
     endInput.closest(".jw-end-date-field")?.classList.toggle("is-disabled", noFixed);
     if (endRequired) endRequired.hidden = noFixed;
-    if (noFixed) endInput.value = "";
+    if (endDisplayInput) {
+      endDisplayInput.required = jobWizardActive && !noFixed;
+      endDisplayInput.disabled = noFixed;
+    }
+    if (noFixed) setJobDatePickerValue(endInput, "");
   }
   if (siteAddress) siteAddress.required = true;
 }
@@ -13421,58 +13439,555 @@ function validateSchedulePayWizardStep({ report = true } = {}) {
   return true;
 }
 
-const JOB_SCHEDULE_PICKER_IDS = [
-  "jobStart",
-  "jobEndDate",
-  "jobShiftStart",
-  "jobShiftFinish",
-];
+const JOB_DATE_PICKER_IDS = ["jobStart", "jobEndDate"];
+const JOB_TIME_PICKER_IDS = ["jobShiftStart", "jobShiftFinish"];
+const JOB_TIME_PICKER_INTERVAL_MINUTES = 15;
+const JOB_SCHEDULE_PICKER_GUTTER = 12;
+let openJobSchedulePicker = null;
 
-function openNativePickerFromField(input, event) {
+function jobDateIsoValue(value) {
+  const raw = String(value || "").trim();
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const ukMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const parts = isoMatch
+    ? [Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3])]
+    : ukMatch
+      ? [Number(ukMatch[3]), Number(ukMatch[2]), Number(ukMatch[1])]
+      : null;
+  if (!parts) return "";
+  const [year, month, day] = parts;
+  const date = new Date(year, month - 1, day, 12);
   if (
-    event.button !== 0 ||
-    event.isPrimary === false ||
-    input.disabled ||
-    input.readOnly
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
   ) {
-    return;
+    return "";
   }
-  input.focus({ preventScroll: true });
-  if (typeof input.showPicker !== "function") return;
-  try {
-    input.showPicker();
-    event.preventDefault();
-  } catch {
-    // Preserve the browser's normal native-input behaviour as the fallback.
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function jobDateDisplayValue(value) {
+  const iso = jobDateIsoValue(value);
+  if (!iso) return "";
+  const [year, month, day] = iso.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function jobDateFromIso(value) {
+  const iso = jobDateIsoValue(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function jobDateToIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function jobDatePickerDisplayInput(canonicalInput) {
+  return canonicalInput
+    ?.closest("[data-date-picker]")
+    ?.querySelector(".jw-date-picker-display");
+}
+
+function setJobDatePickerValue(canonicalInput, value) {
+  if (!canonicalInput) return;
+  const iso = jobDateIsoValue(value);
+  if (canonicalInput.type === "datetime-local") {
+    canonicalInput.value = iso
+      ? String(value || "").includes("T")
+        ? String(value).slice(0, 16)
+        : composeProjectStartValue(iso, document.getElementById("jobShiftStart")?.value || "")
+      : "";
+  } else {
+    canonicalInput.value = iso;
+  }
+  const displayInput = jobDatePickerDisplayInput(canonicalInput);
+  if (displayInput) {
+    displayInput.value = jobDateDisplayValue(iso);
+    displayInput.setCustomValidity("");
   }
 }
 
-const JOB_SCHEDULE_PICKER_SELECTOR = JOB_SCHEDULE_PICKER_IDS
-  .map((id) => `#${id}`)
-  .join(", ");
-
-jobForm?.addEventListener(
-  "pointerdown",
-  (event) => {
-    const input = event.target.closest?.(JOB_SCHEDULE_PICKER_SELECTOR);
-    if (!input?.closest('.jw-step[data-wizard-step="3"]')) return;
-    openNativePickerFromField(input, event);
-  },
-  true,
-);
-
-JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
-  const input = document.getElementById(id);
-  if (["jobStart", "jobEndDate"].includes(id)) {
-    input?.addEventListener("input", clearSchedulePayValidation);
+function syncJobDatePickerFromDisplay(displayInput, { format = false } = {}) {
+  const picker = displayInput?.closest("[data-date-picker]");
+  const canonicalInput = document.getElementById(picker?.dataset.dateInputId || "");
+  if (!picker || !canonicalInput) return false;
+  const raw = String(displayInput.value || "").trim();
+  const iso = jobDateIsoValue(raw);
+  displayInput.setCustomValidity(
+    !raw || iso ? "" : "Enter a valid date in dd/mm/yyyy format.",
+  );
+  const previous = String(canonicalInput.value || "").slice(0, 10);
+  canonicalInput.value = iso;
+  if (format && iso) displayInput.value = jobDateDisplayValue(iso);
+  if (previous !== iso) {
+    canonicalInput.dispatchEvent(new Event("input", { bubbles: true }));
+    canonicalInput.dispatchEvent(new Event("change", { bubbles: true }));
   }
-});
-JOB_SCHEDULE_PICKER_IDS.forEach((id) => {
-  document.getElementById(id)?.addEventListener("change", (event) => {
-    const control = event.currentTarget;
-    if (control.value) {
-      requestAnimationFrame(() => control.blur());
+  return !!iso;
+}
+
+function configureJobDatePickerMode(wizardMode) {
+  JOB_DATE_PICKER_IDS.forEach((id) => {
+    const canonicalInput = document.getElementById(id);
+    const displayInput = jobDatePickerDisplayInput(canonicalInput);
+    if (!canonicalInput || !displayInput) return;
+    const noFixedEndDate =
+      id === "jobEndDate" &&
+      !!document.getElementById("jobNoFixedEndDate")?.checked;
+    const iso = String(canonicalInput.value || "").slice(0, 10);
+    if (wizardMode) {
+      canonicalInput.type = "date";
+      canonicalInput.value = jobDateIsoValue(iso);
+      canonicalInput.required = false;
+      canonicalInput.tabIndex = -1;
+      canonicalInput.setAttribute("aria-hidden", "true");
+      displayInput.required = !noFixedEndDate;
+      displayInput.disabled = noFixedEndDate;
+      displayInput.removeAttribute("aria-hidden");
+      displayInput.removeAttribute("tabindex");
+      displayInput.value = jobDateDisplayValue(canonicalInput.value);
+    } else {
+      displayInput.required = false;
+      displayInput.tabIndex = -1;
+      displayInput.setAttribute("aria-hidden", "true");
+      canonicalInput.required = !noFixedEndDate;
+      canonicalInput.disabled = noFixedEndDate;
+      canonicalInput.removeAttribute("aria-hidden");
+      canonicalInput.removeAttribute("tabindex");
     }
+  });
+}
+
+function jobDatePickerViewDate(picker) {
+  const canonicalInput = document.getElementById(picker.dataset.dateInputId || "");
+  const selected = jobDateFromIso(canonicalInput?.value);
+  const stored = jobDateFromIso(picker.dataset.datePickerView);
+  const fallback = picker.dataset.dateInputId === "jobEndDate"
+    ? jobDateFromIso(document.getElementById("jobStart")?.value)
+    : null;
+  const date = stored || selected || fallback || new Date();
+  return new Date(date.getFullYear(), date.getMonth(), 1, 12);
+}
+
+function renderJobDatePicker(picker) {
+  const popover = picker.querySelector(".jw-date-picker-popover");
+  const canonicalInput = document.getElementById(picker.dataset.dateInputId || "");
+  if (!popover || !canonicalInput) return;
+  const viewDate = jobDatePickerViewDate(picker);
+  picker.dataset.datePickerView = jobDateToIso(viewDate);
+  const selectedIso = jobDateIsoValue(canonicalInput.value);
+  const todayIso = jobDateToIso(new Date());
+  const firstDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1, 12);
+  const gridStart = new Date(firstDay);
+  gridStart.setDate(firstDay.getDate() - ((firstDay.getDay() + 6) % 7));
+  const startMinimum = picker.dataset.dateInputId === "jobEndDate"
+    ? jobDateIsoValue(document.getElementById("jobStart")?.value)
+    : "";
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    const iso = jobDateToIso(date);
+    const outside = date.getMonth() !== viewDate.getMonth();
+    const disabled = !!startMinimum && iso < startMinimum;
+    const classes = [
+      "jw-date-picker-day",
+      outside ? "is-outside-month" : "",
+      iso === todayIso ? "is-today" : "",
+      iso === selectedIso ? "is-selected" : "",
+    ].filter(Boolean).join(" ");
+    return `<button class="${classes}" type="button" data-date-picker-day="${iso}" aria-label="${escapeHtml(formatDateOnly(iso))}" aria-pressed="${iso === selectedIso}" ${disabled ? "disabled" : ""}>${date.getDate()}</button>`;
+  }).join("");
+  const monthLabel = new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(viewDate);
+  popover.innerHTML = `
+    <div class="jw-date-picker-header">
+      <strong>${escapeHtml(monthLabel)}</strong>
+      <div class="jw-date-picker-nav">
+        <button class="jw-date-picker-nav-button" type="button" data-date-picker-month="-1" aria-label="Previous month">${onsiteIcon("chevronLeft", 16)}</button>
+        <button class="jw-date-picker-nav-button" type="button" data-date-picker-month="1" aria-label="Next month">${onsiteIcon("chevronRight", 16)}</button>
+      </div>
+    </div>
+    <div class="jw-date-picker-weekdays" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+    <div class="jw-date-picker-grid">${days}</div>`;
+}
+
+function jobTimeValueIsValid(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || "").trim());
+}
+
+function jobTimeValueToMinutes(value) {
+  if (!jobTimeValueIsValid(value)) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function jobTimePickerOptions(input) {
+  const options = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += JOB_TIME_PICKER_INTERVAL_MINUTES) {
+    options.push({
+      value: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
+      custom: false,
+    });
+  }
+  const currentValue = String(input.value || "").trim();
+  const currentMinutes = jobTimeValueToMinutes(currentValue);
+  if (
+    currentMinutes !== null &&
+    currentMinutes % JOB_TIME_PICKER_INTERVAL_MINUTES !== 0
+  ) {
+    options.push({ value: currentValue, custom: true });
+    options.sort(
+      (first, second) =>
+        jobTimeValueToMinutes(first.value) - jobTimeValueToMinutes(second.value),
+    );
+  }
+  return options;
+}
+
+function setJobTimePickerValidity(input) {
+  const value = String(input.value || "").trim();
+  input.setCustomValidity(
+    !value || jobTimeValueIsValid(value)
+      ? ""
+      : "Enter a valid time in 24-hour HH:mm format.",
+  );
+}
+
+function jobTimePickerOptionId(input, value) {
+  return `${input.id}TimeOption${value.replace(":", "")}`;
+}
+
+function setJobTimePickerActiveOption(picker, index) {
+  const input = picker.querySelector("input");
+  const options = Array.from(
+    picker.querySelectorAll("[data-time-picker-option]"),
+  );
+  if (!input || !options.length) return;
+  const nextIndex = Math.min(Math.max(index, 0), options.length - 1);
+  options.forEach((option, optionIndex) => {
+    option.classList.toggle("is-active", optionIndex === nextIndex);
+  });
+  const activeOption = options[nextIndex];
+  picker.dataset.activeOptionIndex = String(nextIndex);
+  input.setAttribute("aria-activedescendant", activeOption.id);
+}
+
+function renderJobTimePickerOptions(picker) {
+  const input = picker.querySelector("input");
+  const listbox = picker.querySelector(".jw-time-picker-popover");
+  if (!input || !listbox) return;
+  const options = jobTimePickerOptions(input);
+  const currentValue = String(input.value || "").trim();
+  listbox.innerHTML = options.map(({ value, custom }) => `
+    <button
+      class="jw-time-picker-option${value === currentValue ? " is-selected" : ""}"
+      type="button"
+      role="option"
+      id="${jobTimePickerOptionId(input, value)}"
+      data-time-picker-option="${value}"
+      aria-selected="${value === currentValue}"
+    >${value}${custom ? '<span class="jw-time-picker-option-note">Current</span>' : ""}</button>`).join("");
+  const selectedIndex = Math.max(
+    options.findIndex(({ value }) => value === currentValue),
+    0,
+  );
+  setJobTimePickerActiveOption(picker, selectedIndex);
+}
+
+function positionJobSchedulePopover(picker) {
+  const popover = picker?.querySelector(
+    ".jw-date-picker-popover, .jw-time-picker-popover",
+  );
+  const anchor = picker?.querySelector(
+    ".jw-date-picker-display, #jobShiftStart, #jobShiftFinish",
+  );
+  if (!popover || !anchor || popover.hidden) return;
+  const anchorRect = anchor.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const gap = 6;
+  const availableBelow = window.innerHeight - anchorRect.bottom - JOB_SCHEDULE_PICKER_GUTTER;
+  const availableAbove = anchorRect.top - JOB_SCHEDULE_PICKER_GUTTER;
+  const openAbove = availableBelow < popoverRect.height && availableAbove > availableBelow;
+  const preferredLeft = ["jobEndDate", "jobShiftFinish"].includes(
+    picker.dataset.dateInputId || picker.dataset.timeInputId,
+  )
+    ? anchorRect.right - popoverRect.width
+    : anchorRect.left;
+  const left = Math.min(
+    Math.max(preferredLeft, JOB_SCHEDULE_PICKER_GUTTER),
+    Math.max(
+      JOB_SCHEDULE_PICKER_GUTTER,
+      window.innerWidth - popoverRect.width - JOB_SCHEDULE_PICKER_GUTTER,
+    ),
+  );
+  const preferredTop = openAbove
+    ? anchorRect.top - popoverRect.height - gap
+    : anchorRect.bottom + gap;
+  const top = Math.min(
+    Math.max(preferredTop, JOB_SCHEDULE_PICKER_GUTTER),
+    Math.max(
+      JOB_SCHEDULE_PICKER_GUTTER,
+      window.innerHeight - popoverRect.height - JOB_SCHEDULE_PICKER_GUTTER,
+    ),
+  );
+  picker.classList.toggle("opens-upward", openAbove);
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function closeJobSchedulePicker(except = null) {
+  const active = openJobSchedulePicker;
+  if (!active) return;
+  if (
+    except instanceof Element &&
+    (active === except || active.contains(except) || except.contains(active))
+  ) {
+    return;
+  }
+  const popover = active.querySelector(
+    ".jw-date-picker-popover, .jw-time-picker-popover",
+  );
+  const input = active.querySelector(
+    ".jw-date-picker-display, #jobShiftStart, #jobShiftFinish",
+  );
+  active.classList.remove("is-open", "opens-upward");
+  popover?.setAttribute("hidden", "");
+  popover?.removeAttribute("style");
+  input?.setAttribute("aria-expanded", "false");
+  input?.removeAttribute("aria-activedescendant");
+  openJobSchedulePicker = null;
+}
+
+function openJobDatePicker(displayInput) {
+  const picker = displayInput.closest("[data-date-picker]");
+  if (!picker || displayInput.disabled) return;
+  closeAppPopovers(picker);
+  if (openJobSchedulePicker && openJobSchedulePicker !== picker) {
+    closeJobSchedulePicker();
+  }
+  renderJobDatePicker(picker);
+  const popover = picker.querySelector(".jw-date-picker-popover");
+  picker.classList.add("is-open");
+  popover?.removeAttribute("hidden");
+  displayInput.setAttribute("aria-expanded", "true");
+  openJobSchedulePicker = picker;
+  requestAnimationFrame(() => positionJobSchedulePopover(picker));
+}
+
+function openJobTimePicker(input) {
+  const picker = input.closest("[data-time-picker]");
+  if (!picker || input.disabled) return;
+  closeAppPopovers(picker);
+  if (openJobSchedulePicker && openJobSchedulePicker !== picker) {
+    closeJobSchedulePicker();
+  }
+  renderJobTimePickerOptions(picker);
+  const popover = picker.querySelector(".jw-time-picker-popover");
+  picker.classList.add("is-open");
+  popover?.removeAttribute("hidden");
+  input.setAttribute("aria-expanded", "true");
+  openJobSchedulePicker = picker;
+  requestAnimationFrame(() => {
+    positionJobSchedulePopover(picker);
+    picker.querySelector(".jw-time-picker-option.is-selected")?.scrollIntoView({
+      block: "center",
+    });
+  });
+}
+
+function commitJobTimePickerInput(input) {
+  input.value = String(input.value || "").trim();
+  setJobTimePickerValidity(input);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function selectJobTimePickerOption(input, value) {
+  input.value = value;
+  commitJobTimePickerInput(input);
+  closeJobSchedulePicker();
+  input.focus({ preventScroll: true });
+}
+
+function bindJobDatePickers() {
+  document.querySelectorAll("[data-date-picker]").forEach((picker) => {
+    const displayInput = picker.querySelector(".jw-date-picker-display");
+    const popover = picker.querySelector(".jw-date-picker-popover");
+    if (!displayInput || !popover) return;
+    displayInput.addEventListener("click", () => openJobDatePicker(displayInput));
+    displayInput.addEventListener("input", () => {
+      syncJobDatePickerFromDisplay(displayInput);
+      clearSchedulePayValidation();
+      if (openJobSchedulePicker === picker) renderJobDatePicker(picker);
+    });
+    displayInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && openJobSchedulePicker === picker) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeJobSchedulePicker();
+        return;
+      }
+      if (event.key === "Enter" && openJobSchedulePicker !== picker) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (syncJobDatePickerFromDisplay(displayInput, { format: true })) {
+          closeJobSchedulePicker();
+        } else {
+          openJobDatePicker(displayInput);
+        }
+        return;
+      }
+      if (event.key === "ArrowDown" && openJobSchedulePicker !== picker) {
+        event.preventDefault();
+        event.stopPropagation();
+        openJobDatePicker(displayInput);
+        return;
+      }
+      if (event.key === "Tab") {
+        syncJobDatePickerFromDisplay(displayInput, { format: true });
+        closeJobSchedulePicker();
+      }
+    });
+    displayInput.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (picker.contains(document.activeElement)) return;
+        syncJobDatePickerFromDisplay(displayInput, { format: true });
+        closeJobSchedulePicker();
+      }, 0);
+    });
+    picker.addEventListener("click", (event) => {
+      const monthButton = event.target.closest?.("[data-date-picker-month]");
+      if (monthButton) {
+        const viewDate = jobDatePickerViewDate(picker);
+        viewDate.setMonth(viewDate.getMonth() + Number(monthButton.dataset.datePickerMonth));
+        picker.dataset.datePickerView = jobDateToIso(viewDate);
+        renderJobDatePicker(picker);
+        requestAnimationFrame(() => positionJobSchedulePopover(picker));
+        return;
+      }
+      const dayButton = event.target.closest?.("[data-date-picker-day]");
+      if (!dayButton || dayButton.disabled) return;
+      const canonicalInput = document.getElementById(picker.dataset.dateInputId || "");
+      setJobDatePickerValue(canonicalInput, dayButton.dataset.datePickerDay);
+      canonicalInput?.dispatchEvent(new Event("input", { bubbles: true }));
+      canonicalInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      clearSchedulePayValidation();
+      closeJobSchedulePicker();
+      displayInput.focus({ preventScroll: true });
+    });
+    popover.addEventListener("keydown", (event) => {
+      const dayButton = event.target.closest?.("[data-date-picker-day]");
+      if (!dayButton || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const options = Array.from(popover.querySelectorAll("[data-date-picker-day]:not(:disabled)"));
+      const currentIndex = options.indexOf(dayButton);
+      const offset = {
+        ArrowLeft: -1,
+        ArrowRight: 1,
+        ArrowUp: -7,
+        ArrowDown: 7,
+      }[event.key];
+      options[Math.min(Math.max(currentIndex + offset, 0), options.length - 1)]?.focus();
+    });
+  });
+}
+
+function bindJobTimePickers() {
+  document.querySelectorAll("[data-time-picker]").forEach((picker) => {
+    const input = picker.querySelector("input");
+    const listbox = picker.querySelector(".jw-time-picker-popover");
+    if (!input || !listbox) return;
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    setJobTimePickerValidity(input);
+    input.addEventListener("click", () => openJobTimePicker(input));
+    input.addEventListener("input", () => {
+      setJobTimePickerValidity(input);
+      if (openJobSchedulePicker === picker) renderJobTimePickerOptions(picker);
+    });
+    input.addEventListener("keydown", (event) => {
+      const isOpen = openJobSchedulePicker === picker;
+      if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeJobSchedulePicker();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isOpen) {
+          if (jobTimeValueIsValid(input.value)) commitJobTimePickerInput(input);
+          else openJobTimePicker(input);
+          return;
+        }
+        const activeIndex = Number(picker.dataset.activeOptionIndex || 0);
+        const option = listbox.querySelectorAll("[data-time-picker-option]")[activeIndex];
+        if (option) selectJobTimePickerOption(input, option.dataset.timePickerOption);
+        return;
+      }
+      if (event.key === "Tab") {
+        if (isOpen) commitJobTimePickerInput(input);
+        closeJobSchedulePicker();
+        return;
+      }
+      if (!isOpen && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        openJobTimePicker(input);
+        return;
+      }
+      if (!isOpen || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const options = listbox.querySelectorAll("[data-time-picker-option]");
+      const activeIndex = Number(picker.dataset.activeOptionIndex || 0);
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? options.length - 1
+          : activeIndex + (event.key === "ArrowDown" ? 1 : -1);
+      setJobTimePickerActiveOption(picker, nextIndex);
+      options[Math.min(Math.max(nextIndex, 0), options.length - 1)]?.scrollIntoView({
+        block: "nearest",
+      });
+    });
+    input.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (picker.contains(document.activeElement)) return;
+        setJobTimePickerValidity(input);
+        closeJobSchedulePicker();
+      }, 0);
+    });
+    picker.addEventListener("click", (event) => {
+      const option = event.target.closest?.("[data-time-picker-option]");
+      if (!option) return;
+      selectJobTimePickerOption(input, option.dataset.timePickerOption);
+    });
+  });
+}
+
+bindJobDatePickers();
+bindJobTimePickers();
+window.addEventListener("resize", () => positionJobSchedulePopover(openJobSchedulePicker));
+window.addEventListener("scroll", () => positionJobSchedulePopover(openJobSchedulePicker), true);
+jobForm?.addEventListener("reset", () => {
+  requestAnimationFrame(() => {
+    JOB_DATE_PICKER_IDS.forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) setJobDatePickerValue(input, input.value);
+    });
+    closeJobSchedulePicker();
   });
 });
 document.getElementById("jobNoFixedEndDate")?.addEventListener("change", () => {

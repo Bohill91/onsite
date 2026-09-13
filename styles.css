@@ -23354,6 +23354,291 @@ button.project-requirement-step-control:focus-visible {
   cursor: pointer;
 }
 
+.jw-date-picker,
+.jw-time-picker {
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.jw-date-picker-display {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-date-picker-native {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-date-picker-display {
+  display: block;
+}
+
+#formJob.jw-wizard-mode :is(.jw-date-picker, .jw-time-picker) > input:not(.jw-date-picker-native) {
+  cursor: text;
+  padding-right: 40px;
+}
+
+.jw-date-picker-icon,
+.jw-time-picker-icon {
+  align-items: center;
+  color: var(--ink-3);
+  display: inline-flex;
+  height: 18px;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: color 150ms ease;
+  width: 18px;
+}
+
+.jw-date-picker-icon {
+  display: none;
+}
+
+#formJob.jw-wizard-mode .jw-date-picker-icon {
+  display: inline-flex;
+}
+
+:is(.jw-date-picker-icon, .jw-time-picker-icon) svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 18px;
+}
+
+:is(.jw-date-picker, .jw-time-picker).is-open :is(.jw-date-picker-icon, .jw-time-picker-icon),
+:is(.jw-date-picker, .jw-time-picker):focus-within :is(.jw-date-picker-icon, .jw-time-picker-icon) {
+  color: var(--orange);
+}
+
+.jw-date-picker-popover,
+.jw-time-picker-popover {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  left: 0;
+  max-width: calc(100vw - 24px);
+  position: fixed;
+  top: 0;
+  z-index: 12000;
+}
+
+.jw-date-picker-popover[hidden],
+.jw-time-picker-popover[hidden] {
+  display: none;
+}
+
+.jw-time-picker-popover {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: 1fr;
+  max-height: min(240px, calc(100vh - 24px));
+  overflow-y: auto;
+  padding: 7px;
+  scrollbar-width: thin;
+  width: 232px;
+}
+
+.jw-time-picker-option {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 6px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  width: 100%;
+}
+
+.jw-time-picker-option:hover,
+.jw-time-picker-option:focus-visible,
+.jw-time-picker-option.is-active {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #c2410c;
+  outline: none;
+}
+
+.jw-time-picker-option.is-selected {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.35);
+  color: var(--orange);
+  font-weight: 750;
+}
+
+.jw-time-picker-option.is-selected::after {
+  color: var(--orange);
+  content: "✓";
+  font-size: 0.78rem;
+  margin-left: 7px;
+}
+
+.jw-time-picker-option.is-selected:hover,
+.jw-time-picker-option.is-selected:focus-visible,
+.jw-time-picker-option.is-selected.is-active {
+  background: #ffedd5;
+  border-color: rgba(249, 115, 22, 0.55);
+  color: #ea580c;
+}
+
+.jw-time-picker-option-note {
+  color: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin-left: 4px;
+  opacity: 0.78;
+}
+
+.jw-date-picker-popover {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 12px;
+  width: 278px;
+}
+
+.jw-date-picker-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.jw-date-picker-header strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.jw-date-picker-nav {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.jw-date-picker-nav-button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  width: 30px;
+}
+
+.jw-date-picker-nav-button:hover,
+.jw-date-picker-nav-button:focus-visible {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.35);
+  color: var(--orange);
+  outline: none;
+}
+
+.jw-date-picker-weekdays,
+.jw-date-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.jw-date-picker-weekdays {
+  color: var(--ink-3);
+  font-size: 0.65rem;
+  font-weight: 750;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+.jw-date-picker-grid {
+  gap: 3px 2px;
+}
+
+.jw-date-picker-day {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.76rem;
+  height: 31px;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  width: 31px;
+}
+
+.jw-date-picker-day:hover,
+.jw-date-picker-day:focus-visible {
+  background: #fff7ed;
+  border-color: rgba(249, 115, 22, 0.35);
+  color: #c2410c;
+  outline: none;
+}
+
+.jw-date-picker-day.is-outside-month {
+  color: var(--ink-3);
+  opacity: 0.58;
+}
+
+.jw-date-picker-day.is-today {
+  border-color: rgba(249, 115, 22, 0.65);
+  color: #ea580c;
+  font-weight: 750;
+}
+
+.jw-date-picker-day.is-selected {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+  font-weight: 750;
+}
+
+.jw-date-picker-day.is-selected:hover,
+.jw-date-picker-day.is-selected:focus-visible {
+  background: #ea580c;
+  border-color: #ea580c;
+  color: #fff;
+}
+
+.jw-date-picker-day:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-3);
+  cursor: not-allowed;
+  opacity: 0.34;
+}
+
 .jw-end-date-field {
   display: grid;
   gap: 9px;
@@ -25302,6 +25587,12 @@ button.project-requirement-step-control:focus-visible {
 
   .jw-wizard-mode .jw-wizard-nav {
     padding-top: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  #formJob.jw-wizard-mode .jw-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
