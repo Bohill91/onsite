@@ -1238,7 +1238,12 @@
                         <span>Move the pin to the gate or entrance workers should use.</span>
                       </div>
                       <div class="picker-map-shell">
-                        <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage"></div>
+                        <div id="jobPickerMap" class="picker-map" role="region" tabindex="0" aria-label="Map for setting the worker arrival point" aria-describedby="jobArrivalPointHelper jobEntrancePinMessage">
+                          <div id="jobPickerMapLoading" class="picker-map-loading" role="status" aria-live="polite">
+                            <span class="picker-map-loading-indicator" aria-hidden="true"></span>
+                            <span>Loading map…</span>
+                          </div>
+                        </div>
                         <div id="jobPickerMapFailure" class="picker-map-failure hidden" role="status" aria-live="polite" hidden>
                           <strong>Map temporarily unavailable.</strong>
                           <button id="jobPickerMapRetry" class="secondary-btn" type="button">Try again</button>
