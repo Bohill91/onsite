@@ -27,6 +27,7 @@ function startWorkerRegistration() {
   document.getElementById('workerStep1Form')?.reset();
   document.getElementById('workerStep2Form')?.reset();
   resetWorkerRegistrationPhoto();
+  initialiseWorkerReferralInput();
   initialiseWorkerTaxonomyFields();
   showScreen('worker-reg');
   setWorkerStep(1);
@@ -228,6 +229,8 @@ document.getElementById('forgotForm').addEventListener('submit', function(e) {
 document.getElementById('workerStep1Form').addEventListener('submit', function(e) {
   e.preventDefault();
   const email = document.getElementById('regEmail').value.trim().toLowerCase();
+  const referralInput = document.getElementById('regReferralCode');
+  const referralCode = referralInput?.value.trim().toUpperCase() || '';
   const pass  = document.getElementById('regPassword').value;
   const pass2 = document.getElementById('regPassword2').value;
   const err   = document.getElementById('step1Error');
@@ -254,6 +257,15 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
     err.style.display = 'block';
     return;
   }
+  if (referralCode && typeof validateWorkerReferralCode === 'function') {
+    const validation = validateWorkerReferralCode(referralCode);
+    if (!validation.ok) {
+      err.textContent = validation.reason || 'Referral code not recognised.';
+      err.style.display = 'block';
+      referralInput?.focus();
+      return;
+    }
+  }
   err.style.display = 'none';
   workerRegData = {
     name:     document.getElementById('regName').value.trim(),
@@ -261,6 +273,7 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
     phone:    document.getElementById('regPhone').value.trim(),
     password: pass,
     profilePhotoDataUrl: workerRegPhotoDataUrl,
+    referralCode,
   };
   setWorkerStep(2);
 });
@@ -386,8 +399,12 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
   if (typeof ensureWorkerProfileForUser === 'function') {
     ensureWorkerProfileForUser(user);
   }
+  const referralResult = workerRegData.referralCode && typeof registerWorkerReferral === 'function'
+    ? registerWorkerReferral(user, workerRegData.referralCode)
+    : null;
+  if (referralResult?.ok) saveUsers(users);
   setCurrentUser(user);
-  showWorkerSuccess(user, dupeResult);
+  showWorkerSuccess(user, dupeResult, referralResult);
 });
 
 function setWorkerStep(step) {
@@ -410,7 +427,7 @@ function setWorkerStep(step) {
   authOverlay.scrollTop = 0;
 }
 
-function showWorkerSuccess(user, dupeResult) {
+function showWorkerSuccess(user, dupeResult, referralResult) {
   const assessment = typeof assessWorkerProfile === 'function'
     ? assessWorkerProfile(user)
     : { percentage: calcCompletion(user), workReady: false, missingMandatoryItems: [] };
@@ -437,6 +454,19 @@ function showWorkerSuccess(user, dupeResult) {
         ') and history have been restored. Our team may review the match.';
     } else {
       note.style.display = 'none';
+    }
+  }
+  const referralNote = document.getElementById('workerReferralJoinNote');
+  if (referralNote) {
+    if (referralResult?.ok && referralResult.referral?.foundingWorker) {
+      referralNote.style.display = 'block';
+      referralNote.innerHTML = '<strong>Founding Worker status added.</strong> Your referral has been linked. Rewards remain conditional on paid work milestones after launch.';
+    } else if (workerRegData.referralCode && referralResult && !referralResult.ok) {
+      referralNote.style.display = 'block';
+      referralNote.textContent = referralResult.reason || 'The referral could not be linked.';
+    } else {
+      referralNote.style.display = 'none';
+      referralNote.textContent = '';
     }
   }
   showScreen('worker-success');
@@ -511,6 +541,18 @@ function renderCompletionChecklist(user) {
       (item.done ? '' : ' <span style="color:var(--ink-3);font-weight:400;">— not yet added</span>') +
     '</li>';
   }).join('');
+}
+
+function initialiseWorkerReferralInput() {
+  const input = document.getElementById('regReferralCode');
+  if (!input) return;
+  const queryCode = new URLSearchParams(window.location.search).get('ref') || '';
+  if (queryCode && !input.value) input.value = queryCode.trim().toUpperCase();
+  if (input.dataset.referralInitialised === 'true') return;
+  input.dataset.referralInitialised = 'true';
+  input.addEventListener('blur', function() {
+    input.value = input.value.trim().toUpperCase();
+  });
 }
 
 // ─── Canonical Trade → Role classification ────────────────
@@ -671,6 +713,7 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
   try {
     // Populate cert checkboxes
     initialisePasswordToggles();
+    initialiseWorkerReferralInput();
     const certContainer = document.getElementById('certCheckboxes');
     if (certContainer) {
       certContainer.innerHTML = CERT_OPTIONS.map(function(c) {

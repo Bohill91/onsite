@@ -135,6 +135,10 @@ function labourInsightsEngine() {
   return typeof window !== "undefined" ? window.OnSiteLabourInsights : null;
 }
 
+function workerReferralsEngine() {
+  return typeof window !== "undefined" ? window.OnSiteWorkerReferrals : null;
+}
+
 function labourCapacityContext(options = {}) {
   return {
     projects: state.jobs || [],
@@ -6244,6 +6248,9 @@ const demoData = {
   notifications: [],
   projectActivities: [],
   marketplaceEvents: [],
+  workerReferralProgramme: { version: 1, phase: "prelaunch", launchAt: "" },
+  workerReferralInvites: [],
+  workerReferrals: [],
   taxonomySuggestions: [],
   preferredWorkers: [],
   projectTransfers: [],
@@ -6285,6 +6292,8 @@ function migrateState(s) {
   if (!Array.isArray(s.notifications)) s.notifications = [];
   if (!Array.isArray(s.projectActivities)) s.projectActivities = [];
   if (!Array.isArray(s.marketplaceEvents)) s.marketplaceEvents = [];
+  if (!Array.isArray(s.workerReferralInvites)) s.workerReferralInvites = [];
+  if (!Array.isArray(s.workerReferrals)) s.workerReferrals = [];
   if (!Array.isArray(s.taxonomySuggestions)) s.taxonomySuggestions = [];
   if (!Array.isArray(s.preferredWorkers)) s.preferredWorkers = [];
   if (!Array.isArray(s.projectTransfers)) s.projectTransfers = [];
@@ -6385,6 +6394,7 @@ function migrateState(s) {
       w.paymentVerificationStatus = "unverified";
     w.weekendPreferences = workerWeekendPreferences(w);
   });
+  workerReferralsEngine()?.ensureReferralState(s, s.workers || []);
   (s.applications || []).forEach((a) => {
     if (!a.status) a.status = "interested";
     if (!a.createdAt) a.createdAt = a.offeredAt || new Date().toISOString();
@@ -8934,6 +8944,119 @@ function ensureWorkerProfileForUser(user) {
 
   saveState();
   return worker;
+}
+
+function validateWorkerReferralCode(code) {
+  const engine = workerReferralsEngine();
+  if (!engine) return { ok: false, reason: "Referral service unavailable" };
+  return engine.validateReferralCode(state, state.workers || [], code);
+}
+
+function registerWorkerReferral(user, code) {
+  const engine = workerReferralsEngine();
+  if (!engine || !user?.id || !code) {
+    return { ok: false, reason: "A valid referral code is required" };
+  }
+  const worker = findWorker(user.id) || ensureWorkerProfileForUser(user);
+  const result = engine.attributeReferral(
+    state,
+    state.workers || [],
+    worker,
+    code,
+  );
+  if (result.ok) {
+    user.foundingWorker = !!result.referral.foundingWorker;
+    worker.foundingWorker = !!result.referral.foundingWorker;
+    saveState();
+  }
+  return result;
+}
+
+function workerReferralPaidDayCount(workerIds) {
+  const ids = new Set(workerIds);
+  const attendanceIds = new Set();
+  const fallbackLines = new Set();
+  let fallbackDays = 0;
+  (state.invoices || []).forEach((invoice) => {
+    (invoice.lines || []).forEach((line) => {
+      if (!ids.has(line.workerId) || workerPaymentStatusForLine(invoice, line) !== "paid") {
+        return;
+      }
+      const paidAttendanceIds = Array.isArray(line.attendanceRecordIds)
+        ? line.attendanceRecordIds.filter(Boolean)
+        : [];
+      if (paidAttendanceIds.length) {
+        paidAttendanceIds.forEach((id) => attendanceIds.add(String(id)));
+        return;
+      }
+      const lineKey = [
+        invoice.id,
+        line.workerId,
+        line.jobId,
+        invoice.weekStart,
+      ].join(":");
+      if (fallbackLines.has(lineKey)) return;
+      fallbackLines.add(lineKey);
+      fallbackDays += Math.max(0, Math.floor(Number(line.days) || 0));
+    });
+  });
+  return attendanceIds.size + fallbackDays;
+}
+
+function workerReferralEvidence(workerId) {
+  const accountIds = linkedAccountIds(workerId);
+  const authUsers = readAuthUsers().filter((user) => accountIds.includes(user.id));
+  const workerProfiles = (state.workers || []).filter((worker) =>
+    accountIds.includes(worker.id),
+  );
+  const profileCompleted = [...workerProfiles, ...authUsers].some(
+    (worker) => calcWorkerCompletion(worker) >= 100,
+  );
+  const firstWorkedAttendance = attendanceRecords
+    .filter(
+      (record) =>
+        accountIds.includes(record.workerId) && isInvoiceableAttendance(record),
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.checkInTime || left.createdAt || `${left.date}T00:00:00`).getTime() -
+        new Date(right.checkInTime || right.createdAt || `${right.date}T00:00:00`).getTime(),
+    )[0];
+  return {
+    profileCompleted,
+    profileCompletedAt: profileCompleted
+      ? authUsers.find((user) => calcWorkerCompletion(user) >= 100)?.profileCompletedAt || ""
+      : "",
+    startedWork: !!firstWorkedAttendance,
+    startedWorkAt:
+      firstWorkedAttendance?.checkInTime ||
+      firstWorkedAttendance?.createdAt ||
+      (firstWorkedAttendance?.date
+        ? `${firstWorkedAttendance.date}T00:00:00.000Z`
+        : ""),
+    paidDayCount: workerReferralPaidDayCount(accountIds),
+  };
+}
+
+function syncWorkerReferralProgress() {
+  const engine = workerReferralsEngine();
+  if (!engine) return false;
+  const result = engine.syncAllReferralProgress(
+    state,
+    state.workers || [],
+    (workerId) => workerReferralEvidence(workerId),
+  );
+  return !!result.changed;
+}
+
+function recordWorkerReferralInvitation(worker, channel = "share") {
+  const engine = workerReferralsEngine();
+  if (!engine || !worker) return { ok: false, reason: "Worker not found" };
+  const result = engine.recordInvitation(state, state.workers || [], worker, {
+    channel,
+  });
+  if (result.ok && !result.duplicate) saveState();
+  return result;
 }
 
 function notifyPlannedAbsenceChange(worker, absence, action) {
@@ -15634,6 +15757,7 @@ const NAV_SM = {
   offers: onsiteIcon("tag", 16),
   notifications: onsiteIcon("bell", 16),
   market: onsiteIcon("users", 16),
+  referrals: onsiteIcon("users", 16),
 };
 
 const NAV_LG = Object.fromEntries(
@@ -15648,6 +15772,7 @@ const WORKER_TABS = [
   { id: "offers", icon: "offers", label: "Offers" },
   { id: "calendar", icon: "bookings", label: "Calendar" },
   { id: "attendance", icon: "bookings", label: "Timesheet" },
+  { id: "referrals", icon: "referrals", label: "Referrals" },
   { id: "profile", icon: "profile", label: "Profile" },
 ];
 
@@ -17026,6 +17151,180 @@ function bindAgreementOpeners(el) {
   });
 }
 
+function workerReferralStatusLabel(status) {
+  return (
+    {
+      joined_early_access: "Joined early access",
+      joined: "Joined",
+      profile_completed: "Profile completed",
+      started_work: "Started work",
+      five_paid_days: "5 paid days",
+      twenty_paid_days: "20 paid days",
+    }[status] || "Joined"
+  );
+}
+
+function workerNameForReferral(workerId) {
+  return (
+    findWorker(workerId)?.name ||
+    readAuthUsers().find((user) => user.id === workerId)?.name ||
+    "Referred worker"
+  );
+}
+
+function workerReferralLink(code) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("ref", code);
+  return url.toString();
+}
+
+async function copyWorkerReferralText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Copy failed");
+}
+
+function workerReferralProgressHTML(referral) {
+  const paidDays = Math.max(0, Number(referral.milestones?.paidDayCount) || 0);
+  const progress = Math.min(100, Math.round((paidDays / 20) * 100));
+  return `<article class="worker-referral-row">
+    <div class="worker-referral-row-head">
+      <div>
+        <strong>${escapeHtml(workerNameForReferral(referral.referredWorkerId))}</strong>
+        <span>${escapeHtml(workerReferralStatusLabel(referral.status))}</span>
+      </div>
+      ${referral.foundingWorker ? '<span class="worker-founding-badge">Founding Worker</span>' : ""}
+    </div>
+    <div class="worker-referral-progress" role="progressbar" aria-label="Paid-day referral progress" aria-valuemin="0" aria-valuemax="20" aria-valuenow="${Math.min(20, paidDays)}"><span style="width:${progress}%"></span></div>
+    <div class="worker-referral-milestones">
+      <span class="${paidDays >= 5 ? "is-complete" : ""}">5 paid days · £50</span>
+      <span class="${paidDays >= 20 ? "is-complete" : ""}">20 paid days · +£50</span>
+    </div>
+  </article>`;
+}
+
+function renderWorkerReferralsPage(user) {
+  const root = document.getElementById("workerReferralsContent");
+  const engine = workerReferralsEngine();
+  if (!root || !engine || user?.type !== "worker") return;
+  const worker = findWorker(user.id) || ensureWorkerProfileForUser(user);
+  engine.ensureReferralState(state, state.workers || []);
+  const referralCode = engine.ensureWorkerReferralCode(
+    worker,
+    state.workers || [],
+  );
+  const workerIds = linkedAccountIds(user.id);
+  const summary = engine.referralSummary(state, workerIds);
+  const ownReferral = engine.referralForReferredWorker(state, workerIds);
+  const referralLink = workerReferralLink(referralCode);
+  const isPrelaunch = summary.phase === engine.PROGRAMME_PHASES.PRELAUNCH;
+  const metricCards = isPrelaunch
+    ? [
+        ["Invited", summary.invitedCount],
+        ["Joined early access", summary.joinedEarlyAccessCount],
+        ["Potential rewards", `Up to ${formatMoney(summary.potentialRewardPence / 100)}`],
+      ]
+    : [
+        ["Joined", summary.joinedCount],
+        ["Rewards earned", formatMoney(summary.earnedRewardPence / 100)],
+        ["Maximum per referral", "£100"],
+      ];
+  const referralRows = summary.referrals.length
+    ? summary.referrals.map(workerReferralProgressHTML).join("")
+    : guidedEmptyStateHTML({
+        kicker: "Referrals",
+        title: "No workers referred yet",
+        body: "Share your personal invite link with trusted tradespeople. Their progress will appear here after they join.",
+      });
+
+  root.innerHTML = `<div class="worker-referrals-page">
+    <header class="worker-referrals-head">
+      <div>
+        <p>Founding Worker Referral Programme</p>
+        <h1>Refer skilled workers to OnSite</h1>
+        <span>Invite people you trust and follow their progress towards work-based rewards.</span>
+      </div>
+      ${ownReferral?.foundingWorker ? '<span class="worker-founding-badge">Founding Worker</span>' : ""}
+    </header>
+
+    <section class="worker-referral-card worker-referral-share" aria-labelledby="workerReferralShareTitle">
+      <div>
+        <p class="worker-referral-kicker">Your invite</p>
+        <h2 id="workerReferralShareTitle">Share your referral link</h2>
+        <span>Your code is stable and identifies workers who join through your invitation.</span>
+      </div>
+      <div class="worker-referral-code-row">
+        <div><small>Referral code</small><strong>${escapeHtml(referralCode)}</strong></div>
+        <button class="secondary-btn" type="button" data-worker-referral-copy-code>Copy code</button>
+        <button class="primary-btn" type="button" data-worker-referral-share>Share invite</button>
+      </div>
+      <div class="worker-referral-link"><small>Invite link</small><span>${escapeHtml(referralLink)}</span></div>
+    </section>
+
+    <section class="worker-referral-metrics" aria-label="Referral summary">
+      ${metricCards
+        .map(
+          ([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`,
+        )
+        .join("")}
+    </section>
+
+    <section class="worker-referral-card">
+      <p class="worker-referral-kicker">How rewards work</p>
+      <h2>${isPrelaunch ? "Bank potential rewards before launch" : "Rewards follow paid work"}</h2>
+      <div class="worker-referral-reward-grid">
+        <div><strong>5 paid working days</strong><span>You earn £50. The referred worker separately becomes eligible for their £25 new-worker reward.</span></div>
+        <div><strong>20 paid working days</strong><span>You earn an additional £50, bringing the maximum normal referral reward to £100.</span></div>
+      </div>
+      <p class="worker-referral-disclaimer">${isPrelaunch ? "Early-access signups do not generate immediate cash. Potential rewards become eligible only after OnSite launches and the referred worker completes the qualifying paid days." : "Rewards shown as earned represent eligibility only. OnSite does not process referral payouts in this prototype."}</p>
+      ${ownReferral?.foundingWorker ? '<p class="worker-referral-founding-copy"><strong>Your Founding Worker status is active.</strong> You have priority access to complete your full profile when onboarding opens. Your separate £25 new-worker reward remains conditional on completing 5 paid working days.</p>' : ""}
+    </section>
+
+    <section class="worker-referral-card">
+      <div class="worker-referral-list-head"><div><p class="worker-referral-kicker">Referral progress</p><h2>${isPrelaunch ? "Joined early access" : "Referred workers"}</h2></div><span>${summary.referrals.length}</span></div>
+      <div class="worker-referral-list">${referralRows}</div>
+    </section>
+  </div>`;
+
+  root.querySelector("[data-worker-referral-copy-code]")?.addEventListener("click", async () => {
+    try {
+      await copyWorkerReferralText(referralCode);
+      showToast("Referral code copied");
+    } catch (_) {
+      showToast("Referral code could not be copied");
+    }
+  });
+  root.querySelector("[data-worker-referral-share]")?.addEventListener("click", async () => {
+    const shareData = {
+      title: "Join OnSite",
+      text: `Join the OnSite Founding Worker Referral Programme with my code ${referralCode}.`,
+      url: referralLink,
+    };
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else await copyWorkerReferralText(referralLink);
+      recordWorkerReferralInvitation(worker, navigator.share ? "share" : "copy_link");
+      render();
+      showToast(navigator.share ? "Invite shared" : "Invite link copied");
+    } catch (error) {
+      if (error?.name !== "AbortError") showToast("Invite could not be shared");
+    }
+  });
+}
+
 // ─── Worker Profile ───────────────────────────────────────
 function renderWorkerProfile(user) {
   const el = document.getElementById("profileContent");
@@ -17041,6 +17340,11 @@ function renderWorkerProfile(user) {
       ? (stats.reliability ?? 100)
       : (user.reliability ?? 100);
   const pct = calcWorkerCompletion(user);
+  const referralEngine = workerReferralsEngine();
+  const ownReferral = referralEngine?.referralForReferredWorker(
+    state,
+    linkedAccountIds(user.id),
+  );
 
   // Keep the permanent identity record's score in sync so it can be restored
   // if this worker ever deletes and re-registers.
@@ -17183,6 +17487,7 @@ function renderWorkerProfile(user) {
         <div class="prof-verify ${user.verificationStatus || "incomplete"}">
           ${{ verified: "✓ Verified", pending: "Pending Review", incomplete: "Incomplete Profile" }[user.verificationStatus || "incomplete"]}
         </div>
+        ${ownReferral?.foundingWorker ? '<div class="worker-founding-badge">Founding Worker</div>' : ""}
       </div>
       <div class="prof-ring">
         ${ratingBadgeHTML(rating.reliabilityRating)}
@@ -28610,6 +28915,7 @@ function render() {
   if (expireJobOffers()) saveState();
   // Roll up any newly-completed weeks into invoices and refresh restrictions.
   if (generateWeeklyInvoices()) saveState();
+  if (syncWorkerReferralProgress()) saveState();
 
   // Update counts (elements may not exist after nav rebuild)
   const wcEl = document.getElementById("workerCount");
@@ -28622,6 +28928,7 @@ function render() {
     renderWorkerOffersPage(user);
     renderWorkerCalendarPage(user);
     renderWorkerAttendance(user);
+    renderWorkerReferralsPage(user);
     renderWorkerProfile(user);
   } else if (role === "company") {
     renderContractorHome(user);

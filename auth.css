@@ -422,6 +422,11 @@ body.auth-is-open {
   letter-spacing: 0.01em;
 }
 
+.auth-optional {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
 .auth-input {
   background: var(--form-control-background);
   border: 1px solid var(--form-control-border);
@@ -903,6 +908,22 @@ body.auth-is-open {
   font-size: 0.77rem;
   color: var(--ink-3);
   margin-top: 4px;
+}
+
+.founding-worker-note {
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.22);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 12px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.founding-worker-note strong {
+  color: var(--ink);
 }
 
 /* ─── Success Screen ────────────────────────────────────── */
