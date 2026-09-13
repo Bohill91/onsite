@@ -26,6 +26,8 @@ const ICON_PATHS = {
   calendar: `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
   check: `<polyline points="20 6 9 17 4 12"/>`,
   chevronRight: `<polyline points="9 18 15 12 9 6"/>`,
+  chevronsLeft: `<polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>`,
+  chevronsRight: `<polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>`,
   circleSlash: `<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>`,
   clock: `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,
   edit: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
@@ -35,6 +37,7 @@ const ICON_PATHS = {
   home: `<path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
   locate: `<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/>`,
   lock: `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
+  moreHorizontal: `<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>`,
   minusCircle: `<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   penLine: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
@@ -14400,6 +14403,102 @@ const CONTRACTOR_TABS = [
   { id: "notifications", icon: "notifications", label: "Notifications" },
 ];
 
+const SIDEBAR_PREFERENCE_KEY = "onsite_sidebar_collapsed_v1";
+
+function storedSidebarPreference() {
+  try {
+    return localStorage.getItem(SIDEBAR_PREFERENCE_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+}
+
+function setSidebarCollapsed(collapsed, { persist = false } = {}) {
+  const app = document.getElementById("main-app");
+  if (!app) return;
+  const isDesktopCompany =
+    window.innerWidth >= 860 && getSessionUser()?.type === "company";
+  const isCollapsed = isDesktopCompany && Boolean(collapsed);
+  app.classList.toggle("sidebar-collapsed", isCollapsed);
+  app.dataset.sidebarState = isCollapsed ? "collapsed" : "expanded";
+
+  if (persist) {
+    try {
+      localStorage.setItem(
+        SIDEBAR_PREFERENCE_KEY,
+        isCollapsed ? "collapsed" : "expanded",
+      );
+    } catch {
+      // The sidebar remains usable when local storage is unavailable.
+    }
+  }
+
+  document.querySelectorAll(".tab-nav .tab-btn").forEach((button) => {
+    const label = Array.from(button.children).find(
+      (child) =>
+        child.tagName === "SPAN" &&
+        !child.classList.contains("nav-unread-badge"),
+    )?.textContent?.trim();
+    if (!label) return;
+    if (isCollapsed) {
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
+    } else {
+      button.removeAttribute("aria-label");
+      button.removeAttribute("title");
+    }
+  });
+
+  const control = document.querySelector("[data-sidebar-collapse]");
+  if (control) {
+    const nextLabel = isCollapsed ? "Expand sidebar" : "Collapse sidebar";
+    control.setAttribute("aria-label", nextLabel);
+    control.setAttribute("title", nextLabel);
+    control.setAttribute("aria-pressed", String(isCollapsed));
+    control.innerHTML = `<span class="sidebar-collapse-icon" aria-hidden="true">${onsiteIcon(isCollapsed ? "chevronsRight" : "chevronsLeft", 20)}</span>`;
+  }
+}
+
+function syncSidebarState() {
+  setSidebarCollapsed(storedSidebarPreference());
+}
+
+function ensureSidebarCollapseControl() {
+  const nav = document.querySelector(".tab-nav");
+  if (!nav) return;
+  let utility = nav.querySelector("[data-sidebar-utility]");
+  if (getSessionUser()?.type !== "company") {
+    utility?.remove();
+    setSidebarCollapsed(false);
+    return;
+  }
+  if (!utility) {
+    nav.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="sidebar-utility-zone" data-sidebar-utility></div>`,
+    );
+    utility = nav.querySelector("[data-sidebar-utility]");
+  }
+  let control = utility?.querySelector("[data-sidebar-collapse]");
+  if (!control) {
+    utility?.insertAdjacentHTML(
+      "beforeend",
+      `<button class="sidebar-collapse-control" type="button" data-sidebar-collapse aria-pressed="false"></button>`,
+    );
+    control = utility?.querySelector("[data-sidebar-collapse]");
+    control?.addEventListener("click", () => {
+      closeAppPopovers();
+      const isCollapsed = document
+        .getElementById("main-app")
+        ?.classList.contains("sidebar-collapsed");
+      setSidebarCollapsed(!isCollapsed, { persist: true });
+    });
+  }
+  syncSidebarState();
+}
+
+window.addEventListener("resize", syncSidebarState);
+
 function companyUnreadNotificationCount(user = getSessionUser()) {
   return companyVisibleNotifications(user).filter((n) => !n.readAt).length;
 }
@@ -14437,6 +14536,7 @@ function rebuildNav(tabDefs, activeId) {
     )
     .join("");
   bindTabEvents();
+  ensureSidebarCollapseControl();
   renderSidebarAccount(getSessionUser());
 }
 
@@ -14444,6 +14544,7 @@ function restoreNav() {
   document.querySelector(".tab-nav").innerHTML = ORIG_TOP_NAV;
   document.querySelector(".bottom-nav").innerHTML = ORIG_BOTTOM_NAV;
   bindTabEvents();
+  ensureSidebarCollapseControl();
 }
 
 function companySidebarName(user) {
@@ -14493,14 +14594,14 @@ function renderSidebarAccount(user) {
   const userName = user?.name || user?.fullName || "User";
   const userRole = companySidebarUserRole(user);
   slot.innerHTML = `
-    <button class="sidebar-account-card" type="button" aria-expanded="false" data-sidebar-account-toggle>
+    <button class="sidebar-account-card" type="button" aria-expanded="false" aria-label="${escapeHtml(companyName)} account menu" title="${escapeHtml(companyName)}" data-sidebar-account-toggle>
       <span class="sidebar-company-avatar">${escapeHtml(companySidebarInitials(companyName))}</span>
       <span class="sidebar-company-text">
         <span class="sidebar-company-name">${escapeHtml(companyName)}</span>
         <span class="sidebar-user-name">${escapeHtml(userName)}</span>
         <span class="sidebar-user-role">${escapeHtml(userRole)}</span>
       </span>
-      <span class="sidebar-account-chevron" aria-hidden="true">⌄</span>
+      <span class="sidebar-account-more" aria-hidden="true">${onsiteIcon("moreHorizontal", 18)}</span>
     </button>
     <div class="sidebar-account-menu hidden" data-sidebar-account-menu>
       <button type="button" data-sidebar-account-action="profile">My Profile</button>

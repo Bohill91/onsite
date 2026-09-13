@@ -1719,6 +1719,10 @@ button.is-loading,
       "sidenav content";
     min-height: 100vh;
   }
+
+  .app-root.sidebar-collapsed {
+    --shell-sidebar-width: 72px;
+  }
 }
 
 /* ─── Top Bar ─────────────────────────────────────────── */
@@ -1827,6 +1831,93 @@ button.is-loading,
   .tab-btn svg {
     flex-shrink: 0;
   }
+
+  .sidebar-utility-zone {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+    min-height: 34px;
+  }
+
+  .sidebar-collapse-control {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-xs);
+    color: var(--ink-2);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    height: 34px;
+    justify-content: center;
+    padding: 7px;
+    transition: background-color 160ms ease, color 160ms ease;
+    width: 34px;
+  }
+
+  .sidebar-collapse-control:hover,
+  .sidebar-collapse-control:focus-visible {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .sidebar-collapse-control:focus-visible {
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
+    outline: 2px solid rgba(249, 115, 22, 0.62);
+    outline-offset: 1px;
+  }
+
+  .sidebar-collapse-icon,
+  .sidebar-collapse-icon svg {
+    display: block;
+  }
+
+  .sidebar-collapsed .tab-nav {
+    align-items: center;
+    padding-inline: 10px;
+  }
+
+  .sidebar-collapsed .tab-btn {
+    justify-content: center;
+    padding-inline: 10px;
+    position: relative;
+    width: 48px;
+  }
+
+  .sidebar-collapsed .tab-btn > span:not(.nav-unread-badge),
+  .sidebar-collapsed .sidebar-company-text,
+  .sidebar-collapsed .sidebar-account-more {
+    display: none;
+  }
+
+  .sidebar-collapsed .tab-btn .nav-unread-badge {
+    position: absolute;
+    right: 3px;
+    top: 4px;
+  }
+
+  .sidebar-collapsed .sidebar-utility-zone {
+    align-self: stretch;
+    justify-content: center;
+  }
+
+  .sidebar-collapsed .sidebar-account-slot {
+    align-self: stretch;
+  }
+
+  .sidebar-collapsed .sidebar-account-card {
+    justify-content: center;
+    padding-inline: 6px;
+  }
+
+  .sidebar-collapsed .sidebar-account-menu {
+    bottom: 8px;
+    left: calc(100% + 8px);
+    right: auto;
+    width: 220px;
+  }
 }
 
 .tab-count {
@@ -1922,10 +2013,11 @@ button.is-loading,
     white-space: nowrap;
   }
 
-  .sidebar-account-chevron {
+  .sidebar-account-more {
+    align-items: center;
     color: var(--ink-3);
-    font-size: 1rem;
-    line-height: 1;
+    display: inline-flex;
+    flex: 0 0 18px;
     margin-left: auto;
   }
 
@@ -2003,6 +2095,20 @@ button.is-loading,
   .content-area:has(#tab-notifications.active .request-labour-page),
   .content-area:has(#tab-account.active .request-labour-page) {
     max-width: var(--page-content-max);
+  }
+
+  .content-area:has(.company-saas-page),
+  .content-area:has(.company-dashboard-page),
+  .content-area:has(#tab-request-labour.active) {
+    max-width: none;
+  }
+
+  .content-area:has(.company-saas-page) .company-saas-page,
+  .content-area:has(.company-saas-page) .os-page-content,
+  .content-area:has(.company-dashboard-page) .company-dashboard-page,
+  .content-area:has(#tab-request-labour.active) .request-labour-page {
+    max-width: none;
+    width: 100%;
   }
 }
 
@@ -15127,6 +15233,36 @@ body.modal-open {
 }
 
 /* ─── Responsive Audit Fixes ───────────────────────────── */
+.primary-btn,
+.secondary-btn,
+.outline-btn,
+.company-project-tab,
+.tab-btn,
+.notification-action-btn,
+.company-project-open,
+.taxonomy-missing-action,
+.jw-day-chip span,
+.jw-wizard-nav button {
+  white-space: nowrap;
+}
+
+.company-page-head > *,
+.company-dashboard-head > *,
+.attendance-page-head > *,
+.attendance-project-detail-head > *,
+.company-project-page-head > *,
+.company-project-detail-head > *,
+.panel-header > *,
+.company-home-head > *,
+.company-home-section-head > *,
+.jw-compact-disclosure-row > *,
+.jw-labour-section-head > *,
+.jw-requirement-builder-head > *,
+.jw-requirement-group-head > *,
+.jw-phased-schedule-head > * {
+  min-width: 0;
+}
+
 .content-area,
 .tab-panel,
 .request-labour-page,
