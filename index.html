@@ -1412,9 +1412,14 @@
               </div>
 
               <div class="jw-wizard-nav">
-                <button type="button" id="jobWizardBack" class="secondary-btn jw-wizard-back">Back</button>
-                <button type="button" id="jobWizardContinue" class="primary-btn jw-wizard-continue">Continue</button>
-                <button type="button" id="jobWizardSubmit" class="primary-btn jw-wizard-submit hidden">Find Labour</button>
+                <div class="jw-wizard-nav-leading">
+                  <button type="button" id="jobWizardBack" class="secondary-btn jw-wizard-back">Back</button>
+                  <button type="button" id="discardRequestLabourDraft" class="jw-draft-discard hidden">Discard draft</button>
+                </div>
+                <div class="jw-wizard-nav-actions">
+                  <button type="button" id="jobWizardContinue" class="primary-btn jw-wizard-continue">Continue</button>
+                  <button type="button" id="jobWizardSubmit" class="primary-btn jw-wizard-submit hidden">Find Labour</button>
+                </div>
               </div>
 
               <button type="submit" class="primary-btn full-width jw-submit">Find Labour</button>
@@ -1429,7 +1434,10 @@
                 <h1>Request Labour</h1>
                 <p>Create a new project and specify the labour required.</p>
               </div>
-              <span class="att-today-badge os-date-pill" id="requestLabourTodayBadge"></span>
+              <div class="request-labour-head-meta">
+                <span class="request-labour-draft-status" id="requestLabourDraftStatus" aria-live="polite"></span>
+                <span class="att-today-badge os-date-pill" id="requestLabourTodayBadge"></span>
+              </div>
             </header>
             <div id="requestLabourPageBody" class="request-labour-page-body os-card company-saas-body"></div>
           </section>

@@ -9440,6 +9440,7 @@ function closeSpecificWorkerPicker({ apply = false } = {}) {
       (workerId) => !!findWorker(workerId),
     );
     renderJobPreferredWorkerChoices(getSessionUser());
+    scheduleRequestLabourDraftSave();
   }
   hideWithMotion(
     modal,
@@ -11054,20 +11055,34 @@ function hideLabourRequestModal() {
   hideWithMotion(modal, () => document.body.classList.remove("modal-open"));
 }
 
-function openLabourRequestPage({ focus = true } = {}) {
+function openLabourRequestPage({ focus = true, restoreDraft = true } = {}) {
   const formWrap = document.getElementById("formJob");
   const body = document.getElementById("requestLabourPageBody");
   if (!formWrap || !body) {
     switchTab("add");
     return;
   }
+  if (
+    restoreDraft &&
+    document.getElementById("tab-request-labour")?.classList.contains("active")
+  ) {
+    flushRequestLabourDraft();
+  }
   activeCompanyProjectId = "";
   hideLabourRequestModal();
   body.appendChild(formWrap);
   formWrap.classList.remove("hidden");
   switchTab("request-labour");
+  setRequestLabourPageSessionActive(true);
   updateRequestLabourDatePill();
+  resetRequestLabourFormState();
   enterJobWizardMode({ reset: true });
+  const restored = restoreDraft && restoreRequestLabourDraft();
+  if (!restored) {
+    requestLabourDraftDirty = false;
+    setRequestLabourDraftStatus();
+    syncRequestLabourDraftControls();
+  }
   prepareLabourRequestForm({ focus });
 }
 
@@ -11334,7 +11349,7 @@ function applyRepeatProjectToForm(job) {
 function repeatProject(jobId) {
   const job = findJob(jobId);
   if (!job) return;
-  openLabourRequestPage({ focus: false });
+  openLabourRequestPage({ focus: false, restoreDraft: false });
   applyRepeatProjectToForm(job);
   showToast("Project details copied — add new dates before submitting");
 }
@@ -11407,6 +11422,524 @@ let jobArrivalPointAddress = "";
 let jobSitePhotosOpen = false;
 let jobAttendanceManagerOpen = false;
 let jobWizardShiftDefaultsInitialized = false;
+
+const REQUEST_LABOUR_DRAFT_VERSION = 1;
+const REQUEST_LABOUR_DRAFT_STORAGE_PREFIX =
+  "onsite_request_labour_draft_v1";
+const REQUEST_LABOUR_PAGE_SESSION_KEY =
+  "onsite_request_labour_page_active_v1";
+const REQUEST_LABOUR_DRAFT_DEBOUNCE_MS = 500;
+let requestLabourDraftTimer = null;
+let requestLabourDraftDirty = false;
+let requestLabourDraftRestoring = false;
+
+function requestLabourDraftOwnerId(user = getSessionUser()) {
+  return user?.type === "company" ? String(user.id || "") : "";
+}
+
+function requestLabourDraftStorageKey(user = getSessionUser()) {
+  const ownerId = requestLabourDraftOwnerId(user);
+  return ownerId
+    ? `${REQUEST_LABOUR_DRAFT_STORAGE_PREFIX}:${ownerId}`
+    : "";
+}
+
+function setRequestLabourPageSessionActive(active, user = getSessionUser()) {
+  try {
+    if (active) {
+      const ownerId = requestLabourDraftOwnerId(user);
+      if (ownerId) sessionStorage.setItem(REQUEST_LABOUR_PAGE_SESSION_KEY, ownerId);
+      return;
+    }
+    sessionStorage.removeItem(REQUEST_LABOUR_PAGE_SESSION_KEY);
+  } catch (_) {}
+}
+
+function requestLabourPageWasActive(user = getSessionUser()) {
+  try {
+    return (
+      !!requestLabourDraftOwnerId(user) &&
+      sessionStorage.getItem(REQUEST_LABOUR_PAGE_SESSION_KEY) ===
+        requestLabourDraftOwnerId(user)
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function setRequestLabourDraftStatus(status = "") {
+  const element = document.getElementById("requestLabourDraftStatus");
+  if (!element) return;
+  element.classList.remove("is-saving", "is-saved", "is-error");
+  element.textContent = {
+    saving: "Saving…",
+    saved: "Saved",
+    error: "Draft not saved",
+  }[status] || "";
+  if (status) element.classList.add(`is-${status}`);
+}
+
+function requestLabourDraftExists() {
+  const key = requestLabourDraftStorageKey();
+  if (!key) return false;
+  try {
+    return !!localStorage.getItem(key);
+  } catch (_) {
+    return false;
+  }
+}
+
+function syncRequestLabourDraftControls() {
+  document
+    .getElementById("discardRequestLabourDraft")
+    ?.classList.toggle(
+      "hidden",
+      !(requestLabourDraftExists() || requestLabourDraftDirty),
+    );
+}
+
+function requestLabourDraftControlSnapshot() {
+  const fields = {};
+  const checkboxes = [];
+  const radios = {};
+  const radioNames = new Set();
+  const controls = jobForm?.querySelectorAll(
+    '.jw-step[data-wizard-step] input, .jw-step[data-wizard-step] select, .jw-step[data-wizard-step] textarea',
+  ) || [];
+  controls.forEach((control) => {
+    const step = Number(control.closest(".jw-step")?.dataset.wizardStep || 0);
+    if (!step || step > 5) return;
+    if (["file", "button", "submit"].includes(control.type)) return;
+    if (control.classList.contains("jw-date-picker-display")) return;
+    if (control.type === "radio") {
+      if (!control.name) return;
+      radioNames.add(control.name);
+      if (control.checked) radios[control.name] = control.value;
+      return;
+    }
+    if (control.type === "checkbox") {
+      checkboxes.push({
+        id: control.id || "",
+        name: control.name || "",
+        value: control.value || "",
+        checked: control.checked,
+      });
+      return;
+    }
+    if (control.id) fields[control.id] = control.value;
+  });
+  radioNames.forEach((name) => {
+    if (!Object.prototype.hasOwnProperty.call(radios, name)) radios[name] = "";
+  });
+  const dateDisplays = {};
+  document.querySelectorAll("#formJob [data-date-picker]").forEach((picker) => {
+    const id = picker.dataset.dateInputId;
+    const display = picker.querySelector(".jw-date-picker-display");
+    if (id && display) dateDisplays[id] = display.value;
+  });
+  return { fields, checkboxes, radios, dateDisplays };
+}
+
+function requestLabourDraftEditorSnapshot() {
+  if (projectRequirementEditorState?.mode !== "draft") return null;
+  const modal = document.getElementById("projectRequirementModal");
+  if (modal) syncProjectRequirementEditorDraft(modal);
+  const editor = projectRequirementEditorState;
+  return {
+    requirementId: String(editor.requirementId || ""),
+    step: Math.min(Math.max(Number(editor.step) || 1, 1), 3),
+    draft: structuredClone(editor.draft),
+    initialDraftSnapshot: String(editor.initialDraftSnapshot || ""),
+    contentDrafts: structuredClone(editor.contentDrafts || {}),
+  };
+}
+
+function requestLabourDraftSnapshot() {
+  const locationData = jobLocationPicker?.getSelectedLocation() || null;
+  return {
+    schemaVersion: REQUEST_LABOUR_DRAFT_VERSION,
+    ownerId: requestLabourDraftOwnerId(),
+    updatedAt: new Date().toISOString(),
+    step: Math.min(Math.max(Number(jobWizardStep) || 1, 1), JOB_WIZARD_STEPS.length),
+    enteredFromReview: !!jobWizardEnteredFromReview,
+    completedSteps: Array.from(jobWizardCompleted)
+      .map(Number)
+      .filter((step) => step >= 1 && step <= JOB_WIZARD_STEPS.length),
+    controls: requestLabourDraftControlSnapshot(),
+    locationData,
+    labour: {
+      requirements: structuredClone(pendingTradeRequirements || []),
+      activeRequirementId: String(activeTradeRequirementId || ""),
+      editorOpen: !!tradeRequirementEditorOpen,
+      moreOptionsOpen: !!jobLabourMoreOptionsOpen,
+      credentialIds: [...selectedJobCredentialIds],
+      requestedWorkerIds: [...jobRequestedWorkerIds],
+    },
+    site: {
+      pin: currentJobHasEntrancePin() ? { ...currentJobPin } : null,
+      mapSiteCenter: pickerMapSiteCenter
+        ? structuredClone(pickerMapSiteCenter)
+        : null,
+      arrivalPointConfirmed: !!jobArrivalPointConfirmed,
+      arrivalPointSource: String(jobArrivalPointSource || ""),
+      arrivalPointAddress: String(jobArrivalPointAddress || ""),
+      photos: structuredClone(currentJobPhotos || {}),
+      photoMeta: structuredClone(currentJobPhotoMeta || {}),
+      disclosures: {
+        arrivalDetails: !!jobArrivalDetailsOpen,
+        entrancePin: !!jobEntrancePinOpen,
+        sitePhotos: !!jobSitePhotosOpen,
+        attendanceManager: !!jobAttendanceManagerOpen,
+      },
+    },
+    preStart: {
+      setupStatus: draftPreStartSetupStatus,
+      requirements: structuredClone(draftPreStartRequirements || []),
+      editor: requestLabourDraftEditorSnapshot(),
+    },
+    repeatProjectTemplate: pendingRepeatProjectTemplate
+      ? structuredClone(pendingRepeatProjectTemplate)
+      : null,
+  };
+}
+
+function saveRequestLabourDraft() {
+  if (requestLabourDraftRestoring || !jobWizardActive || !requestLabourDraftDirty) {
+    return false;
+  }
+  const key = requestLabourDraftStorageKey();
+  if (!key) return false;
+  setRequestLabourDraftStatus("saving");
+  try {
+    localStorage.setItem(key, JSON.stringify(requestLabourDraftSnapshot()));
+    requestLabourDraftDirty = false;
+    setRequestLabourDraftStatus("saved");
+    syncRequestLabourDraftControls();
+    return true;
+  } catch (_) {
+    setRequestLabourDraftStatus("error");
+    syncRequestLabourDraftControls();
+    return false;
+  }
+}
+
+function scheduleRequestLabourDraftSave() {
+  if (requestLabourDraftRestoring || !jobWizardActive) return;
+  requestLabourDraftDirty = true;
+  clearTimeout(requestLabourDraftTimer);
+  setRequestLabourDraftStatus("saving");
+  syncRequestLabourDraftControls();
+  requestLabourDraftTimer = setTimeout(() => {
+    requestLabourDraftTimer = null;
+    saveRequestLabourDraft();
+  }, REQUEST_LABOUR_DRAFT_DEBOUNCE_MS);
+}
+
+function flushRequestLabourDraft() {
+  clearTimeout(requestLabourDraftTimer);
+  requestLabourDraftTimer = null;
+  return saveRequestLabourDraft();
+}
+
+function clearRequestLabourDraft() {
+  clearTimeout(requestLabourDraftTimer);
+  requestLabourDraftTimer = null;
+  const key = requestLabourDraftStorageKey();
+  if (key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+  }
+  requestLabourDraftDirty = false;
+  setRequestLabourDraftStatus();
+  syncRequestLabourDraftControls();
+}
+
+function resetRequestLabourFormState({ clearPreStartStorage = false } = {}) {
+  const wasRestoring = requestLabourDraftRestoring;
+  requestLabourDraftRestoring = true;
+  closeJobSchedulePicker();
+  document.getElementById("projectRequirementModal")?.remove();
+  projectRequirementEditorState = null;
+  pendingRepeatProjectTemplate = null;
+  document.getElementById("repeatProjectNotice")?.remove();
+  jobForm?.reset();
+  jobLocationPicker?.clear({ clearInput: true, emit: false });
+  resetJobTradeRequirements();
+  resetJobPhotos();
+  draftPreStartSetupStatus = "";
+  draftPreStartRequirements = [];
+  if (clearPreStartStorage) clearPersistedDraftPreStartConfiguration();
+  currentJobPin = { lat: null, lng: null };
+  pickerMapSiteCenter = null;
+  jobArrivalPointConfirmed = false;
+  jobArrivalPointSource = "";
+  jobArrivalPointAddress = "";
+  jobWizardShiftDefaultsInitialized = false;
+  jobWizardStep = 1;
+  jobWizardCompleted = new Set();
+  jobWizardEnteredFromReview = false;
+  resetJobWizardSubmissionState();
+  initializeNewRequestShiftDefaults();
+  setJobDatePickerValue(document.getElementById("jobStart"), "");
+  setJobDatePickerValue(document.getElementById("jobEndDate"), "");
+  syncPickerMarkerToCurrentPin();
+  updatePinCoords();
+  updateAssignmentTypeForm();
+  updateAccommodationForm();
+  updateOvertimeForm();
+  prepareJobSiteDisclosures();
+  renderDraftPreStartStep();
+  requestLabourDraftRestoring = wasRestoring;
+}
+
+function restoreRequestLabourDraftControls(controls = {}) {
+  Object.entries(controls.fields || {}).forEach(([id, value]) => {
+    const control = document.getElementById(id);
+    if (!control || !jobForm?.contains(control)) return;
+    if (control instanceof HTMLSelectElement) setSelectValue(control, value);
+    else setInputValue(id, value);
+  });
+  (Array.isArray(controls.checkboxes) ? controls.checkboxes : []).forEach(
+    (saved) => {
+      let control = saved.id ? document.getElementById(saved.id) : null;
+      if (!control && saved.name) {
+        control = jobForm?.querySelector(
+          `input[type="checkbox"][name="${CSS.escape(saved.name)}"][value="${CSS.escape(saved.value || "")}"]`,
+        );
+      }
+      if (control instanceof HTMLInputElement) control.checked = !!saved.checked;
+    },
+  );
+  Object.entries(controls.radios || {}).forEach(([name, value]) => {
+    const radios = jobForm?.querySelectorAll(
+      `input[type="radio"][name="${CSS.escape(name)}"]`,
+    ) || [];
+    radios.forEach((radio) => {
+      radio.checked = !!value && radio.value === value;
+    });
+  });
+  Object.entries(controls.dateDisplays || {}).forEach(([id, value]) => {
+    const display = jobDatePickerDisplayInput(document.getElementById(id));
+    if (display && String(value || "") !== jobDateDisplayValue(document.getElementById(id)?.value)) {
+      display.value = String(value || "");
+    }
+  });
+}
+
+function restoreRequestLabourDraftEditor(editor) {
+  if (!editor?.draft || jobWizardStep !== 5) return;
+  openDraftPreStartRequirementModal(String(editor.requirementId || ""));
+  if (projectRequirementEditorState?.mode !== "draft") return;
+  const requirementId = String(editor.requirementId || "");
+  const original = requirementId
+    ? draftPreStartRequirements.find(
+        (requirement) => requirement.documentId === requirementId,
+      ) || null
+    : null;
+  projectRequirementEditorState = {
+    ...projectRequirementEditorState,
+    requirementId,
+    original,
+    step: Math.min(Math.max(Number(editor.step) || 1, 1), 3),
+    draft: structuredClone(editor.draft),
+    initialDraftSnapshot:
+      String(editor.initialDraftSnapshot || "") ||
+      JSON.stringify(editor.draft),
+    contentDrafts:
+      editor.contentDrafts && typeof editor.contentDrafts === "object"
+        ? structuredClone(editor.contentDrafts)
+        : {},
+    resourceEditor: null,
+  };
+  renderProjectRequirementEditor();
+}
+
+function restoreRequestLabourDraft() {
+  const key = requestLabourDraftStorageKey();
+  if (!key) return false;
+  let draft;
+  try {
+    draft = JSON.parse(localStorage.getItem(key) || "null");
+  } catch (_) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+    return false;
+  }
+  if (
+    !draft ||
+    draft.schemaVersion !== REQUEST_LABOUR_DRAFT_VERSION ||
+    draft.ownerId !== requestLabourDraftOwnerId()
+  ) {
+    if (draft) {
+      try {
+        localStorage.removeItem(key);
+      } catch (_) {}
+    }
+    return false;
+  }
+  requestLabourDraftRestoring = true;
+  try {
+    restoreRequestLabourDraftControls(draft.controls);
+    const rawLocation = String(draft.controls?.fields?.jobLocation || "");
+    if (draft.locationData && typeof draft.locationData === "object") {
+      const restored = jobLocationPicker?.setSelectedLocation(draft.locationData, {
+        focus: false,
+        emit: false,
+      });
+      if (!restored && rawLocation) jobLocationPicker?.setLegacyValue(rawLocation);
+    } else if (rawLocation) {
+      jobLocationPicker?.setLegacyValue(rawLocation);
+    }
+
+    const labour = draft.labour && typeof draft.labour === "object"
+      ? draft.labour
+      : {};
+    pendingTradeRequirements = dedupeLabourRequirements(
+      Array.isArray(labour.requirements)
+        ? labour.requirements.filter((requirement) => requirement && typeof requirement === "object")
+        : [],
+    );
+    activeTradeRequirementId = pendingTradeRequirements.some(
+      (requirement) => requirement.id === labour.activeRequirementId,
+    )
+      ? labour.activeRequirementId
+      : "";
+    tradeRequirementEditorOpen = !!labour.editorOpen;
+    jobLabourMoreOptionsOpen = !!labour.moreOptionsOpen;
+    selectedJobCredentialIds = canonicalCredentialIds(labour.credentialIds);
+    jobRequestedWorkerIds = (Array.isArray(labour.requestedWorkerIds)
+      ? labour.requestedWorkerIds
+      : [])
+      .filter((workerId) => !!findWorker(workerId));
+
+    const site = draft.site && typeof draft.site === "object" ? draft.site : {};
+    const pinLat = Number(site.pin?.lat);
+    const pinLng = Number(site.pin?.lng);
+    currentJobPin = Number.isFinite(pinLat) && Number.isFinite(pinLng)
+      ? { lat: pinLat, lng: pinLng }
+      : { lat: null, lng: null };
+    const center = site.mapSiteCenter?.center;
+    pickerMapSiteCenter =
+      Array.isArray(center) &&
+      center.length === 2 &&
+      center.every((value) => Number.isFinite(Number(value)))
+        ? {
+            center: center.map(Number),
+            zoom: Number.isFinite(Number(site.mapSiteCenter.zoom))
+              ? Number(site.mapSiteCenter.zoom)
+              : 17,
+          }
+        : null;
+    jobArrivalPointConfirmed = currentJobHasEntrancePin() && !!site.arrivalPointConfirmed;
+    jobArrivalPointSource = String(site.arrivalPointSource || "");
+    jobArrivalPointAddress = String(site.arrivalPointAddress || "");
+    currentJobPhotos = Object.fromEntries(
+      PHOTO_KEYS.map(({ key: photoKey }) => {
+        const value = site.photos?.[photoKey];
+        return [photoKey, typeof value === "string" ? value : null];
+      }),
+    );
+    currentJobPhotoMeta = Object.fromEntries(
+      PHOTO_KEYS.map(({ key: photoKey }) => [
+        photoKey,
+        site.photoMeta?.[photoKey] && typeof site.photoMeta[photoKey] === "object"
+          ? site.photoMeta[photoKey]
+          : null,
+      ]),
+    );
+    jobArrivalDetailsOpen = !!site.disclosures?.arrivalDetails;
+    jobEntrancePinOpen = !!site.disclosures?.entrancePin;
+    jobSitePhotosOpen = !!site.disclosures?.sitePhotos;
+    jobAttendanceManagerOpen = !!site.disclosures?.attendanceManager;
+
+    const preStart = draft.preStart && typeof draft.preStart === "object"
+      ? draft.preStart
+      : {};
+    draftPreStartSetupStatus = DRAFT_PRE_START_SETUP_STATUSES.has(preStart.setupStatus)
+      ? preStart.setupStatus
+      : "";
+    draftPreStartRequirements = (Array.isArray(preStart.requirements)
+      ? preStart.requirements
+      : [])
+      .map((requirement) => normalizeDraftPreStartRequirement(requirement, requirement))
+      .filter(Boolean);
+    pendingRepeatProjectTemplate =
+      draft.repeatProjectTemplate && typeof draft.repeatProjectTemplate === "object"
+        ? structuredClone(draft.repeatProjectTemplate)
+        : null;
+
+    jobWizardCompleted = new Set(
+      (Array.isArray(draft.completedSteps) ? draft.completedSteps : [])
+        .map(Number)
+        .filter((step) => step >= 1 && step <= JOB_WIZARD_STEPS.length),
+    );
+    jobWizardStep = Math.min(
+      Math.max(Number(draft.step) || 1, 1),
+      JOB_WIZARD_STEPS.length,
+    );
+    jobWizardEnteredFromReview = !!draft.enteredFromReview;
+    jobWizardShiftDefaultsInitialized = true;
+    syncJobCredentialMirror();
+    configureJobDatePickerMode(true);
+    updateAssignmentTypeForm();
+    updateAccommodationForm();
+    updateOvertimeForm();
+    syncTradeReqBuilderState();
+    updateJobPhotoPreviews();
+    syncPickerMarkerToCurrentPin();
+    updatePinCoords();
+    goToJobWizardStep(jobWizardStep, { scroll: false });
+    jobArrivalDetailsOpen = !!site.disclosures?.arrivalDetails;
+    jobEntrancePinOpen = !!site.disclosures?.entrancePin;
+    jobSitePhotosOpen = !!site.disclosures?.sitePhotos;
+    jobAttendanceManagerOpen = !!site.disclosures?.attendanceManager;
+    syncJobSiteDisclosureState();
+    restoreRequestLabourDraftEditor(preStart.editor);
+    requestLabourDraftDirty = false;
+    setRequestLabourDraftStatus("saved");
+    syncRequestLabourDraftControls();
+    showToast("Draft restored");
+    return true;
+  } catch (_) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {}
+    resetRequestLabourFormState();
+    setRequestLabourDraftStatus();
+    syncRequestLabourDraftControls();
+    return false;
+  } finally {
+    requestLabourDraftRestoring = false;
+  }
+}
+
+function discardRequestLabourDraft(trigger = null) {
+  openDraftPreStartConfirmDialog({
+    title: "Discard Request Labour draft?",
+    description: "This clears the saved request and returns the wizard to Step 1.",
+    confirmLabel: "Discard draft",
+    cancelLabel: "Keep draft",
+    trigger,
+    onConfirm: () => {
+      clearRequestLabourDraft();
+      resetRequestLabourFormState({ clearPreStartStorage: true });
+      goToJobWizardStep(1);
+      prepareLabourRequestForm({ focus: true });
+      showToast("Draft discarded");
+    },
+  });
+}
+
+jobForm?.addEventListener("input", scheduleRequestLabourDraftSave);
+jobForm?.addEventListener("change", scheduleRequestLabourDraftSave);
+document
+  .getElementById("discardRequestLabourDraft")
+  ?.addEventListener("click", (event) =>
+    discardRequestLabourDraft(event.currentTarget),
+  );
+window.addEventListener("pagehide", flushRequestLabourDraft);
 
 function initializeNewRequestShiftDefaults() {
   if (jobWizardShiftDefaultsInitialized) return;
@@ -11639,6 +12172,7 @@ function persistDraftPreStartConfiguration() {
   } catch (_) {
     // Existing local file limits still apply; in-memory draft state remains usable.
   }
+  scheduleRequestLabourDraftSave();
 }
 
 function restoreDraftPreStartConfiguration() {
@@ -11988,6 +12522,7 @@ function openDraftPreStartConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Keep requirements",
   onConfirm,
   trigger = null,
 }) {
@@ -12000,7 +12535,7 @@ function openDraftPreStartConfirmDialog({
   modal.setAttribute("aria-labelledby", "draftPreStartConfirmTitle");
   modal.innerHTML = `<div class="dispute-sheet jw-requirement-guard-sheet">
     <div class="dispute-sheet-header"><div><h3 class="dispute-sheet-title" id="draftPreStartConfirmTitle">${escapeHtml(title)}</h3></div><button class="modal-close-btn" type="button" aria-label="Close" data-draft-prestart-confirm-cancel>×</button></div>
-    <div class="dispute-sheet-body"><p class="jw-requirement-guard-copy">${escapeHtml(description)}</p><div class="jw-requirement-guard-actions"><button class="secondary-btn" type="button" data-draft-prestart-confirm-cancel>Keep requirements</button><button class="primary-btn" type="button" data-draft-prestart-confirm>${escapeHtml(confirmLabel)}</button></div></div>
+    <div class="dispute-sheet-body"><p class="jw-requirement-guard-copy">${escapeHtml(description)}</p><div class="jw-requirement-guard-actions"><button class="secondary-btn" type="button" data-draft-prestart-confirm-cancel>${escapeHtml(cancelLabel)}</button><button class="primary-btn" type="button" data-draft-prestart-confirm>${escapeHtml(confirmLabel)}</button></div></div>
   </div>`;
   document.body.appendChild(modal);
   const close = () => {
@@ -12595,6 +13130,14 @@ function goToJobWizardStep(step, { scroll = true } = {}) {
     jobWizardEnteredFromReview = false;
     renderJobWizardReview();
   }
+  if (
+    jobWizardActive &&
+    previousStep !== jobWizardStep &&
+    !requestLabourDraftRestoring
+  ) {
+    requestLabourDraftDirty = true;
+    flushRequestLabourDraft();
+  }
   if (scroll) scrollAppToTop();
 }
 
@@ -13010,6 +13553,7 @@ function toggleJobCredential(id) {
   renderJobCredentialPicker();
   setTradeRequirementMessage();
   updateTradeRequirementEditorState();
+  scheduleRequestLabourDraftSave();
 }
 
 function setJobCredentialSelection(ids = []) {
@@ -14627,6 +15171,7 @@ function saveTradeRequirement() {
   tradeRequirementEditorOpen = !jobWizardActive;
   setTradeRequirementMessage();
   syncTradeReqBuilderState();
+  scheduleRequestLabourDraftSave();
   showToast(wasEditing ? "Labour requirement updated" : "Labour requirement saved");
   return true;
 }
@@ -14731,6 +15276,7 @@ document.getElementById("jobTradeReqList")?.addEventListener("click", (event) =>
   }
   if (!pendingTradeRequirements.length) tradeRequirementEditorOpen = !jobWizardActive;
   syncTradeReqBuilderState();
+  scheduleRequestLabourDraftSave();
 });
 
 ["input", "change"].forEach((eventName) => {
@@ -14796,6 +15342,13 @@ function getSessionUser() {
 
 // ─── Tab Routing ──────────────────────────────────────────
 function switchTab(tab, { scroll = true } = {}) {
+  const leavingRequestLabour =
+    tab !== "request-labour" &&
+    document.getElementById("tab-request-labour")?.classList.contains("active");
+  if (leavingRequestLabour) {
+    flushRequestLabourDraft();
+    setRequestLabourPageSessionActive(false);
+  }
   closeAppPopovers();
   document
     .querySelectorAll("[data-tab]")
@@ -15191,7 +15744,11 @@ function applyRoleView(user) {
     if (addSub) addSub.textContent = "Post a new labour requirement";
     render();
     if (!syncCompanyKpiDrilldownFromHash({ scroll: false })) {
-      switchTab("dashboard");
+      if (requestLabourPageWasActive(user)) {
+        openLabourRequestPage({ focus: false });
+      } else {
+        switchTab("dashboard");
+      }
     }
   } else {
     // Admin / demo — restore original nav and dashboard
@@ -23961,6 +24518,13 @@ function openProjectRequirementEditor({
   const modal = document.createElement("div");
   modal.id = "projectRequirementModal";
   modal.className = "modal-overlay project-requirement-modal";
+  ["input", "change", "click"].forEach((eventName) => {
+    modal.addEventListener(eventName, () => {
+      if (projectRequirementEditorState?.mode === "draft") {
+        scheduleRequestLabourDraftSave();
+      }
+    });
+  });
   modal.addEventListener("click", (event) => {
     if (event.target === modal) requestProjectRequirementEditorExit();
   });
@@ -27681,6 +28245,7 @@ jobForm.addEventListener("submit", (e) => {
     "job",
     `New job posted: <strong>${escapeHtml(trade)}</strong> in ${escapeHtml(location)}${duration ? ` · ${escapeHtml(duration)}` : ""}${job.sitePin ? " · 📍 Location pinned" : ""}${preferredOffer.ok ? " · preferred worker offered" : autoOffer.ok ? " · best match offered" : ""}`,
   );
+  clearRequestLabourDraft();
   jobForm.reset();
   jobWizardShiftDefaultsInitialized = false;
   jobLocationPicker?.clear({ clearInput: true, emit: false });
@@ -28885,6 +29450,7 @@ PHOTO_KEYS.forEach(({ key, inputId, prevId, phId }) => {
         card.classList.add("has-photo");
       }
       syncJobSiteDisclosureState();
+      scheduleRequestLabourDraftSave();
     } catch (_) {
       showToast("Photo upload failed — try a different image");
     } finally {
@@ -29000,6 +29566,7 @@ function setCurrentJobPinFromMapPoint(lat, lng) {
   jobArrivalPointAddress = normalizedJobSiteAddress();
   updatePickerMarkerVisualState();
   updatePinCoords();
+  scheduleRequestLabourDraftSave();
 }
 
 function updatePickerMarkerVisualState() {
@@ -29077,6 +29644,7 @@ document.getElementById("toggleSiteLocBtn")?.addEventListener("click", () => {
 document.getElementById("jobArrivalDetailsToggle")?.addEventListener("click", () => {
   jobArrivalDetailsOpen = !jobArrivalDetailsOpen;
   syncJobSiteDisclosureState();
+  scheduleRequestLabourDraftSave();
 });
 
 document.getElementById("jobEntrancePinToggle")?.addEventListener("click", async (event) => {
@@ -29119,6 +29687,7 @@ document.getElementById("jobEntrancePinConfirm")?.addEventListener("click", () =
   }
   setJobEntrancePinDisclosure(false);
   updatePinCoords();
+  scheduleRequestLabourDraftSave();
 });
 
 document.getElementById("jobPickerMapRetry")?.addEventListener("click", async () => {
@@ -29128,11 +29697,13 @@ document.getElementById("jobPickerMapRetry")?.addEventListener("click", async ()
 document.getElementById("jobSitePhotosToggle")?.addEventListener("click", () => {
   jobSitePhotosOpen = !jobSitePhotosOpen;
   syncJobSiteDisclosureState();
+  scheduleRequestLabourDraftSave();
 });
 
 document.getElementById("jobAttendanceManagerToggle")?.addEventListener("click", () => {
   jobAttendanceManagerOpen = !jobAttendanceManagerOpen;
   syncJobSiteDisclosureState();
+  scheduleRequestLabourDraftSave();
 });
 
 document
@@ -29313,6 +29884,7 @@ async function geocodeJobSiteAddress(trigger) {
         );
         resizePickerMap();
       });
+      scheduleRequestLabourDraftSave();
       showToast("Site found — confirm the exact entrance point");
       return true;
     } else {

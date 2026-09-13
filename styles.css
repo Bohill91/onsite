@@ -11804,9 +11804,30 @@ body.modal-open {
   min-width: 0;
 }
 
-.request-labour-page-head--unboxed .att-today-badge {
+.request-labour-head-meta {
+  align-items: center;
+  display: flex;
   flex: 0 0 auto;
+  gap: 10px;
+  justify-content: flex-end;
   margin-left: auto;
+}
+
+.request-labour-draft-status {
+  color: var(--ink-3);
+  font-size: var(--ui-font-xs);
+  font-weight: var(--ui-weight-semibold);
+  line-height: 1.25;
+  min-height: 1.25em;
+  white-space: nowrap;
+}
+
+.request-labour-draft-status.is-saved {
+  color: var(--ink-2);
+}
+
+.request-labour-draft-status.is-error {
+  color: var(--amber-text);
 }
 
 .request-labour-page-head--unboxed h1 {
@@ -25208,6 +25229,42 @@ button.project-requirement-step-control:focus-visible {
   padding-top: 20px;
 }
 
+.jw-wizard-nav-leading,
+.jw-wizard-nav-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.jw-draft-discard {
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-sm);
+  font-weight: var(--ui-weight-semibold);
+  padding: 8px 0;
+  text-decoration: underline transparent;
+  text-underline-offset: 3px;
+  transition: color 180ms ease, text-decoration-color 180ms ease;
+}
+
+.jw-draft-discard:hover,
+.jw-draft-discard:focus-visible {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
+.jw-draft-discard:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.3);
+  outline-offset: 3px;
+}
+
+.jw-draft-discard.hidden {
+  display: none;
+}
+
 .jw-wizard-nav .jw-wizard-continue {
   margin-left: auto;
   min-width: 148px;
@@ -25232,6 +25289,12 @@ button.project-requirement-step-control:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .request-labour-head-meta {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 6px;
+  }
+
   .jw-wizard-mode .jw-wizard-stepper {
     display: none;
   }
@@ -25586,7 +25649,14 @@ button.project-requirement-step-control:focus-visible {
   }
 
   .jw-wizard-mode .jw-wizard-nav {
+    align-items: flex-end;
     padding-top: 16px;
+  }
+
+  .jw-wizard-nav-leading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }
 
