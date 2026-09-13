@@ -7,6 +7,32 @@ const CERT_OPTIONS = window.OnSiteCredentials?.common?.() || [];
 // ─── In-progress registration data ─────────────────────────
 let workerRegData = {};
 let companyRegData = {};
+let workerRegPhotoDataUrl = '';
+let workerRegPhotoPending = false;
+
+function resetWorkerRegistrationPhoto() {
+  workerRegPhotoDataUrl = '';
+  workerRegPhotoPending = false;
+  const input = document.getElementById('regProfilePhoto');
+  if (input) input.value = '';
+  const preview = document.getElementById('regProfilePhotoPreview');
+  if (preview) preview.removeAttribute('src');
+  document.getElementById('regProfilePhotoControl')?.classList.remove('has-photo', 'is-loading');
+  const action = document.getElementById('regProfilePhotoAction');
+  if (action) action.textContent = 'Choose photo';
+}
+
+function startWorkerRegistration() {
+  workerRegData = {};
+  document.getElementById('workerStep1Form')?.reset();
+  document.getElementById('workerStep2Form')?.reset();
+  resetWorkerRegistrationPhoto();
+  initialiseWorkerTaxonomyFields();
+  showScreen('worker-reg');
+  setWorkerStep(1);
+}
+
+window.startWorkerRegistration = startWorkerRegistration;
 
 function setAuthButtonLoading(button, isLoading, label = 'Working') {
   if (!(button instanceof HTMLButtonElement)) return;
@@ -206,6 +232,18 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
   const pass2 = document.getElementById('regPassword2').value;
   const err   = document.getElementById('step1Error');
 
+  if (workerRegPhotoPending) {
+    err.textContent = 'Your profile photo is still being prepared. Please wait a moment.';
+    err.style.display = 'block';
+    return;
+  }
+  if (!workerRegPhotoDataUrl) {
+    err.textContent = 'Add a profile photo before continuing.';
+    err.style.display = 'block';
+    document.getElementById('regProfilePhoto')?.focus();
+    return;
+  }
+
   if (pass !== pass2) {
     err.textContent = 'Passwords do not match.';
     err.style.display = 'block';
@@ -222,8 +260,52 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
     email,
     phone:    document.getElementById('regPhone').value.trim(),
     password: pass,
+    profilePhotoDataUrl: workerRegPhotoDataUrl,
   };
   setWorkerStep(2);
+});
+
+document.getElementById('regProfilePhoto')?.addEventListener('change', async function(e) {
+  const input = e.currentTarget;
+  const file = input.files && input.files[0];
+  const err = document.getElementById('step1Error');
+  if (!file) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    workerRegPhotoDataUrl = '';
+    input.value = '';
+    err.textContent = 'Choose a JPG, PNG or WebP profile photo.';
+    err.style.display = 'block';
+    return;
+  }
+
+  workerRegPhotoPending = true;
+  document.getElementById('regProfilePhotoControl')?.classList.add('is-loading');
+  try {
+    workerRegPhotoDataUrl = typeof compressImage === 'function'
+      ? await compressImage(file)
+      : await new Promise(function(resolve, reject) {
+          const reader = new FileReader();
+          reader.onerror = reject;
+          reader.onload = function(event) { resolve(event.target.result); };
+          reader.readAsDataURL(file);
+        });
+    const preview = document.getElementById('regProfilePhotoPreview');
+    if (preview) preview.src = workerRegPhotoDataUrl;
+    document.getElementById('regProfilePhotoControl')?.classList.add('has-photo');
+    const action = document.getElementById('regProfilePhotoAction');
+    if (action) action.textContent = 'Change photo';
+    if (err) err.style.display = 'none';
+  } catch (_) {
+    workerRegPhotoDataUrl = '';
+    input.value = '';
+    if (err) {
+      err.textContent = 'That photo could not be prepared. Try another image.';
+      err.style.display = 'block';
+    }
+  } finally {
+    workerRegPhotoPending = false;
+    document.getElementById('regProfilePhotoControl')?.classList.remove('is-loading');
+  }
 });
 
 // ─── Worker Reg — Step 2: create the account ───────────────
@@ -276,6 +358,7 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
     certifications: [],
     qualifications: [],
     profilePhoto: '',
+    profilePhotoDataUrl: workerRegData.profilePhotoDataUrl || '',
     verificationStatus: 'pending',
     workerVerificationStatus: 'pending',
     qualificationVerificationStatus: 'pending',
@@ -378,6 +461,7 @@ function deleteWorkerAccount() {
   clearCurrentUser();
   workerRegData = {};
   companyRegData = {};
+  resetWorkerRegistrationPhoto();
 
   const userSection = document.getElementById('topbar-user');
   const resetBtn    = document.getElementById('resetDemoBtn');
@@ -398,7 +482,7 @@ function calcCompletion(user) {
     !!user.rightToWork,
     !!user.cscsCard,
     !!(user.certifications && user.certifications.length),
-    !!user.profilePhoto,
+    !!(user.profilePhotoDataUrl || user.profilePhoto),
   ];
   return Math.round(items.filter(Boolean).length / items.length * 100);
 }
@@ -413,7 +497,7 @@ function renderCompletionChecklist(user) {
     { label: 'Right to Work', done: !!user.rightToWork },
     { label: 'Trade card details', done: !!user.cscsCard },
     { label: 'Qualifications and certificates', done: !!(user.certifications && user.certifications.length) },
-    { label: 'Profile photo', done: !!user.profilePhoto },
+    { label: 'Profile photo', done: !!(user.profilePhotoDataUrl || user.profilePhoto) },
   ];
   const list = document.getElementById('completionChecklist');
   list.innerHTML = items.map(function(item) {
@@ -566,6 +650,7 @@ function logoutCurrentUser() {
   clearCurrentUser();
   workerRegData   = {};
   companyRegData  = {};
+  resetWorkerRegistrationPhoto();
   const userSection = document.getElementById('topbar-user');
   const resetBtn    = document.getElementById('resetDemoBtn');
   if (userSection) userSection.style.display = 'none';

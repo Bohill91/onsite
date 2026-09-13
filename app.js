@@ -8741,6 +8741,12 @@ function ensureWorkerProfileForUser(user) {
       user.preferredPaymentMethod || worker?.preferredPaymentMethod || "",
     paymentVerificationStatus:
       user.paymentVerificationStatus || worker?.paymentVerificationStatus || "unverified",
+    profilePhotoDataUrl:
+      user.profilePhotoDataUrl ||
+      worker?.profilePhotoDataUrl ||
+      worker?.profilePhoto ||
+      worker?.photo ||
+      "",
   };
 
   if (worker) {
@@ -8969,6 +8975,44 @@ function isPreferredWorker(companyId, workerId) {
   );
 }
 
+function workerProfilePhotoSource(worker) {
+  const photo = String(
+    worker?.profilePhotoDataUrl || worker?.profilePhoto || worker?.photo || "",
+  ).trim();
+  return photo.startsWith("data:image/") || photo.startsWith("/") ? photo : "";
+}
+
+function workerAvatarHTML(worker, {
+  className = "worker-avatar",
+  tag = "div",
+  decorative = true,
+} = {}) {
+  const name = worker?.name || "Worker";
+  const photo = workerProfilePhotoSource(worker);
+  const safeTag = tag === "span" ? "span" : "div";
+  const classes = [className, photo ? "has-photo" : avatarColor(name)]
+    .filter(Boolean)
+    .join(" ");
+  const accessibility = decorative
+    ? 'aria-hidden="true"'
+    : `role="img" aria-label="${escapeHtml(`${name} profile photo`)}"`;
+  return `<${safeTag} class="${escapeHtml(classes)}" ${accessibility}>${
+    photo
+      ? `<img src="${escapeHtml(photo)}" alt="" />`
+      : escapeHtml(initials(name))
+  }</${safeTag}>`;
+}
+
+function preferredWorkerStarButtonHTML(companyId, worker, { showText = false } = {}) {
+  if (!companyId || !worker?.id) return "";
+  const preferred = isPreferredWorker(companyId, worker.id);
+  const action = preferred ? "Remove" : "Add";
+  const label = `${action} ${worker.name || "worker"} ${preferred ? "from" : "to"} preferred workers`;
+  return `<button class="preferred-worker-star${preferred ? " is-preferred" : ""}${showText ? " has-label" : ""}" type="button" data-preferred-worker="${escapeHtml(worker.id)}" aria-pressed="${preferred}" aria-label="${escapeHtml(label)}" title="${escapeHtml(preferred ? "Preferred" : "Add to preferred")}">
+    <span aria-hidden="true">${preferred ? "★" : "☆"}</span>${showText ? `<strong>${preferred ? "Preferred" : "Add to preferred"}</strong>` : ""}
+  </button>`;
+}
+
 function togglePreferredWorker(companyId, workerId) {
   const worker = findWorker(workerId);
   if (!companyId || !worker) return { ok: false, reason: "Worker not found" };
@@ -8978,7 +9022,7 @@ function togglePreferredWorker(companyId, workerId) {
   );
   if (existing) {
     state.preferredWorkers = state.preferredWorkers.filter(
-      (pref) => pref.id !== existing.id,
+      (pref) => !(pref.companyId === companyId && pref.workerId === workerId),
     );
     return { ok: true, preferred: false, worker };
   }
@@ -9167,6 +9211,7 @@ function specificWorkerPickerModels(companyId) {
       projectCount: workerHistory?.projects?.length || 0,
       reliability: rating.reliabilityRating || "New / Unproven",
       availability: workerAvailabilityLabel(worker),
+      preferred: preferredIds.has(worker.id),
       relevance: workerRequirementRelevance(worker),
       preferredAt: dateFromValue(preferredAt)?.getTime() || 0,
       searchText: "",
@@ -9219,15 +9264,10 @@ function specificWorkerPickerModels(companyId) {
 }
 
 function specificWorkerAvatarHTML(worker, className = "") {
-  const photo = String(
-    worker?.profilePhotoDataUrl || worker?.profilePhoto || worker?.photo || "",
-  );
-  const safePhoto =
-    photo.startsWith("data:image/") || photo.startsWith("/") ? photo : "";
-  if (safePhoto) {
-    return `<span class="jw-worker-avatar ${className}"><img src="${escapeHtml(safePhoto)}" alt="" /></span>`;
-  }
-  return `<span class="jw-worker-avatar ${avatarColor(worker?.name || "Worker")} ${className}" aria-hidden="true">${escapeHtml(initials(worker?.name || "Worker"))}</span>`;
+  return workerAvatarHTML(worker, {
+    className: `jw-worker-avatar ${className}`.trim(),
+    tag: "span",
+  });
 }
 
 function renderJobPreferredWorkerChoices(user) {
@@ -9291,7 +9331,7 @@ function specificWorkerSourceEmptyHTML(source, hasQuery) {
 }
 
 function specificWorkerRowHTML(model) {
-  const { worker, source, latestProject, projectCount } = model;
+  const { worker, latestProject, projectCount } = model;
   const selected = specificWorkerPickerDraftIds.has(worker.id);
   const role = [worker.trade, worker.specialism || worker.grade]
     .filter(Boolean)
@@ -9306,17 +9346,22 @@ function specificWorkerRowHTML(model) {
   const relationship = latestProject
     ? `<div class="jw-specific-worker-project"><strong>${escapeHtml(latestProject.name)}</strong><span>${escapeHtml(latestProject.location)} · ${escapeHtml(latestProject.dateLabel)}</span>${projectCount > 1 ? `<small>Worked with you on ${projectCount} projects</small>` : ""}</div>`
     : `<div class="jw-specific-worker-project"><span>${escapeHtml(broadLocation || "Location not set")}${qualificationSummary ? ` · ${escapeHtml(qualificationSummary)}` : ""}</span></div>`;
-  return `<label class="jw-specific-worker-row${selected ? " is-selected" : ""}">
-    <input type="checkbox" value="${escapeHtml(worker.id)}" data-specific-worker-select ${selected ? "checked" : ""} />
+  return `<div class="jw-specific-worker-row${selected ? " is-selected" : ""}" data-specific-worker-row>
+    <label class="jw-specific-worker-select-control">
+      <input type="checkbox" value="${escapeHtml(worker.id)}" data-specific-worker-select aria-label="Select ${escapeHtml(worker.name || "worker")} for this labour request" ${selected ? "checked" : ""} />
+    </label>
     ${specificWorkerAvatarHTML(worker)}
     <span class="jw-specific-worker-main">
-      <span class="jw-specific-worker-name"><strong>${escapeHtml(worker.name || "Worker")}</strong>${source === "preferred" ? `<small>★ Preferred</small>` : ""}</span>
+      <span class="jw-specific-worker-name"><strong>${escapeHtml(worker.name || "Worker")}</strong>${model.preferred ? `<small>★ Preferred</small>` : ""}</span>
       <span class="jw-specific-worker-role">${escapeHtml(role)}</span>
       ${relationship}
       <span class="jw-specific-worker-status"><small>${escapeHtml(model.reliability)}</small><small>${escapeHtml(model.availability)}</small></span>
     </span>
-    <span class="jw-specific-worker-select-label">${selected ? "Selected" : "Select"}</span>
-  </label>`;
+    <span class="jw-specific-worker-actions">
+      ${preferredWorkerStarButtonHTML(getSessionUser()?.id || "", worker)}
+      <span class="jw-specific-worker-select-label">${selected ? "Selected" : "Select"}</span>
+    </span>
+  </div>`;
 }
 
 function renderSpecificWorkerPickerResults() {
@@ -9350,6 +9395,8 @@ function renderSpecificWorkerPickerSource() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
     button.tabIndex = active ? 0 : -1;
+    const count = button.querySelector("[data-specific-worker-source-count]");
+    if (count) count.textContent = String(models[button.dataset.specificWorkerSource]?.length || 0);
   });
   const sourceModels = models[jobSpecificWorkerPickerSource] || [];
   const searchWrap = modal.querySelector("[data-specific-worker-search-wrap]");
@@ -9431,7 +9478,7 @@ function openSpecificWorkerPicker(trigger = null) {
           ["global", "Find an OnSite worker", models.global.length],
         ]
           .map(
-            ([source, label, count]) => `<button type="button" role="tab" data-specific-worker-source="${source}">${escapeHtml(label)} <span>${count}</span></button>`,
+            ([source, label, count]) => `<button type="button" role="tab" data-specific-worker-source="${source}">${escapeHtml(label)} <span data-specific-worker-source-count>${count}</span></button>`,
           )
           .join("")}
       </div>
@@ -9479,6 +9526,34 @@ function openSpecificWorkerPicker(trigger = null) {
     if (label) label.textContent = input.checked ? "Selected" : "Select";
     const count = modal.querySelector("[data-specific-worker-selected-count]");
     if (count) count.textContent = `${specificWorkerPickerDraftIds.size} selected`;
+  });
+  modal.querySelector("[data-specific-worker-results]")?.addEventListener("click", (event) => {
+    const favouriteButton = event.target.closest("[data-preferred-worker]");
+    if (favouriteButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const res = togglePreferredWorker(user.id, favouriteButton.dataset.preferredWorker);
+      if (!res.ok) {
+        showToast(res.reason);
+        return;
+      }
+      saveState();
+      const history = companyPreviousWorkerHistory(user.id);
+      jobSpecificWorkerPickerSource = res.preferred
+        ? "preferred"
+        : history.has(res.worker.id)
+          ? "previous"
+          : "global";
+      renderSpecificWorkerPickerSource();
+      showToast(res.preferred ? `${res.worker.name} added to Preferred Workers` : `${res.worker.name} removed from Preferred Workers`);
+      return;
+    }
+    const row = event.target.closest("[data-specific-worker-row]");
+    if (!row || event.target.closest("input, .jw-specific-worker-select-control")) return;
+    const input = row.querySelector("[data-specific-worker-select]");
+    if (!input) return;
+    input.checked = !input.checked;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   modal.addEventListener("click", (event) => {
     if (event.target === modal) closeSpecificWorkerPicker();
@@ -15739,7 +15814,7 @@ function renderWorkerProfile(user) {
 
   el.innerHTML = `
     <div class="prof-header">
-      <div class="prof-avatar ${avatarColor(user.name || "U")}">${initials(user.name || "?")}</div>
+      ${workerAvatarHTML(workerProfile || user, { className: "prof-avatar" })}
       <div class="prof-id">
         <div class="prof-name">${escapeHtml(user.name || "")}</div>
         <div class="prof-trade">${escapeHtml(user.trade || "Trade not set")}${user.grade ? ` · ${escapeHtml(user.grade)}` : ""}</div>
@@ -19750,9 +19825,12 @@ function companyProjectWorkersHTML(job, summary, agreements = companyProjectAgre
           const worker = applicationWorker(app);
           const rating = worker ? buildWorkerRating(worker.id) : null;
           return `<div class="company-project-review-row">
-            <div>
-              <strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong>
-              <span>${escapeHtml(worker?.trade || job.trade || "Trade not set")}${worker?.grade ? ` · ${escapeHtml(worker.grade)}` : ""}${rating ? ` · ${escapeHtml(rating.reliabilityRating)} reliability` : ""}</span>
+            <div class="company-project-person">
+              ${worker ? workerAvatarHTML(worker, { className: "worker-avatar is-compact" }) : ""}
+              <span class="company-project-person-copy">
+                <strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong>
+                <span>${escapeHtml(worker?.trade || job.trade || "Trade not set")}${worker?.grade ? ` · ${escapeHtml(worker.grade)}` : ""}${rating ? ` · ${escapeHtml(rating.reliabilityRating)} reliability` : ""}</span>
+              </span>
             </div>
             <div class="company-project-review-actions">
               ${worker ? `<button class="company-project-inline-action" type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">View profile &rarr;</button>` : ""}
@@ -19970,9 +20048,10 @@ function companyProjectWorkerRowHTML(worker, job, summary, agreements = companyP
   const startLabel = startDate
     ? `${dateOnlyMs(startDate) > dateOnlyMs(todayDateStr()) ? "Starts" : "Started"} ${formatDateOnly(startDate)}`
     : "Start date TBC";
+  const companyId = job.companyId || getSessionUser()?.id || "";
   return `<article class="company-project-roster-row">
     <div class="company-project-roster-worker">
-      <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
+      ${workerAvatarHTML(worker)}
       <div>
         <strong>${escapeHtml(worker.name)}</strong>
         <span>${escapeHtml(identityParts.join(" · ") || "Role not set")}</span>
@@ -19986,6 +20065,7 @@ function companyProjectWorkerRowHTML(worker, job, summary, agreements = companyP
     ${companyProjectRosterStateHTML(documentState, "Documents")}
     ${companyProjectRosterStateHTML(agreementState, "Agreement")}
     <div class="company-project-roster-actions">
+      ${preferredWorkerStarButtonHTML(companyId, worker)}
       <button class="company-project-inline-action" type="button" data-company-worker-profile="${worker.id}" data-company-worker-job="${job.id}">View worker &rarr;</button>
       <details class="company-project-row-menu">
         <summary aria-label="More actions for ${escapeHtml(worker.name)}">More</summary>
@@ -20017,7 +20097,7 @@ function companyProjectRequirementsHTML(job, summary) {
               ? `Responded ${formatDate(app.workerRespondedAt)}`
               : "Response received";
           return `<div class="company-project-offer-row">
-            <div><strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong><span>${escapeHtml(worker?.trade || app.workerTrade || job.trade || "Trade not set")}${worker?.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</span></div>
+            <div class="company-project-person">${worker ? workerAvatarHTML(worker, { className: "worker-avatar is-compact" }) : ""}<span class="company-project-person-copy"><strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong><span>${escapeHtml(worker?.trade || app.workerTrade || job.trade || "Trade not set")}${worker?.grade ? ` · ${escapeHtml(worker.grade)}` : ""}</span></span></div>
             <span class="company-project-offer-status is-${escapeHtml(app.status || "offered")}" data-label="Status">${escapeHtml(offerStatusLabel(app.status))}</span>
             <span data-label="Rate">${advertisedRate ? `${formatMoney(advertisedRate)}/day` : "Rate not set"}</span>
             <span data-label="Sent">${app.offeredAt ? formatDate(app.offeredAt) : "Not recorded"}</span>
@@ -20192,7 +20272,7 @@ function companyProjectAttendanceWorkersHTML(job, workers) {
         .join(" · ");
       return `<article class="company-project-attendance-worker-row">
         <div class="company-project-attendance-worker">
-          <div class="worker-avatar ${avatarColor(worker.name)}">${initials(worker.name)}</div>
+          ${workerAvatarHTML(worker)}
           <div><strong>${escapeHtml(worker.name || "Worker")}</strong><span>${escapeHtml(identity || "Role not set")}</span></div>
         </div>
         <span class="company-project-attendance-value" data-label="Expected">${escapeHtml(jobExpectedStartTime(job))}</span>

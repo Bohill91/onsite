@@ -2205,6 +2205,36 @@ button.is-loading,
   letter-spacing: -0.03em;
 }
 
+.worker-avatar.has-photo,
+.match-worker-avatar.has-photo,
+.prof-avatar.has-photo,
+.wsc-avatar.has-photo {
+  background: var(--surface-3);
+  color: transparent;
+  overflow: hidden;
+}
+
+.worker-avatar.has-photo img,
+.match-worker-avatar.has-photo img,
+.prof-avatar.has-photo img,
+.wsc-avatar.has-photo img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.worker-avatar.is-compact {
+  font-size: 0.7rem;
+  height: 34px;
+  width: 34px;
+}
+
+.att-worker-avatar {
+  font-size: 0.8rem;
+  height: 38px;
+  width: 38px;
+}
+
 .worker-info {
   flex: 1;
   min-width: 0;
@@ -18287,6 +18317,85 @@ button svg,
   justify-items: end;
 }
 
+.preferred-worker-star {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1.15rem;
+  height: 30px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  width: 30px;
+}
+
+.preferred-worker-star:hover {
+  background: var(--surface-2);
+  border-color: var(--card-divider);
+  color: var(--ink-2);
+}
+
+.preferred-worker-star:focus-visible {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
+  outline: none;
+}
+
+.preferred-worker-star.is-preferred {
+  color: var(--orange);
+}
+
+.preferred-worker-star.has-label {
+  border-color: var(--card-border);
+  font-size: 1rem;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  width: auto;
+}
+
+.preferred-worker-star.has-label strong {
+  color: var(--ink-2);
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.preferred-worker-star.has-label.is-preferred strong {
+  color: var(--orange-dark);
+}
+
+.company-project-person,
+.company-worker-profile-identity,
+.company-worker-profile-head-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.company-project-person-copy,
+.company-worker-profile-identity > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.company-worker-profile-head-actions {
+  flex-shrink: 0;
+}
+
+.company-worker-profile-avatar {
+  height: 46px;
+  width: 46px;
+}
+
 .company-project-row-menu {
   position: relative;
 }
@@ -18387,7 +18496,7 @@ button svg,
   border-top: 0;
 }
 
-.company-project-review-row > div:first-child,
+.company-project-review-row > div:first-child:not(.company-project-person),
 .company-project-preferred-row > div,
 .company-project-agreement-row > div {
   display: grid;
@@ -21127,6 +21236,15 @@ button.project-requirement-step-control:focus-visible {
 }
 
 @media (max-width: 480px) {
+  .company-worker-profile-head-actions .preferred-worker-star.has-label {
+    padding: 0;
+    width: 34px;
+  }
+
+  .company-worker-profile-head-actions .preferred-worker-star.has-label strong {
+    display: none;
+  }
+
   .company-project-roster-row {
     grid-template-columns: 1fr;
   }
@@ -22602,12 +22720,15 @@ button.project-requirement-step-control:focus-visible {
 .jw-specific-workers-sheet {
   left: auto;
   max-width: 760px;
+  min-height: 0;
   right: auto;
   width: min(760px, calc(100vw - 32px));
 }
 
 .jw-specific-workers-body {
+  flex: 1 1 auto;
   gap: 12px;
+  min-height: 0;
   padding-bottom: 16px;
 }
 
@@ -22700,6 +22821,11 @@ button.project-requirement-step-control:focus-visible {
   width: 16px;
 }
 
+.jw-specific-worker-select-control {
+  align-items: center;
+  display: flex;
+}
+
 .jw-specific-worker-main {
   display: grid;
   gap: 3px;
@@ -22761,6 +22887,13 @@ button.project-requirement-step-control:focus-visible {
   color: var(--ink-2);
   font-size: 0.72rem;
   font-weight: 800;
+}
+
+.jw-specific-worker-actions {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
 }
 
 .jw-specific-worker-row.is-selected .jw-specific-worker-select-label {
@@ -24816,8 +24949,12 @@ button.project-requirement-step-control:focus-visible {
   }
 
   .jw-specific-worker-select-label {
-    grid-column: 3;
     padding-top: 2px;
+  }
+
+  .jw-specific-worker-actions {
+    grid-column: 3;
+    justify-content: flex-start;
   }
 
   .jw-specific-workers-footer {

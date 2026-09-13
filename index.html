@@ -48,7 +48,7 @@
             </button>
             <div class="welcome-divider"><span>or create an account</span></div>
             <div class="welcome-type-row">
-              <button class="cta-btn cta-btn--type" type="button" onclick="showScreen('worker-reg'); setWorkerStep(1);">
+              <button class="cta-btn cta-btn--type" type="button" onclick="startWorkerRegistration();">
                 <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Worker
               </button>
@@ -176,6 +176,24 @@
                   <div class="auth-field">
                     <label class="auth-label" for="regName">Full Name</label>
                     <input class="auth-input" id="regName" type="text" placeholder="e.g. Sam Taylor" required autocomplete="name" />
+                  </div>
+                  <div class="auth-field">
+                    <span class="auth-label">Profile photo *</span>
+                    <div class="auth-profile-photo-control" id="regProfilePhotoControl">
+                      <div class="auth-profile-photo-preview" aria-hidden="true">
+                        <span id="regProfilePhotoPlaceholder">Photo</span>
+                        <img id="regProfilePhotoPreview" alt="" />
+                      </div>
+                      <div class="auth-profile-photo-copy">
+                        <strong>Add a clear photo so companies can recognise you on site.</strong>
+                        <span>Use a recent, well-lit head-and-shoulders photo with your face clearly visible.</span>
+                        <label class="auth-profile-photo-button" for="regProfilePhoto">
+                          <span id="regProfilePhotoAction">Choose photo</span>
+                          <input id="regProfilePhoto" type="file" accept="image/jpeg,image/png,image/webp" aria-required="true" />
+                        </label>
+                      </div>
+                    </div>
+                    <span class="auth-hint">JPG, PNG or WebP. Your photo is stored locally in this prototype.</span>
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="regEmail">Email Address</label>

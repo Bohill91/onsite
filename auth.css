@@ -484,6 +484,120 @@ body.auth-is-open {
   height: 17px;
 }
 
+.auth-profile-photo-control {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 14px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.auth-profile-photo-control:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
+}
+
+.auth-profile-photo-preview {
+  align-items: center;
+  background: var(--surface-3);
+  border-radius: 50%;
+  color: var(--ink-3);
+  display: flex;
+  flex: 0 0 72px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  height: 72px;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 72px;
+}
+
+.auth-profile-photo-preview img {
+  display: none;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.auth-profile-photo-control.has-photo .auth-profile-photo-preview img {
+  display: block;
+}
+
+.auth-profile-photo-control.has-photo .auth-profile-photo-preview span {
+  display: none;
+}
+
+.auth-profile-photo-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.auth-profile-photo-copy strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.auth-profile-photo-copy > span {
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.auth-profile-photo-button {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 700;
+  justify-self: start;
+  margin-top: 3px;
+  min-height: 34px;
+  padding: 7px 10px;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.auth-profile-photo-button:hover,
+.auth-profile-photo-button:focus-within {
+  background: var(--orange-light);
+  border-color: var(--orange);
+  color: var(--orange-dark);
+}
+
+.auth-profile-photo-button input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.auth-profile-photo-control.is-loading {
+  opacity: 0.72;
+}
+
+@media (max-width: 420px) {
+  .auth-profile-photo-control {
+    align-items: start;
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .auth-profile-photo-preview {
+    flex-basis: 56px;
+    height: 56px;
+    width: 56px;
+  }
+}
+
 .auth-input::placeholder {
   color: var(--ink-3);
 }
