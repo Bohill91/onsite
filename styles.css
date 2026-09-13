@@ -10525,6 +10525,24 @@ margin-bottom: 12px;
   transform: none;
 }
 
+.company-action-hero-clear .company-dashboard-state-title {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+  margin: 5px 0 0;
+}
+
+.company-action-hero-clear .company-dashboard-state-copy {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.45;
+  margin: 6px 0 0;
+  max-width: 48ch;
+}
+
 .company-action-hero-content {
   display: block;
   min-width: 0;
@@ -11682,12 +11700,22 @@ body.modal-open {
 }
 
 .request-labour-page-head.request-labour-page-head--unboxed {
+  align-items: flex-start;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  display: block;
+  display: flex;
   padding: 8px 0 0;
+}
+
+.request-labour-page-head--unboxed > div {
+  min-width: 0;
+}
+
+.request-labour-page-head--unboxed .att-today-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .request-labour-page-head--unboxed h1 {

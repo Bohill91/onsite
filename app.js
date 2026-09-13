@@ -17928,10 +17928,9 @@ function companyDashboardActionHeroHTML(action) {
     return `<article class="company-action-hero company-action-hero-clear company-dashboard-section-card jw-card">
       <div>
         <p class="company-home-kicker">ACTION REQUIRED</p>
-        <h3>No immediate action</h3>
-        <p>Attendance, labour demand and upcoming starts are currently in order.</p>
+        <h3 class="company-dashboard-state-title">No action required</h3>
+        <p class="company-dashboard-state-copy">Items requiring your attention will appear here.</p>
       </div>
-      <span class="company-action-hero-cta">Stay ready</span>
     </article>`;
   }
   return `<article class="company-action-hero ${escapeHtml(action.tone)} company-dashboard-section-card jw-card">
@@ -19299,6 +19298,7 @@ function companyProjectDetailHTML(job, user) {
           <p>${escapeHtml(job.jobNumber || "Job number not set")} · ${escapeHtml(job.location || "Location to confirm")}</p>
         </div>
         <div class="company-project-detail-heading-side">
+          <span class="att-today-badge os-date-pill">${formatAttDate(todayDateStr())}</span>
           <div class="company-project-detail-indicators">
             <span class="company-project-stage company-project-stage--${stage}">${escapeHtml(stage[0].toUpperCase() + stage.slice(1))}</span>
             ${projectHealthGuidanceHTML(health, { pulse: health.requiresAction })}
