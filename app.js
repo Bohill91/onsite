@@ -29572,7 +29572,6 @@ let pickerMarker = null;
 let pickerMapLibre = null;
 let pickerMapRenderer = "";
 let pickerMapInitPromise = null;
-let pickerMapLoadTimeout = null;
 let pickerMapLoadingFallbackTimeout = null;
 let pickerMapReady = false;
 let pickerMapLastError = null;
@@ -29585,7 +29584,6 @@ const MAPLIBRE_MODULE_URL = "/vendor/maplibre/maplibre-gl.mjs";
 const ONSITE_ENTRANCE_MAP_STYLE_URL = "/onsite-map-style.json";
 const ONSITE_ENTRANCE_RASTER_TILES =
   "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const PICKER_MAP_VECTOR_TIMEOUT_MS = 4000;
 const PICKER_MAP_RASTER_LOADING_FALLBACK_MS = 1500;
 const PICKER_VIEWPORT = Object.freeze({
   minZoom: 16,
@@ -30292,8 +30290,6 @@ function warnPickerMapFallback(error) {
 }
 
 function destroyPickerMapRenderer() {
-  clearTimeout(pickerMapLoadTimeout);
-  pickerMapLoadTimeout = null;
   clearTimeout(pickerMapLoadingFallbackTimeout);
   pickerMapLoadingFallbackTimeout = null;
   pickerMarker?.remove();
@@ -30407,13 +30403,13 @@ function initVectorPickerMap(container, center, zoom) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let styleReady = false;
+    let renderedFrame = false;
     const resolveVectorMap = (map) => {
       if (settled) return;
       settled = true;
       pickerMapReady = true;
       pickerMapLastError = null;
-      clearTimeout(pickerMapLoadTimeout);
-      pickerMapLoadTimeout = null;
       setPickerMapFailureState(false);
       syncPickerMarkerToCurrentPin();
       resizePickerMap();
@@ -30431,19 +30427,37 @@ function initVectorPickerMap(container, center, zoom) {
         canvas &&
         canvas.width > 0 &&
         canvas.height > 0 &&
-        typeof pickerMap.isStyleLoaded === "function" &&
-        pickerMap.isStyleLoaded()
+        styleReady &&
+        renderedFrame
       );
     };
     const markUsableVectorRender = () => {
       if (!settled && isUsableVectorRender()) resolveVectorMap(pickerMap);
     };
-    pickerMap.on("style.load", () => requestAnimationFrame(markUsableVectorRender));
-    pickerMap.on("render", markUsableVectorRender);
-    pickerMap.on("load", markUsableVectorRender);
+    pickerMap.on("style.load", () => {
+      styleReady = true;
+      requestAnimationFrame(markUsableVectorRender);
+    });
+    pickerMap.on("render", () => {
+      renderedFrame = true;
+      markUsableVectorRender();
+    });
+    pickerMap.on("load", () => {
+      styleReady = true;
+      renderedFrame = true;
+      markUsableVectorRender();
+    });
     pickerMap.on("error", (event) => {
       pickerMapLastError = event?.error || event;
-      if (!pickerMapReady && isFatalPickerMapError(event)) {
+      const isSourceResourceError = !!(
+        event?.sourceId ||
+        event?.source ||
+        event?.tile
+      );
+      if (
+        !pickerMapReady &&
+        (isFatalPickerMapError(event) || (!styleReady && !isSourceResourceError))
+      ) {
         rejectVectorMap(pickerMapLastError);
         return;
       }
@@ -30454,14 +30468,6 @@ function initVectorPickerMap(container, center, zoom) {
         );
       }
     });
-    pickerMapLoadTimeout = setTimeout(() => {
-      if (!pickerMapReady) {
-        rejectVectorMap(
-          pickerMapLastError ||
-            new Error("The vector entrance map did not become ready in time."),
-        );
-      }
-    }, PICKER_MAP_VECTOR_TIMEOUT_MS);
   });
 }
 
