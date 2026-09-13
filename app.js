@@ -123,6 +123,75 @@ function marketplaceEventsEngine() {
   return typeof window !== "undefined" ? window.OnSiteMarketplaceEvents : null;
 }
 
+function labourCapacityEngine() {
+  return typeof window !== "undefined" ? window.OnSiteLabourCapacity : null;
+}
+
+function labourCapacityContext(options = {}) {
+  return {
+    projects: state.jobs || [],
+    applications: state.applications || [],
+    releases: state.workerReleases || [],
+    cancellations: state.cancellations || [],
+    today: todayDateStr(),
+    ignoreProjectIds: options.ignoreProjectIds || [],
+    ignoreSlotId: options.ignoreSlotId || "",
+    ignoreApplicationId: options.ignoreApplicationId || "",
+    skipWorkerAvailability: !!options.skipWorkerAvailability,
+    skipPlannedAbsences: !!options.skipPlannedAbsences,
+  };
+}
+
+function workerCapacityForProject(worker, job, options = {}) {
+  const engine = labourCapacityEngine();
+  if (!engine || !worker || !job) {
+    return {
+      state: "availability_unknown",
+      eligible: false,
+      availableForRange: false,
+      label: "Availability not confirmed",
+      reason: !engine
+        ? "Labour capacity checks are unavailable."
+        : "Worker or project details are incomplete.",
+      commitments: [],
+      conflicts: [],
+      absenceConflicts: [],
+      absencePenalty: 0,
+    };
+  }
+  return engine.workerCapacityForProject(
+    worker,
+    job,
+    labourCapacityContext(options),
+  );
+}
+
+function marketplaceCapacitySnapshot(capacity) {
+  if (!capacity) return null;
+  return {
+    state: capacity.state || "availability_unknown",
+    eligible: !!capacity.eligible,
+    expectedAvailableDate: capacity.expectedAvailableDate || "",
+    requestedRange: capacity.requestedRange || null,
+    commitmentProjectIds: Array.from(
+      new Set((capacity.commitments || []).map((item) => item.projectId).filter(Boolean)),
+    ),
+    conflictingProjectIds: Array.from(
+      new Set((capacity.conflicts || []).map((item) => item.projectId).filter(Boolean)),
+    ),
+    absenceConflictDays: (capacity.absenceConflicts || []).reduce(
+      (sum, item) => sum + (Number(item.conflictDays) || 0),
+      0,
+    ),
+  };
+}
+
+function capacityConflictReason(capacity, action = "offer") {
+  if (!capacity || capacity.eligible) return "";
+  const prefix = action === "extension" ? "Extension unavailable" : "Worker unavailable";
+  return `${prefix}: ${capacity.reason || "capacity is not confirmed for these dates"}`;
+}
+
 function marketplaceActor() {
   const user = typeof getSessionUser === "function" ? getSessionUser() : null;
   if (!user?.id) return { actorType: "system", actorId: "" };
@@ -919,9 +988,51 @@ function bindLabourAdjustButtons(container) {
 // ─── Extension actions ────────────────────────────────────
 // Company asks to extend a worker. The worker must accept before it takes
 // effect — a company can never hold a worker past the estimated end date.
+function workerCapacityForExtension(job, worker, proposedEndDate) {
+  const engine = labourCapacityEngine();
+  const currentEnd = job?.estimatedEndDate || job?.endDate || job?.end || "";
+  const currentEndMs = engine?.dateOnlyMs(currentEnd);
+  const proposedEndMs = engine?.dateOnlyMs(proposedEndDate);
+  if (!engine || !job || !worker || currentEndMs === null || proposedEndMs === null) {
+    return {
+      state: "availability_unknown",
+      eligible: false,
+      reason: "The current and proposed project dates must be confirmed first.",
+    };
+  }
+  if (proposedEndMs <= currentEndMs) {
+    return {
+      state: "availability_unknown",
+      eligible: false,
+      reason: "The proposed end date must be after the current project end date.",
+    };
+  }
+  return engine.workerCapacityForRange(
+    worker,
+    engine.dateOnlyString(currentEndMs + 86400000),
+    proposedEndDate,
+    {
+      ...labourCapacityContext({
+        ignoreProjectIds: [job.id],
+        skipWorkerAvailability: true,
+      }),
+      requestedWorkingDays: job.workingDays,
+    },
+  );
+}
+
 function requestExtension(jobId, newEndDate, newRate) {
   const job = findJob(jobId);
-  if (!job || !job.assignedWorkerId || !newEndDate) return;
+  if (!job || !job.assignedWorkerId || !newEndDate) {
+    return { ok: false, reason: "Extension details are incomplete" };
+  }
+  const worker = findWorker(job.assignedWorkerId);
+  const capacity = workerCapacityForExtension(job, worker, newEndDate);
+  if (!capacity.eligible) {
+    const reason = capacityConflictReason(capacity, "extension");
+    showToast(reason);
+    return { ok: false, reason, capacity };
+  }
   initExtensionFields(job);
   job.newProposedEndDate = newEndDate;
   const baseRate =
@@ -947,11 +1058,22 @@ function requestExtension(jobId, newEndDate, newRate) {
   });
   saveAndRender();
   showToast("Extension request sent to worker");
+  return { ok: true, capacity };
 }
 
 function acceptExtension(jobId) {
   const job = findJob(jobId);
   if (!job) return;
+  const worker = findWorker(job.assignedWorkerId);
+  const capacity = workerCapacityForExtension(
+    job,
+    worker,
+    job.newProposedEndDate,
+  );
+  if (!capacity.eligible) {
+    showToast(capacityConflictReason(capacity, "extension"));
+    return;
+  }
   const acceptedAt = new Date().toISOString();
   const extensionRequestedAt = job.extensionRequestedAt || "";
   const previousEndDate = job.estimatedEndDate || job.endDate || "";
@@ -975,7 +1097,7 @@ function acceptExtension(jobId) {
   job.extensionResponseDeadline = "";
   job._remind14 = false;
   job._remind7 = false; // allow a fresh cycle before the new end date
-  const w = findWorker(job.assignedWorkerId);
+  const w = worker;
   const slot = placementSlotsEngine()?.slotForWorker(job, job.assignedWorkerId);
   const changedFields = ["estimatedEndDate"];
   if (Number(previousDayRate) !== Number(job.agreedDayRate)) {
@@ -2244,6 +2366,17 @@ function confirmBooking(job, workerId, options = {}) {
     application?.requirementId || "",
   );
   const pricingJob = placementJobForRequirement(job, requirement);
+  const transferFromProjectId = application?.transferFromJobId || "";
+  const capacity = workerCapacityForProject(worker, pricingJob, {
+    ignoreProjectIds: transferFromProjectId ? [transferFromProjectId] : [],
+  });
+  if (!capacity.eligible) {
+    return {
+      ok: false,
+      reason: capacityConflictReason(capacity, "booking"),
+      capacity,
+    };
+  }
   const pricing = computeBookingPricing({
     workerMin: workerMinRate(worker),
     budget: jobBudget(pricingJob),
@@ -2253,7 +2386,15 @@ function confirmBooking(job, workerId, options = {}) {
     job,
     worker,
     application,
-    state.jobs,
+    {
+      projects: state.jobs,
+      applications: state.applications,
+      releases: state.workerReleases,
+      cancellations: state.cancellations,
+      ignoreProjectIds: transferFromProjectId ? [transferFromProjectId] : [],
+    },
+    new Date().toISOString(),
+    { transferFromProjectId },
   );
   if (placement && !placement.ok) return placement;
 
@@ -2300,7 +2441,7 @@ function confirmBooking(job, workerId, options = {}) {
     placementSlot: placement?.slot,
   });
   if (application && agreement) application.bookingId = agreement.id;
-  return { ok: true, pricing, slot: placement?.slot, agreement };
+  return { ok: true, pricing, capacity, slot: placement?.slot, agreement };
 }
 
 // Apply a cancellation to a confirmed booking and log it for the admin view.
@@ -3094,8 +3235,8 @@ document
       ? document.getElementById("extNewRate")?.value
       : "";
     const jobId = currentExtensionJobId;
-    closeExtensionModal();
-    requestExtension(jobId, newEnd, newRate);
+    const result = requestExtension(jobId, newEnd, newRate);
+    if (result.ok) closeExtensionModal();
   });
 document.getElementById("extensionModal")?.addEventListener("click", (e) => {
   if (e.target === document.getElementById("extensionModal"))
@@ -9432,13 +9573,16 @@ function createProjectTransferOffer(fromJobId, toJobId, workerId) {
   if (!jobHasOpenPlacement(toJob) || toJob.completed)
     return { ok: false, reason: "Target job is not open" };
 
-  const matches = getMatches(toJob);
+  const matches = getMatches(toJob, {
+    allowReallocationFromProjectId: fromJob.id,
+  });
   const rank = matches.findIndex((match) => match.id === worker.id);
   const offered = createJobOffer(
     toJob.id,
     worker.id,
     "project_transfer",
     rank >= 0 ? rank + 1 : null,
+    { transferFromJobId: fromJob.id },
   );
   if (!offered.ok) return offered;
 
@@ -9573,10 +9717,16 @@ function respondToShiftChangeOffer(offerId, accepted) {
   return { ok: true, offer };
 }
 
-function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
+function buildOfferMatchSnapshot(
+  job,
+  worker,
+  rankAtOffer = null,
+  capacity = null,
+  matchOptions = {},
+) {
   const stats = getWorkerStats(worker?.id || "");
   const rating = buildWorkerRating(worker?.id || "");
-  const scored = getMatches(job).find((w) => w.id === worker?.id);
+  const scored = getMatches(job, matchOptions).find((w) => w.id === worker?.id);
   return {
     reliabilityRating: rating.reliabilityRating,
     punctualityRating: rating.punctualityRating,
@@ -9608,6 +9758,7 @@ function buildOfferMatchSnapshot(job, worker, rankAtOffer = null) {
     preferredForCompany: isPreferredWorker(job?.companyId || "", worker?.id || ""),
     matchScore: scored?._composite ?? null,
     matchBreakdown: scored?._matchBreakdown || null,
+    capacity: marketplaceCapacitySnapshot(capacity || scored?._capacity),
     rankAtOffer,
     jobTrade: job?.trade || "",
     jobLocation: job?.location || "",
@@ -9667,11 +9818,23 @@ function createJobOffer(
   if (!requirement || !jobHasOpenPlacement(job, requirement.requirementId) || job.completed)
     return { ok: false, reason: "This job is no longer open" };
   const matchingJob = placementJobForRequirement(job, requirement);
-  if (worker.availability !== "available")
-    return { ok: false, reason: "Worker is unavailable" };
+  const transferFromProjectId = options.transferFromJobId || "";
+  const matchOptions = transferFromProjectId
+    ? { allowReallocationFromProjectId: transferFromProjectId }
+    : {};
+  const capacity = workerCapacityForProject(worker, matchingJob, {
+    ignoreProjectIds: transferFromProjectId ? [transferFromProjectId] : [],
+  });
+  if (!capacity.eligible) {
+    return {
+      ok: false,
+      reason: capacityConflictReason(capacity),
+      capacity,
+    };
+  }
   if (
     ["manual", "preferred_worker", "requested_worker", "project_transfer"].includes(source) &&
-    !getMatches(matchingJob).some((match) => match.id === worker.id)
+    !getMatches(matchingJob, matchOptions).some((match) => match.id === worker.id)
   ) {
     return { ok: false, reason: "Worker is not eligible for this job offer" };
   }
@@ -9695,8 +9858,15 @@ function createJobOffer(
     job,
     worker,
     app,
-    state.jobs,
+    {
+      projects: state.jobs,
+      applications: state.applications,
+      releases: state.workerReleases,
+      cancellations: state.cancellations,
+      ignoreProjectIds: transferFromProjectId ? [transferFromProjectId] : [],
+    },
     now.toISOString(),
+    { transferFromProjectId },
   );
   if (reserved && !reserved.ok) return reserved;
 
@@ -9719,7 +9889,13 @@ function createJobOffer(
     labourRequirementId: requirement.requirementId,
     placementSlotId: reserved?.slot?.slotId || app.placementSlotId || "",
     matchSnapshot: {
-      ...buildOfferMatchSnapshot(matchingJob, worker, rankAtOffer),
+      ...buildOfferMatchSnapshot(
+        matchingJob,
+        worker,
+        rankAtOffer,
+        capacity,
+        matchOptions,
+      ),
       requirementId: requirement.requirementId,
       placementSlotId: reserved?.slot?.slotId || app.placementSlotId || "",
     },
@@ -9768,6 +9944,7 @@ function createJobOffer(
         matchScore: app.matchSnapshot?.matchScore ?? null,
         rankAtOffer,
         requirement: marketplaceRequirementSnapshot(job, requirement),
+        capacity: app.matchSnapshot?.capacity || null,
       },
     },
     `match_generated:${offerIdentity?.offerAttemptId || app.id}`,
@@ -9786,6 +9963,7 @@ function createJobOffer(
         matchScore: app.matchSnapshot?.matchScore ?? null,
         rankAtOffer,
         requirement: marketplaceRequirementSnapshot(job, requirement),
+        capacity: app.matchSnapshot?.capacity || null,
       },
     },
     `offer_sent:${offerIdentity?.offerAttemptId || app.id}`,
@@ -26872,7 +27050,20 @@ function jobDateWindow(job) {
   };
 }
 
-function plannedAbsenceImpact(worker, job) {
+function plannedAbsenceImpact(worker, job, capacity = null) {
+  if (capacity) {
+    const conflictDays = (capacity.absenceConflicts || []).reduce(
+      (sum, conflict) => sum + (Number(conflict.conflictDays) || 0),
+      0,
+    );
+    return {
+      exclude: capacity.state === "absence_conflict",
+      penalty: Number(capacity.absencePenalty) || 0,
+      label: conflictDays
+        ? `${conflictDays} planned absence day${conflictDays === 1 ? "" : "s"}`
+        : "",
+    };
+  }
   const absences = plannedAbsencesForWorker(worker);
   if (!absences.length) return { exclude: false, penalty: 0, label: "" };
   const { startMs, endMs } = jobDateWindow(job);
@@ -27004,43 +27195,31 @@ function previousDeclinePenalty(workerId, job) {
   return Math.min(15, penalty);
 }
 
-function getMatches(job) {
+function getMatches(job, options = {}) {
   if (!job || !jobHasOpenPlacement(job) || job.completed) return [];
-  const { startMs } = jobDateWindow(job);
+  const ignoreProjectIds = Array.from(
+    new Set([
+      ...(options.ignoreProjectIds || []),
+      options.allowReallocationFromProjectId || "",
+    ].filter(Boolean)),
+  );
 
   return state.workers
     .filter((w) => canonicalTrade(w.trade) === canonicalTrade(job.trade))
     .map((w) => {
+      const capacity = workerCapacityForProject(w, job, { ignoreProjectIds });
+      if (!capacity.eligible) return null;
+
       const pricing = computeBookingPricing({
         workerMin: workerMinRate(w),
         budget: jobBudget(job),
       });
       if (!pricing.viable) return null;
 
-      const otherBooking = state.jobs.find(
-        (candidate) =>
-          candidate.id !== job.id &&
-          jobHasAssignedWorker(candidate, w.id) &&
-          !candidate.completed,
-      );
-      let availabilityLabel = "";
-      let availabilityScore = 8;
-      if (otherBooking) {
-        if (!isReallocatable(otherBooking)) return null;
-        const endDate = otherBooking.estimatedEndDate || otherBooking.endDate;
-        if (job.start && endDate && new Date(job.start) < new Date(endDate))
-          return null;
-        availabilityLabel = `Available from ${formatDate(endDate)}`;
-        availabilityScore = otherBooking.workerAvailabilityStatus === "available_soon" ? 8 : 6;
-      } else {
-        if (w.availability !== "available") return null;
-        const nextMs = dateOnlyMs(w.nextAvailableDate);
-        if (nextMs && startMs && nextMs > startMs) return null;
-        if (nextMs && startMs && nextMs === startMs)
-          availabilityLabel = "Available from start date";
-      }
-
-      const absence = plannedAbsenceImpact(w, job);
+      const availabilityLabel =
+        capacity.state === "available_by_start" ? capacity.label : "";
+      const availabilityScore = capacity.state === "available_by_start" ? 7 : 8;
+      const absence = plannedAbsenceImpact(w, job, capacity);
       if (absence.exclude) return null;
       const travel = travelMatch(job, w);
       if (travel.exclude) return null;
@@ -27099,6 +27278,7 @@ function getMatches(job) {
         _qualBonus: qual.score,
         _composite: composite,
         _availabilityLabel: notes.join(" · "),
+        _capacity: capacity,
         _rating: rating,
         _matchBreakdown: {
           trade: 20,
@@ -27109,6 +27289,7 @@ function getMatches(job) {
           punctuality: punctualityPoints,
           attendance: experienceScore,
           availability: availabilityScore,
+          capacityState: capacity.state,
           weekend: weekend.score,
           travel: travel.score,
           preferred: preferredScore,

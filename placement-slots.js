@@ -26,6 +26,18 @@
     "under_company_review",
   ]);
 
+  function labourCapacityEngine() {
+    if (globalScope.OnSiteLabourCapacity) return globalScope.OnSiteLabourCapacity;
+    if (typeof module !== "undefined" && module.exports && typeof require === "function") {
+      try {
+        return require("./labour-capacity.js");
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   function cleanIdPart(value) {
     return String(value || "record")
       .trim()
@@ -532,7 +544,33 @@
     return job;
   }
 
-  function workerHasOverlappingPlacement(jobs, job, workerId, ignoredSlotId = "") {
+  function workerHasOverlappingPlacement(
+    jobs,
+    job,
+    workerId,
+    ignoredSlotId = "",
+    options = {},
+  ) {
+    const capacity = labourCapacityEngine();
+    if (capacity) {
+      const result = capacity.workerCapacityForProject(
+        { id: workerId, availability: "available" },
+        job,
+        {
+          projects: jobs || [],
+          applications: options.applications || [],
+          releases: options.releases || [],
+          cancellations: options.cancellations || [],
+          ignoreProjectIds: options.ignoreProjectIds || [],
+          ignoreSlotId: ignoredSlotId,
+          ignoreApplicationId: options.ignoreApplicationId || "",
+          skipWorkerAvailability: true,
+          skipPlannedAbsences: true,
+          today: options.today,
+        },
+      );
+      return !result.eligible;
+    }
     return (jobs || []).some((candidate) => {
       if (!candidate || candidate.completed || !projectDatesOverlap(candidate, job)) return false;
       return projectSlots(candidate).some(
@@ -541,10 +579,37 @@
     });
   }
 
-  function reserveSlot(job, worker, application, jobs = [], now = new Date().toISOString()) {
+  function reserveSlot(
+    job,
+    worker,
+    application,
+    contextOrJobs = [],
+    now = new Date().toISOString(),
+    options = {},
+  ) {
+    const context = Array.isArray(contextOrJobs)
+      ? { projects: contextOrJobs }
+      : contextOrJobs || {};
+    const jobs = context.projects || context.jobs || [];
     const linkedSlotId = application?.placementSlotId || "";
-    if (workerHasOverlappingPlacement(jobs, job, worker?.id || "", linkedSlotId)) {
-      return { ok: false, reason: "Worker already has an overlapping assignment" };
+    const ignoreProjectIds = Array.from(
+      new Set([
+        ...(context.ignoreProjectIds || []),
+        options.transferFromProjectId || application?.transferFromJobId || "",
+      ].filter(Boolean)),
+    );
+    if (
+      workerHasOverlappingPlacement(jobs, job, worker?.id || "", linkedSlotId, {
+        ...context,
+        ignoreProjectIds,
+        ignoreApplicationId: application?.id || "",
+        today: String(now).slice(0, 10),
+      })
+    ) {
+      return {
+        ok: false,
+        reason: "Worker already has a commitment during the requested dates",
+      };
     }
     ensureProject(job, { applications: application ? [application] : [], workers: worker ? [worker] : [], now });
     const existing = application?.placementSlotId
@@ -581,8 +646,22 @@
     return { ok: true, slot, requirement: req };
   }
 
-  function confirmSlot(job, worker, application, jobs = [], now = new Date().toISOString()) {
-    const reserved = reserveSlot(job, worker, application, jobs, now);
+  function confirmSlot(
+    job,
+    worker,
+    application,
+    contextOrJobs = [],
+    now = new Date().toISOString(),
+    options = {},
+  ) {
+    const reserved = reserveSlot(
+      job,
+      worker,
+      application,
+      contextOrJobs,
+      now,
+      options,
+    );
     if (!reserved.ok) return reserved;
     const slot = reserved.slot;
     slot.status = SLOT_STATUS.CONFIRMED;

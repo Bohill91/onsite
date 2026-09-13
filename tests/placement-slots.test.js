@@ -115,6 +115,26 @@ assert.equal(
   false,
 );
 
+// An explicit project-transfer context is the only overlap exception at slot level.
+const transferTarget = project(1, { id: "transfer-target" });
+slots.ensureProject(transferTarget);
+assert.equal(
+  slots.confirmSlot(
+    transferTarget,
+    alice,
+    application(
+      "app-transfer",
+      transferTarget.id,
+      alice.id,
+      "under_company_review",
+    ),
+    [multi, transferTarget],
+    "2026-09-02T09:00:00.000Z",
+    { transferFromProjectId: multi.id },
+  ).ok,
+  true,
+);
+
 // F-G: release preserves history and a replacement reuses the affected slot.
 const releasedSlotId = aliceApp.placementSlotId;
 assert.equal(
