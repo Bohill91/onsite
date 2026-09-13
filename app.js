@@ -24222,6 +24222,25 @@ function renderCompanyProjectsPage(user) {
     });
     return;
   }
+  if (!companyJobs.length) {
+    el.innerHTML = companyPageShellHTML({
+      title: "Projects",
+      compactHeader: true,
+      className:
+        "company-dashboard-shell company-projects-shell company-projects-empty-shell",
+      bodyClass: "company-dashboard-body company-projects-body",
+      body: `<section class="company-project-directory company-project-directory--empty">
+        <div class="company-project-empty-state" aria-labelledby="projectsEmptyTitle">
+          <span class="company-project-empty-icon" aria-hidden="true">${onsiteIcon("briefcase", 22)}</span>
+          <h2 id="projectsEmptyTitle">No projects yet</h2>
+          <p>Create your first project to request labour, add site details and set pre-start requirements.</p>
+          <button class="primary-btn" type="button" data-company-request-labour>Request labour</button>
+        </div>
+      </section>`,
+    });
+    bindLabourRequestWorkflow(el);
+    return;
+  }
   el.innerHTML = companyPageShellHTML({
     title: "Projects",
     compactHeader: true,
