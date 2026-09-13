@@ -5121,6 +5121,45 @@ const PROJECT_REQUIREMENT_FILE_ACCEPT =
 const PROJECT_REQUIREMENT_FILE_MAX_BYTES = 1024 * 1024;
 const PROJECT_REQUIREMENT_FILES_TOTAL_MAX_BYTES = 2 * 1024 * 1024;
 
+function onsiteDocumentStorage() {
+  return window.OnSiteDocumentStorage || null;
+}
+
+function onsiteDocumentFileUrl(record, options = {}) {
+  return onsiteDocumentStorage()?.fileUrl(record, options) || "";
+}
+
+function onsiteDocumentReferenceFields(record) {
+  return onsiteDocumentStorage()?.referenceFields(record) || {};
+}
+
+function onsiteDocumentHasFile(record) {
+  return !!onsiteDocumentStorage()?.normalizeFileReference(record);
+}
+
+async function uploadOnSiteDocument(file, {
+  purpose,
+  ownerId,
+  ownerType,
+  projectId = "",
+  companyId = "",
+  accessScope = "restricted",
+} = {}) {
+  const storage = onsiteDocumentStorage();
+  const user = getSessionUser() || {};
+  if (!storage) throw new Error("Document storage is unavailable.");
+  return storage.upload(file, {
+    actorId: user.id || ownerId,
+    actorType: user.type || ownerType,
+    ownerId,
+    ownerType,
+    projectId,
+    companyId,
+    purpose,
+    accessScope,
+  });
+}
+
 const PROJECT_REQUIREMENT_CANONICAL_COMPLETION = Object.freeze({
   video_induction: "watch_and_acknowledge",
   external_training: "external_verification",
@@ -5258,8 +5297,8 @@ function normalizeProjectRequirementResource(resource, fallbackId = "") {
   const createdAt = resource?.createdAt || new Date().toISOString();
   if (type === "file") {
     const fileName = String(resource?.fileName || resource?.label || "").trim();
-    const dataUrl = String(resource?.dataUrl || "");
-    if (!fileName || !dataUrl.startsWith("data:")) return null;
+    if (!fileName || !onsiteDocumentHasFile(resource)) return null;
+    const fileReference = onsiteDocumentReferenceFields(resource);
     return {
       id,
       type,
@@ -5267,11 +5306,17 @@ function normalizeProjectRequirementResource(resource, fallbackId = "") {
       fileName,
       mimeType: String(resource?.mimeType || "application/octet-stream"),
       size: Math.max(0, Number(resource?.size) || 0),
-      dataUrl,
+      ...fileReference,
       createdAt,
       sourceVersion: String(
         resource?.sourceVersion ||
-          [id, fileName, Number(resource?.size) || 0, createdAt].join(":"),
+          [
+            id,
+            fileName,
+            Number(resource?.size) || 0,
+            resource?.storageRef?.fileId || "legacy",
+            createdAt,
+          ].join(":"),
       ),
     };
   }
@@ -6905,6 +6950,7 @@ function dailyMobileJobsPanelHTML(job, { manage = false, workerView = false } = 
 
 const WORKER_DOCUMENT_TYPES = [
   { value: "cv", label: "CV/PDF", accepts: "PDF" },
+  { value: "right_to_work", label: "Right-to-work document", accepts: "PDF or image" },
   { value: "cscs_ecs", label: "CSCS/ECS card image", accepts: "Image" },
   { value: "ipaf", label: "IPAF certificate/card", accepts: "PDF or image" },
   { value: "pasma", label: "PASMA certificate/card", accepts: "PDF or image" },
@@ -6914,6 +6960,8 @@ const WORKER_DOCUMENT_TYPES = [
 ];
 
 const WORKER_DOCUMENT_STATUSES = ["unverified", "pending", "verified", "rejected"];
+const WORKER_DOCUMENT_FILE_ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp";
+const WORKER_DOCUMENT_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
 function workerDocumentTypeLabel(type) {
   return WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.label || "Document";
@@ -7536,6 +7584,9 @@ function normalizeWorkerDocument(doc) {
     documentType,
     fileName,
     fileType: doc?.fileType || WORKER_DOCUMENT_TYPES.find((d) => d.value === documentType)?.accepts || "",
+    mimeType: String(doc?.mimeType || ""),
+    size: Math.max(0, Number(doc?.size) || 0),
+    ...onsiteDocumentReferenceFields(doc),
     credentialId,
     qualificationTitle: String(doc?.qualificationTitle || doc?.certificateTitle || "").trim(),
     uploadedAt: doc?.uploadedAt || new Date().toISOString(),
@@ -7582,7 +7633,7 @@ function maskSensitiveTail(value, keep = 4) {
 function upsertWorkerDocument(workerId, doc) {
   const worker = findWorker(workerId);
   const record = normalizeWorkerDocument(doc);
-  if (!worker || !record) return { ok: false, reason: "Add a file name or upload label" };
+  if (!worker || !record) return { ok: false, reason: "Select a document file" };
   worker.documents = workerDocumentsFor(worker);
   const idx = worker.documents.findIndex((d) => d.documentId === record.documentId);
   if (idx === -1) worker.documents.unshift(record);
@@ -7615,6 +7666,12 @@ function workerDocumentsHTML(worker, opts = {}) {
       .map((doc) => {
         const expiry = workerDocumentExpiryStatus(doc.expiryDate);
         const credential = window.OnSiteCredentials?.findById(doc.credentialId);
+        const canAccessFile =
+          onsiteDocumentHasFile(doc) &&
+          (!opts.companyView || doc.documentType !== "cv");
+        const downloadUrl = canAccessFile
+          ? onsiteDocumentFileUrl(doc, { download: true })
+          : "";
         return `
       <div class="worker-doc-row ${expiry.cls === "expired" ? "expired" : ""}">
         <div class="worker-doc-main">
@@ -7628,6 +7685,7 @@ function workerDocumentsHTML(worker, opts = {}) {
         <div class="worker-doc-side">
           <span class="worker-doc-status ${escapeHtml(doc.verificationStatus)}">${escapeHtml(doc.verificationStatus)}</span>
           <span class="worker-doc-expiry ${expiry.cls}">${escapeHtml(expiry.label)}</span>
+          ${downloadUrl ? `<a class="worker-doc-open" href="${escapeHtml(downloadUrl)}" download="${escapeHtml(doc.fileName)}">Download</a>` : ""}
           ${
             opts.manage
               ? `<button class="doc-del-btn" type="button" data-worker-doc-remove="${doc.documentId}">Remove</button>`
@@ -7688,7 +7746,7 @@ function companyWorkerDocumentsHTML(worker, job = null) {
             </div>`
           : ""
       }
-      ${workerDocumentsHTML(worker)}
+      ${workerDocumentsHTML(worker, { companyView: true })}
     </div>`;
 }
 
@@ -7761,7 +7819,7 @@ function projectRequirementDirectVideoResource(requirement) {
   return {
     id: resource.id,
     label: resource.label || "Induction video",
-    url: resource.type === "file" ? resource.dataUrl : resource.url,
+    url: resource.type === "file" ? onsiteDocumentFileUrl(resource) : resource.url,
   };
 }
 
@@ -7772,9 +7830,11 @@ function projectRequirementPresentationResourceHTML(resource) {
   if (resource.type === "file") {
     const isImage = /^image\//i.test(resource.mimeType || "");
     const isPdf = /pdf/i.test(resource.mimeType || "") || /\.pdf$/i.test(resource.fileName || "");
+    const fileUrl = onsiteDocumentFileUrl(resource);
+    const downloadUrl = onsiteDocumentFileUrl(resource, { download: true });
     return `<section class="prestart-completion-resource">
       <h4>${escapeHtml(resource.label || resource.fileName)}</h4>
-      ${isImage ? `<img src="${escapeHtml(resource.dataUrl)}" alt="${escapeHtml(resource.label || resource.fileName)}" />` : isPdf ? `<object data="${escapeHtml(resource.dataUrl)}" type="application/pdf"><a href="${escapeHtml(resource.dataUrl)}" target="_blank" rel="noopener">Open ${escapeHtml(resource.fileName)}</a></object>` : `<a href="${escapeHtml(resource.dataUrl)}" download="${escapeHtml(resource.fileName)}">Open ${escapeHtml(resource.fileName)}</a>`}
+      ${isImage ? `<img src="${escapeHtml(fileUrl)}" alt="${escapeHtml(resource.label || resource.fileName)}" />` : isPdf ? `<div class="onsite-pdf-preview" data-prestart-pdf-resource="${escapeHtml(resource.id)}" data-render-state="pending" aria-label="PDF preview"><p>Loading PDF preview…</p></div><a href="${escapeHtml(downloadUrl)}" download="${escapeHtml(resource.fileName)}">Download ${escapeHtml(resource.fileName)}</a>` : `<a href="${escapeHtml(downloadUrl)}" download="${escapeHtml(resource.fileName)}">Open ${escapeHtml(resource.fileName)}</a>`}
     </section>`;
   }
   return `<section class="prestart-completion-resource">
@@ -7789,8 +7849,36 @@ function projectRequirementDocumentCanTrackEnd(requirement) {
   return resources.length > 0 && resources.every(
     (resource) =>
       resource.type === "reference" ||
-      (resource.type === "file" && /^image\//i.test(resource.mimeType || "")),
+      (resource.type === "file" &&
+        (/^image\//i.test(resource.mimeType || "") ||
+          /pdf/i.test(resource.mimeType || "") ||
+          /\.pdf$/i.test(resource.fileName || ""))),
   );
+}
+
+async function renderWorkerPreStartPdfResources(root, requirement) {
+  const storage = onsiteDocumentStorage();
+  if (!storage) return;
+  const resources = requirement?.resources || [];
+  const previews = root.querySelectorAll("[data-prestart-pdf-resource]");
+  await Promise.all(
+    Array.from(previews).map(async (preview) => {
+      const resource = resources.find(
+        (item) => item.id === preview.dataset.prestartPdfResource,
+      );
+      if (!resource) return;
+      try {
+        await storage.renderPdf(preview, resource);
+        preview.dataset.renderState = "ready";
+      } catch (error) {
+        preview.dataset.renderState = "failed";
+        preview.innerHTML = `<div class="onsite-pdf-preview-error"><strong>Preview unavailable.</strong><span>${escapeHtml(error?.message || "Download the PDF to view it.")}</span></div>`;
+      }
+    }),
+  );
+  root
+    .querySelector("[data-prestart-document-scroll]")
+    ?.dispatchEvent(new Event("scroll"));
 }
 
 function projectRequirementDocumentPresentationHTML(requirement) {
@@ -7938,6 +8026,7 @@ function renderWorkerPreStartCompletion() {
     <div class="prestart-completion-body">${workerPreStartCompletionBodyHTML(job, context.workerId, requirement, record)}</div>
   </div>`;
   bindWorkerPreStartCompletion(modal, job, requirement, record);
+  renderWorkerPreStartPdfResources(modal, requirement);
 }
 
 function openWorkerPreStartCompletion(jobId, requirementId, workerId, trigger = null) {
@@ -8022,13 +8111,29 @@ function setupPreStartSignaturePad(root) {
   });
 }
 
-function preStartSignatureReference(workerId) {
+async function preStartSignatureReference(workerId, job, requirement) {
   const dataUrl = workerPreStartCompletionState?.signatureDataUrl || "";
   if (!dataUrl.startsWith("data:image/png")) return null;
+  const file = onsiteDocumentStorage()?.dataUrlFile(
+    dataUrl,
+    `signature-${workerId}.png`,
+  );
+  if (!file) throw new Error("Signature storage is unavailable.");
+  const storedFile = await uploadOnSiteDocument(file, {
+    purpose: "prestart_signature",
+    ownerId: workerId,
+    ownerType: "worker",
+    projectId: job?.id || "",
+    companyId: job?.companyId || "",
+    accessScope: "restricted",
+  });
   return {
     id: createId(),
     kind: "drawn_signature",
-    dataUrl,
+    fileName: storedFile.fileName,
+    mimeType: storedFile.mimeType,
+    size: storedFile.size,
+    storageRef: storedFile.storageRef,
     signerWorkerId: workerId,
     capturedAt: new Date().toISOString(),
   };
@@ -8193,6 +8298,13 @@ function bindWorkerPreStartCompletion(root, job, requirement, record) {
   if (scroll) {
     const markEnd = () => {
       if (!projectRequirementDocumentCanTrackEnd(requirement)) return;
+      if (
+        scroll.querySelector(
+          '[data-prestart-pdf-resource][data-render-state="pending"], [data-prestart-pdf-resource][data-render-state="failed"]',
+        )
+      ) {
+        return;
+      }
       const atEnd = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 3;
       if (!atEnd || record?.documentProgress?.bottomReachedAt) return;
       const result = updateProjectRequirementCompletion({
@@ -8304,22 +8416,35 @@ function bindWorkerPreStartCompletion(root, job, requirement, record) {
       preStartFormSaveTimer = setTimeout(saveDraft, 350);
     });
     workerForm.addEventListener("change", saveDraft);
-    workerForm.addEventListener("submit", (event) => {
+    workerForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const submit = workerForm.querySelector("[data-prestart-form-submit]");
       if (submit?.disabled) return;
       const answers = workerPreStartFormAnswers(workerForm, definition);
       const valid = validateWorkerPreStartForm(workerForm, definition, answers);
-      const signature = preStartSignatureReference(workerId);
+      const hasSignature = String(
+        workerPreStartCompletionState?.signatureDataUrl || "",
+      ).startsWith("data:image/png");
       const summary = workerForm.querySelector("[data-prestart-form-summary]");
-      if (!valid || !signature) {
+      if (!valid || !hasSignature) {
         if (summary) {
-          summary.textContent = !signature ? "Complete the required fields and draw your signature." : "Complete every required field.";
+          summary.textContent = !hasSignature ? "Complete the required fields and draw your signature." : "Complete every required field.";
           summary.classList.remove("hidden");
         }
         return;
       }
       submit.disabled = true;
+      let signature;
+      try {
+        signature = await preStartSignatureReference(
+          workerId,
+          job,
+          requirement,
+        );
+      } catch (error) {
+        submit.disabled = false;
+        return showToast(error?.message || "The signature could not be stored");
+      }
       const result = updateProjectRequirementCompletion({
         job,
         workerId,
@@ -8336,6 +8461,7 @@ function bindWorkerPreStartCompletion(root, job, requirement, record) {
         },
       });
       if (!result.ok) {
+        await onsiteDocumentStorage()?.remove(signature).catch(() => {});
         submit.disabled = false;
         return showToast(result.reason);
       }
@@ -8384,27 +8510,60 @@ function bindWorkerPreStartCompletion(root, job, requirement, record) {
     if (!file) return;
     if (file.size > PROJECT_REQUIREMENT_FILE_MAX_BYTES) return showToast("Evidence must be 1 MB or smaller in this local prototype");
     try {
-      const dataUrl = await readProjectRequirementFile(file);
+      const storedFile = await uploadOnSiteDocument(file, {
+        purpose: "prestart_evidence",
+        ownerId: workerId,
+        ownerType: "worker",
+        projectId: job.id,
+        companyId: job.companyId || "",
+        accessScope:
+          requirement.requirementType === "background_check"
+            ? "restricted"
+            : "company_project",
+      });
       const result = updateProjectRequirementCompletion({
         job,
         workerId,
         requirement,
         mutate(draft, timestamp) {
-          draft.evidenceAttachments = [{ id: createId(), type: "file", label: file.name, fileName: file.name, mimeType: file.type || "application/octet-stream", size: file.size, dataUrl, createdAt: timestamp, accessScope: requirement.requirementType === "background_check" ? "restricted" : "company_project" }];
+          draft.evidenceAttachments = [{
+            id: createId(),
+            type: "file",
+            label: storedFile.fileName,
+            fileName: storedFile.fileName,
+            mimeType: storedFile.mimeType,
+            size: storedFile.size,
+            storageRef: storedFile.storageRef,
+            createdAt: timestamp,
+            accessScope:
+              requirement.requirementType === "background_check"
+                ? "restricted"
+                : "company_project",
+          }];
           draft.verificationStatus = "awaiting_verification";
           draft.completionMethod = "upload_evidence";
           draft.participantActions = { ...(draft.participantActions || {}), workerSubmittedForVerificationAt: timestamp };
         },
       });
-      if (!result.ok) return showToast(result.reason);
+      if (!result.ok) {
+        await onsiteDocumentStorage()?.remove(storedFile).catch(() => {});
+        return showToast(result.reason);
+      }
       renderWorkerPreStartCompletion();
     } catch (error) {
       showToast(error?.message || "Evidence could not be read");
     }
   });
-  root.querySelector("[data-prestart-induction-sign]")?.addEventListener("click", () => {
-    const signature = preStartSignatureReference(workerId);
-    if (!signature) return showToast("Draw your acknowledgement signature first");
+  root.querySelector("[data-prestart-induction-sign]")?.addEventListener("click", async () => {
+    if (!String(workerPreStartCompletionState?.signatureDataUrl || "").startsWith("data:image/png")) {
+      return showToast("Draw your acknowledgement signature first");
+    }
+    let signature;
+    try {
+      signature = await preStartSignatureReference(workerId, job, requirement);
+    } catch (error) {
+      return showToast(error?.message || "The signature could not be stored");
+    }
     const result = updateProjectRequirementCompletion({
       job,
       workerId,
@@ -8416,7 +8575,10 @@ function bindWorkerPreStartCompletion(root, job, requirement, record) {
         draft.participantActions = { ...(draft.participantActions || {}), workerAcknowledgementSignature: { workerId, completedAt: timestamp, signatureId: signature.id } };
       },
     });
-    if (!result.ok) return showToast(result.reason);
+    if (!result.ok) {
+      await onsiteDocumentStorage()?.remove(signature).catch(() => {});
+      return showToast(result.reason);
+    }
     renderWorkerPreStartCompletion();
   });
 }
@@ -17072,8 +17234,9 @@ function renderWorkerProfile(user) {
             <input id="workerDocTitle" type="text" placeholder="As shown on the document" />
           </label>
         </div>
-        <label class="field-label">File Name / Upload Label
-            <input id="workerDocFileName" type="text" placeholder="e.g. cscs-card-front.jpg" />
+        <label class="field-label">Document file
+            <input id="workerDocFile" type="file" accept="${WORKER_DOCUMENT_FILE_ACCEPT}" />
+            <span class="form-helper">PDF, PNG, JPG or WebP up to 10 MB.</span>
         </label>
         <div class="form-grid-2">
           <label class="field-label">Expiry Date
@@ -17139,14 +17302,47 @@ function renderWorkerProfile(user) {
       if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
     });
 
-  el.querySelector("#workerDocAddBtn")?.addEventListener("click", () => {
+  el.querySelector("#workerDocAddBtn")?.addEventListener("click", async (event) => {
     const type = el.querySelector("#workerDocType")?.value || "other";
+    const file = el.querySelector("#workerDocFile")?.files?.[0];
+    if (!file) return showToast("Select a document file");
+    if (file.size > WORKER_DOCUMENT_FILE_MAX_BYTES) {
+      return showToast("Documents must be 10 MB or smaller");
+    }
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    const isImage = /^image\/(png|jpeg|webp)$/i.test(file.type);
+    if ((type === "cv" && !isPdf) || (type !== "cv" && !isPdf && !isImage)) {
+      return showToast(
+        type === "cv"
+          ? "Choose a PDF for the CV"
+          : "Choose a PDF, PNG, JPG or WebP document",
+      );
+    }
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Uploading…";
+    let storedFile;
+    try {
+      storedFile = await uploadOnSiteDocument(file, {
+        purpose: type === "cv" ? "worker_cv" : "worker_document",
+        ownerId: user.id,
+        ownerType: "worker",
+        accessScope: type === "cv" ? "worker_private" : "company_worker",
+      });
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Add Document Record";
+      return showToast(error?.message || "The document could not be uploaded");
+    }
     const res = upsertWorkerDocument(user.id, {
       documentType: type,
       credentialId: el.querySelector("#workerDocCredential")?.value || "",
       qualificationTitle: el.querySelector("#workerDocTitle")?.value || "",
-      fileName: el.querySelector("#workerDocFileName")?.value || "",
-      fileType: WORKER_DOCUMENT_TYPES.find((d) => d.value === type)?.accepts || "",
+      fileName: storedFile.fileName,
+      fileType: storedFile.mimeType,
+      mimeType: storedFile.mimeType,
+      size: storedFile.size,
+      storageRef: storedFile.storageRef,
       expiryDate: el.querySelector("#workerDocExpiry")?.value || "",
       verificationStatus: el.querySelector("#workerDocStatus")?.value || "unverified",
       notes: el.querySelector("#workerDocNotes")?.value || "",
@@ -17160,7 +17356,17 @@ function renderWorkerProfile(user) {
   });
 
   el.querySelectorAll("[data-worker-doc-remove]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
+      const documentRecord = workerDocumentsFor(user).find(
+        (doc) => doc.documentId === btn.dataset.workerDocRemove,
+      );
+      try {
+        if (onsiteDocumentHasFile(documentRecord)) {
+          await onsiteDocumentStorage()?.remove(documentRecord);
+        }
+      } catch (error) {
+        return showToast(error?.message || "The document could not be removed");
+      }
       const res = removeWorkerDocument(user.id, btn.dataset.workerDocRemove);
       if (!res.ok) {
         showToast(res.reason);
@@ -21935,7 +22141,7 @@ function closeCompanyPreStartVerification() {
 
 function companyPreStartEvidenceHTML(requirement, record) {
   if (!record?.evidenceAttachments?.length) return "";
-  return `<div class="prestart-company-evidence"><span>Submitted evidence</span>${record.evidenceAttachments.map((attachment) => `<a href="${escapeHtml(attachment.dataUrl)}" target="_blank" rel="noopener">${escapeHtml(attachment.fileName)}</a>`).join("")}${requirement.requirementType === "background_check" ? `<small>Restricted to authorised company verification in this local prototype. Do not copy criminal-record details into OnSite.</small>` : ""}</div>`;
+  return `<div class="prestart-company-evidence"><span>Submitted evidence</span>${record.evidenceAttachments.map((attachment) => `<a href="${escapeHtml(onsiteDocumentFileUrl(attachment))}" target="_blank" rel="noopener">${escapeHtml(attachment.fileName)}</a>`).join("")}${requirement.requirementType === "background_check" ? `<small>Restricted to authorised company verification in this local prototype. Do not copy criminal-record details into OnSite.</small>` : ""}</div>`;
 }
 
 function renderCompanyPreStartVerification() {
@@ -22213,8 +22419,11 @@ function projectRequirementResourceRowHTML(resource) {
   const metadata = file
     ? `${projectRequirementFileTypeLabel(resource)} · ${projectRequirementFileSizeLabel(resource.size)}`
     : projectRequirementResourceTypeLabel(resource.type);
+  const downloadUrl = file
+    ? onsiteDocumentFileUrl(resource, { download: true })
+    : "";
   const primaryAction = file
-    ? `<a href="${escapeHtml(resource.dataUrl)}" download="${escapeHtml(resource.fileName)}">Download</a>
+    ? `<a href="${escapeHtml(downloadUrl)}" download="${escapeHtml(resource.fileName)}">Download</a>
        <label class="project-requirement-resource-file-action">Replace<input type="file" accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-resource-replace="${escapeHtml(resource.id)}" aria-label="Replace ${escapeHtml(resource.fileName)}" /></label>`
     : external
       ? `<a href="${escapeHtml(resource.url)}" target="_blank" rel="noopener noreferrer">Open</a>
@@ -22276,7 +22485,7 @@ function projectRequirementResourceComposerHTML(editor) {
       <div><p>Upload file</p><span>Select one or more project documents.</span></div>
       <label class="field-label">Choose file
         <input type="file" multiple required accept="${PROJECT_REQUIREMENT_FILE_ACCEPT}" data-project-requirement-resource-files />
-        <span class="form-helper">Files are stored in this browser for the local prototype. Each file must be 1 MB or smaller, with a 2 MB total per requirement.</span>
+        <span class="form-helper">Each file must be 1 MB or smaller, with a 2 MB total per requirement.</span>
       </label>
       <button class="project-requirement-resource-cancel" type="button" data-project-requirement-resource-cancel>Cancel</button>
     </div>`;
@@ -23378,15 +23587,6 @@ function saveProjectRequirementEditor({ afterSave = null } = {}) {
   return true;
 }
 
-function readProjectRequirementFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("The selected file could not be read."));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
-}
-
 function projectRequirementFileExtensionAllowed(fileName) {
   const extension = `.${String(fileName || "").split(".").pop().toLowerCase()}`;
   return PROJECT_REQUIREMENT_FILE_ACCEPT.split(",").includes(extension);
@@ -23429,25 +23629,47 @@ async function createProjectRequirementFileResources(
     throw new Error("Requirement files exceed the 2 MB local prototype limit.");
   }
   const createdAt = replacedResource?.createdAt || new Date().toISOString();
-  return Promise.all(
-    selected.map(async (file, index) => {
+  const editor = projectRequirementEditorState;
+  const job = editor?.mode === "project" ? findJob(editor.jobId) : null;
+  const user = getSessionUser() || {};
+  const companyId = job?.companyId || (user.type === "company" ? user.id : "");
+  const ownerId = job?.id || companyId || user.id;
+  const createdResources = [];
+  try {
+    for (const [index, file] of selected.entries()) {
       const id =
         replacedResource && index === 0
           ? replacedResource.id
           : createId();
-      return {
+      const storedFile = await uploadOnSiteDocument(file, {
+        purpose: "project_requirement",
+        ownerId,
+        ownerType: job ? "project" : "company_draft",
+        projectId: job?.id || "",
+        companyId,
+        accessScope: "company_project",
+      });
+      createdResources.push({
         id,
         type: "file",
         label: file.name,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        dataUrl: await readProjectRequirementFile(file),
+        fileName: storedFile.fileName,
+        mimeType: storedFile.mimeType,
+        size: storedFile.size,
+        storageRef: storedFile.storageRef,
         createdAt,
         sourceVersion: createId(),
-      };
-    }),
-  );
+      });
+    }
+    return createdResources;
+  } catch (error) {
+    await Promise.allSettled(
+      createdResources.map((resource) =>
+        onsiteDocumentStorage()?.remove(resource),
+      ),
+    );
+    throw error;
+  }
 }
 
 function syncProjectRequirementPdfSourceAfterUpload(
@@ -23502,16 +23724,6 @@ function projectDocumentFieldPalette(action) {
 
 function projectDocumentFieldTypeLabel(type) {
   return PROJECT_DOCUMENT_FIELD_DEFINITIONS[type]?.label || "Document field";
-}
-
-function projectDocumentFieldEditorDataBytes(dataUrl) {
-  const encoded = String(dataUrl || "").split(",")[1] || "";
-  const binary = window.atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
 }
 
 function projectDocumentFieldStyle(field) {
@@ -23734,12 +23946,11 @@ async function renderProjectDocumentPdfPages() {
   const pages = document.querySelector("[data-document-pdf-pages]");
   if (!state || !pages) return;
   try {
-    const pdfjs = await import("/node_modules/pdfjs-dist/build/pdf.mjs");
-    pdfjs.GlobalWorkerOptions.workerSrc =
-      "/node_modules/pdfjs-dist/build/pdf.worker.mjs";
-    projectDocumentFieldEditorPdfTask = pdfjs.getDocument({
-      data: projectDocumentFieldEditorDataBytes(state.sourcePdf.dataUrl),
-    });
+    const storage = onsiteDocumentStorage();
+    if (!storage) throw new Error("PDF rendering is unavailable.");
+    projectDocumentFieldEditorPdfTask = await storage.createPdfLoadingTask(
+      state.sourcePdf,
+    );
     const pdf = await projectDocumentFieldEditorPdfTask.promise;
     if (projectDocumentFieldEditorState !== state) return;
     state.pageCount = pdf.numPages;
@@ -34025,20 +34236,53 @@ async function submitDispute() {
   btn.disabled = true;
   btn.textContent = "Submitting…";
 
+  let disputeEvidence = null;
+  if (files?.length) {
+    const uploadedEvidence = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > WORKER_DOCUMENT_FILE_MAX_BYTES) {
+          throw new Error(`${file.name} is larger than 10 MB.`);
+        }
+        const storedFile = await uploadOnSiteDocument(file, {
+          purpose: "attendance_dispute_evidence",
+          ownerId: rec.workerId,
+          ownerType: "worker",
+          projectId: rec.jobId || "",
+          companyId: rec.companyId || "",
+          accessScope: "restricted",
+        });
+        uploadedEvidence.push({
+          id: createId(),
+          fileName: storedFile.fileName,
+          mimeType: storedFile.mimeType,
+          size: storedFile.size,
+          storageRef: storedFile.storageRef,
+          uploadedAt: new Date().toISOString(),
+          accessScope: "restricted",
+        });
+      }
+      disputeEvidence = uploadedEvidence;
+    } catch (error) {
+      await Promise.allSettled(
+        uploadedEvidence.map((attachment) =>
+          onsiteDocumentStorage()?.remove(attachment),
+        ),
+      );
+      btn.disabled = false;
+      btn.textContent = "Submit Dispute";
+      return showToast(error?.message || "Evidence could not be uploaded");
+    }
+  }
+
   rec.disputeStatus = "pending";
   rec.disputeReason = reason;
   rec.disputeComment = comment;
   rec.disputeTimestamp = Date.now();
 
-  if (files?.length) {
+  if (disputeEvidence) {
+    rec.disputeEvidence = disputeEvidence;
     rec.disputePhotos = [];
-    for (const file of Array.from(files)) {
-      if (file.type.startsWith("image/")) {
-        try {
-          rec.disputePhotos.push(await compressImage(file));
-        } catch (_) {}
-      }
-    }
   }
 
   const w = findWorker(rec.workerId);

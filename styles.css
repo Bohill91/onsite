@@ -7495,6 +7495,12 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   color: var(--ink-3);
 }
 
+.worker-doc-open {
+  color: var(--orange-dark);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
 .worker-doc-form {
   border-top: 1px solid var(--border);
   display: grid;
@@ -9819,8 +9825,7 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   font-size: 0.82rem;
 }
 
-.prestart-completion-resource img,
-.prestart-completion-resource object {
+.prestart-completion-resource img {
   background: var(--surface);
   border: 0;
   border-radius: var(--radius-xs);
@@ -9829,8 +9834,37 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   width: 100%;
 }
 
-.prestart-completion-resource object {
-  height: 520px;
+.onsite-pdf-preview {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  min-height: 120px;
+  width: 100%;
+}
+
+.onsite-pdf-preview > p {
+  color: var(--ink-3);
+  padding: 24px;
+}
+
+.onsite-pdf-page {
+  background: var(--surface);
+  border: 1px solid var(--card-divider);
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
+.onsite-pdf-preview-error {
+  background: var(--surface);
+  border-radius: var(--radius-xs);
+  color: var(--ink-2);
+  display: grid;
+  font-size: 0.74rem;
+  gap: 4px;
+  justify-self: stretch;
+  padding: 12px;
 }
 
 .prestart-completion-resource a,
@@ -10059,10 +10093,6 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   .prestart-document-scroll {
     max-height: 44vh;
     padding: 16px;
-  }
-
-  .prestart-completion-resource object {
-    height: 360px;
   }
 
   .company-project-worker-completion-action {

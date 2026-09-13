@@ -3,6 +3,11 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const OpenAI = require('openai');
+const {
+  DocumentFileStoreError,
+  createDocumentFileStore,
+  safeFileName,
+} = require('./document-file-store');
 
 const parsedPort = Number.parseInt(process.env.PORT || '', 10);
 const PORT = Number.isFinite(parsedPort) ? parsedPort : 5000;
@@ -12,6 +17,9 @@ const isReplit = !!(
   process.env.REPLIT_DEPLOYMENT
 );
 const HOST = process.env.HOST || (isReplit ? '0.0.0.0' : '127.0.0.1');
+const documentFileStore = createDocumentFileStore({
+  rootDir: process.env.ONSITE_FILE_STORAGE_DIR || path.join(__dirname, '.onsite-storage'),
+});
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -210,20 +218,169 @@ function handleAuthRecovery(req, res) {
   });
 }
 
+function sendJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function requestHeader(req, name, maxLength = 200) {
+  const value = Array.isArray(req.headers[name])
+    ? req.headers[name][0]
+    : req.headers[name];
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function readRequestBytes(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const contentLength = Number.parseInt(req.headers['content-length'] || '0', 10);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      req.resume();
+      reject(new DocumentFileStoreError('The document is too large.', 413));
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    let rejected = false;
+    req.on('data', chunk => {
+      if (rejected) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        rejected = true;
+        chunks.length = 0;
+        reject(new DocumentFileStoreError('The document is too large.', 413));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (!rejected) resolve(Buffer.concat(chunks));
+    });
+    req.on('error', reject);
+  });
+}
+
+function documentAccessToken(req, url) {
+  const authorization = requestHeader(req, 'authorization', 400);
+  if (authorization.startsWith('Bearer ')) return authorization.slice(7).trim();
+  return url.searchParams.get('token') || '';
+}
+
+async function handleDocumentFileUpload(req, res) {
+  try {
+    const actorId = requestHeader(req, 'x-onsite-actor-id', 160);
+    const ownerId = requestHeader(req, 'x-onsite-owner-id', 160);
+    if (!actorId || !ownerId) {
+      throw new DocumentFileStoreError('Document ownership is required.', 400);
+    }
+    let fileName = 'document';
+    try {
+      fileName = decodeURIComponent(requestHeader(req, 'x-onsite-file-name', 600));
+    } catch (_) {}
+    const data = await readRequestBytes(req, documentFileStore.maxBytes);
+    const file = await documentFileStore.save({
+      data,
+      fileName,
+      mimeType: requestHeader(req, 'content-type', 120),
+      actorId,
+      actorType: requestHeader(req, 'x-onsite-actor-type', 40),
+      ownerId,
+      ownerType: requestHeader(req, 'x-onsite-owner-type', 40),
+      companyId: requestHeader(req, 'x-onsite-company-id', 160),
+      projectId: requestHeader(req, 'x-onsite-project-id', 160),
+      purpose: requestHeader(req, 'x-onsite-purpose', 80),
+      accessScope: requestHeader(req, 'x-onsite-access-scope', 40),
+    });
+    sendJson(res, 201, { file });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    if (statusCode >= 500) console.error('[Document storage] Upload failed:', error);
+    sendJson(res, statusCode, { error: error.message || 'Document upload failed.' });
+  }
+}
+
+async function handleDocumentFileAccess(req, res, url, fileId) {
+  try {
+    const accessToken = documentAccessToken(req, url);
+    const record = await documentFileStore.authorize(fileId, accessToken);
+    if (req.method === 'DELETE') {
+      await documentFileStore.remove(fileId, accessToken);
+      sendJson(res, 200, { removed: true });
+      return;
+    }
+    const disposition = url.searchParams.get('download') === '1'
+      ? 'attachment'
+      : 'inline';
+    const fileName = safeFileName(record.metadata.fileName);
+    const asciiFileName = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
+    const headers = {
+      'Content-Type': record.metadata.mimeType,
+      'Content-Length': record.metadata.size,
+      'Content-Disposition': `${disposition}; filename="${asciiFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    };
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    fs.createReadStream(record.filePath).on('error', error => {
+      console.error('[Document storage] Read failed:', error);
+      if (!res.headersSent) sendJson(res, 500, { error: 'Document read failed.' });
+      else res.destroy(error);
+    }).pipe(res);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    if (statusCode >= 500) console.error('[Document storage] Access failed:', error);
+    sendJson(res, statusCode, { error: error.message || 'Document access failed.' });
+  }
+}
+
 // ─── HTTP server ─────────────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
   // AI chat API
-  if (req.method === 'POST' && req.url === '/api/ai-chat') {
+  if (req.method === 'POST' && url.pathname === '/api/ai-chat') {
     return handleAiChat(req, res);
   }
 
-  if (req.method === 'POST' && req.url === '/api/auth/recover') {
+  if (req.method === 'POST' && url.pathname === '/api/auth/recover') {
     return handleAuthRecovery(req, res);
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/document-files') {
+    handleDocumentFileUpload(req, res);
+    return;
+  }
+
+  const documentFileMatch = url.pathname.match(/^\/api\/document-files\/(file_[0-9a-f-]{36})$/);
+  if (documentFileMatch && ['GET', 'HEAD', 'DELETE'].includes(req.method)) {
+    handleDocumentFileAccess(req, res, url, documentFileMatch[1]);
+    return;
+  }
+
+  if (url.pathname.startsWith('/api/document-files')) {
+    sendJson(res, documentFileMatch ? 405 : 404, {
+      error: documentFileMatch ? 'Method not allowed.' : 'Document file not found.',
+    });
+    return;
+  }
+
+  const pdfAssetRoutes = {
+    '/vendor/pdfjs/pdf.mjs': path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.mjs'),
+    '/vendor/pdfjs/pdf.worker.mjs': path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.worker.mjs'),
+  };
+
   // Static files
-  const requestPath = req.url.split('?')[0];
-  const filePath = path.join(__dirname, requestPath === '/' ? 'index.html' : requestPath);
+  const requestPath = url.pathname;
+  const filePath = pdfAssetRoutes[requestPath] ||
+    path.join(__dirname, requestPath === '/' ? 'index.html' : requestPath);
   const ext = path.extname(filePath);
   const contentType = mimeTypes[ext] || 'text/plain';
 
