@@ -18993,13 +18993,13 @@ function companyDailyBriefingHTML(summary, user) {
         <div>
           <p class="company-home-kicker">LIVE SITES</p>
         </div>
-        <small>${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No active attendance"}</small>
+        <small class="company-dashboard-context-label">${briefing.siteRows.length ? `${briefing.siteRows.length} scheduled today` : "No attendance due today"}</small>
       </div>
       ${briefing.siteRows.length
         ? `<div class="company-live-site-cards">${briefing.siteRows.map(companyLiveSiteStatusCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state">
-            <strong>No attendance expected yet</strong>
-            <span>When a scheduled project has workers due on site, the live sign-in position will appear here.</span>
+            <strong class="company-dashboard-state-title">No sites active today</strong>
+            <span class="company-dashboard-state-copy">Sites with sub-contractors due today will appear here.</span>
           </div>`}
     </section>
     <section class="company-command-section company-upcoming-panel company-dashboard-section-card jw-card">
@@ -19007,13 +19007,13 @@ function companyDailyBriefingHTML(summary, user) {
         <div>
           <p class="company-home-kicker">UPCOMING SITES</p>
         </div>
-        <small>Next 7 days</small>
+        <small class="company-dashboard-context-label">Next 7 days</small>
       </div>
       ${briefing.upcoming.length
         ? `<div class="company-upcoming-timeline">${briefing.upcoming.map(companyDashboardUpcomingCardHTML).join("")}</div>`
         : `<div class="company-dashboard-empty-state compact">
-            <strong>No upcoming actions in the next week</strong>
-            <span>Starts, labour changes and pending decisions will appear here when they need attention.</span>
+            <strong class="company-dashboard-state-title">No upcoming starts</strong>
+            <span class="company-dashboard-state-copy">Projects starting in the next 7 days will appear here.</span>
           </div>`}
     </section>
   </section>`;
@@ -19033,8 +19033,8 @@ function companyDashboardActionHeroHTML(action) {
     <span class="company-action-dot" aria-hidden="true"></span>
     <span class="company-action-hero-content">
       <span class="company-home-kicker">ACTION REQUIRED</span>
-      <strong>${escapeHtml(action.title)}</strong>
-      <span>${escapeHtml(action.body)}</span>
+      <strong class="company-dashboard-state-title">${escapeHtml(action.title)}</strong>
+      <span class="company-dashboard-state-copy">${escapeHtml(action.body)}</span>
       ${action.meta ? `<small>${escapeHtml(action.meta)}</small>` : ""}
     </span>
     <button class="primary-btn company-action-hero-cta" type="button" ${action.actionAttr}>${escapeHtml(action.actionLabel)} &rarr;</button>
@@ -19476,16 +19476,15 @@ function companyRecentActivityHTML(summary, user) {
       <div>
         <p class="company-home-kicker">RECENT ACTIVITY</p>
       </div>
-      <button class="company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity &rarr;</button>
+      ${rows.length ? `<button class="company-recent-activity-view-all" type="button" data-empty-tab="notifications">View all activity &rarr;</button>` : ""}
     </div>
     <div class="company-recent-activity-list">
       ${rows.length
         ? rows.map(companyRecentActivityRowHTML).join("")
-        : guidedEmptyStateHTML({
-            kicker: "Activity",
-            title: "No project activity yet",
-            body: "Project updates, attendance events, offer decisions and invoice activity will appear here as work progresses.",
-          })}
+        : `<div class="company-dashboard-empty-state compact">
+            <strong class="company-dashboard-state-title">No recent activity</strong>
+            <span class="company-dashboard-state-copy">Project, attendance and offer updates will appear here.</span>
+          </div>`}
     </div>
   </section>`;
 }

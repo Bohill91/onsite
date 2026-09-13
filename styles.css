@@ -10616,22 +10616,40 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   transform: none;
 }
 
-.company-action-hero-clear .company-dashboard-state-title {
+.company-dashboard-state-title,
+.company-dashboard-empty-state .company-dashboard-state-title,
+.company-action-hero-clear .company-dashboard-state-title,
+.company-action-hero-content > .company-dashboard-state-title {
   color: var(--ink);
+  display: block;
   font-size: 0.95rem;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.25;
-  margin: 5px 0 0;
+  margin: 0;
 }
 
-.company-action-hero-clear .company-dashboard-state-copy {
+.company-dashboard-state-copy,
+.company-dashboard-empty-state .company-dashboard-state-copy,
+.company-action-hero-clear .company-dashboard-state-copy,
+.company-action-hero-content > .company-dashboard-state-copy {
   color: var(--ink-2);
+  display: block;
   font-size: 0.82rem;
   font-weight: 400;
   line-height: 1.45;
-  margin: 6px 0 0;
+  margin: 0;
   max-width: 48ch;
+}
+
+.company-action-hero-clear .company-home-kicker {
+  color: var(--orange);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0;
+  text-transform: uppercase;
 }
 
 .company-action-hero-content {
@@ -10713,10 +10731,12 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   justify-content: space-between;
 }
 
-.company-command-section-head small {
+.company-command-section-head small,
+.company-dashboard-context-label {
   color: var(--ink-3);
   font-size: 0.78rem;
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .company-recent-activity-head .company-recent-activity-view-all {
@@ -11262,17 +11282,33 @@ body:has(#jobEntrancePinPanel:not(.hidden)) .ai-fab {
   line-height: 1.35;
 }
 
-.company-dashboard-empty-state {
-  background: #fafafa;
-  border: 1px dashed var(--card-divider);
-  border-radius: 18px;
-  display: grid;
-  gap: 6px;
+.company-dashboard-body .company-dashboard-section-card:has(.company-dashboard-empty-state) {
+  gap: 10px;
   padding: 20px;
 }
 
+.company-dashboard-body .company-dashboard-section-card:has(.company-dashboard-empty-state)
+  .company-dashboard-empty-state {
+  min-height: 0;
+  padding: 4px 0 0;
+}
+
+.company-dashboard-empty-state {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px 0 2px;
+}
+
 .company-dashboard-empty-state.compact {
-  padding: 16px;
+  padding: 10px 0 2px;
+}
+
+.company-dashboard-empty-state .primary-btn {
+  justify-self: start;
+  width: auto;
 }
 
 .company-dashboard-empty-state strong {
