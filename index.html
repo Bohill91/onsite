@@ -136,7 +136,7 @@
                 <div class="auth-field-group">
                   <div class="auth-field">
                     <label class="auth-label" for="forgotEmail">Email address</label>
-                    <input class="auth-input" id="forgotEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
+                    <input class="auth-input" id="forgotEmail" type="email" placeholder="your@email.com" required disabled autocomplete="email" />
                   </div>
                 </div>
                 <button class="auth-submit-btn" type="submit">Continue</button>
@@ -695,8 +695,8 @@
           <div id="paymentsContent"></div>
         </div>
 
-        <!-- ADD TAB -->
-
+        <!-- ADD TAB (Admin/demo only) -->
+        <div class="tab-panel" id="tab-add">
           <div id="formWorker" class="form-section">
             <div class="form-card">
               <div class="form-card-header">
@@ -1432,6 +1432,7 @@
               <button type="submit" class="primary-btn full-width jw-submit">Find Labour</button>
             </form>
           </div>
+        </div>
 
         <!-- REQUEST LABOUR PAGE (Company) -->
         <div class="tab-panel" id="tab-request-labour">

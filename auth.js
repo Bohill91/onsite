@@ -116,6 +116,15 @@ function hideAuthOverlay() {
 function showScreen(id) {
   document.querySelectorAll('.auth-screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById('screen-' + id);
+  const forgotEmail = document.getElementById('forgotEmail');
+  const forgotFormWrap = document.getElementById('forgotFormWrap');
+  const forgotMsg = document.getElementById('forgotMsg');
+  const forgotIsActive = id === 'forgot';
+  if (forgotEmail) forgotEmail.disabled = !forgotIsActive;
+  if (forgotIsActive) {
+    if (forgotFormWrap) forgotFormWrap.style.display = '';
+    if (forgotMsg) forgotMsg.style.display = 'none';
+  }
   if (el) {
     el.classList.add('active');
     authOverlay.scrollTop = 0;
@@ -223,6 +232,7 @@ document.getElementById('forgotForm').addEventListener('submit', function(e) {
   e.preventDefault();
   document.getElementById('forgotFormWrap').style.display = 'none';
   document.getElementById('forgotMsg').style.display = 'block';
+  document.getElementById('forgotEmail').disabled = true;
 });
 
 // ─── Worker Reg — Step 1 ───────────────────────────────────

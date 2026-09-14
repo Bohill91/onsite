@@ -33,6 +33,22 @@ const mimeTypes = {
   '.ico':  'image/x-icon',
 };
 
+const pdfAssetModules = Object.freeze({
+  '/vendor/pdfjs/pdf.mjs': 'pdfjs-dist/build/pdf.mjs',
+  '/vendor/pdfjs/pdf.worker.mjs': 'pdfjs-dist/build/pdf.worker.mjs',
+});
+
+function resolvePdfAsset(requestPath) {
+  const moduleId = pdfAssetModules[requestPath];
+  if (!moduleId) return null;
+  try {
+    return require.resolve(moduleId);
+  } catch (error) {
+    console.error(`[PDF preview] Missing runtime dependency for ${requestPath}:`, error.message);
+    return '';
+  }
+}
+
 // ─── OpenAI client (Replit AI Integrations — no API key needed) ─────────────
 function getOpenAIClient() {
   return new OpenAI({
@@ -372,20 +388,28 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const pdfAssetRoutes = {
-    '/vendor/pdfjs/pdf.mjs': path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.mjs'),
-    '/vendor/pdfjs/pdf.worker.mjs': path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.worker.mjs'),
-  };
-
   // Static files
   const requestPath = url.pathname;
-  const filePath = pdfAssetRoutes[requestPath] ||
+  const isPdfAsset = Object.hasOwn(pdfAssetModules, requestPath);
+  const resolvedPdfAsset = resolvePdfAsset(requestPath);
+  if (isPdfAsset && !resolvedPdfAsset) {
+    sendJson(res, 503, {
+      error: 'PDF preview assets are unavailable. Install application dependencies before starting OnSite.',
+    });
+    return;
+  }
+  const filePath = resolvedPdfAsset ||
     path.join(__dirname, requestPath === '/' ? 'index.html' : requestPath);
   const ext = path.extname(filePath);
   const contentType = mimeTypes[ext] || 'text/plain';
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
+      if (isPdfAsset) {
+        console.error(`[PDF preview] Could not read ${requestPath}:`, err.message);
+        sendJson(res, 503, { error: 'PDF preview assets are unavailable.' });
+        return;
+      }
       if (err.code === 'ENOENT') {
         fs.readFile(path.join(__dirname, 'index.html'), (err2, data2) => {
           if (err2) {
@@ -401,7 +425,10 @@ const server = http.createServer((req, res) => {
         res.end('Server error');
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        ...(isPdfAsset ? { 'X-Content-Type-Options': 'nosniff' } : {}),
+      });
       res.end(data);
     }
   });

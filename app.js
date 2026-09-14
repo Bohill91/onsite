@@ -16031,8 +16031,21 @@ document.addEventListener("click", (event) => {
 });
 
 // ─── Role-Based View ─────────────────────────────────────
+function syncLegacyWorkerFormAccess(user) {
+  const allowed = !user || user.type === "admin";
+  const formWrap = document.getElementById("formWorker");
+  formWrap?.classList.toggle("hidden", !allowed);
+  formWrap?.toggleAttribute("inert", !allowed);
+  formWrap?.setAttribute("aria-hidden", String(!allowed));
+  workerForm?.querySelectorAll("input, select, textarea, button").forEach((control) => {
+    control.disabled = !allowed;
+  });
+  return allowed;
+}
+
 function applyRoleView(user) {
   const role = user?.type || null;
+  syncLegacyWorkerFormAccess(user);
 
   if (role === "worker") {
     rebuildNav(WORKER_TABS, "dashboard");
@@ -28429,6 +28442,7 @@ document.querySelectorAll(".add-toggle-btn").forEach((btn) => {
 // ─── Forms ────────────────────────────────────────────────
 workerForm.addEventListener("submit", (e) => {
   e.preventDefault();
+  if (!syncLegacyWorkerFormAccess(getSessionUser())) return;
   const name = document.querySelector("#workerName").value.trim();
   const trade = document.querySelector("#workerTrade").value.trim();
   const score = clampScore(document.querySelector("#workerReliability").value);
