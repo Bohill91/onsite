@@ -70,9 +70,9 @@ function unwrapResult(result, fallbackMessage) {
 
 function createSupabaseAuthAdapter({ env = process.env, clientFactory = createClient } = {}) {
   const url = cleanText(env.SUPABASE_URL, 500);
-  const anonKey = cleanText(env.SUPABASE_ANON_KEY, 5000);
-  const serviceRoleKey = cleanText(env.SUPABASE_SERVICE_ROLE_KEY, 5000);
-  const configured = !!(url && anonKey && serviceRoleKey);
+  const publishableKey = cleanText(env.SUPABASE_PUBLISHABLE_KEY, 5000);
+  const secretKey = cleanText(env.SUPABASE_SECRET_KEY, 5000);
+  const configured = !!(url && publishableKey && secretKey);
 
   if (!configured) {
     return { configured: false };
@@ -86,30 +86,30 @@ function createSupabaseAuthAdapter({ env = process.env, clientFactory = createCl
       flowType: "implicit",
     },
   };
-  const anon = clientFactory(url, anonKey, commonOptions);
-  const admin = clientFactory(url, serviceRoleKey, commonOptions);
-  const sessionClient = () => clientFactory(url, anonKey, commonOptions);
+  const publicClient = clientFactory(url, publishableKey, commonOptions);
+  const admin = clientFactory(url, secretKey, commonOptions);
+  const sessionClient = () => clientFactory(url, publishableKey, commonOptions);
 
   return {
     configured: true,
 
     async signUp({ email, password, metadata }) {
       return unwrapResult(
-        await anon.auth.signUp({ email, password, options: { data: metadata } }),
+        await publicClient.auth.signUp({ email, password, options: { data: metadata } }),
         "Account registration failed.",
       );
     },
 
     async signInWithPassword({ email, password }) {
       return unwrapResult(
-        await anon.auth.signInWithPassword({ email, password }),
+        await publicClient.auth.signInWithPassword({ email, password }),
         "Sign in failed.",
       );
     },
 
     async getUser(accessToken) {
       const data = unwrapResult(
-        await anon.auth.getUser(accessToken),
+        await publicClient.auth.getUser(accessToken),
         "The authenticated session is invalid.",
       );
       return data?.user || null;
@@ -117,7 +117,7 @@ function createSupabaseAuthAdapter({ env = process.env, clientFactory = createCl
 
     async refreshSession(refreshToken) {
       return unwrapResult(
-        await anon.auth.refreshSession({ refresh_token: refreshToken }),
+        await publicClient.auth.refreshSession({ refresh_token: refreshToken }),
         "The authenticated session has expired.",
       );
     },
@@ -139,7 +139,7 @@ function createSupabaseAuthAdapter({ env = process.env, clientFactory = createCl
 
     async requestPasswordReset(email, redirectTo) {
       return unwrapResult(
-        await anon.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined),
+        await publicClient.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined),
         "Password recovery could not be started.",
       );
     },

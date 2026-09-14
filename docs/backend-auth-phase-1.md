@@ -14,17 +14,28 @@ whose worker ID, company ID and company role were resolved by the server.
 1. Create a Supabase project.
 2. Apply `supabase/migrations/202609140001_identity_foundation.sql` with the
    Supabase CLI or SQL migration workflow.
-3. Copy the names from `.env.example` into the deployment's secret manager.
-4. Set `SUPABASE_AUTH_REDIRECT_URL` to the deployed OnSite root URL.
-5. Configure the same URL in Supabase Auth's allowed redirect URLs.
+3. In Supabase, open the project's Connect dialog or **Settings > API Keys** and
+   copy the Project URL, publishable key and secret key.
+4. Copy the variable names from `.env.example` into the deployment's server-side
+   environment or secret manager, then set their values there.
+5. Set `SUPABASE_AUTH_REDIRECT_URL` to the deployed OnSite root URL.
+6. Configure the same URL in Supabase Auth's allowed redirect URLs.
 
 Required environment variables:
 
 - `SUPABASE_URL`: Supabase project URL.
-- `SUPABASE_ANON_KEY`: public anon key, used only by the Node server in Phase 1.
-- `SUPABASE_SERVICE_ROLE_KEY`: privileged server-only key. Never expose it in
-  browser JavaScript or commit it.
+- `SUPABASE_PUBLISHABLE_KEY`: low-privilege key used for ordinary authentication
+  and authenticated-user sessions. It is suitable for public-client use when
+  Row Level Security is correctly configured; Phase 1 currently uses it on the
+  Node server.
+- `SUPABASE_SECRET_KEY`: privileged key used only by trusted Node server
+  operations. It bypasses Row Level Security and must never be exposed through
+  browser JavaScript, HTML, public configuration, logs, errors or API responses.
 - `SUPABASE_AUTH_REDIRECT_URL`: destination for password-recovery links.
+
+Never hard-code or commit real Supabase values. Keep the secret key in the
+deployment's server-only secret manager. The publishable key does not replace
+RLS: retain policies for the `anon` and `authenticated` database roles.
 
 ## Session model
 
@@ -54,7 +65,7 @@ memberships and companies for which they have an active membership.
 
 Memberships are not client-editable. Worker column grants exclude canonical
 identity, Founding Worker and account-status fields. Canonical registration is
-performed by service-role-only transactional database functions.
+performed by secret-key-only transactional database functions.
 
 ## Deliberate Phase 1 boundaries
 

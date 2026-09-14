@@ -29,8 +29,8 @@ function startServer(port, storageDir) {
       PORT: String(port),
       ONSITE_FILE_STORAGE_DIR: storageDir,
       SUPABASE_URL: "",
-      SUPABASE_ANON_KEY: "",
-      SUPABASE_SERVICE_ROLE_KEY: "",
+      SUPABASE_PUBLISHABLE_KEY: "",
+      SUPABASE_SECRET_KEY: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

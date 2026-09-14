@@ -7,8 +7,76 @@ const {
   authTokensFromRequest,
   clearSessionCookies,
   createAuthService,
+  createSupabaseAuthAdapter,
   sessionCookies,
 } = require("../server-auth.js");
+
+async function assertSupabaseKeyConfiguration() {
+  const clientCalls = [];
+  const operationCalls = [];
+  const adapter = createSupabaseAuthAdapter({
+    env: {
+      SUPABASE_URL: "https://onsite-test.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
+      SUPABASE_SECRET_KEY: "sb_secret_test",
+    },
+    clientFactory(url, key, options) {
+      clientCalls.push({ url, key, options });
+      return {
+        auth: {
+          signUp: async () => {
+            operationCalls.push({ operation: "signUp", key });
+            return { data: { user: { id: "auth-test" } }, error: null };
+          },
+          admin: {
+            deleteUser: async () => {
+              operationCalls.push({ operation: "deleteUser", key });
+              return { data: { user: { id: "auth-test" } }, error: null };
+            },
+          },
+        },
+      };
+    },
+  });
+
+  assert.equal(adapter.configured, true);
+  assert.equal(clientCalls.length, 2);
+  assert.deepEqual(clientCalls.map(({ key }) => key), [
+    "sb_publishable_test",
+    "sb_secret_test",
+  ]);
+  assert.equal(clientCalls.every(({ url }) => url === "https://onsite-test.supabase.co"), true);
+  assert.equal(JSON.stringify(adapter).includes("sb_secret_test"), false);
+  await adapter.signUp({ email: "test@example.com", password: "password", metadata: {} });
+  await adapter.deleteAuthUser("auth-test");
+  assert.deepEqual(operationCalls, [
+    { operation: "signUp", key: "sb_publishable_test" },
+    { operation: "deleteUser", key: "sb_secret_test" },
+  ]);
+
+  const missingSecret = createSupabaseAuthAdapter({
+    env: {
+      SUPABASE_URL: "https://onsite-test.supabase.co",
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
+    },
+    clientFactory() {
+      throw new Error("An incomplete configuration must not create a client.");
+    },
+  });
+  assert.deepEqual(missingSecret, { configured: false });
+
+  const legacyOnly = createSupabaseAuthAdapter({
+    env: {
+      SUPABASE_URL: "https://onsite-test.supabase.co",
+      SUPABASE_ANON_KEY: "legacy-anon",
+      SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role",
+    },
+    clientFactory() {
+      throw new Error("Legacy-only configuration must fail closed.");
+    },
+  });
+  assert.deepEqual(legacyOnly, { configured: false });
+}
 
 function fakeAdapter() {
   let sequence = 0;
@@ -181,6 +249,8 @@ const workerInput = {
 };
 
 async function run() {
+  await assertSupabaseKeyConfiguration();
+
   const adapter = fakeAdapter();
   const service = createAuthService({ adapter, env: {} });
 
@@ -307,6 +377,7 @@ async function run() {
 
   const authSource = fs.readFileSync(path.join(__dirname, "..", "auth.js"), "utf8");
   const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   const migrationSource = fs.readFileSync(
     path.join(
       __dirname,
@@ -320,6 +391,7 @@ async function run() {
   assert.doesNotMatch(authSource, /getUsers\(\)\.find\([^\n]+u\.password/);
   assert.doesNotMatch(authSource, /localStorage\.setItem\(AUTH_SESSION_KEY/);
   assert.doesNotMatch(appSource, /localStorage\.(getItem|setItem)\(["']onsite_auth_v1/);
+  assert.doesNotMatch(`${authSource}\n${appSource}\n${indexSource}`, /SUPABASE_SECRET_KEY|sb_secret_/);
   assert.match(authSource, /AUTHORITY_FIELDS/);
   assert.match(authSource, /'permissionRole'/);
   assert.match(authSource, /'companyRole'/);
