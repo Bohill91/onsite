@@ -66,9 +66,14 @@ async function stopServer(child) {
 }
 
 async function run() {
+  const replitConfig = await fs.readFile(path.join(rootDir, ".replit"), "utf8");
   const indexHtml = await fs.readFile(path.join(rootDir, "index.html"), "utf8");
   const appSource = await fs.readFile(path.join(rootDir, "app.js"), "utf8");
   const authSource = await fs.readFile(path.join(rootDir, "auth.js"), "utf8");
+  assert.match(replitConfig, /modules = \["nodejs-22"/);
+  assert.match(replitConfig, /args = "npm ci --omit=dev && HOST=0\.0\.0\.0 PORT=5000 npm start"/);
+  assert.match(replitConfig, /build = "npm ci --omit=dev"/);
+  assert.match(replitConfig, /run = "npm start"/);
   const tabAddIndex = indexHtml.indexOf('id="tab-add"');
   const workerFormIndex = indexHtml.indexOf('id="workerForm"');
   const requestLabourIndex = indexHtml.indexOf('id="tab-request-labour"');
