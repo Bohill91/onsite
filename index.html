@@ -85,6 +85,7 @@
           <div class="auth-form-wrap auth-card auth-card--login">
             <h1 class="auth-title">Welcome back</h1>
             <p class="auth-subtitle">Sign in to your OnSite account</p>
+            <div id="loginNotice" class="auth-info-banner" style="display:none;"></div>
             <div id="loginError" class="auth-error"></div>
             <form id="loginForm">
               <div class="auth-field-group">
@@ -131,6 +132,7 @@
           <div class="auth-form-wrap auth-card">
             <h1 class="auth-title">Reset your password</h1>
             <p class="auth-subtitle">Enter your email address and we'll help you regain access.</p>
+            <div id="forgotError" class="auth-error"></div>
             <div id="forgotFormWrap">
               <form id="forgotForm">
                 <div class="auth-field-group">
@@ -145,10 +147,51 @@
             <div id="forgotMsg" style="display:none;">
               <div class="auth-info-banner">
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                Password reset is not connected yet. Return to sign in or contact your OnSite administrator for access.
+                Check your email for a secure password reset link. You can close this window once it arrives.
               </div>
               <button class="auth-submit-btn auth-submit-btn--secondary" type="button" onclick="showScreen('login');">Back to sign in</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Password Reset Screen ───────────────────────── -->
+      <div class="auth-screen" id="screen-reset-password">
+        <div class="auth-header-bar">
+          <div class="auth-header-content">
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+            <img src="/logo.png" alt="OnSite" class="auth-logo-sm" />
+            <span class="auth-header-spacer" aria-hidden="true"></span>
+          </div>
+        </div>
+        <div class="auth-inner">
+          <div class="auth-form-wrap auth-card auth-card--login">
+            <h1 class="auth-title">Choose a new password</h1>
+            <p class="auth-subtitle">Use at least eight characters.</p>
+            <div id="resetPasswordError" class="auth-error"></div>
+            <form id="resetPasswordForm">
+              <div class="auth-field-group">
+                <div class="auth-field">
+                  <label class="auth-label" for="resetPassword">New password</label>
+                  <div class="auth-password-wrap">
+                    <input class="auth-input" id="resetPassword" type="password" required minlength="8" autocomplete="new-password" />
+                    <button class="auth-password-toggle" type="button" data-password-toggle="resetPassword" aria-label="Show password" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="auth-field">
+                  <label class="auth-label" for="resetPassword2">Confirm new password</label>
+                  <div class="auth-password-wrap">
+                    <input class="auth-input" id="resetPassword2" type="password" required minlength="8" autocomplete="new-password" />
+                    <button class="auth-password-toggle" type="button" data-password-toggle="resetPassword2" aria-label="Show password" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <button class="auth-submit-btn" type="submit">Update password</button>
+            </form>
           </div>
         </div>
       </div>
@@ -251,6 +294,7 @@
             <div class="reg-step" data-step="2">
               <h1 class="auth-title">Tell us about your work</h1>
               <p class="auth-subtitle">We'll use this to show you more relevant opportunities.</p>
+              <div id="workerStep2Error" class="auth-error"></div>
               <form id="workerStep2Form">
                 <div class="auth-field-group">
                   <div class="auth-input-row">
@@ -470,6 +514,7 @@
             <div class="company-step" data-step="2">
               <h1 class="auth-title">Company Details</h1>
               <p class="auth-subtitle">Your registered business information.</p>
+              <div id="companyStep2Error" class="auth-error"></div>
               <form id="companyStep2Form">
                 <div class="auth-field-group">
                   <div class="auth-field">

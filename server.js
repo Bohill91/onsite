@@ -1,8 +1,14 @@
 const http   = require('http');
 const fs     = require('fs');
 const path   = require('path');
-const crypto = require('crypto');
 const OpenAI = require('openai');
+const {
+  AuthServiceError,
+  authTokensFromRequest,
+  clearSessionCookies,
+  createAuthService,
+  sessionCookies,
+} = require('./server-auth');
 const {
   DocumentFileStoreError,
   createDocumentFileStore,
@@ -20,6 +26,7 @@ const HOST = process.env.HOST || (isReplit ? '0.0.0.0' : '127.0.0.1');
 const documentFileStore = createDocumentFileStore({
   rootDir: process.env.ONSITE_FILE_STORAGE_DIR || path.join(__dirname, '.onsite-storage'),
 });
+const authService = createAuthService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -180,67 +187,164 @@ async function handleAiChat(req, res) {
   });
 }
 
-// ─── Canonical company account recovery ─────────────────────────────────────
-// The prototype stores ordinary accounts in browser localStorage. This narrow
-// bridge lets the recovered company account bootstrap a fresh browser profile
-// using the workspace-managed password without ever returning that password.
-function passwordsMatch(actual, expected) {
-  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length &&
-    crypto.timingSafeEqual(actualBuffer, expectedBuffer);
-}
-
-function handleAuthRecovery(req, res) {
-  let body = '';
-  req.on('data', chunk => {
-    body += chunk;
-    if (body.length > 4096) req.destroy();
-  });
-  req.on('end', () => {
-    try {
-      const payload = JSON.parse(body || '{}');
-      const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
-      const password = typeof payload.password === 'string' ? payload.password : '';
-      const expectedPassword = process.env.ONSITE_ACCOUNT_PASSWORD;
-
-      if (
-        email !== 'luke_bohill@outlook.com' ||
-        !passwordsMatch(password, expectedPassword)
-      ) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Incorrect email or password.' }));
-        return;
-      }
-
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        user: {
-          id: 'user-1789138666146-7a64bd748b1e',
-          type: 'company',
-          name: 'Luke Bohill',
-          companyName: 'Bohill Electrical Ltd',
-          email: 'luke_bohill@outlook.com',
-          verificationStatus: 'pending',
-          companyVerificationStatus: 'pending',
-          vatVerificationStatus: 'unverified',
-        },
-      }));
-    } catch (_) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid recovery request.' }));
-    }
-  });
-}
-
-function sendJson(res, statusCode, payload) {
+function sendJson(res, statusCode, payload, headers = {}) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    ...headers,
   });
   res.end(JSON.stringify(payload));
+}
+
+async function readJsonRequest(req, maxBytes = 1024 * 1024) {
+  const contentLength = Number.parseInt(req.headers['content-length'] || '0', 10);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    req.resume();
+    throw new AuthServiceError('The request is too large.', 413, 'REQUEST_TOO_LARGE');
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      throw new AuthServiceError('The request is too large.', 413, 'REQUEST_TOO_LARGE');
+    }
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch (_) {
+    throw new AuthServiceError('Invalid JSON request.', 400, 'INVALID_JSON');
+  }
+}
+
+function publicAuthError(error) {
+  if (error instanceof AuthServiceError) return error;
+  console.error('[Auth] Unexpected error:', error);
+  return new AuthServiceError('Authentication service error.', 500, 'AUTH_INTERNAL_ERROR');
+}
+
+async function resolveAuthenticatedPrincipal(req) {
+  return authService.restoreSession(authTokensFromRequest(req));
+}
+
+async function handleAuthApi(req, res, url) {
+  try {
+    if (req.method === 'GET' && url.pathname === '/api/auth/status') {
+      sendJson(res, 200, { configured: authService.configured });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/auth/session') {
+      const result = await resolveAuthenticatedPrincipal(req);
+      const cookies = sessionCookies(req, result.session);
+      sendJson(
+        res,
+        200,
+        { principal: result.principal },
+        cookies.length ? { 'Set-Cookie': cookies, Vary: 'Cookie' } : { Vary: 'Cookie' },
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/register/worker') {
+      const result = await authService.registerWorker(await readJsonRequest(req));
+      const cookies = sessionCookies(req, result.session);
+      sendJson(
+        res,
+        result.requiresEmailConfirmation ? 202 : 201,
+        {
+          principal: result.requiresEmailConfirmation ? null : result.principal,
+          requiresEmailConfirmation: result.requiresEmailConfirmation,
+        },
+        cookies.length ? { 'Set-Cookie': cookies, Vary: 'Cookie' } : {},
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/register/company') {
+      const result = await authService.registerCompany(await readJsonRequest(req));
+      const cookies = sessionCookies(req, result.session);
+      sendJson(
+        res,
+        result.requiresEmailConfirmation ? 202 : 201,
+        {
+          principal: result.requiresEmailConfirmation ? null : result.principal,
+          requiresEmailConfirmation: result.requiresEmailConfirmation,
+        },
+        cookies.length ? { 'Set-Cookie': cookies, Vary: 'Cookie' } : {},
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+      const result = await authService.login(await readJsonRequest(req));
+      sendJson(res, 200, { principal: result.principal }, {
+        'Set-Cookie': sessionCookies(req, result.session),
+        Vary: 'Cookie',
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+      const tokens = authTokensFromRequest(req);
+      if (authService.configured) await authService.logout(tokens);
+      sendJson(res, 200, { ok: true }, {
+        'Set-Cookie': clearSessionCookies(req),
+        Vary: 'Cookie',
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/password/recovery') {
+      await authService.requestPasswordReset(await readJsonRequest(req));
+      sendJson(res, 202, { ok: true });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/password/adopt') {
+      const result = await authService.adoptSession(await readJsonRequest(req));
+      sendJson(res, 200, { principal: result.principal }, {
+        'Set-Cookie': sessionCookies(req, result.session),
+        Vary: 'Cookie',
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/password/reset') {
+      const payload = await readJsonRequest(req);
+      await authService.resetPassword({
+        ...authTokensFromRequest(req),
+        password: payload.password,
+      });
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'PATCH' && url.pathname === '/api/auth/worker-profile') {
+      const result = await authService.updateWorkerProfile({
+        ...authTokensFromRequest(req),
+        changes: await readJsonRequest(req),
+      });
+      const cookies = sessionCookies(req, result.session);
+      sendJson(
+        res,
+        200,
+        { principal: result.principal },
+        cookies.length ? { 'Set-Cookie': cookies, Vary: 'Cookie' } : { Vary: 'Cookie' },
+      );
+      return;
+    }
+
+    sendJson(res, 404, { error: 'Authentication route not found.' });
+  } catch (rawError) {
+    const error = publicAuthError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : {};
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
 }
 
 function requestHeader(req, name, maxLength = 200) {
@@ -361,13 +465,14 @@ async function handleDocumentFileAccess(req, res, url, fileId) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
+  if (url.pathname.startsWith('/api/auth/')) {
+    handleAuthApi(req, res, url);
+    return;
+  }
+
   // AI chat API
   if (req.method === 'POST' && url.pathname === '/api/ai-chat') {
     return handleAiChat(req, res);
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/auth/recover') {
-    return handleAuthRecovery(req, res);
   }
 
   if (req.method === 'POST' && url.pathname === '/api/document-files') {

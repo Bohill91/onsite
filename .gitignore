@@ -1,2 +1,5 @@
 node_modules/
 .onsite-storage/
+.env
+.env.*
+!.env.example

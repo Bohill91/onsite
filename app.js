@@ -4203,11 +4203,7 @@ const ASSIGNMENT_TYPES = {
 };
 
 function readAuthUsers() {
-  try {
-    return JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
-  } catch (_) {
-    return [];
-  }
+  return typeof getUsers === "function" ? getUsers() : [];
 }
 
 function normalizeAssignmentType(type) {
@@ -9180,24 +9176,32 @@ function updateWorkerAvailability(userId, availability, nextAvailableDate = "") 
     worker.nextAvailableDate = cleanDate;
   }
 
-  try {
-    const session = JSON.parse(localStorage.getItem("onsite_auth_v1") || "null");
-    if (session && session.id === userId) {
-      session.availability = cleanAvailability;
-      session.nextAvailableDate = cleanDate;
-      localStorage.setItem("onsite_auth_v1", JSON.stringify(session));
+  const session = getSessionUser();
+  if (session?.id === userId) {
+    setCurrentUser({
+      ...session,
+      availability: cleanAvailability,
+      nextAvailableDate: cleanDate,
+    });
+    if (session.serverAuthenticated && window.OnSiteAuth?.updateWorkerProfile) {
+      window.OnSiteAuth.updateWorkerProfile({
+        availabilityStatus: cleanAvailability,
+        nextAvailableDate: cleanDate,
+      }).catch((error) => {
+        showToast(error.message || "Availability could not be saved");
+      });
     }
-  } catch (_) {}
+  }
 
-  try {
-    const users = JSON.parse(localStorage.getItem("onsite_users_v1") || "[]");
-    const idx = users.findIndex((u) => u.id === userId);
+  if (typeof getUsers === "function" && typeof saveUsers === "function") {
+    const users = getUsers();
+    const idx = users.findIndex((user) => user.id === userId);
     if (idx !== -1) {
       users[idx].availability = cleanAvailability;
       users[idx].nextAvailableDate = cleanDate;
-      localStorage.setItem("onsite_users_v1", JSON.stringify(users));
+      saveUsers(users);
     }
-  } catch (_) {}
+  }
 
   logActivity(
     "avail",
@@ -15695,11 +15699,7 @@ document.querySelectorAll(".filter-chip").forEach((chip) => {
 
 // ─── Session User Helper ──────────────────────────────────
 function getSessionUser() {
-  try {
-    return JSON.parse(localStorage.getItem("onsite_auth_v1"));
-  } catch (_) {
-    return null;
-  }
+  return typeof getCurrentUser === "function" ? getCurrentUser() : null;
 }
 
 // ─── Tab Routing ──────────────────────────────────────────
@@ -16598,9 +16598,7 @@ function renderWorkerHome(user) {
 
   // Availability toggle
   document.getElementById("whAvailBtn")?.addEventListener("click", () => {
-    const session = JSON.parse(
-      localStorage.getItem("onsite_auth_v1") || "null",
-    );
+    const session = getSessionUser();
     if (!session) return;
     const nextAvailability =
       session.availability === "not available" ? "available" : "not available";
@@ -16624,9 +16622,7 @@ function renderWorkerHome(user) {
   document
     .getElementById("whNextAvailableSave")
     ?.addEventListener("click", () => {
-      const session = JSON.parse(
-        localStorage.getItem("onsite_auth_v1") || "null",
-      );
+      const session = getSessionUser();
       if (!session) return;
       const nextDate =
         document.getElementById("whNextAvailableDate")?.value || "";
@@ -17680,7 +17676,7 @@ function renderWorkerProfile(user) {
       if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
     });
 
-  el.querySelector("#saveWorkerMinimumDayRate")?.addEventListener("click", () => {
+  el.querySelector("#saveWorkerMinimumDayRate")?.addEventListener("click", async () => {
     const input = el.querySelector("#workerProfileMinimumDayRate");
     const result = window.OnSiteWorkerRatePreferences?.applyMinimumDayRate(
       user,
@@ -17693,24 +17689,18 @@ function renderWorkerProfile(user) {
     }
     input.setCustomValidity("");
     const minimum = result.minimumDayRate;
-    user.minRate = minimum;
-    if (workerProfile) workerProfile.minRate = minimum;
-    if (typeof getUsers === "function" && typeof saveUsers === "function") {
-      saveUsers(
-        getUsers().map((account) =>
-          account.id === user.id ? { ...account, minRate: minimum } : account,
-        ),
-      );
-    }
-    if (
-      typeof getCurrentUser === "function" &&
-      typeof setCurrentUser === "function"
-    ) {
-      const session = getCurrentUser();
-      if (session?.id === user.id) {
-        setCurrentUser({ ...session, minRate: minimum });
+    if (user.serverAuthenticated && window.OnSiteAuth?.updateWorkerProfile) {
+      try {
+        await window.OnSiteAuth.updateWorkerProfile({ minimumDayRate: minimum });
+      } catch (error) {
+        showToast(error.message || "Minimum day rate could not be saved");
+        return;
       }
     }
+    user.minRate = minimum;
+    if (workerProfile) workerProfile.minRate = minimum;
+    const session = getCurrentUser();
+    if (session?.id === user.id) setCurrentUser({ ...session, minRate: minimum });
     saveState();
     renderWorkerProfile(user);
     showToast("Minimum day rate updated");

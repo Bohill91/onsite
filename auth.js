@@ -1,6 +1,18 @@
 // ─── Auth Constants ────────────────────────────────────────
 const AUTH_SESSION_KEY = 'onsite_auth_v1';
 const AUTH_USERS_KEY   = 'onsite_users_v1';
+const AUTHORITY_FIELDS = [
+  'authUserId',
+  'id',
+  'workerId',
+  'companyId',
+  'type',
+  'permissionRole',
+  'companyRole',
+  'membershipStatus',
+  'foundingWorker',
+  'serverAuthenticated',
+];
 
 const CERT_OPTIONS = window.OnSiteCredentials?.common?.() || [];
 
@@ -9,6 +21,9 @@ let workerRegData = {};
 let companyRegData = {};
 let workerRegPhotoDataUrl = '';
 let workerRegPhotoPending = false;
+let workerRegistrationPassword = '';
+let companyRegistrationPassword = '';
+let authenticatedPrincipal = null;
 
 function resetWorkerRegistrationPhoto() {
   workerRegPhotoDataUrl = '';
@@ -24,6 +39,7 @@ function resetWorkerRegistrationPhoto() {
 
 function startWorkerRegistration() {
   workerRegData = {};
+  workerRegistrationPassword = '';
   document.getElementById('workerStep1Form')?.reset();
   document.getElementById('workerStep2Form')?.reset();
   resetWorkerRegistrationPhoto();
@@ -69,22 +85,90 @@ document.addEventListener('submit', function(e) {
   }, 450);
 });
 
-// ─── User Storage ──────────────────────────────────────────
+// ─── Server-authenticated principal compatibility ──────────
+function withoutPassword(value) {
+  if (!value || typeof value !== 'object') return value;
+  const { password: _password, ...safe } = value;
+  return safe;
+}
+
 function getUsers() {
-  try { return JSON.parse(localStorage.getItem(AUTH_USERS_KEY)) || []; } catch (_) { return []; }
+  try {
+    const users = JSON.parse(localStorage.getItem(AUTH_USERS_KEY)) || [];
+    return users.map(withoutPassword);
+  } catch (_) {
+    return [];
+  }
 }
 function saveUsers(users) {
-  try { localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(users)); } catch (_) {}
+  try {
+    localStorage.setItem(AUTH_USERS_KEY, JSON.stringify((users || []).map(withoutPassword)));
+  } catch (_) {}
 }
 function getCurrentUser() {
-  try { return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY)); } catch (_) { return null; }
+  return authenticatedPrincipal ? { ...authenticatedPrincipal } : null;
 }
 function setCurrentUser(user) {
-  try { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user)); } catch (_) {}
+  if (!user) {
+    authenticatedPrincipal = null;
+    return;
+  }
+  if (!authenticatedPrincipal) {
+    if (user.serverAuthenticated) authenticatedPrincipal = withoutPassword(user);
+    return;
+  }
+  const next = { ...authenticatedPrincipal, ...withoutPassword(user) };
+  AUTHORITY_FIELDS.forEach(function(field) {
+    next[field] = authenticatedPrincipal[field];
+  });
+  authenticatedPrincipal = next;
 }
 function clearCurrentUser() {
+  authenticatedPrincipal = null;
   try { localStorage.removeItem(AUTH_SESSION_KEY); } catch (_) {}
 }
+function acceptServerPrincipal(principal) {
+  if (!principal?.serverAuthenticated) {
+    throw new Error('The server did not return an authenticated OnSite identity.');
+  }
+  authenticatedPrincipal = {
+    ...(authenticatedPrincipal || {}),
+    ...withoutPassword(principal),
+  };
+  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch (_) {}
+  return getCurrentUser();
+}
+
+async function authRequest(path, { method = 'GET', body } = {}) {
+  const response = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let payload = {};
+  try { payload = await response.json(); } catch (_) {}
+  if (!response.ok) {
+    const error = new Error(payload.error || 'Authentication request failed.');
+    error.code = payload.code || 'AUTH_ERROR';
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function updateServerWorkerProfile(changes) {
+  const payload = await authRequest('/api/auth/worker-profile', {
+    method: 'PATCH',
+    body: changes,
+  });
+  return acceptServerPrincipal(payload.principal);
+}
+
+window.OnSiteAuth = {
+  getCurrentUser,
+  updateWorkerProfile: updateServerWorkerProfile,
+};
 
 // ─── Overlay & Screen Control ──────────────────────────────
 const authOverlay = document.getElementById('auth-overlay');
@@ -105,11 +189,13 @@ function showAuthOverlay() {
   setMainAppAvailable(false);
   document.body.classList.add('auth-is-open');
   authOverlay.style.display = 'flex';
+  authOverlay.removeAttribute('inert');
   authOverlay.setAttribute('aria-hidden', 'false');
 }
 function hideAuthOverlay() {
   document.body.classList.remove('auth-is-open');
   authOverlay.style.display = 'none';
+  authOverlay.setAttribute('inert', '');
   authOverlay.setAttribute('aria-hidden', 'true');
 }
 
@@ -180,21 +266,11 @@ function updateTopbarUser(user) {
 }
 
 // ─── Login ─────────────────────────────────────────────────
-async function recoverCanonicalCompany(email, password) {
-  if (email !== 'luke_bohill@outlook.com') return null;
-
-  try {
-    const response = await fetch('/api/auth/recover', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) return null;
-    const payload = await response.json();
-    return payload.user || null;
-  } catch (_) {
-    return null;
-  }
+function showLoginNotice(message) {
+  const notice = document.getElementById('loginNotice');
+  if (!notice) return;
+  notice.textContent = message || '';
+  notice.style.display = message ? 'flex' : 'none';
 }
 
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -202,37 +278,50 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const pass  = document.getElementById('loginPassword').value;
   const err   = document.getElementById('loginError');
-
-  const existingUser = getUsers().find(u => u.email === email);
-  let user = getUsers().find(u => u.email === email && u.password === pass);
-
-  if (!user) {
-    const recoveredUser = await recoverCanonicalCompany(email, pass);
-    if (recoveredUser) {
-      user = { ...existingUser, ...recoveredUser, password: pass };
-      const users = getUsers().filter(u => u.email !== email);
-      users.push(user);
-      saveUsers(users);
-    }
-  }
-
-  if (!user) {
-    err.textContent = 'Incorrect email or password.';
+  const submitter = e.submitter;
+  showLoginNotice('');
+  setAuthButtonLoading(submitter, true, 'Signing in');
+  try {
+    const payload = await authRequest('/api/auth/login', {
+      method: 'POST',
+      body: { email, password: pass },
+    });
+    const user = acceptServerPrincipal(payload.principal);
+    err.style.display = 'none';
+    document.getElementById('loginPassword').value = '';
+    hideAuthOverlay();
+    updateTopbarUser(user);
+  } catch (error) {
+    err.textContent = error.message || 'Incorrect email or password.';
     err.style.display = 'block';
-    return;
+  } finally {
+    setAuthButtonLoading(submitter, false);
   }
-  err.style.display = 'none';
-  setCurrentUser(user);
-  hideAuthOverlay();
-  updateTopbarUser(user);
 });
 
 // ─── Forgot Password ───────────────────────────────────────
-document.getElementById('forgotForm').addEventListener('submit', function(e) {
+document.getElementById('forgotForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  document.getElementById('forgotFormWrap').style.display = 'none';
-  document.getElementById('forgotMsg').style.display = 'block';
-  document.getElementById('forgotEmail').disabled = true;
+  const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
+  const submitter = e.submitter;
+  setAuthButtonLoading(submitter, true, 'Sending');
+  try {
+    await authRequest('/api/auth/password/recovery', {
+      method: 'POST',
+      body: { email },
+    });
+    document.getElementById('forgotFormWrap').style.display = 'none';
+    document.getElementById('forgotMsg').style.display = 'block';
+    document.getElementById('forgotEmail').disabled = true;
+  } catch (error) {
+    const errorElement = document.getElementById('forgotError');
+    if (errorElement) {
+      errorElement.textContent = error.message || 'Password recovery could not be started.';
+      errorElement.style.display = 'block';
+    }
+  } finally {
+    setAuthButtonLoading(submitter, false);
+  }
 });
 
 // ─── Worker Reg — Step 1 ───────────────────────────────────
@@ -262,11 +351,6 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
     err.style.display = 'block';
     return;
   }
-  if (getUsers().find(u => u.email === email)) {
-    err.textContent = 'An account with this email already exists.';
-    err.style.display = 'block';
-    return;
-  }
   if (referralCode && typeof validateWorkerReferralCode === 'function') {
     const validation = validateWorkerReferralCode(referralCode);
     if (!validation.ok) {
@@ -281,10 +365,10 @@ document.getElementById('workerStep1Form').addEventListener('submit', function(e
     name:     document.getElementById('regName').value.trim(),
     email,
     phone:    document.getElementById('regPhone').value.trim(),
-    password: pass,
     profilePhotoDataUrl: workerRegPhotoDataUrl,
     referralCode,
   };
+  workerRegistrationPassword = pass;
   setWorkerStep(2);
 });
 
@@ -332,7 +416,7 @@ document.getElementById('regProfilePhoto')?.addEventListener('change', async fun
 });
 
 // ─── Worker Reg — Step 2: create the account ───────────────
-document.getElementById('workerStep2Form').addEventListener('submit', function(e) {
+document.getElementById('workerStep2Form').addEventListener('submit', async function(e) {
   e.preventDefault();
   const minRateInput = document.getElementById('regMinRate');
   const minRateResult = window.OnSiteWorkerRatePreferences?.applyMinimumDayRate(
@@ -356,76 +440,69 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
   workerRegData.travelRadiusMiles = Number(document.getElementById('regTravelRadius').value) || 15;
   workerRegData.travelFurtherWithAccommodation =
     document.querySelector('input[name="regTravelFurther"]:checked')?.value === 'yes';
-  const user = {
-    id: 'user-' + Date.now() + '-' + Math.random().toString(16).slice(2),
-    type: 'worker',
-    name:     workerRegData.name,
-    email:    workerRegData.email,
-    phone:    workerRegData.phone,
-    password: workerRegData.password,
-    trade:    workerRegData.trade,
-    tradeKey: workerRegData.tradeKey,
-    specialism: workerRegData.specialism,
-    roleKey: workerRegData.roleKey,
-    // Compatibility mirror for legacy matching/profile readers.
-    grade: workerRegData.specialism,
-    yearsExp: workerRegData.yearsExp,
-    location: workerRegData.location,
-    minRate:  workerRegData.minRate,
-    travelRadiusMiles: workerRegData.travelRadiusMiles || 15,
-    travelFurtherWithAccommodation: !!workerRegData.travelFurtherWithAccommodation,
-    weekendPreferences: workerRegData.weekendPreferences || {
-      saturday: false,
-      sunday: false,
-      weekendOnly: false,
-    },
-    locationData: workerRegData.locationData,
-    // Empty compatibility fields are intentionally completed later in Profile.
-    utr: '',
-    cisStatus: '',
-    nationalInsuranceNumber: '',
-    dateOfBirth: '',
-    cscsCard: '',
-    rightToWork: '',
-    photoId: '',
-    drivingLicenceHolder: false,
-    certifications: [],
-    qualifications: [],
-    profilePhoto: '',
-    profilePhotoDataUrl: workerRegData.profilePhotoDataUrl || '',
-    verificationStatus: 'pending',
-    workerVerificationStatus: 'pending',
-    qualificationVerificationStatus: 'pending',
-    paymentDetailsPlaceholder: '',
-    preferredPaymentMethod: '',
-    paymentVerificationStatus: 'unverified',
-    createdAt: Date.now(),
+  workerRegData.weekendPreferences = {
+    saturday: document.getElementById('regWeekendSaturday')?.value === 'yes',
+    sunday: document.getElementById('regWeekendSunday')?.value === 'yes',
+    weekendOnly: document.getElementById('regWeekendOnly')?.value === 'yes',
   };
 
-  // ── Permanent identity record + duplicate/returning-worker check ──
-  let dupeResult = null;
-  if (typeof registerWorkerIdentity === 'function') {
-    dupeResult = registerWorkerIdentity(user);
-    if (dupeResult && dupeResult.identity) {
-      user.identityId = dupeResult.identity.workerIdentityId;
-      if (dupeResult.isDuplicate && typeof dupeResult.restoredScore === 'number') {
-        user.reliability = dupeResult.restoredScore;
-      }
+  const submitter = e.submitter;
+  const errorElement = document.getElementById('workerStep2Error');
+  setAuthButtonLoading(submitter, true, 'Creating account');
+  try {
+    const payload = await authRequest('/api/auth/register/worker', {
+      method: 'POST',
+      body: {
+        name: workerRegData.name,
+        email: workerRegData.email,
+        phone: workerRegData.phone,
+        password: workerRegistrationPassword,
+        referralCode: workerRegData.referralCode,
+        trade: workerRegData.trade,
+        tradeKey: workerRegData.tradeKey,
+        specialism: workerRegData.specialism,
+        roleKey: workerRegData.roleKey,
+        grade: workerRegData.specialism,
+        yearsExperience: workerRegData.yearsExp,
+        location: workerRegData.location,
+        locationData: workerRegData.locationData,
+        minimumDayRate: workerRegData.minRate,
+        travelRadiusMiles: workerRegData.travelRadiusMiles,
+        travelFurtherWithAccommodation: workerRegData.travelFurtherWithAccommodation,
+        weekendPreferences: workerRegData.weekendPreferences,
+      },
+    });
+    workerRegistrationPassword = '';
+    if (payload.requiresEmailConfirmation) {
+      showScreen('login');
+      showLoginNotice('Check your email to confirm your account, then sign in.');
+      return;
     }
-  }
+    const user = acceptServerPrincipal({
+      ...payload.principal,
+      profilePhotoDataUrl: workerRegData.profilePhotoDataUrl || '',
+    });
 
-  const users = getUsers();
-  users.push(user);
-  saveUsers(users);
-  if (typeof ensureWorkerProfileForUser === 'function') {
-    ensureWorkerProfileForUser(user);
+    let dupeResult = null;
+    if (typeof registerWorkerIdentity === 'function') {
+      dupeResult = registerWorkerIdentity(user);
+      if (dupeResult?.identity) user.identityId = dupeResult.identity.workerIdentityId;
+    }
+    if (typeof ensureWorkerProfileForUser === 'function') ensureWorkerProfileForUser(user);
+    const referralResult = workerRegData.referralCode && typeof registerWorkerReferral === 'function'
+      ? registerWorkerReferral(user, workerRegData.referralCode)
+      : null;
+    setCurrentUser(user);
+    if (errorElement) errorElement.style.display = 'none';
+    showWorkerSuccess(getCurrentUser(), dupeResult, referralResult);
+  } catch (error) {
+    if (errorElement) {
+      errorElement.textContent = error.message || 'Worker account creation failed.';
+      errorElement.style.display = 'block';
+    }
+  } finally {
+    setAuthButtonLoading(submitter, false);
   }
-  const referralResult = workerRegData.referralCode && typeof registerWorkerReferral === 'function'
-    ? registerWorkerReferral(user, workerRegData.referralCode)
-    : null;
-  if (referralResult?.ok) saveUsers(users);
-  setCurrentUser(user);
-  showWorkerSuccess(user, dupeResult, referralResult);
 });
 
 function setWorkerStep(step) {
@@ -497,6 +574,10 @@ function showWorkerSuccess(user, dupeResult, referralResult) {
 function deleteWorkerAccount() {
   const user = getCurrentUser();
   if (!user || user.type !== 'worker') return;
+  if (user.serverAuthenticated) {
+    alert('Contact OnSite support to request secure account deletion.');
+    return;
+  }
   const ok = confirm(
     'Delete your account?\n\n' +
     'Your login will be removed, but OnSite keeps a limited identity and ' +
@@ -611,28 +692,23 @@ document.getElementById('companyStep1Form').addEventListener('submit', function(
     err.style.display = 'block';
     return;
   }
-  if (getUsers().find(function(u) { return u.email === email; })) {
-    err.textContent = 'An account with this email already exists.';
-    err.style.display = 'block';
-    return;
-  }
   err.style.display = 'none';
   companyRegData = {
     companyName: document.getElementById('companyName').value.trim(),
     name:        document.getElementById('companyContactName').value.trim(),
     email,
     phone:       document.getElementById('companyPhone').value.trim(),
-    password: pass,
   };
+  companyRegistrationPassword = pass;
   setCompanyStep(2);
 });
 
 // ─── Company Reg — Step 2 ──────────────────────────────────
-document.getElementById('companyStep2Form').addEventListener('submit', function(e) {
+document.getElementById('companyStep2Form').addEventListener('submit', async function(e) {
   e.preventDefault();
 
   const accountsEmail = document.getElementById('companyAccountsEmail')?.value.trim().toLowerCase() || '';
-  const err = document.getElementById('companyStep1Error');
+  const err = document.getElementById('companyStep2Error');
   if (accountsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountsEmail)) {
     err.textContent = 'Enter a valid accounts email address.';
     err.style.display = 'block';
@@ -642,34 +718,44 @@ document.getElementById('companyStep2Form').addEventListener('submit', function(
 
   const companyNumber = document.getElementById('companyRegNumber').value.trim();
 
-  const user = {
-    id: 'user-' + Date.now() + '-' + Math.random().toString(16).slice(2),
-    type:        'company',
-    name:        companyRegData.name,
-    companyName: companyRegData.companyName,
-    email:       companyRegData.email,
-    phone:       companyRegData.phone,
-    password:    companyRegData.password,
-    address:     document.getElementById('companyAddress').value.trim(),
-    regNumber:   companyNumber,
-    companyNumber,
-    vatNumber:   document.getElementById('companyVAT').value.trim(),
-    vatRegistered: document.getElementById('companyVatRegistered')?.value === 'yes',
-    paymentContact: document.getElementById('companyPaymentContact')?.value.trim() || '',
-    accountsEmail,
-    companyVerificationStatus: 'pending',
-    vatVerificationStatus: document.getElementById('companyVAT').value.trim() ? 'pending' : 'unverified',
-    verificationStatus: 'pending',
-    createdAt: Date.now(),
-  };
-
-  const users = getUsers();
-  users.push(user);
-  saveUsers(users);
-  setCurrentUser(user);
-
-  document.getElementById('companySuccessName').textContent = companyRegData.companyName;
-  showScreen('company-success');
+  const submitter = e.submitter;
+  const errorElement = document.getElementById('companyStep2Error');
+  setAuthButtonLoading(submitter, true, 'Creating account');
+  try {
+    const payload = await authRequest('/api/auth/register/company', {
+      method: 'POST',
+      body: {
+        name: companyRegData.name,
+        companyName: companyRegData.companyName,
+        email: companyRegData.email,
+        phone: companyRegData.phone,
+        password: companyRegistrationPassword,
+        address: document.getElementById('companyAddress').value.trim(),
+        companyNumber,
+        vatNumber: document.getElementById('companyVAT').value.trim(),
+        vatRegistered: document.getElementById('companyVatRegistered')?.value === 'yes',
+        paymentContact: document.getElementById('companyPaymentContact')?.value.trim() || '',
+        accountsEmail,
+      },
+    });
+    companyRegistrationPassword = '';
+    if (payload.requiresEmailConfirmation) {
+      showScreen('login');
+      showLoginNotice('Check your email to confirm your account, then sign in.');
+      return;
+    }
+    const user = acceptServerPrincipal(payload.principal);
+    if (errorElement) errorElement.style.display = 'none';
+    document.getElementById('companySuccessName').textContent = user.companyName;
+    showScreen('company-success');
+  } catch (error) {
+    if (errorElement) {
+      errorElement.textContent = error.message || 'Company account creation failed.';
+      errorElement.style.display = 'block';
+    }
+  } finally {
+    setAuthButtonLoading(submitter, false);
+  }
 });
 
 function setCompanyStep(step) {
@@ -709,10 +795,17 @@ document.getElementById('companySuccessContinueBtn').addEventListener('click', f
 });
 
 // ─── Logout ────────────────────────────────────────────────
-function logoutCurrentUser() {
+async function logoutCurrentUser() {
+  try {
+    await authRequest('/api/auth/logout', { method: 'POST' });
+  } catch (_) {
+    // Local UI state is cleared even if the network is unavailable.
+  }
   clearCurrentUser();
   workerRegData   = {};
   companyRegData  = {};
+  workerRegistrationPassword = '';
+  companyRegistrationPassword = '';
   resetWorkerRegistrationPhoto();
   const userSection = document.getElementById('topbar-user');
   const resetBtn    = document.getElementById('resetDemoBtn');
@@ -729,9 +822,81 @@ function logoutCurrentUser() {
 window.logoutCurrentUser = logoutCurrentUser;
 document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUser);
 
-// ─── Init ──────────────────────────────────────────────────
-(function init() {
+document.getElementById('resetPasswordForm')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const password = document.getElementById('resetPassword').value;
+  const confirmation = document.getElementById('resetPassword2').value;
+  const errorElement = document.getElementById('resetPasswordError');
+  if (password !== confirmation) {
+    errorElement.textContent = 'Passwords do not match.';
+    errorElement.style.display = 'block';
+    return;
+  }
+  const submitter = e.submitter;
+  setAuthButtonLoading(submitter, true, 'Updating');
   try {
+    await authRequest('/api/auth/password/reset', {
+      method: 'POST',
+      body: { password },
+    });
+    await authRequest('/api/auth/logout', { method: 'POST' });
+    clearCurrentUser();
+    document.getElementById('resetPasswordForm').reset();
+    showScreen('login');
+    showLoginNotice('Password updated. Sign in with your new password.');
+  } catch (error) {
+    errorElement.textContent = error.message || 'Password reset failed.';
+    errorElement.style.display = 'block';
+  } finally {
+    setAuthButtonLoading(submitter, false);
+  }
+});
+
+async function adoptPasswordRecoverySession() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (params.get('type') !== 'recovery') return false;
+  const accessToken = params.get('access_token') || '';
+  const refreshToken = params.get('refresh_token') || '';
+  try {
+    const payload = await authRequest('/api/auth/password/adopt', {
+      method: 'POST',
+      body: { accessToken, refreshToken },
+    });
+    acceptServerPrincipal(payload.principal);
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    showAuthOverlay();
+    showScreen('reset-password');
+    return true;
+  } catch (error) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    showAuthOverlay();
+    showScreen('login');
+    const loginError = document.getElementById('loginError');
+    loginError.textContent = error.message || 'The password recovery link is invalid or expired.';
+    loginError.style.display = 'block';
+    return true;
+  }
+}
+
+async function restoreServerSession() {
+  try {
+    const payload = await authRequest('/api/auth/session');
+    return acceptServerPrincipal(payload.principal);
+  } catch (error) {
+    clearCurrentUser();
+    if (error.status !== 401 && error.status !== 503) {
+      console.error('[Auth] Session restoration failed:', error.message);
+    }
+    return null;
+  }
+}
+
+// ─── Init ──────────────────────────────────────────────────
+(async function init() {
+  try {
+    // Remove password material left by the retired browser-only account store.
+    saveUsers(getUsers());
+    clearCurrentUser();
     // Populate cert checkboxes
     initialisePasswordToggles();
     initialiseWorkerReferralInput();
@@ -772,8 +937,13 @@ document.getElementById('logoutBtn')?.addEventListener('click', logoutCurrentUse
       }
     });
 
-    // Check the existing session before revealing either the app or auth shell.
-    const user = getCurrentUser();
+    if (await adoptPasswordRecoverySession()) {
+      window.OnSiteLaunch?.ready();
+      return;
+    }
+
+    // Restore the server session from HttpOnly cookies before revealing the app.
+    const user = await restoreServerSession();
     if (user) {
       hideAuthOverlay();
       updateTopbarUser(user);

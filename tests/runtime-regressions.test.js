@@ -28,6 +28,9 @@ function startServer(port, storageDir) {
       HOST: "127.0.0.1",
       PORT: String(port),
       ONSITE_FILE_STORAGE_DIR: storageDir,
+      SUPABASE_URL: "",
+      SUPABASE_ANON_KEY: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -93,6 +96,12 @@ async function run() {
   try {
     server = await startServer(port, storageDir);
     const baseUrl = `http://127.0.0.1:${port}`;
+    const authStatus = await fetch(`${baseUrl}/api/auth/status`);
+    assert.equal(authStatus.status, 200);
+    assert.deepEqual(await authStatus.json(), { configured: false });
+    const session = await fetch(`${baseUrl}/api/auth/session`);
+    assert.equal(session.status, 503);
+    assert.equal((await session.json()).code, "AUTH_NOT_CONFIGURED");
     for (const asset of ["pdf.mjs", "pdf.worker.mjs"]) {
       const response = await fetch(`${baseUrl}/vendor/pdfjs/${asset}`);
       assert.equal(response.status, 200);
