@@ -1053,8 +1053,17 @@ function requestExtension(jobId, newEndDate, newRate) {
   job.newProposedEndDate = newEndDate;
   const baseRate =
     job.agreedDayRate != null ? job.agreedDayRate : parseDayRate(job.payRate);
-  job.proposedDayRate =
+  const proposedDayRate =
     newRate !== "" && newRate != null ? parseDayRate(newRate) : baseRate;
+  const rateEligibility = workerMinimumRateAllowsPayableRate(
+    worker,
+    proposedDayRate,
+    { rateKnown: Number(proposedDayRate) > 0 },
+  );
+  if (!rateEligibility.eligible) {
+    return { ok: false, reason: "Worker is not eligible for this offer" };
+  }
+  job.proposedDayRate = proposedDayRate;
   job.extensionRequestedAt = new Date().toISOString();
   job.extensionResponseDeadline = newEndDate;
   const w = findWorker(job.assignedWorkerId);
@@ -4042,10 +4051,43 @@ const PRICING = {
 
 // A worker's private minimum day rate (companies never see this value).
 function workerMinRate(worker) {
-  const r = Number(worker?.minRate);
-  return Number.isFinite(r) && r > 0
-    ? Math.round(r)
-    : PRICING.DEFAULT_WORKER_MIN;
+  return savedWorkerMinimumRate(worker) || PRICING.DEFAULT_WORKER_MIN;
+}
+
+function savedWorkerMinimumRate(worker) {
+  return (
+    window.OnSiteWorkerRatePreferences?.normalizeMinimumDayRate(
+      worker?.minRate,
+    ) || null
+  );
+}
+
+function workerMinimumRateAllowsPayableRate(
+  worker,
+  workerFacingDayRate,
+  { rateKnown = true } = {},
+) {
+  return window.OnSiteWorkerRatePreferences.minimumRateEligibility({
+    minimumDayRate: savedWorkerMinimumRate(worker),
+    workerFacingDayRate,
+    rateKnown,
+  });
+}
+
+function workerMinimumRateEligibility(job, worker, options = {}) {
+  const minimumDayRate = savedWorkerMinimumRate(worker);
+  const rateKnown = !options.skipPricing && jobBudget(job) > 0;
+  if (!minimumDayRate || !rateKnown) {
+    return workerMinimumRateAllowsPayableRate(worker, null, { rateKnown });
+  }
+  const pricing = computeBookingPricing({
+    workerMin: minimumDayRate,
+    budget: jobBudget(job),
+  });
+  return workerMinimumRateAllowsPayableRate(
+    worker,
+    pricing.viable ? pricing.workerPay : null,
+  );
 }
 
 // Pure pricing calculation — no access to the global state, fully deterministic
@@ -8853,7 +8895,9 @@ function ensureWorkerProfileForUser(user) {
   const certNames = (user.certifications || []).map((c) =>
     typeof c === "object" ? c.name : c,
   );
-  const minRateRaw = Number(user.minRate);
+  const minRate = savedWorkerMinimumRate({
+    minRate: user.minRate ?? worker?.minRate,
+  });
   const radiusRaw = Number(user.travelRadiusMiles ?? worker?.travelRadiusMiles ?? 15);
   const weekendPrefs = workerWeekendPreferences(user.weekendPreferences ? user : worker);
   const base = {
@@ -8880,10 +8924,7 @@ function ensureWorkerProfileForUser(user) {
     nextAvailableDate: formatDateInput(
       user.nextAvailableDate ?? worker?.nextAvailableDate ?? "",
     ),
-    minRate:
-      Number.isFinite(minRateRaw) && minRateRaw > 0
-        ? Math.round(minRateRaw)
-        : undefined,
+    minRate: minRate || undefined,
     travelRadiusMiles:
       Number.isFinite(radiusRaw) && radiusRaw > 0 ? Math.round(radiusRaw) : 15,
     travelFurtherWithAccommodation: !!(
@@ -10022,6 +10063,16 @@ function createShiftChangeOffer(jobId, fields) {
     return { ok: false, reason: "Choose an effective date" };
   if (!fields.proposedShiftStartTime || !fields.proposedShiftFinishTime)
     return { ok: false, reason: "Add proposed working hours" };
+  const workerFacingDayRate =
+    Number(fields.revisedOfferedRate) || workerPayDisplay(job, worker);
+  const rateEligibility = workerMinimumRateAllowsPayableRate(
+    worker,
+    workerFacingDayRate,
+    { rateKnown: Number(workerFacingDayRate) > 0 },
+  );
+  if (!rateEligibility.eligible) {
+    return { ok: false, reason: "Worker is not eligible for this offer" };
+  }
   if (!Array.isArray(state.shiftChangeOffers)) state.shiftChangeOffers = [];
   const offer = {
     id: createId(),
@@ -17450,6 +17501,7 @@ function renderWorkerProfile(user) {
     .join("");
 
   const weekendPrefs = workerWeekendPreferences(workerProfile || user);
+  const minimumDayRate = savedWorkerMinimumRate(workerProfile || user);
   const travelFields = [
     { label: "Home town or postcode", val: workerProfile?.location || user.location },
     { label: "Willing to travel", val: travelRadiusLabel(workerProfile?.travelRadiusMiles || user.travelRadiusMiles) },
@@ -17520,6 +17572,14 @@ function renderWorkerProfile(user) {
     <div class="prof-section">
       <div class="prof-section-title">Travel Preferences</div>
       <div class="prof-fields">${travelFields}</div>
+      <div class="worker-rate-preference-form">
+        <label class="field-label" for="workerProfileMinimumDayRate">
+          Minimum Day Rate (£)
+          <input id="workerProfileMinimumDayRate" type="number" min="1" step="1" value="${minimumDayRate || ""}" placeholder="e.g. 200" />
+          <span class="form-helper">Private to OnSite. We use this to avoid showing opportunities below your minimum.</span>
+        </label>
+        <button class="secondary-btn" id="saveWorkerMinimumDayRate" type="button">Save preference</button>
+      </div>
     </div>
 
     <div class="prof-section">
@@ -17619,6 +17679,42 @@ function renderWorkerProfile(user) {
     delBtn.addEventListener("click", () => {
       if (typeof deleteWorkerAccount === "function") deleteWorkerAccount();
     });
+
+  el.querySelector("#saveWorkerMinimumDayRate")?.addEventListener("click", () => {
+    const input = el.querySelector("#workerProfileMinimumDayRate");
+    const result = window.OnSiteWorkerRatePreferences?.applyMinimumDayRate(
+      user,
+      input?.value,
+    );
+    if (!result?.ok) {
+      input?.setCustomValidity(result?.reason || "Enter a valid minimum day rate");
+      input?.reportValidity();
+      return;
+    }
+    input.setCustomValidity("");
+    const minimum = result.minimumDayRate;
+    user.minRate = minimum;
+    if (workerProfile) workerProfile.minRate = minimum;
+    if (typeof getUsers === "function" && typeof saveUsers === "function") {
+      saveUsers(
+        getUsers().map((account) =>
+          account.id === user.id ? { ...account, minRate: minimum } : account,
+        ),
+      );
+    }
+    if (
+      typeof getCurrentUser === "function" &&
+      typeof setCurrentUser === "function"
+    ) {
+      const session = getCurrentUser();
+      if (session?.id === user.id) {
+        setCurrentUser({ ...session, minRate: minimum });
+      }
+    }
+    saveState();
+    renderWorkerProfile(user);
+    showToast("Minimum day rate updated");
+  });
 
   el.querySelector("#workerDocAddBtn")?.addEventListener("click", async (event) => {
     const type = el.querySelector("#workerDocType")?.value || "other";
@@ -29803,13 +29899,7 @@ function evaluateWorkerMatch(job, worker, options = {}) {
   const tradeMatched =
     canonicalTrade(worker?.trade) === canonicalTrade(job?.trade);
   const capacity = workerCapacityForProject(worker, job, { ignoreProjectIds });
-  const budget = jobBudget(job);
-  const pricing = options.skipPricing && !budget
-    ? { viable: true }
-    : computeBookingPricing({
-        workerMin: workerMinRate(worker),
-        budget,
-      });
+  const rateEligibility = workerMinimumRateEligibility(job, worker, options);
   const absence = plannedAbsenceImpact(worker, job, capacity);
   const travel = travelMatch(job, worker);
   const weekend = weekendMatch(job, worker);
@@ -29839,7 +29929,7 @@ function evaluateWorkerMatch(job, worker, options = {}) {
     !qualificationMatched ? "qualification" : "",
     travel.exclude ? "travel" : "",
     weekend.exclude ? "schedule" : "",
-    !pricing.viable ? "rate" : "",
+    !rateEligibility.eligible ? "rate" : "",
   ].filter((value, index, values) => value && values.indexOf(value) === index);
   const eligible = constraints.length === 0;
   const base = {
@@ -29848,7 +29938,7 @@ function evaluateWorkerMatch(job, worker, options = {}) {
     primaryConstraint: constraints[0] || "",
     constraints,
     capacity,
-    pricingViable: !!pricing.viable,
+    pricingViable: rateEligibility.eligible,
     qualificationMatched,
     roleEvidencePresent,
     roleAligned,

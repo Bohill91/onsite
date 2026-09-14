@@ -334,6 +334,17 @@ document.getElementById('regProfilePhoto')?.addEventListener('change', async fun
 // ─── Worker Reg — Step 2: create the account ───────────────
 document.getElementById('workerStep2Form').addEventListener('submit', function(e) {
   e.preventDefault();
+  const minRateInput = document.getElementById('regMinRate');
+  const minRateResult = window.OnSiteWorkerRatePreferences?.applyMinimumDayRate(
+    workerRegData,
+    minRateInput?.value,
+  );
+  if (!minRateResult?.ok) {
+    minRateInput?.setCustomValidity(minRateResult?.reason || 'Enter a valid minimum day rate');
+    minRateInput?.reportValidity();
+    return;
+  }
+  minRateInput.setCustomValidity('');
   workerRegData.trade = document.getElementById('regTrade').value;
   workerRegData.tradeKey = window.OnSiteTaxonomy?.tradeKeyFor(workerRegData.trade) || '';
   workerRegData.specialism = document.getElementById('regRole').value;
@@ -341,7 +352,7 @@ document.getElementById('workerStep2Form').addEventListener('submit', function(e
   workerRegData.yearsExp = document.getElementById('regYearsExp').value;
   workerRegData.location = document.getElementById('regLocation').value.trim();
   workerRegData.locationData = window.workerLocationSelection || null;
-  workerRegData.minRate = '';
+  workerRegData.minRate = minRateResult.minimumDayRate;
   workerRegData.travelRadiusMiles = Number(document.getElementById('regTravelRadius').value) || 15;
   workerRegData.travelFurtherWithAccommodation =
     document.querySelector('input[name="regTravelFurther"]:checked')?.value === 'yes';
