@@ -21,12 +21,21 @@ async function assertSupabaseKeyConfiguration() {
       SUPABASE_SECRET_KEY: "sb_secret_test",
     },
     clientFactory(url, key, options) {
-      clientCalls.push({ url, key, options });
-      return {
+      const client = {
         auth: {
           signUp: async () => {
             operationCalls.push({ operation: "signUp", key });
             return { data: { user: { id: "auth-test" } }, error: null };
+          },
+          signInWithPassword: async () => {
+            operationCalls.push({ operation: "signIn", key });
+            return {
+              data: {
+                user: { id: "auth-test" },
+                session: { access_token: "user-access", refresh_token: "user-refresh" },
+              },
+              error: null,
+            };
           },
           admin: {
             deleteUser: async () => {
@@ -35,7 +44,18 @@ async function assertSupabaseKeyConfiguration() {
             },
           },
         },
+        from(table) {
+          operationCalls.push({ operation: `select:${table}`, key });
+          const query = {
+            select() { return query; },
+            eq() { return query; },
+            maybeSingle: async () => ({ data: null, error: null }),
+          };
+          return query;
+        },
       };
+      clientCalls.push({ url, key, options, client });
+      return client;
     },
   });
 
@@ -46,11 +66,18 @@ async function assertSupabaseKeyConfiguration() {
     "sb_secret_test",
   ]);
   assert.equal(clientCalls.every(({ url }) => url === "https://onsite-test.supabase.co"), true);
+  assert.notEqual(clientCalls[0].client, clientCalls[1].client);
+  assert.equal(clientCalls.every(({ options }) => options.auth.persistSession === false), true);
+  assert.equal(clientCalls.every(({ options }) => options.auth.autoRefreshToken === false), true);
   assert.equal(JSON.stringify(adapter).includes("sb_secret_test"), false);
   await adapter.signUp({ email: "test@example.com", password: "password", metadata: {} });
+  await adapter.signInWithPassword({ email: "test@example.com", password: "password" });
+  await adapter.getWorkerProfileByUserId("auth-test");
   await adapter.deleteAuthUser("auth-test");
   assert.deepEqual(operationCalls, [
     { operation: "signUp", key: "sb_publishable_test" },
+    { operation: "signIn", key: "sb_publishable_test" },
+    { operation: "select:worker_profiles", key: "sb_secret_test" },
     { operation: "deleteUser", key: "sb_secret_test" },
   ]);
 
@@ -281,6 +308,7 @@ async function run() {
   assert.equal(companyRegistration.principal.companyId, companyRegistration.principal.id);
   assert.notEqual(companyRegistration.principal.companyId, "browser-injected-company");
   assert.equal(companyRegistration.principal.minRate, undefined);
+  assert.equal(Object.hasOwn(companyRegistration.principal, "minRate"), false);
 
   const workerLogin = await service.login({
     email: workerInput.email,
@@ -374,6 +402,14 @@ async function run() {
     () => unconfigured.login({ email: "a@example.com", password: "password" }),
     (error) => error.code === "AUTH_NOT_CONFIGURED" && error.statusCode === 503,
   );
+  await assert.rejects(
+    () => service.restoreSession({}),
+    (error) => error.code === "UNAUTHENTICATED" && error.statusCode === 401,
+  );
+  await assert.rejects(
+    () => service.restoreSession({ accessToken: "invalid-access-token" }),
+    (error) => error.code === "UNAUTHENTICATED" && error.statusCode === 401,
+  );
 
   const authSource = fs.readFileSync(path.join(__dirname, "..", "auth.js"), "utf8");
   const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
@@ -385,6 +421,16 @@ async function run() {
       "supabase",
       "migrations",
       "202609140001_identity_foundation.sql",
+    ),
+    "utf8",
+  );
+  const runtimeFixMigrationSource = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "supabase",
+      "migrations",
+      "202609150002_auth_runtime_fix.sql",
     ),
     "utf8",
   );
@@ -403,8 +449,29 @@ async function run() {
   assert.match(migrationSource, /worker_profiles_select_own/);
   assert.match(migrationSource, /company_memberships_select_own/);
   assert.match(migrationSource, /private_minimum_day_rate/);
+  assert.match(migrationSource, /revoke all on public\.worker_profiles from anon/);
+  assert.match(migrationSource, /revoke all on public\.companies from anon/);
+  assert.match(migrationSource, /revoke all on public\.company_memberships from anon/);
+  assert.match(migrationSource, /grant select on public\.worker_profiles to authenticated/);
+  assert.match(migrationSource, /grant select on public\.companies to authenticated/);
+  assert.match(migrationSource, /grant select on public\.company_memberships to authenticated/);
+  assert.doesNotMatch(migrationSource, /grant (?:insert|delete) on public\..+ to authenticated/);
   assert.match(migrationSource, /grant execute[\s\S]+to service_role/);
   assert.doesNotMatch(migrationSource, /attendance manager/i);
+  assert.match(runtimeFixMigrationSource, /grant usage on schema public to service_role/);
+  assert.match(
+    runtimeFixMigrationSource,
+    /grant select on table[\s\S]+public\.worker_profiles[\s\S]+public\.companies[\s\S]+public\.company_memberships[\s\S]+to service_role/,
+  );
+  assert.match(
+    runtimeFixMigrationSource,
+    /grant update \([\s\S]+availability_status[\s\S]+next_available_date[\s\S]+private_minimum_day_rate[\s\S]+\) on table public\.worker_profiles to service_role/,
+  );
+  assert.match(
+    runtimeFixMigrationSource,
+    /foreign key \(user_id\)[\s\S]+references auth\.users\(id\)[\s\S]+on delete cascade/,
+  );
+  assert.doesNotMatch(runtimeFixMigrationSource, /grant[\s\S]+to (?:anon|authenticated)/);
 
   console.log("server auth foundation tests passed");
 }
