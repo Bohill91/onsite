@@ -863,6 +863,8 @@ async function adoptPasswordRecoverySession() {
       body: { accessToken, refreshToken },
     });
     acceptServerPrincipal(payload.principal);
+    const resetPasswordEmail = document.getElementById('resetPasswordEmail');
+    if (resetPasswordEmail) resetPasswordEmail.value = payload.principal?.email || '';
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
     showAuthOverlay();
     showScreen('reset-password');

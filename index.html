@@ -91,7 +91,7 @@
               <div class="auth-field-group">
                 <div class="auth-field">
                   <label class="auth-label" for="loginEmail">Email address</label>
-                  <input class="auth-input" id="loginEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
+                  <input class="auth-input" id="loginEmail" type="email" placeholder="your@email.com" required autocomplete="username" />
                 </div>
                 <div class="auth-field">
                   <label class="auth-label" for="loginPassword">Password</label>
@@ -170,6 +170,7 @@
             <p class="auth-subtitle">Use at least eight characters.</p>
             <div id="resetPasswordError" class="auth-error"></div>
             <form id="resetPasswordForm">
+              <input class="auth-autofill-context" id="resetPasswordEmail" type="email" autocomplete="username" tabindex="-1" aria-hidden="true" />
               <div class="auth-field-group">
                 <div class="auth-field">
                   <label class="auth-label" for="resetPassword">New password</label>
@@ -252,7 +253,7 @@
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="regEmail">Email</label>
-                    <input class="auth-input" id="regEmail" type="email" placeholder="your@email.com" required autocomplete="email" />
+                    <input class="auth-input" id="regEmail" type="email" placeholder="your@email.com" required autocomplete="username" />
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="regPhone">Mobile</label>
@@ -477,7 +478,7 @@
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="companyEmail">Email address</label>
-                    <input class="auth-input" id="companyEmail" type="email" placeholder="contact@company.co.uk" required autocomplete="email" />
+                    <input class="auth-input" id="companyEmail" type="email" placeholder="contact@company.co.uk" required autocomplete="username" />
                   </div>
                   <div class="auth-field">
                     <label class="auth-label" for="companyPhone">Mobile number</label>
