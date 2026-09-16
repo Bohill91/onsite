@@ -51,9 +51,25 @@ function displayRole(role) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
+function recordsFromLookup(value) {
+  const unwrapped = value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.hasOwn(value, "data")
+    ? value.data
+    : value;
+  if (unwrapped == null) return [];
+  const records = Array.isArray(unwrapped) ? unwrapped : [unwrapped];
+  return records.filter((record) =>
+    record
+    && typeof record === "object"
+    && !Array.isArray(record)
+    && Object.keys(record).length > 0,
+  );
+}
+
 function firstRecord(value) {
-  if (Array.isArray(value)) return value[0] || null;
-  return value || null;
+  return recordsFromLookup(value)[0] || null;
 }
 
 function unwrapResult(result, fallbackMessage) {
@@ -65,7 +81,11 @@ function unwrapResult(result, fallbackMessage) {
       result.error.code || "SUPABASE_ERROR",
     );
   }
-  return result?.data ?? result;
+  return result
+    && typeof result === "object"
+    && Object.hasOwn(result, "data")
+    ? result.data
+    : result;
 }
 
 function createSupabaseAuthAdapter({ env = process.env, clientFactory = createClient } = {}) {
@@ -330,21 +350,37 @@ function createAuthService({ adapter, env = process.env } = {}) {
       throw new AuthServiceError("Authentication is required.", 401, "UNAUTHENTICATED");
     }
 
-    const workerProfile = await authAdapter.getWorkerProfileByUserId(authUser.id);
-    const memberships = (await authAdapter.getCompanyMembershipsByUserId(authUser.id))
-      .filter((membership) =>
-        membership?.user_id === authUser.id && membership.status === "active",
-      );
+    const workerProfiles = recordsFromLookup(
+      await authAdapter.getWorkerProfileByUserId(authUser.id),
+    ).filter((profile) => profile.user_id === authUser.id && !!profile.id);
+    const memberships = recordsFromLookup(
+      await authAdapter.getCompanyMembershipsByUserId(authUser.id),
+    ).filter((membership) => {
+      const company = firstRecord(membership.companies) || membership.company || {};
+      return membership.user_id === authUser.id
+        && membership.status === "active"
+        && !!displayRole(membership.role)
+        && !!company.id
+        && (!membership.company_id || membership.company_id === company.id);
+    });
 
-    if (workerProfile && memberships.length) {
+    if (
+      workerProfiles.length > 1
+      || memberships.length > 1
+      || (workerProfiles.length === 1 && memberships.length === 1)
+    ) {
       throw new AuthServiceError(
         "This account has conflicting OnSite identities.",
         409,
         "IDENTITY_CONFLICT",
       );
     }
-    if (workerProfile) return normalizeWorkerPrincipal(authUser, workerProfile);
-    if (memberships.length) return normalizeCompanyPrincipal(authUser, memberships[0]);
+    if (workerProfiles.length === 1) {
+      return normalizeWorkerPrincipal(authUser, workerProfiles[0]);
+    }
+    if (memberships.length === 1) {
+      return normalizeCompanyPrincipal(authUser, memberships[0]);
+    }
     throw new AuthServiceError(
       "This account does not have an OnSite profile.",
       403,

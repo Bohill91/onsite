@@ -50,6 +50,7 @@ async function assertSupabaseKeyConfiguration() {
             select() { return query; },
             eq() { return query; },
             maybeSingle: async () => ({ data: null, error: null }),
+            order: async () => ({ data: [], error: null }),
           };
           return query;
         },
@@ -72,12 +73,14 @@ async function assertSupabaseKeyConfiguration() {
   assert.equal(JSON.stringify(adapter).includes("sb_secret_test"), false);
   await adapter.signUp({ email: "test@example.com", password: "password", metadata: {} });
   await adapter.signInWithPassword({ email: "test@example.com", password: "password" });
-  await adapter.getWorkerProfileByUserId("auth-test");
+  assert.equal(await adapter.getWorkerProfileByUserId("auth-test"), null);
+  assert.deepEqual(await adapter.getCompanyMembershipsByUserId("auth-test"), []);
   await adapter.deleteAuthUser("auth-test");
   assert.deepEqual(operationCalls, [
     { operation: "signUp", key: "sb_publishable_test" },
     { operation: "signIn", key: "sb_publishable_test" },
     { operation: "select:worker_profiles", key: "sb_secret_test" },
+    { operation: "select:company_memberships", key: "sb_secret_test" },
     { operation: "deleteUser", key: "sb_secret_test" },
   ]);
 
@@ -275,8 +278,134 @@ const workerInput = {
   referralCode: "OSW-ABC123DEF456",
 };
 
+function principalResolutionAdapter({ workerResult = null, membershipResult = [] } = {}) {
+  const user = {
+    id: "auth-principal-test",
+    email: "principal@example.com",
+    user_metadata: { full_name: "Canonical User" },
+  };
+  return {
+    configured: true,
+    user,
+    async getWorkerProfileByUserId() {
+      return workerResult;
+    },
+    async getCompanyMembershipsByUserId() {
+      return membershipResult;
+    },
+    async signInWithPassword() {
+      return {
+        user,
+        session: {
+          access_token: "principal-access",
+          refresh_token: "principal-refresh",
+        },
+      };
+    },
+  };
+}
+
+function principalWorker() {
+  return {
+    id: "worker-principal-test",
+    user_id: "auth-principal-test",
+    name: "Canonical Worker",
+    private_minimum_day_rate: 275,
+  };
+}
+
+function principalCompanyMembership() {
+  return {
+    user_id: "auth-principal-test",
+    company_id: "company-principal-test",
+    role: "administrator",
+    status: "active",
+    companies: {
+      id: "company-principal-test",
+      name: "Canonical Company",
+      status: "verified",
+    },
+  };
+}
+
+async function assertPrincipalResolutionShapes() {
+  const membership = principalCompanyMembership();
+  for (const emptyWorkerResult of [[], null, {}, { data: [] }]) {
+    const adapter = principalResolutionAdapter({
+      workerResult: emptyWorkerResult,
+      membershipResult: [membership],
+    });
+    const principal = await createAuthService({ adapter, env: {} })
+      .resolvePrincipal(adapter.user);
+    assert.equal(principal.type, "company");
+    assert.equal(principal.serverAuthenticated, true);
+    assert.equal(principal.companyId, "company-principal-test");
+    assert.equal(principal.companyName, "Canonical Company");
+    assert.equal(principal.permissionRole, "Administrator");
+    assert.equal(principal.companyRole, "Administrator");
+    assert.equal(Object.hasOwn(principal, "minRate"), false);
+    assert.equal(Object.hasOwn(principal, "private_minimum_day_rate"), false);
+  }
+
+  const wrappedMembershipAdapter = principalResolutionAdapter({
+    workerResult: null,
+    membershipResult: { data: [membership] },
+  });
+  const wrappedMembershipPrincipal = await createAuthService({
+    adapter: wrappedMembershipAdapter,
+    env: {},
+  }).resolvePrincipal(wrappedMembershipAdapter.user);
+  assert.equal(wrappedMembershipPrincipal.type, "company");
+
+  const workerOnlyAdapter = principalResolutionAdapter({
+    workerResult: principalWorker(),
+    membershipResult: { data: [] },
+  });
+  const workerPrincipal = await createAuthService({ adapter: workerOnlyAdapter, env: {} })
+    .resolvePrincipal(workerOnlyAdapter.user);
+  assert.equal(workerPrincipal.type, "worker");
+  assert.equal(workerPrincipal.minRate, 275);
+
+  const conflictAdapter = principalResolutionAdapter({
+    workerResult: principalWorker(),
+    membershipResult: [membership],
+  });
+  await assert.rejects(
+    () => createAuthService({ adapter: conflictAdapter, env: {} })
+      .resolvePrincipal(conflictAdapter.user),
+    (error) => error.code === "IDENTITY_CONFLICT" && error.statusCode === 409,
+  );
+
+  const noIdentityAdapter = principalResolutionAdapter({
+    workerResult: { data: [] },
+    membershipResult: {},
+  });
+  await assert.rejects(
+    () => createAuthService({ adapter: noIdentityAdapter, env: {} })
+      .resolvePrincipal(noIdentityAdapter.user),
+    (error) => error.code === "PROFILE_REQUIRED" && error.statusCode === 403,
+  );
+
+  const companyLoginAdapter = principalResolutionAdapter({
+    workerResult: [],
+    membershipResult: [membership],
+  });
+  const companyLogin = await createAuthService({ adapter: companyLoginAdapter, env: {} }).login({
+    email: "principal@example.com",
+    password: "safe-password-3",
+    type: "worker",
+    workerId: "browser-injected-worker",
+    minRate: 1,
+  });
+  assert.equal(companyLogin.principal.type, "company");
+  assert.equal(companyLogin.principal.companyId, "company-principal-test");
+  assert.equal(Object.hasOwn(companyLogin.principal, "workerId"), false);
+  assert.equal(Object.hasOwn(companyLogin.principal, "minRate"), false);
+}
+
 async function run() {
   await assertSupabaseKeyConfiguration();
+  await assertPrincipalResolutionShapes();
 
   const adapter = fakeAdapter();
   const service = createAuthService({ adapter, env: {} });
