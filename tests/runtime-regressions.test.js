@@ -105,6 +105,9 @@ async function run() {
     const projects = await fetch(`${baseUrl}/api/projects`);
     assert.equal(projects.status, 503);
     assert.equal((await projects.json()).code, "AUTH_NOT_CONFIGURED");
+    const jobs = await fetch(`${baseUrl}/api/jobs`);
+    assert.equal(jobs.status, 503);
+    assert.equal((await jobs.json()).code, "AUTH_NOT_CONFIGURED");
     for (const asset of ["pdf.mjs", "pdf.worker.mjs"]) {
       const response = await fetch(`${baseUrl}/vendor/pdfjs/${asset}`);
       assert.equal(response.status, 200);

@@ -14,6 +14,10 @@ const {
   createProjectService,
 } = require('./server-projects');
 const {
+  MarketplaceServiceError,
+  createMarketplaceService,
+} = require('./server-marketplace');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -32,6 +36,7 @@ const documentFileStore = createDocumentFileStore({
 });
 const authService = createAuthService();
 const projectService = createProjectService();
+const marketplaceService = createMarketplaceService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -417,6 +422,92 @@ async function handleProjectApi(req, res, url) {
   }
 }
 
+function publicMarketplaceError(error) {
+  if (error instanceof MarketplaceServiceError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Marketplace] Unexpected error:', error);
+  return new MarketplaceServiceError(
+    'Marketplace service error.',
+    500,
+    'MARKETPLACE_INTERNAL_ERROR',
+  );
+}
+
+async function handleMarketplaceApi(req, res, url) {
+  try {
+    const restored = await resolveAuthenticatedPrincipal(req);
+    const cookies = sessionCookies(req, restored.session);
+    const responseHeaders = cookies.length
+      ? { 'Set-Cookie': cookies, Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    const jobMatch = url.pathname.match(/^\/api\/jobs\/([0-9a-f-]{36})$/i);
+    const jobApplicationMatch = url.pathname.match(
+      /^\/api\/jobs\/([0-9a-f-]{36})\/applications$/i,
+    );
+    const applicationMatch = url.pathname.match(/^\/api\/applications\/([0-9a-f-]{36})$/i);
+
+    if (req.method === 'GET' && url.pathname === '/api/jobs') {
+      const jobs = await marketplaceService.listJobs(restored.principal);
+      sendJson(res, 200, { jobs }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && jobMatch) {
+      const job = await marketplaceService.getJob(restored.principal, jobMatch[1]);
+      sendJson(res, 200, { job }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && jobApplicationMatch) {
+      const application = await marketplaceService.apply(
+        restored.principal,
+        jobApplicationMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 201, { application }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/applications') {
+      const applications = await marketplaceService.listWorkerApplications(
+        restored.principal,
+      );
+      sendJson(res, 200, { applications }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'PATCH' && applicationMatch) {
+      const application = await marketplaceService.withdraw(
+        restored.principal,
+        applicationMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { application }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/company/applications') {
+      const applications = await marketplaceService.listCompanyApplications(
+        restored.principal,
+      );
+      sendJson(res, 200, { applications }, responseHeaders);
+      return;
+    }
+
+    sendJson(res, 404, {
+      error: 'Marketplace route not found.',
+      code: 'MARKETPLACE_ROUTE_NOT_FOUND',
+    });
+  } catch (rawError) {
+    const error = publicMarketplaceError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
+}
+
 function requestHeader(req, name, maxLength = 200) {
   const value = Array.isArray(req.headers[name])
     ? req.headers[name][0]
@@ -542,6 +633,17 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/projects' || url.pathname.startsWith('/api/projects/')) {
     handleProjectApi(req, res, url);
+    return;
+  }
+
+  if (
+    url.pathname === '/api/jobs'
+    || url.pathname.startsWith('/api/jobs/')
+    || url.pathname === '/api/applications'
+    || url.pathname.startsWith('/api/applications/')
+    || url.pathname === '/api/company/applications'
+  ) {
+    handleMarketplaceApi(req, res, url);
     return;
   }
 

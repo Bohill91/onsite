@@ -2351,6 +2351,10 @@ function companyChargeDisplay(job) {
 // is the stored worker pay; for an open job it's derived from the viewing
 // worker's private minimum against the company budget.
 function workerPayDisplay(job, worker) {
+  if (job?.workerSafeMarketplace) {
+    const advertised = Number(job.advertisedDayRate);
+    return Number.isFinite(advertised) && advertised > 0 ? advertised : null;
+  }
   const placementSlot = worker?.id
     ? placementSlotsEngine()?.slotForWorker(job, worker.id)
     : null;
@@ -6670,7 +6674,16 @@ function migrateState(s) {
 function saveState() {
   try {
     syncCommercialInvoiceArchitecture(state);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const persistedState = {
+      ...state,
+      applications: (state.applications || []).filter(
+        (application) => !application.canonicalMarketplaceApplication,
+      ),
+      workers: (state.workers || []).filter(
+        (worker) => !worker.canonicalApplicant,
+      ),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
     return true;
   } catch (_) {
     return false;
@@ -6695,6 +6708,146 @@ async function projectApiRequest(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+async function marketplaceApiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || "Marketplace request failed.");
+    error.code = payload.code || "MARKETPLACE_API_ERROR";
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+let canonicalWorkerMarketplaceJobs = [];
+let canonicalWorkerMarketplaceSyncInFlight = null;
+let canonicalCompanyApplicationSyncInFlight = null;
+
+function clearCanonicalMarketplaceCompatibility() {
+  canonicalWorkerMarketplaceJobs = [];
+  state.applications = (state.applications || []).filter(
+    (application) => !application.canonicalMarketplaceApplication,
+  );
+  state.workers = (state.workers || []).filter(
+    (worker) => !worker.canonicalApplicant,
+  );
+}
+
+function canonicalApplicationCompatibility(application, worker = {}) {
+  return {
+    id: application.id,
+    applicationId: application.id,
+    canonicalMarketplaceApplication: true,
+    canonicalStatus: application.status,
+    jobId: application.projectId || "",
+    projectId: application.projectId || "",
+    requirementId: application.requirementId || "",
+    labourRequirementId: application.requirementId || "",
+    workerId: application.workerId || worker.id || "",
+    workerName: worker.name || "Worker",
+    workerTrade: worker.trade || "",
+    companyId: application.companyId || "",
+    status: application.status === "applied" ? "interested" : application.status,
+    workerNote: application.workerNote || "",
+    withdrawalReason: application.withdrawalReason || "",
+    withdrawnAt: application.withdrawnAt || "",
+    createdAt: application.createdAt || "",
+    updatedAt: application.updatedAt || "",
+  };
+}
+
+function replaceCanonicalApplications(applications, user, { company = false } = {}) {
+  if (!Array.isArray(state.applications)) state.applications = [];
+  if (!Array.isArray(state.workers)) state.workers = [];
+  state.applications = state.applications.filter((application) => {
+    if (!application.canonicalMarketplaceApplication) return true;
+    return company
+      ? application.companyId !== user.id
+      : application.workerId !== user.id;
+  });
+  applications.forEach((application) => {
+    const worker = company ? application.worker || {} : user;
+    if (company && worker.id) {
+      const existingIndex = state.workers.findIndex(
+        (candidate) => candidate.id === worker.id,
+      );
+      const compatibleWorker = {
+        ...(existingIndex >= 0 ? state.workers[existingIndex] : {}),
+        ...worker,
+        canonicalApplicant:
+          existingIndex < 0 || !!state.workers[existingIndex]?.canonicalApplicant,
+      };
+      if (existingIndex >= 0) state.workers[existingIndex] = compatibleWorker;
+      else state.workers.push(compatibleWorker);
+    }
+    state.applications.push({
+      ...canonicalApplicationCompatibility(application, worker),
+      companyId: company ? user.id : application.companyId || "",
+      projectName: application.projectName || "",
+      jobNumber: application.jobNumber || "",
+    });
+  });
+}
+
+async function syncCanonicalWorkerMarketplace(user = getSessionUser()) {
+  if (user?.type !== "worker" || !user.serverAuthenticated) return;
+  if (canonicalWorkerMarketplaceSyncInFlight) {
+    return canonicalWorkerMarketplaceSyncInFlight;
+  }
+  canonicalWorkerMarketplaceSyncInFlight = (async () => {
+    try {
+      const [{ jobs = [] }, { applications = [] }] = await Promise.all([
+        marketplaceApiRequest("/api/jobs"),
+        marketplaceApiRequest("/api/applications"),
+      ]);
+      canonicalWorkerMarketplaceJobs = jobs;
+      replaceCanonicalApplications(applications, user);
+      saveAndRender();
+    } catch (error) {
+      canonicalWorkerMarketplaceJobs = [];
+      console.error("[Marketplace] Canonical worker sync failed:", error);
+      showToast(error.message || "Available jobs could not be loaded");
+    } finally {
+      canonicalWorkerMarketplaceSyncInFlight = null;
+    }
+  })();
+  return canonicalWorkerMarketplaceSyncInFlight;
+}
+
+async function syncCanonicalCompanyApplications(
+  user = getSessionUser(),
+  { render = true } = {},
+) {
+  if (user?.type !== "company" || !user.serverAuthenticated) return;
+  if (canonicalCompanyApplicationSyncInFlight) {
+    return canonicalCompanyApplicationSyncInFlight;
+  }
+  canonicalCompanyApplicationSyncInFlight = (async () => {
+    try {
+      const { applications = [] } = await marketplaceApiRequest(
+        "/api/company/applications",
+      );
+      replaceCanonicalApplications(applications, user, { company: true });
+      if (render) saveAndRender();
+    } catch (error) {
+      console.error("[Marketplace] Canonical company application sync failed:", error);
+      showToast(error.message || "Worker applications could not be loaded");
+    } finally {
+      canonicalCompanyApplicationSyncInFlight = null;
+    }
+  })();
+  return canonicalCompanyApplicationSyncInFlight;
 }
 
 function canonicalProjectWritePayload(job, { includeRequirements = true } = {}) {
@@ -6839,6 +6992,7 @@ async function syncCanonicalCompanyProjects(user = getSessionUser()) {
         ),
         ...canonical,
       ];
+      await syncCanonicalCompanyApplications(user, { render: false });
       saveAndRender();
     } catch (error) {
       console.error("[Projects] Canonical project sync failed:", error);
@@ -9395,19 +9549,52 @@ function updateWorkerAvailability(userId, availability, nextAvailableDate = "") 
 
 function applicationFor(jobId, workerId) {
   return (state.applications || []).find(
-    (a) => a.jobId === jobId && a.workerId === workerId,
+    (a) =>
+      (a.jobId === jobId || a.requirementId === jobId) &&
+      a.workerId === workerId &&
+      a.status !== "withdrawn" &&
+      a.canonicalStatus !== "withdrawn",
   );
 }
 
-function registerInterest(jobId, user) {
-  const job = findJob(jobId);
+async function registerInterest(jobId, user) {
+  const canonicalJob = canonicalWorkerMarketplaceJobs.find(
+    (job) => job.requirementId === jobId || job.id === jobId,
+  );
+  const job = canonicalJob || findJob(jobId);
   if (!job || !user?.id) return { ok: false, reason: "Job not found" };
-  if (!jobHasOpenPlacement(job) || job.completed)
+  if (!canonicalJob && (!jobHasOpenPlacement(job) || job.completed))
     return { ok: false, reason: "This job is no longer open" };
   if (!Array.isArray(state.applications)) state.applications = [];
 
   const existing = applicationFor(job.id, user.id);
   if (existing) return { ok: true, application: existing, duplicate: true };
+
+  if (user.serverAuthenticated && canonicalJob) {
+    try {
+      const { application } = await marketplaceApiRequest(
+        `/api/jobs/${canonicalJob.requirementId}/applications`,
+        { method: "POST", body: {} },
+      );
+      const compatibility = canonicalApplicationCompatibility(application, user);
+      state.applications.push(compatibility);
+      saveAndRender();
+      return { ok: true, application: compatibility };
+    } catch (error) {
+      if (error.code === "APPLICATION_EXISTS") {
+        await syncCanonicalWorkerMarketplace(user);
+        return {
+          ok: true,
+          application: applicationFor(canonicalJob.requirementId, user.id),
+          duplicate: true,
+        };
+      }
+      return {
+        ok: false,
+        reason: error.message || "Interest could not be registered",
+      };
+    }
+  }
 
   const worker = findWorker(user.id) || ensureWorkerProfileForUser(user);
   const application = {
@@ -16278,6 +16465,7 @@ function syncLegacyWorkerFormAccess(user) {
 
 function applyRoleView(user) {
   const role = user?.type || null;
+  clearCanonicalMarketplaceCompatibility();
   syncLegacyWorkerFormAccess(user);
 
   if (role === "worker") {
@@ -16291,6 +16479,7 @@ function applyRoleView(user) {
     if (jobsSub) jobsSub.textContent = "Open positions matching your trade";
     render();
     switchTab("dashboard");
+    void syncCanonicalWorkerMarketplace(user);
   } else if (role === "company") {
     rebuildNav(CONTRACTOR_TABS, "dashboard");
     // Companies: show job form only, hide worker form and toggle bar
@@ -16345,11 +16534,7 @@ function renderWorkerHome(user) {
   const booking = state.jobs.find((job) => jobHasAssignedWorker(job, user.id));
 
   // Recommended jobs (trade-matched, up to 3)
-  const trade = canonicalTrade(user.trade);
-  const recommended = [...state.jobs]
-    .filter((j) => !trade || canonicalTrade(j.trade) === trade)
-    .sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0))
-    .slice(0, 3);
+  const recommended = workerOpenJobs(user).slice(0, 3);
 
   // Greeting
   const hr = new Date().getHours();
@@ -17047,8 +17232,20 @@ function workerOfferDecisionCardHTML(app, user) {
 function renderWorkerOffersPage(user) {
   const el = document.getElementById("offersContent");
   if (!el) return;
+  const offerStatuses = new Set([
+    "offered",
+    "accepted_by_worker",
+    "under_company_review",
+    "declined_by_worker",
+    "declined_by_company",
+    "expired",
+    "confirmed",
+    "superseded",
+  ]);
   const apps = (state.applications || [])
-    .filter((app) => app.workerId === user.id)
+    .filter(
+      (app) => app.workerId === user.id && offerStatuses.has(app.status),
+    )
     .sort(
       (a, b) =>
         new Date(b.updatedAt || b.createdAt || 0) -
@@ -17135,10 +17332,13 @@ function renderWorkerOffersPage(user) {
 
 function workerOpenJobs(user) {
   const trade = canonicalTrade(user?.trade);
-  return [...state.jobs]
+  const source = user?.serverAuthenticated
+    ? canonicalWorkerMarketplaceJobs
+    : state.jobs;
+  return [...source]
     .filter(
       (job) =>
-        jobHasOpenPlacement(job) &&
+        (job.workerSafeMarketplace || jobHasOpenPlacement(job)) &&
         !job.completed &&
         (!trade || canonicalTrade(job.trade) === trade),
     )
@@ -17183,8 +17383,8 @@ function bindWorkerOfferButtons(scope) {
 
 function bindWorkerJobBoardButtons(scope, user) {
   scope.querySelectorAll("[data-apply-job]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const result = registerInterest(btn.dataset.applyJob, user);
+    btn.addEventListener("click", async () => {
+      const result = await registerInterest(btn.dataset.applyJob, user);
       if (!result.ok) {
         showToast(result.reason);
         return;
@@ -22075,6 +22275,38 @@ function companyProjectWorkerRowHTML(worker, job, summary, agreements = companyP
 }
 
 function companyProjectRequirementsHTML(job, summary) {
+  const canonicalApplicants = (summary.apps || []).filter(
+    (app) =>
+      app.canonicalMarketplaceApplication &&
+      app.canonicalStatus === "applied",
+  );
+  const applicantRows = canonicalApplicants.length
+    ? canonicalApplicants
+        .map((app) => {
+          const worker = applicationWorker(app);
+          const requirement = (summary.labourRequirements || []).find(
+            (item) =>
+              (item.requirementId || item.id) === app.requirementId,
+          );
+          const requirementLabel = [
+            requirement?.trade || worker?.trade || job.trade,
+            requirement?.specialism || requirement?.grade || worker?.grade,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `<div class="company-project-offer-row">
+            <div class="company-project-person">${worker ? workerAvatarHTML(worker, { className: "worker-avatar is-compact" }) : ""}<span class="company-project-person-copy"><strong>${escapeHtml(app.workerName || worker?.name || "Worker")}</strong><span>${escapeHtml(worker?.location || "Location not supplied")}</span></span></div>
+            <span data-label="Requirement">${escapeHtml(requirementLabel || "Labour requirement")}</span>
+            <span class="company-project-offer-status is-interested" data-label="Status">Applied</span>
+            <span data-label="Applied">${app.createdAt ? formatDate(app.createdAt) : "Not recorded"}</span>
+            <span data-label="Worker note">${escapeHtml(app.workerNote || "No note supplied")}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="company-project-workspace-empty is-compact">
+        <strong>No worker applications yet.</strong>
+        <span>Applications submitted to this project's published requirements will appear here.</span>
+      </div>`;
   const activeOffers = (summary.apps || []).filter((app) =>
     ["offered", "under_company_review"].includes(app.status),
   );
@@ -22185,6 +22417,13 @@ function companyProjectRequirementsHTML(job, summary) {
         <div class="company-project-requirement-list">
           ${requirementRows || `<div class="company-project-workspace-empty"><strong>No labour requirements saved.</strong><span>Add a labour requirement to define the trade, role, rate and schedule needed for this project.</span></div>`}
         </div>
+      </section>
+      <section class="company-project-workspace-card">
+        <header class="company-project-workspace-head is-compact">
+          <div><p class="company-project-workspace-kicker">Applications</p><h2>Worker interest</h2></div>
+        </header>
+        ${canonicalApplicants.length ? `<div class="company-project-offer-table-head" aria-hidden="true"><span>Worker</span><span>Requirement</span><span>Status</span><span>Applied</span><span>Worker note</span></div>` : ""}
+        <div class="company-project-offer-list">${applicantRows}</div>
       </section>
       <section class="company-project-workspace-card">
         <header class="company-project-workspace-head is-compact">
@@ -28531,14 +28770,7 @@ function renderWorkerJobBoard(user) {
   const trade = canonicalTrade(user?.trade);
 
   // Filter to only jobs matching this worker's trade, sorted by start date
-  const sorted = [...state.jobs]
-    .filter(
-      (job) =>
-        jobHasOpenPlacement(job) &&
-        !job.completed &&
-        (!trade || canonicalTrade(job.trade) === trade),
-    )
-    .sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0));
+  const sorted = workerOpenJobs(user);
 
   const rating = buildWorkerRating(user?.id || "");
   const pct = calcWorkerCompletion(user || {});
@@ -28588,8 +28820,8 @@ function renderWorkerJobBoard(user) {
     statusCard + sorted.map((job) => workerJobCard(job, user)).join("");
 
   jobsList.querySelectorAll("[data-apply-job]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const result = registerInterest(btn.dataset.applyJob, user);
+    btn.addEventListener("click", async () => {
+      const result = await registerInterest(btn.dataset.applyJob, user);
       if (!result.ok) {
         showToast(result.reason);
         return;
