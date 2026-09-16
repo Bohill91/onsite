@@ -754,38 +754,10 @@ const EXTENSION_SECOND_DAYS = 7; // second reminder window (calendar days)
 const DEFAULT_NOTICE_DAYS = 5; // working days before end → auto end-as-planned
 const RELEASE_STAND_DOWN_DAYS = PROTECTION_WINDOW_DAYS;
 
-const RELEASE_REASON_OPTIONS = {
-  standard_release: [
-    "Site no longer requires worker",
-    "Project phase complete",
-    "Reduction in labour required",
-    "Performance concern",
-    "Other",
-  ],
-  pre_start_stand_down: [
-    "Project delayed",
-    "Project cancelled",
-    "Site not ready",
-    "Labour no longer required",
-    "Other",
-  ],
-  site_not_ready: [
-    "Site not ready",
-    "Materials delayed",
-    "Access issue",
-    "Programme changed",
-    "Other",
-  ],
-  immediate_release: [
-    "No-show",
-    "Health & safety breach",
-    "Conduct issue",
-    "Poor workmanship",
-    "Qualifications issue",
-    "Site no longer requires worker",
-    "Other",
-  ],
-};
+const PLACEMENT_LIFECYCLE_RULES =
+  globalThis.OnSitePlacementLifecycleRules || {};
+const RELEASE_REASON_OPTIONS =
+  PLACEMENT_LIFECYCLE_RULES.RELEASE_REASONS || {};
 
 // Whole calendar days from today (00:00) until the given date. May be negative
 // if the date is in the past. Returns null for an unparseable/empty date.
@@ -1030,10 +1002,44 @@ function workerCapacityForExtension(job, worker, proposedEndDate) {
   );
 }
 
-function requestExtension(jobId, newEndDate, newRate) {
+async function requestExtension(jobId, newEndDate, newRate) {
   const job = findJob(jobId);
   if (!job || !job.assignedWorkerId || !newEndDate) {
     return { ok: false, reason: "Extension details are incomplete" };
+  }
+  const canonicalPlacement = canonicalPlacementForJobWorker(
+    job,
+    job.assignedWorkerId,
+  );
+  const session = getSessionUser();
+  if (
+    canonicalPlacement &&
+    session?.type === "company" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      await marketplaceApiRequest(
+        `/api/placements/${canonicalPlacement.id}/extensions`,
+        {
+          method: "POST",
+          body: {
+            estimatedEndDate: newEndDate,
+            ...(newRate !== "" && newRate != null
+              ? { dayRate: parseDayRate(newRate) }
+              : {}),
+          },
+        },
+      );
+      await syncCanonicalCompanyApplications(session, { render: false });
+      saveAndRender();
+      showToast("Extension request sent to worker");
+      return { ok: true, canonical: true };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error.message || "Extension request could not be sent",
+      };
+    }
   }
   const worker = findWorker(job.assignedWorkerId);
   const capacity = workerCapacityForExtension(job, worker, newEndDate);
@@ -1079,9 +1085,37 @@ function requestExtension(jobId, newEndDate, newRate) {
   return { ok: true, capacity };
 }
 
-function acceptExtension(jobId) {
+async function acceptExtension(jobId) {
   const job = findJob(jobId);
   if (!job) return;
+  const canonicalPlacement = canonicalPlacementForJobWorker(
+    job,
+    job.assignedWorkerId,
+  );
+  const canonicalChangeId =
+    job.canonicalExtensionChangeId ||
+    canonicalPlacement?.changeOffers?.find(
+      (change) => change.type === "extension" && change.status === "pending",
+    )?.id;
+  const session = getSessionUser();
+  if (
+    canonicalChangeId &&
+    session?.type === "worker" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      await marketplaceApiRequest(
+        `/api/placement-changes/${canonicalChangeId}/accept`,
+        { method: "POST", body: {} },
+      );
+      await syncCanonicalWorkerMarketplace(session);
+      showToast("Extension accepted");
+      return { ok: true, canonical: true };
+    } catch (error) {
+      showToast(error.message || "Extension could not be accepted");
+      return { ok: false, reason: error.message };
+    }
+  }
   const worker = findWorker(job.assignedWorkerId);
   const capacity = workerCapacityForExtension(
     job,
@@ -1174,9 +1208,40 @@ function acceptExtension(jobId) {
   showToast("Extension accepted");
 }
 
-function declineExtension(jobId) {
+async function declineExtension(jobId) {
   const job = findJob(jobId);
   if (!job) return;
+  const canonicalPlacement = canonicalPlacementForJobWorker(
+    job,
+    job.assignedWorkerId,
+  );
+  const canonicalChangeId =
+    job.canonicalExtensionChangeId ||
+    canonicalPlacement?.changeOffers?.find(
+      (change) => change.type === "extension" && change.status === "pending",
+    )?.id;
+  const session = getSessionUser();
+  if (
+    canonicalChangeId &&
+    session?.type === "worker" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      await marketplaceApiRequest(
+        `/api/placement-changes/${canonicalChangeId}/decline`,
+        {
+          method: "POST",
+          body: { reason: "Extension not suitable" },
+        },
+      );
+      await syncCanonicalWorkerMarketplace(session);
+      showToast("Extension declined");
+      return { ok: true, canonical: true };
+    } catch (error) {
+      showToast(error.message || "Extension could not be declined");
+      return { ok: false, reason: error.message };
+    }
+  }
   // Declining must NOT affect the worker's reliability score.
   job.extensionStatus = "declined_by_worker";
   job.workerAvailabilityStatus = "available_from_end_date";
@@ -1392,14 +1457,14 @@ function bindExtensionButtons(container) {
   root
     .querySelectorAll("[data-ext-accept]")
     .forEach((btn) =>
-      btn.addEventListener("click", () =>
+      btn.addEventListener("click", async () =>
         acceptExtension(btn.dataset.extAccept),
       ),
     );
   root
     .querySelectorAll("[data-ext-decline]")
     .forEach((btn) =>
-      btn.addEventListener("click", () =>
+      btn.addEventListener("click", async () =>
         declineExtension(btn.dataset.extDecline),
       ),
     );
@@ -2630,22 +2695,24 @@ function latestReleaseForJob(jobId, workerId = "") {
 }
 
 function computeReleaseRule(job, releaseType) {
-  const startDays = workingDaysUntil(job?.startDate || job?.start);
-  const started = startDays === 0;
+  const startDays = calendarDaysUntil(job?.startDate || job?.start);
+  const started = startDays !== null && startDays <= 0;
   const noticeDays =
-    releaseType === "standard_release" && started
+    releaseType === "standard_release"
       ? DEFAULT_NOTICE_DAYS
       : releaseType === "immediate_release"
         ? 0
-        : RELEASE_STAND_DOWN_DAYS;
+        : 0;
   const effectiveDate =
     noticeDays > 0 ? defaultNoticeDate(noticeDays) : todayDateStr();
   const noticeRule =
-    releaseType === "standard_release" && started
+    releaseType === "standard_release"
       ? "5 working days once project has started"
       : releaseType === "immediate_release"
         ? "Immediate release requires a reason"
-        : "Pre-start / site-not-ready 3 working day rule";
+        : startDays !== null && startDays <= RELEASE_STAND_DOWN_DAYS
+          ? "Pre-start stand-down within 3 calendar days"
+          : "Pre-start stand-down";
   return { started, noticeDays, effectiveDate, noticeRule };
 }
 
@@ -2746,11 +2813,31 @@ function detachReleasedAssignment(job, status, workerId = "") {
   return { released, ...placement };
 }
 
-function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
+async function submitWorkerNotice(jobId, proposedLastWorkingDay, reason, notes = "") {
   const job = findJob(jobId);
   const sess = getSessionUser();
   if (!job || !sess?.id || !jobHasAssignedWorker(job, sess.id))
     return { ok: false, reason: "Assignment not found" };
+  const canonicalPlacement = canonicalPlacementForJobWorker(job, sess.id);
+  if (canonicalPlacement && sess.type === "worker" && sess.serverAuthenticated) {
+    try {
+      const { placement } = await marketplaceApiRequest(
+        `/api/placements/${canonicalPlacement.id}/worker-end`,
+        {
+          method: "POST",
+          body: {
+            effectiveDate: proposedLastWorkingDay,
+            reason,
+            notes,
+          },
+        },
+      );
+      await syncCanonicalWorkerMarketplace(sess);
+      return { ok: true, canonical: true, placement };
+    } catch (error) {
+      return { ok: false, reason: error.message || "Notice could not be logged" };
+    }
+  }
   const worker = findWorker(sess.id) || sess;
   const notice = {
     id: createId(),
@@ -3107,12 +3194,12 @@ function closeWorkerNoticeModal() {
   });
 }
 
-function confirmWorkerNotice() {
+async function confirmWorkerNotice() {
   const jobId = document.getElementById("workerNoticeJobId")?.value || "";
   const lastDay = document.getElementById("workerNoticeLastDay")?.value || "";
   const reason = document.getElementById("workerNoticeReason")?.value || "";
   const notes = document.getElementById("workerNoticeNotes")?.value || "";
-  const res = submitWorkerNotice(jobId, lastDay, reason, notes);
+  const res = await submitWorkerNotice(jobId, lastDay, reason, notes);
   if (!res.ok) {
     showToast(res.reason);
     return;
@@ -3178,7 +3265,7 @@ function refreshReleaseDateForType() {
   if (dateInput) dateInput.value = rule.effectiveDate;
 }
 
-function confirmWorkerRelease() {
+async function confirmWorkerRelease() {
   const jobId = document.getElementById("workerReleaseJobId")?.value || "";
   const type = document.getElementById("workerReleaseType")?.value || "";
   const effectiveDate = document.getElementById("workerReleaseDate")?.value || "";
@@ -3189,6 +3276,53 @@ function confirmWorkerRelease() {
     type === "immediate_release" &&
     !confirm("This will immediately release the worker from this assignment. Continue?")
   ) {
+    return;
+  }
+  const job = findJob(jobId);
+  const canonicalPlacement = canonicalPlacementForJobWorker(
+    job,
+    pendingWorkerReleaseId,
+  );
+  const session = getSessionUser();
+  if (
+    canonicalPlacement &&
+    session?.type === "company" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      await marketplaceApiRequest(
+        `/api/placements/${canonicalPlacement.id}/release`,
+        {
+          method: "POST",
+          body: {
+            releaseType: type,
+            effectiveDate,
+            reason,
+            notes,
+            replacementRequested: replacement,
+          },
+        },
+      );
+      if (replacement) {
+        createReplacementTask(
+          job,
+          findWorker(pendingWorkerReleaseId),
+          reason,
+          `release:${type}`,
+          `canonical-release:${canonicalPlacement.id}`,
+          {
+            requirementId: canonicalPlacement.requirementId,
+            placementSlotId: `placement-${canonicalPlacement.id}`,
+          },
+        );
+      }
+      closeWorkerReleaseModal();
+      await syncCanonicalCompanyApplications(session, { render: false });
+      saveAndRender();
+      showToast(`${releaseTypeLabel(type)} logged`);
+    } catch (error) {
+      showToast(error.message || "Worker release could not be logged");
+    }
     return;
   }
   const res = submitWorkerRelease(
@@ -3253,7 +3387,7 @@ document.getElementById("extRateChoice")?.addEventListener("change", (e) => {
 });
 document
   .getElementById("confirmExtensionBtn")
-  ?.addEventListener("click", () => {
+  ?.addEventListener("click", async () => {
     if (!currentExtensionJobId) return;
     const newEnd = document.getElementById("extNewEnd")?.value;
     if (!newEnd) {
@@ -3266,7 +3400,8 @@ document
       ? document.getElementById("extNewRate")?.value
       : "";
     const jobId = currentExtensionJobId;
-    const result = requestExtension(jobId, newEnd, newRate);
+    const result = await requestExtension(jobId, newEnd, newRate);
+    if (!result.ok && result.reason) showToast(result.reason);
     if (result.ok) closeExtensionModal();
   });
 document.getElementById("extensionModal")?.addEventListener("click", (e) => {
@@ -3282,11 +3417,11 @@ document
   ?.addEventListener("click", closeProjectTransferModal);
 document
   .getElementById("confirmProjectTransferBtn")
-  ?.addEventListener("click", () => {
+  ?.addEventListener("click", async () => {
     const fromJobId = document.getElementById("projectTransferFromJobId")?.value || "";
     const workerId = document.getElementById("projectTransferWorkerId")?.value || "";
     const toJobId = document.getElementById("projectTransferTargetJob")?.value || "";
-    const res = createProjectTransferOffer(fromJobId, toJobId, workerId);
+    const res = await createProjectTransferOffer(fromJobId, toJobId, workerId);
     if (!res.ok) {
       showToast(res.reason);
       return;
@@ -3308,10 +3443,10 @@ document
   ?.addEventListener("click", closeShiftChangeModal);
 document
   .getElementById("confirmShiftChangeBtn")
-  ?.addEventListener("click", () => {
+  ?.addEventListener("click", async () => {
     const jobId = document.getElementById("shiftChangeJobId")?.value || "";
     const revisedRateRaw = Number(document.getElementById("shiftChangeRate")?.value);
-    const res = createShiftChangeOffer(jobId, {
+    const res = await createShiftChangeOffer(jobId, {
       workerId: document.getElementById("shiftChangeWorkerId")?.value || "",
       proposedShiftPattern: document.getElementById("shiftChangePattern")?.value || "Days",
       proposedShiftStartTime: document.getElementById("shiftChangeStart")?.value || "",
@@ -6674,19 +6809,30 @@ function saveState() {
           !application.canonicalMarketplaceApplication &&
           !application.canonicalMarketplaceOffer,
       ),
-      jobs: (state.jobs || []).map((job) => {
-        if (!job.canonicalProject) return job;
-        const persistedJob = {
-          ...job,
-          placementSlots: (job.placementSlots || []).filter(
-            (slot) => !slot.canonicalPlacement,
-          ),
-        };
-        placementSlotsEngine()?.syncLegacyAssignmentFields(persistedJob);
-        return persistedJob;
-      }),
+      jobs: (state.jobs || [])
+        .filter((job) => !job.canonicalWorkerPlacementProject)
+        .map((job) => {
+          if (!job.canonicalProject) return job;
+          const persistedJob = {
+            ...job,
+            placementSlots: (job.placementSlots || []).filter(
+              (slot) => !slot.canonicalPlacement,
+            ),
+          };
+          placementSlotsEngine()?.syncLegacyAssignmentFields(persistedJob);
+          return persistedJob;
+        }),
       workers: (state.workers || []).filter(
         (worker) => !worker.canonicalApplicant,
+      ),
+      workerReleases: (state.workerReleases || []).filter(
+        (record) => !record.canonicalPlacementLifecycle,
+      ),
+      workerNotices: (state.workerNotices || []).filter(
+        (record) => !record.canonicalPlacementLifecycle,
+      ),
+      shiftChangeOffers: (state.shiftChangeOffers || []).filter(
+        (record) => !record.canonicalPlacementLifecycle,
       ),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
@@ -6751,6 +6897,18 @@ function clearCanonicalMarketplaceCompatibility() {
   );
   canonicalWorkerOffers = [];
   canonicalWorkerPlacements = [];
+  state.jobs = (state.jobs || []).filter(
+    (job) => !job.canonicalWorkerPlacementProject,
+  );
+  state.workerReleases = (state.workerReleases || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
+  state.workerNotices = (state.workerNotices || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
+  state.shiftChangeOffers = (state.shiftChangeOffers || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
   (state.jobs || []).forEach((job) => {
     if (!job.canonicalProject) return;
     job.placementSlots = (job.placementSlots || []).filter(
@@ -6885,6 +7043,213 @@ function replaceCanonicalOffers(offers, { company = false } = {}) {
   });
 }
 
+function canonicalPlacementForJobWorker(job, workerId = "") {
+  const slot = (job?.placementSlots || []).find(
+    (candidate) =>
+      candidate.canonicalPlacement &&
+      (!workerId || candidate.workerId === workerId),
+  );
+  return slot?.canonicalPlacementData || null;
+}
+
+function replaceCanonicalLifecycleCompatibility(placements = []) {
+  state.workerReleases = (state.workerReleases || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
+  state.workerNotices = (state.workerNotices || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
+  state.shiftChangeOffers = (state.shiftChangeOffers || []).filter(
+    (record) => !record.canonicalPlacementLifecycle,
+  );
+  (state.jobs || []).forEach((job) => {
+    if (!job.canonicalExtensionChangeId) return;
+    job.extensionRequestedAt = "";
+    job.extensionResponseDeadline = "";
+    job.newProposedEndDate = "";
+    job.proposedDayRate = null;
+    job.canonicalExtensionChangeId = "";
+  });
+
+  placements.forEach((placement) => {
+    const job = findJob(placement.projectId);
+    const events = Array.isArray(placement.lifecycleEvents)
+      ? placement.lifecycleEvents
+      : [];
+    const releaseEvent = events.find((event) =>
+      ["release_scheduled", "released"].includes(event.type),
+    );
+    if (placement.scheduledEndType === "company_release" || releaseEvent) {
+      state.workerReleases.push({
+        id: releaseEvent?.id || `canonical-release-${placement.id}`,
+        canonicalPlacementLifecycle: true,
+        canonicalPlacementId: placement.id,
+        workerId: placement.workerId,
+        workerName: placement.worker?.name || "Worker",
+        jobId: placement.projectId,
+        companyId: placement.companyId || "",
+        releaseType: releaseEvent?.metadata?.release_type || "standard_release",
+        releaseGivenAt: releaseEvent?.requestedAt || placement.updatedAt || "",
+        releasedAt: placement.endedAt || "",
+        immediateRelease:
+          releaseEvent?.metadata?.release_type === "immediate_release",
+        effectiveDate:
+          placement.scheduledEndDate ||
+          String(releaseEvent?.effectiveAt || "").slice(0, 10),
+        reason: releaseEvent?.reason || placement.endReason || "",
+        notes: releaseEvent?.privateNotes || "",
+        replacementRequired: !!releaseEvent?.metadata?.replacement_requested,
+        replacementNeeded: !!releaseEvent?.metadata?.replacement_requested,
+        requirementId: placement.requirementId,
+        placementSlotId: `placement-${placement.id}`,
+        noticeWorkingDays: releaseEvent?.noticeDays ?? null,
+        noticeRule: releaseEvent?.noticeClassification || "",
+        releaseStatus:
+          placement.status === "released" ? "immediate" : "pending_effective_date",
+      });
+    }
+
+    const workerEndEvent = events.find(
+      (event) => event.type === "worker_end_requested",
+    );
+    if (placement.scheduledEndType === "worker_end" || workerEndEvent) {
+      state.workerNotices.push({
+        id: workerEndEvent?.id || `canonical-worker-end-${placement.id}`,
+        canonicalPlacementLifecycle: true,
+        canonicalPlacementId: placement.id,
+        workerId: placement.workerId,
+        workerName: placement.worker?.name || "Worker",
+        jobId: placement.projectId,
+        companyId: placement.companyId || "",
+        noticeGivenAt: workerEndEvent?.requestedAt || placement.updatedAt || "",
+        proposedLastWorkingDay:
+          placement.scheduledEndDate ||
+          String(workerEndEvent?.effectiveAt || "").slice(0, 10),
+        reason: workerEndEvent?.reason || placement.endReason || "",
+        notes: "",
+        noticeStatus: "logged",
+      });
+    }
+
+    (placement.changeOffers || []).forEach((change) => {
+      if (change.type === "schedule_change") {
+        state.shiftChangeOffers.push({
+          id: change.id,
+          canonicalPlacementLifecycle: true,
+          canonicalPlacementId: placement.id,
+          companyId: placement.companyId || "",
+          workerId: placement.workerId,
+          jobId: placement.projectId,
+          proposedShiftPattern: change.proposedTerms?.shift_pattern || "Shift",
+          proposedShiftStartTime:
+            change.proposedTerms?.shift_start_time || placement.shiftStartTime || "",
+          proposedShiftFinishTime:
+            change.proposedTerms?.shift_finish_time || placement.shiftFinishTime || "",
+          effectiveDate: change.effectiveDate || "",
+          revisedOfferedRate: change.proposedTerms?.day_rate ?? "",
+          status: change.status === "pending" ? "offered" : change.status,
+          workerRespondedAt: change.respondedAt || "",
+          declineReason: change.declineReason || "",
+          createdAt: change.createdAt || "",
+        });
+      }
+    });
+
+    const pendingExtension = (placement.changeOffers || []).find(
+      (change) => change.type === "extension" && change.status === "pending",
+    );
+    if (job && pendingExtension) {
+      job.extensionRequestedAt = pendingExtension.createdAt || "";
+      job.extensionResponseDeadline = pendingExtension.expiresAt || "";
+      job.newProposedEndDate =
+        pendingExtension.proposedTerms?.estimated_end_date || "";
+      job.proposedDayRate = pendingExtension.proposedTerms?.day_rate ?? null;
+      job.canonicalExtensionChangeId = pendingExtension.id;
+    }
+  });
+}
+
+function canonicalWorkerPlacementJob(placement, user) {
+  const requirementId = placement.requirementId || `requirement-${placement.id}`;
+  const effective = placement.effectiveTerms || {};
+  const requirement = {
+    requirementId,
+    trade: placement.trade || "",
+    specialism: placement.role || "",
+    role: placement.role || "",
+    grade: placement.grade || "",
+    workActivity: placement.workActivity || effective.workActivity || "",
+    workersRequired: 1,
+    numberOfWorkers: 1,
+    dailyRate: placement.agreedDayRate,
+    workingDays: placement.workingDays || effective.workingDays || [],
+    shiftStartTime: placement.shiftStartTime || effective.shiftStartTime || "",
+    shiftFinishTime: placement.shiftFinishTime || effective.shiftFinishTime || "",
+  };
+  return {
+    id: placement.projectId || `placement-project-${placement.id}`,
+    canonicalProject: true,
+    canonicalWorkerPlacementProject: true,
+    projectName: placement.projectName || "Project",
+    jobNumber: placement.jobNumber || "",
+    companyName: placement.companyName || "Company",
+    trade: placement.trade || "",
+    specialism: placement.role || "",
+    role: placement.role || "",
+    grade: placement.grade || "",
+    workActivity: placement.workActivity || effective.workActivity || "",
+    location: placement.location || "",
+    start: placement.startDate || effective.startDate || "",
+    startDate: placement.startDate || effective.startDate || "",
+    estimatedEndDate: placement.estimatedEndDate || effective.estimatedEndDate || "",
+    noFixedEndDate: !!placement.noFixedEndDate,
+    duration: placement.duration || effective.duration || "",
+    workingDays: placement.workingDays || effective.workingDays || [],
+    shiftStartTime: placement.shiftStartTime || effective.shiftStartTime || "",
+    shiftFinishTime: placement.shiftFinishTime || effective.shiftFinishTime || "",
+    agreedDayRate: placement.agreedDayRate,
+    payRate: placement.agreedDayRate ? `£${placement.agreedDayRate}/day` : "",
+    bookingStatus: "confirmed",
+    assignedWorkerId: user.id,
+    assignedWorkerIds: [user.id],
+    labourRequirements: [requirement],
+    placementSlots: [
+      {
+        slotId: `placement-${placement.id}`,
+        requirementId,
+        ordinal: 1,
+        canonicalPlacement: true,
+        canonicalPlacementId: placement.id,
+        canonicalPlacementData: placement,
+        status: placement.status === "active" ? "active" : "confirmed",
+        workerId: user.id,
+        applicationId: placement.applicationId || "",
+        bookingId: "",
+        filledAt: placement.createdAt || "",
+        agreedDayRate: placement.agreedDayRate,
+        pricing: { workerPay: placement.agreedDayRate },
+        history: [],
+      },
+    ],
+  };
+}
+
+function applyCanonicalWorkerPlacements(placements = [], user = getSessionUser()) {
+  state.jobs = (state.jobs || []).filter(
+    (job) => !job.canonicalWorkerPlacementProject,
+  );
+  (placements || [])
+    .filter((placement) => ["upcoming", "active"].includes(placement.status))
+    .sort((left, right) => {
+      if (left.status !== right.status) return left.status === "active" ? -1 : 1;
+      return String(left.startDate || "").localeCompare(String(right.startDate || ""));
+    })
+    .forEach((placement) => {
+      state.jobs.push(canonicalWorkerPlacementJob(placement, user));
+    });
+  replaceCanonicalLifecycleCompatibility(placements);
+}
+
 function applyCanonicalCompanyPlacements(placements = []) {
   (state.jobs || []).forEach((job) => {
     if (!job.canonicalProject) return;
@@ -6916,6 +7281,7 @@ function applyCanonicalCompanyPlacements(placements = []) {
     Object.assign(slot, {
       canonicalPlacement: true,
       canonicalPlacementId: placement.id,
+      canonicalPlacementData: placement,
       status: placement.status === "active" ? "active" : "confirmed",
       workerId: placement.workerId,
       applicationId: placement.applicationId || "",
@@ -6926,6 +7292,7 @@ function applyCanonicalCompanyPlacements(placements = []) {
     });
     placementSlotsEngine()?.syncLegacyAssignmentFields(job);
   });
+  replaceCanonicalLifecycleCompatibility(placements);
 }
 
 async function syncCanonicalWorkerMarketplace(user = getSessionUser()) {
@@ -6951,6 +7318,7 @@ async function syncCanonicalWorkerMarketplace(user = getSessionUser()) {
       canonicalWorkerPlacements = placements;
       replaceCanonicalApplications(applications, user);
       replaceCanonicalOffers(offers);
+      applyCanonicalWorkerPlacements(placements, user);
       saveAndRender();
     } catch (error) {
       canonicalWorkerMarketplaceJobs = [];
@@ -10532,7 +10900,7 @@ function closeProjectTransferModal() {
   });
 }
 
-function createProjectTransferOffer(fromJobId, toJobId, workerId) {
+async function createProjectTransferOffer(fromJobId, toJobId, workerId) {
   const fromJob = findJob(fromJobId);
   const toJob = findJob(toJobId);
   const worker = findWorker(workerId);
@@ -10549,13 +10917,14 @@ function createProjectTransferOffer(fromJobId, toJobId, workerId) {
     allowReallocationFromProjectId: fromJob.id,
   });
   const rank = matches.findIndex((match) => match.id === worker.id);
-  const offered = createJobOffer(
+  let offered = createJobOffer(
     toJob.id,
     worker.id,
     "project_transfer",
     rank >= 0 ? rank + 1 : null,
     { transferFromJobId: fromJob.id },
   );
+  if (offered.canonicalPending) offered = await offered.promise;
   if (!offered.ok) return offered;
 
   const transfer = {
@@ -10611,7 +10980,7 @@ function closeShiftChangeModal() {
   });
 }
 
-function createShiftChangeOffer(jobId, fields) {
+async function createShiftChangeOffer(jobId, fields) {
   const job = findJob(jobId);
   const workerId = fields.workerId || job?.assignedWorkerId || "";
   const worker = jobHasAssignedWorker(job, workerId) ? findWorker(workerId) : null;
@@ -10620,6 +10989,36 @@ function createShiftChangeOffer(jobId, fields) {
     return { ok: false, reason: "Choose an effective date" };
   if (!fields.proposedShiftStartTime || !fields.proposedShiftFinishTime)
     return { ok: false, reason: "Add proposed working hours" };
+  const canonicalPlacement = canonicalPlacementForJobWorker(job, workerId);
+  const session = getSessionUser();
+  if (
+    canonicalPlacement &&
+    session?.type === "company" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      const { changeOffer } = await marketplaceApiRequest(
+        `/api/placements/${canonicalPlacement.id}/changes`,
+        {
+          method: "POST",
+          body: {
+            changeType: "schedule_change",
+            effectiveDate: fields.effectiveDate,
+            shiftPattern: fields.proposedShiftPattern,
+            shiftStartTime: fields.proposedShiftStartTime,
+            shiftFinishTime: fields.proposedShiftFinishTime,
+            ...(fields.revisedOfferedRate
+              ? { dayRate: Number(fields.revisedOfferedRate) }
+              : {}),
+          },
+        },
+      );
+      await syncCanonicalCompanyApplications(session, { render: false });
+      return { ok: true, canonical: true, offer: changeOffer };
+    } catch (error) {
+      return { ok: false, reason: error.message || "Shift change could not be sent" };
+    }
+  }
   const workerFacingDayRate =
     Number(fields.revisedOfferedRate) || workerPayDisplay(job, worker);
   const rateEligibility = workerMinimumRateAllowsPayableRate(
@@ -10665,12 +11064,32 @@ function createShiftChangeOffer(jobId, fields) {
   return { ok: true, offer };
 }
 
-function respondToShiftChangeOffer(offerId, accepted) {
+async function respondToShiftChangeOffer(offerId, accepted) {
   const offer = (state.shiftChangeOffers || []).find((item) => item.id === offerId);
   const job = offer ? findJob(offer.jobId) : null;
   const worker = offer ? findWorker(offer.workerId) : null;
   if (!offer || !job || offer.status !== "offered")
     return { ok: false, reason: "Shift change offer not available" };
+  const session = getSessionUser();
+  if (
+    offer.canonicalPlacementLifecycle &&
+    session?.type === "worker" &&
+    session.serverAuthenticated
+  ) {
+    try {
+      await marketplaceApiRequest(
+        `/api/placement-changes/${offer.id}/${accepted ? "accept" : "decline"}`,
+        {
+          method: "POST",
+          body: accepted ? {} : { reason: "Shift change not suitable" },
+        },
+      );
+      await syncCanonicalWorkerMarketplace(session);
+      return { ok: true, canonical: true, offer };
+    } catch (error) {
+      return { ok: false, reason: error.message || "Shift change could not be updated" };
+    }
+  }
   offer.status = accepted ? "accepted" : "declined";
   offer.workerRespondedAt = new Date().toISOString();
   if (accepted) {
@@ -10856,7 +11275,7 @@ function createJobOffer(
   const worker = findWorker(workerId);
   if (!job || !worker) return { ok: false, reason: "Job or worker not found" };
   const user = getSessionUser();
-  const canonicalSource = !["project_transfer", "shift_change"].includes(source);
+  const canonicalSource = source !== "shift_change";
   if (
     canonicalSource &&
     user?.type === "company" &&
@@ -17364,8 +17783,8 @@ function renderWorkerHome(user) {
     );
   });
   el.querySelectorAll("[data-shift-change-accept]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
+    btn.addEventListener("click", async () => {
+      const res = await respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
       if (!res.ok) {
         showToast(res.reason);
         return;
@@ -17375,8 +17794,8 @@ function renderWorkerHome(user) {
     });
   });
   el.querySelectorAll("[data-shift-change-decline]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
+    btn.addEventListener("click", async () => {
+      const res = await respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
       if (!res.ok) {
         showToast(res.reason);
         return;
@@ -17655,8 +18074,8 @@ function bindWorkerOfferButtons(scope) {
     btn.addEventListener("click", () => openSiteMap(btn.dataset.mapJob));
   });
   scope.querySelectorAll("[data-shift-change-accept]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
+    btn.addEventListener("click", async () => {
+      const res = await respondToShiftChangeOffer(btn.dataset.shiftChangeAccept, true);
       if (!res.ok) {
         showToast(res.reason);
         return;
@@ -17666,8 +18085,8 @@ function bindWorkerOfferButtons(scope) {
     });
   });
   scope.querySelectorAll("[data-shift-change-decline]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const res = respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
+    btn.addEventListener("click", async () => {
+      const res = await respondToShiftChangeOffer(btn.dataset.shiftChangeDecline, false);
       if (!res.ok) {
         showToast(res.reason);
         return;

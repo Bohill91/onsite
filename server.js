@@ -22,6 +22,10 @@ const {
   createOfferService,
 } = require('./server-offers');
 const {
+  PlacementLifecycleError,
+  createPlacementLifecycleService,
+} = require('./server-placement-lifecycle');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -42,6 +46,7 @@ const authService = createAuthService();
 const projectService = createProjectService();
 const marketplaceService = createMarketplaceService();
 const offerService = createOfferService();
+const placementLifecycleService = createPlacementLifecycleService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -576,21 +581,149 @@ async function handleOfferApi(req, res, url) {
       return;
     }
 
-    if (
-      req.method === 'GET'
-      && (url.pathname === '/api/placements' || url.pathname === '/api/company/placements')
-    ) {
-      const placements = await offerService.listPlacements(restored.principal);
-      sendJson(res, 200, { placements }, responseHeaders);
-      return;
-    }
-
     sendJson(res, 404, {
       error: 'Offer route not found.',
       code: 'OFFER_ROUTE_NOT_FOUND',
     });
   } catch (rawError) {
     const error = publicOfferError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
+}
+
+function publicPlacementLifecycleError(error) {
+  if (error instanceof PlacementLifecycleError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Placement lifecycle] Unexpected error:', error);
+  return new PlacementLifecycleError(
+    'Placement lifecycle service error.',
+    500,
+    'PLACEMENT_LIFECYCLE_INTERNAL_ERROR',
+  );
+}
+
+async function handlePlacementLifecycleApi(req, res, url) {
+  try {
+    const restored = await resolveAuthenticatedPrincipal(req);
+    const cookies = sessionCookies(req, restored.session);
+    const responseHeaders = cookies.length
+      ? { 'Set-Cookie': cookies, Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    const placementMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})$/i);
+    const releaseMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})\/release$/i);
+    const workerEndMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})\/worker-end$/i);
+    const completeMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})\/complete$/i);
+    const extensionMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})\/extensions$/i);
+    const changeMatch = url.pathname.match(/^\/api\/placements\/([0-9a-f-]{36})\/changes$/i);
+    const acceptChangeMatch = url.pathname.match(/^\/api\/placement-changes\/([0-9a-f-]{36})\/accept$/i);
+    const declineChangeMatch = url.pathname.match(/^\/api\/placement-changes\/([0-9a-f-]{36})\/decline$/i);
+
+    if (
+      req.method === 'GET'
+      && (url.pathname === '/api/placements' || url.pathname === '/api/company/placements')
+    ) {
+      const placements = await placementLifecycleService.list(restored.principal);
+      sendJson(res, 200, { placements }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && placementMatch) {
+      const placement = await placementLifecycleService.get(
+        restored.principal,
+        placementMatch[1],
+      );
+      sendJson(res, 200, { placement }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && releaseMatch) {
+      const placement = await placementLifecycleService.release(
+        restored.principal,
+        releaseMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { placement }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && workerEndMatch) {
+      const placement = await placementLifecycleService.requestWorkerEnd(
+        restored.principal,
+        workerEndMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { placement }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && completeMatch) {
+      const placement = await placementLifecycleService.complete(
+        restored.principal,
+        completeMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { placement }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && extensionMatch) {
+      const result = await placementLifecycleService.proposeExtension(
+        restored.principal,
+        extensionMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 201, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && changeMatch) {
+      const result = await placementLifecycleService.proposeChange(
+        restored.principal,
+        changeMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 201, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/placement-changes') {
+      const changes = await placementLifecycleService.listChanges(restored.principal);
+      sendJson(res, 200, { changes }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && acceptChangeMatch) {
+      const result = await placementLifecycleService.respondChange(
+        restored.principal,
+        acceptChangeMatch[1],
+        true,
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && declineChangeMatch) {
+      const result = await placementLifecycleService.respondChange(
+        restored.principal,
+        declineChangeMatch[1],
+        false,
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    sendJson(res, 404, {
+      error: 'Placement lifecycle route not found.',
+      code: 'PLACEMENT_LIFECYCLE_ROUTE_NOT_FOUND',
+    });
+  } catch (rawError) {
+    const error = publicPlacementLifecycleError(rawError);
     const headers = error.statusCode === 401
       ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
       : { Vary: 'Cookie' };
@@ -738,11 +871,20 @@ const server = http.createServer((req, res) => {
   }
 
   if (
+    url.pathname === '/api/placements'
+    || url.pathname.startsWith('/api/placements/')
+    || url.pathname === '/api/company/placements'
+    || url.pathname === '/api/placement-changes'
+    || url.pathname.startsWith('/api/placement-changes/')
+  ) {
+    handlePlacementLifecycleApi(req, res, url);
+    return;
+  }
+
+  if (
     url.pathname === '/api/offers'
     || url.pathname.startsWith('/api/offers/')
     || url.pathname === '/api/company/offers'
-    || url.pathname === '/api/placements'
-    || url.pathname === '/api/company/placements'
   ) {
     handleOfferApi(req, res, url);
     return;
