@@ -511,6 +511,10 @@ function changeOutcomeError(outcome) {
     cancelled: ["This placement change is no longer available.", "PLACEMENT_CHANGE_CANCELLED"],
     placement_ended: ["This placement has ended.", "PLACEMENT_ENDED"],
     schedule_conflict: ["The extension conflicts with another confirmed placement.", "PLACEMENT_SCHEDULE_CONFLICT"],
+    scheduled_end_conflict: [
+      "This placement already has an earlier scheduled end.",
+      "PLACEMENT_SCHEDULED_END_CONFLICT",
+    ],
   };
   const [message, code] = errors[outcome] || ["This placement has already changed.", "PLACEMENT_CHANGED"];
   return new PlacementLifecycleError(message, 409, code);

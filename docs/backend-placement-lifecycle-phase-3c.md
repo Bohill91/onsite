@@ -57,6 +57,12 @@ Release does not write attendance or reliability evidence and does not
 calculate notice or stand-down pay. It stores the dates and classifications a
 later commercial engine will need.
 
+Future scheduled ends are single canonical instructions. An equivalent company
+release or worker-end retry returns the existing result without adding another
+event. A different second instruction conflicts instead of overwriting the
+first. Event keys are deterministic from the placement, action, and effective
+date. Standard release continues consuming capacity until that date.
+
 The existing worker notice flow is supported through a worker-owned placement
 end RPC. The worker can act only on their own placement and cannot submit a
 past effective date. The company cannot impersonate this action.
@@ -74,6 +80,17 @@ current rate. Schedule changes update only effective shift, working-day, work
 activity, and rate fields. Original `agreed_*` terms remain recoverable.
 Accepted future schedule changes are applied lazily on or after their effective
 date. Repeated accept/decline attempts return explicit conflict outcomes.
+
+A schedule change may take effect on the placement's final working day, but not
+after its fixed or already scheduled end. A placement with a scheduled end
+cannot be extended. These rules are rechecked when the worker accepts so a
+release or end instruction created after the proposal cannot produce
+contradictory effective terms.
+
+Manual company completion is immediate only. Its effective date must be today
+or a valid historical date between the current placement start and fixed end,
+and the placement must not already have a scheduled end. Future completion is
+left to lifecycle normalization when the date actually arrives.
 
 ## Transfer and replacement
 

@@ -589,6 +589,9 @@ declare
   v_worker_fault boolean;
   v_terminal boolean;
   v_event_id uuid;
+  v_reason_text text;
+  v_private_notes text;
+  v_idempotency_key text;
 begin
   if p_release_type not in (
     'standard_release',
@@ -656,6 +659,11 @@ begin
     if v_effective_date < public.placement_add_working_days(current_date, 5) then
       raise exception using errcode = '22023', message = 'Standard release requires 5 working days notice.';
     end if;
+    if not v_placement.current_no_fixed_end_date
+      and v_placement.current_estimated_end_date is not null
+      and v_effective_date > v_placement.current_estimated_end_date then
+      raise exception using errcode = '22023', message = 'The scheduled release cannot be after the placement end date.';
+    end if;
     v_notice_days := 5;
     v_notice_classification := 'standard_5_working_days';
     v_terminal := false;
@@ -678,6 +686,70 @@ begin
     v_terminal := true;
   end if;
 
+  v_reason_text := coalesce(nullif(trim(p_reason_text), ''), p_reason_code);
+  v_private_notes := nullif(left(trim(coalesce(p_private_company_notes, '')), 2000), '');
+  v_idempotency_key := concat(
+    'company_release:',
+    v_placement.id,
+    ':',
+    p_release_type,
+    ':',
+    v_effective_date
+  );
+
+  if v_placement.scheduled_end_date is not null
+    or v_placement.scheduled_end_type is not null then
+    select lifecycle_event.id
+    into v_event_id
+    from public.placement_lifecycle_events lifecycle_event
+    where lifecycle_event.placement_id = v_placement.id
+      and lifecycle_event.idempotency_key = v_idempotency_key
+      and lifecycle_event.reason_code = p_reason_code
+      and lifecycle_event.reason_text = v_reason_text
+      and lifecycle_event.notice_classification = v_notice_classification
+      and lifecycle_event.private_company_notes is not distinct from v_private_notes
+      and lifecycle_event.metadata->>'release_type' = p_release_type
+      and coalesce(
+        (lifecycle_event.metadata->>'replacement_requested')::boolean,
+        false
+      ) = coalesce(p_replacement_requested, false);
+
+    if v_placement.scheduled_end_date = v_effective_date
+      and v_placement.scheduled_end_type = 'company_release'
+      and v_placement.end_reason_code = p_reason_code
+      and v_placement.end_reason_text = v_reason_text
+      and v_event_id is not null then
+      return jsonb_build_object(
+        'outcome', case when v_terminal then 'released' else 'release_scheduled' end,
+        'placement_id', v_placement.id,
+        'event_id', v_event_id,
+        'effective_date', v_effective_date,
+        'notice_days', v_notice_days,
+        'notice_classification', v_notice_classification,
+        'idempotent', true
+      );
+    end if;
+
+    raise exception using
+      errcode = 'P0003',
+      message = 'This placement already has a different scheduled end.';
+  end if;
+
+  if not v_terminal and exists (
+    select 1
+    from public.placement_change_offers change_offer
+    where change_offer.placement_id = v_placement.id
+      and (
+        change_offer.status = 'pending'
+        or (change_offer.status = 'accepted' and change_offer.applied_at is null)
+      )
+      and change_offer.effective_date > v_effective_date
+  ) then
+    raise exception using
+      errcode = 'P0003',
+      message = 'A pending placement change occurs after the proposed release date.';
+  end if;
+
   v_worker_fault := p_release_type = 'immediate_release'
     and p_reason_code in (
       'No-show',
@@ -694,7 +766,7 @@ begin
     scheduled_end_type = 'company_release',
     ended_at = case when v_terminal then now() else ended_at end,
     end_reason_code = p_reason_code,
-    end_reason_text = coalesce(nullif(trim(p_reason_text), ''), p_reason_code)
+    end_reason_text = v_reason_text
   where id = v_placement.id;
 
   insert into public.placement_lifecycle_events (
@@ -720,7 +792,7 @@ begin
     'company',
     v_role,
     p_reason_code,
-    coalesce(nullif(trim(p_reason_text), ''), p_reason_code),
+    v_reason_text,
     now(),
     v_effective_date::timestamptz,
     v_notice_days,
@@ -730,8 +802,8 @@ begin
       'release_type', p_release_type,
       'replacement_requested', coalesce(p_replacement_requested, false)
     ),
-    nullif(left(trim(coalesce(p_private_company_notes, '')), 2000), ''),
-    'company_release:' || v_placement.id || ':' || gen_random_uuid()
+    v_private_notes,
+    v_idempotency_key
   ) returning id into v_event_id;
 
   return jsonb_build_object(
@@ -768,6 +840,8 @@ declare
   v_notice_days integer;
   v_terminal boolean;
   v_event_id uuid;
+  v_reason_text text;
+  v_idempotency_key text;
 begin
   if nullif(trim(coalesce(p_reason_code, '')), '') is null then
     raise exception using errcode = '22023', message = 'An end reason is required.';
@@ -828,6 +902,58 @@ begin
 
   v_notice_days := public.placement_working_days_between(current_date, v_effective_date);
   v_terminal := v_effective_date <= current_date;
+  v_reason_text := coalesce(nullif(trim(p_reason_text), ''), p_reason_code);
+  v_idempotency_key := concat(
+    'worker_end:',
+    v_placement.id,
+    ':',
+    v_effective_date
+  );
+
+  if v_placement.scheduled_end_date is not null
+    or v_placement.scheduled_end_type is not null then
+    select lifecycle_event.id
+    into v_event_id
+    from public.placement_lifecycle_events lifecycle_event
+    where lifecycle_event.placement_id = v_placement.id
+      and lifecycle_event.idempotency_key = v_idempotency_key
+      and lifecycle_event.reason_code = p_reason_code
+      and lifecycle_event.reason_text = v_reason_text;
+
+    if v_placement.scheduled_end_date = v_effective_date
+      and v_placement.scheduled_end_type = 'worker_end'
+      and v_placement.end_reason_code = p_reason_code
+      and v_placement.end_reason_text = v_reason_text
+      and v_event_id is not null then
+      return jsonb_build_object(
+        'outcome', case when v_terminal then 'released' else 'end_scheduled' end,
+        'placement_id', v_placement.id,
+        'event_id', v_event_id,
+        'effective_date', v_effective_date,
+        'notice_days', v_notice_days,
+        'idempotent', true
+      );
+    end if;
+
+    raise exception using
+      errcode = 'P0003',
+      message = 'This placement already has a different scheduled end.';
+  end if;
+
+  if not v_terminal and exists (
+    select 1
+    from public.placement_change_offers change_offer
+    where change_offer.placement_id = v_placement.id
+      and (
+        change_offer.status = 'pending'
+        or (change_offer.status = 'accepted' and change_offer.applied_at is null)
+      )
+      and change_offer.effective_date > v_effective_date
+  ) then
+    raise exception using
+      errcode = 'P0003',
+      message = 'A pending placement change occurs after the proposed end date.';
+  end if;
 
   update public.placements
   set
@@ -836,7 +962,7 @@ begin
     scheduled_end_type = 'worker_end',
     ended_at = case when v_terminal then now() else ended_at end,
     end_reason_code = p_reason_code,
-    end_reason_text = coalesce(nullif(trim(p_reason_text), ''), p_reason_code)
+    end_reason_text = v_reason_text
   where id = v_placement.id;
 
   insert into public.placement_lifecycle_events (
@@ -858,13 +984,13 @@ begin
     p_actor_user_id,
     'worker',
     p_reason_code,
-    coalesce(nullif(trim(p_reason_text), ''), p_reason_code),
+    v_reason_text,
     now(),
     v_effective_date::timestamptz,
     v_notice_days,
     'worker_requested_end',
     jsonb_build_object('terminal_immediately', v_terminal),
-    'worker_end:' || v_placement.id || ':' || gen_random_uuid()
+    v_idempotency_key
   ) returning id into v_event_id;
 
   return jsonb_build_object(
@@ -895,6 +1021,7 @@ declare
   v_placement public.placements%rowtype;
   v_role text;
   v_effective_date date;
+  v_idempotency_key text;
 begin
   select requirement.project_id, placement.project_requirement_id
   into v_project_id, v_requirement_id
@@ -934,8 +1061,32 @@ begin
   end if;
 
   v_effective_date := coalesce(p_effective_date, current_date);
+  if v_effective_date > current_date then
+    raise exception using errcode = '22023', message = 'A completion date cannot be in the future.';
+  end if;
+  if v_effective_date < v_placement.current_start_date then
+    raise exception using errcode = '22023', message = 'A completion date cannot be before the placement start date.';
+  end if;
+  if not v_placement.current_no_fixed_end_date
+    and v_placement.current_estimated_end_date is not null
+    and v_effective_date > v_placement.current_estimated_end_date then
+    raise exception using errcode = '22023', message = 'A completion date cannot be after the placement end date.';
+  end if;
+  if v_placement.scheduled_end_date is not null
+    or v_placement.scheduled_end_type is not null then
+    raise exception using
+      errcode = 'P0003',
+      message = 'This placement already has a scheduled end.';
+  end if;
+
+  v_idempotency_key := concat(
+    'company_completed:',
+    v_placement.id,
+    ':',
+    v_effective_date
+  );
   update public.placements
-  set status = 'completed', ended_at = now()
+  set status = 'completed', ended_at = v_effective_date::timestamptz
   where id = v_placement.id;
 
   insert into public.placement_lifecycle_events (
@@ -957,7 +1108,7 @@ begin
     'company_confirmed_completion',
     now(),
     v_effective_date::timestamptz,
-    'company_completed:' || v_placement.id || ':' || gen_random_uuid()
+    v_idempotency_key
   );
 
   return jsonb_build_object('outcome', 'completed', 'placement_id', v_placement.id);
@@ -1032,6 +1183,12 @@ begin
   end if;
 
   if p_change_type = 'extension' then
+    if v_placement.scheduled_end_date is not null
+      or v_placement.scheduled_end_type is not null then
+      raise exception using
+        errcode = 'P0003',
+        message = 'A placement with a scheduled end cannot be extended.';
+    end if;
     if v_placement.current_no_fixed_end_date
       or v_placement.current_estimated_end_date is null then
       raise exception using errcode = '22023', message = 'An open-ended placement cannot be extended.';
@@ -1053,6 +1210,15 @@ begin
     v_effective_date := p_effective_date;
     if v_effective_date is null or v_effective_date < current_date then
       raise exception using errcode = '22023', message = 'Choose a valid effective date.';
+    end if;
+    if not v_placement.current_no_fixed_end_date
+      and v_placement.current_estimated_end_date is not null
+      and v_effective_date > v_placement.current_estimated_end_date then
+      raise exception using errcode = '22023', message = 'The change cannot take effect after the placement end date.';
+    end if;
+    if v_placement.scheduled_end_date is not null
+      and v_effective_date > v_placement.scheduled_end_date then
+      raise exception using errcode = '22023', message = 'The change cannot take effect after the scheduled end date.';
     end if;
     begin
       perform nullif(p_proposed_terms->>'shift_start_time', '')::time;
@@ -1235,6 +1401,15 @@ begin
   end if;
 
   if v_change.change_type = 'extension' then
+    if v_placement.scheduled_end_date is not null
+      or v_placement.scheduled_end_type is not null then
+      return jsonb_build_object(
+        'outcome',
+        'scheduled_end_conflict',
+        'change_offer_id',
+        v_change.id
+      );
+    end if;
     v_new_end := nullif(v_change.proposed_terms->>'estimated_end_date', '')::date;
     if v_new_end is null
       or v_placement.current_estimated_end_date is null
@@ -1266,6 +1441,23 @@ begin
       )
     where id = v_placement.id;
     v_applied_at := now();
+  elsif (
+    (
+      not v_placement.current_no_fixed_end_date
+      and v_placement.current_estimated_end_date is not null
+      and v_change.effective_date > v_placement.current_estimated_end_date
+    )
+    or (
+      v_placement.scheduled_end_date is not null
+      and v_change.effective_date > v_placement.scheduled_end_date
+    )
+  ) then
+    return jsonb_build_object(
+      'outcome',
+      'scheduled_end_conflict',
+      'change_offer_id',
+      v_change.id
+    );
   elsif v_change.effective_date <= current_date then
     update public.placements
     set

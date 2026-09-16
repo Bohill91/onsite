@@ -30,6 +30,8 @@ const PROJECT_B = "00000000-0000-4000-8000-000000000202";
 const REQUIREMENT_A = "00000000-0000-4000-8000-000000000301";
 const PLACEMENT_A = "00000000-0000-4000-8000-000000000401";
 const PLACEMENT_B = "00000000-0000-4000-8000-000000000402";
+const TEST_TODAY = "2026-09-16";
+const TEST_NOW = "2026-09-16T10:00:00.000Z";
 
 function companyPrincipal(role = "Administrator", companyId = COMPANY_A) {
   const user = {
@@ -181,7 +183,21 @@ function fakeLifecycleAdapter() {
     setFailNextResponse(value) { failNextResponse = value; },
     async normalize() {
       for (const row of placements.values()) {
-        if (row.status === "upcoming" && row.current_start_date <= "2026-09-16") {
+        if (
+          ["upcoming", "active"].includes(row.status)
+          && row.scheduled_end_date
+          && row.scheduled_end_date <= TEST_TODAY
+        ) {
+          row.status = "released";
+          row.ended_at ||= TEST_NOW;
+        } else if (
+          ["upcoming", "active"].includes(row.status)
+          && !row.current_no_fixed_end_date
+          && row.current_estimated_end_date < TEST_TODAY
+        ) {
+          row.status = "completed";
+          row.ended_at ||= TEST_NOW;
+        } else if (row.status === "upcoming" && row.current_start_date <= TEST_TODAY) {
           row.status = "active";
         }
       }
@@ -201,14 +217,54 @@ function fakeLifecycleAdapter() {
         throw new PlacementLifecycleError("Company cannot release this placement.", 403, "PLACEMENT_PERMISSION_DENIED");
       }
       const terminal = input.releaseType !== "standard_release";
-      const effectiveDate = input.effectiveDate || (terminal ? "2026-09-16" : "2026-09-23");
+      const effectiveDate = input.effectiveDate || (terminal ? TEST_TODAY : "2026-09-23");
+      const reasonText = input.reasonText || input.reason;
+      const idempotencyKey = `company_release:${row.id}:${input.releaseType}:${effectiveDate}`;
+      if (row.scheduled_end_date || row.scheduled_end_type) {
+        const existing = row.placement_lifecycle_events.find(
+          (event) => event.idempotency_key === idempotencyKey,
+        );
+        const equivalent =
+          row.scheduled_end_date === effectiveDate
+          && row.scheduled_end_type === "company_release"
+          && row.end_reason_code === input.reason
+          && row.end_reason_text === reasonText
+          && existing?.private_company_notes === (input.notes || null)
+          && existing?.metadata?.release_type === input.releaseType
+          && !!existing?.metadata?.replacement_requested === !!input.replacementRequested;
+        if (equivalent) {
+          return {
+            outcome: terminal ? "released" : "release_scheduled",
+            placement_id: row.id,
+            event_id: existing.id,
+            idempotent: true,
+          };
+        }
+        throw new PlacementLifecycleError(
+          "This placement already has a different scheduled end.",
+          409,
+          "PLACEMENT_STATE_CONFLICT",
+        );
+      }
+      if (
+        !terminal
+        && !row.current_no_fixed_end_date
+        && row.current_estimated_end_date
+        && effectiveDate > row.current_estimated_end_date
+      ) {
+        throw new PlacementLifecycleError(
+          "The scheduled release cannot be after the placement end date.",
+          400,
+          "INVALID_RELEASE",
+        );
+      }
       row.scheduled_end_date = effectiveDate;
       row.scheduled_end_type = "company_release";
       row.end_reason_code = input.reason;
-      row.end_reason_text = input.reasonText;
+      row.end_reason_text = reasonText;
       if (terminal) {
         row.status = "released";
-        row.ended_at = "2026-09-16T10:00:00.000Z";
+        row.ended_at = TEST_NOW;
       }
       addEvent(row, {
         event_type: terminal ? "released" : "release_scheduled",
@@ -216,13 +272,14 @@ function fakeLifecycleAdapter() {
         initiated_by_role: actorRole(input.actorUserId),
         reason_code: input.reason,
         reason_text: input.reasonText,
-        requested_at: "2026-09-16T10:00:00.000Z",
+        requested_at: TEST_NOW,
         effective_at: `${effectiveDate}T00:00:00.000Z`,
         notice_days: terminal ? 0 : 5,
         notice_classification: terminal ? "immediate_company_release" : "standard_5_working_days",
         worker_fault: input.releaseType === "immediate_release" && input.reason === "No-show",
         metadata: { release_type: input.releaseType, replacement_requested: input.replacementRequested },
         private_company_notes: input.notes || null,
+        idempotency_key: idempotencyKey,
       });
       return { outcome: terminal ? "released" : "release_scheduled", placement_id: row.id };
     },
@@ -231,35 +288,104 @@ function fakeLifecycleAdapter() {
       if (!row || row.worker_id !== actorWorker(input.actorUserId)) {
         throw new PlacementLifecycleError("Placement not found.", 404, "PLACEMENT_NOT_FOUND");
       }
-      row.scheduled_end_date = input.effectiveDate || "2026-09-23";
+      const effectiveDate = input.effectiveDate || "2026-09-23";
+      const reasonText = input.reasonText || input.reason;
+      const idempotencyKey = `worker_end:${row.id}:${effectiveDate}`;
+      if (row.scheduled_end_date || row.scheduled_end_type) {
+        const existing = row.placement_lifecycle_events.find(
+          (event) => event.idempotency_key === idempotencyKey,
+        );
+        if (
+          row.scheduled_end_date === effectiveDate
+          && row.scheduled_end_type === "worker_end"
+          && row.end_reason_code === input.reason
+          && row.end_reason_text === reasonText
+          && existing
+        ) {
+          return {
+            outcome: effectiveDate <= TEST_TODAY ? "released" : "end_scheduled",
+            placement_id: row.id,
+            event_id: existing.id,
+            idempotent: true,
+          };
+        }
+        throw new PlacementLifecycleError(
+          "This placement already has a different scheduled end.",
+          409,
+          "PLACEMENT_STATE_CONFLICT",
+        );
+      }
+      row.scheduled_end_date = effectiveDate;
       row.scheduled_end_type = "worker_end";
       row.end_reason_code = input.reason;
-      row.end_reason_text = input.reasonText;
+      row.end_reason_text = reasonText;
+      if (effectiveDate <= TEST_TODAY) {
+        row.status = "released";
+        row.ended_at = TEST_NOW;
+      }
       addEvent(row, {
         event_type: "worker_end_requested",
         initiated_by_type: "worker",
         reason_code: input.reason,
         reason_text: input.reasonText,
-        requested_at: "2026-09-16T10:00:00.000Z",
+        requested_at: TEST_NOW,
         effective_at: `${row.scheduled_end_date}T00:00:00.000Z`,
         notice_days: 5,
         notice_classification: "worker_requested_end",
+        idempotency_key: idempotencyKey,
       });
-      return { outcome: "end_scheduled", placement_id: row.id };
+      return {
+        outcome: effectiveDate <= TEST_TODAY ? "released" : "end_scheduled",
+        placement_id: row.id,
+      };
     },
     async complete(input) {
       const row = placements.get(input.placementId);
       if (!row || row.project_requirements.projects.company_id !== actorCompany(input.actorUserId)) {
         throw new PlacementLifecycleError("Placement not found.", 404, "PLACEMENT_NOT_FOUND");
       }
+      const effectiveDate = input.effectiveDate || TEST_TODAY;
+      if (effectiveDate > TEST_TODAY) {
+        throw new PlacementLifecycleError(
+          "A completion date cannot be in the future.",
+          400,
+          "INVALID_COMPLETION_DATE",
+        );
+      }
+      if (effectiveDate < row.current_start_date) {
+        throw new PlacementLifecycleError(
+          "A completion date cannot be before the placement start date.",
+          400,
+          "INVALID_COMPLETION_DATE",
+        );
+      }
+      if (
+        !row.current_no_fixed_end_date
+        && row.current_estimated_end_date
+        && effectiveDate > row.current_estimated_end_date
+      ) {
+        throw new PlacementLifecycleError(
+          "A completion date cannot be after the placement end date.",
+          400,
+          "INVALID_COMPLETION_DATE",
+        );
+      }
+      if (row.scheduled_end_date || row.scheduled_end_type) {
+        throw new PlacementLifecycleError(
+          "This placement already has a scheduled end.",
+          409,
+          "PLACEMENT_STATE_CONFLICT",
+        );
+      }
       row.status = "completed";
-      row.ended_at = "2026-12-18T17:00:00.000Z";
+      row.ended_at = `${effectiveDate}T00:00:00.000Z`;
       addEvent(row, {
         event_type: "completed",
         initiated_by_type: "company",
         reason_code: "company_confirmed_completion",
-        requested_at: row.ended_at,
+        requested_at: TEST_NOW,
         effective_at: row.ended_at,
+        idempotency_key: `company_completed:${row.id}:${effectiveDate}`,
       });
       return { outcome: "completed", placement_id: row.id };
     },
@@ -267,6 +393,37 @@ function fakeLifecycleAdapter() {
       const row = placements.get(input.placementId);
       if (!row || row.project_requirements.projects.company_id !== actorCompany(input.actorUserId)) {
         throw new PlacementLifecycleError("Company cannot change this placement.", 403, "PLACEMENT_PERMISSION_DENIED");
+      }
+      if (!["upcoming", "active"].includes(row.status)) {
+        throw new PlacementLifecycleError(
+          "This placement can no longer be changed.",
+          409,
+          "PLACEMENT_STATE_CONFLICT",
+        );
+      }
+      if (input.changeType === "extension" && row.scheduled_end_date) {
+        throw new PlacementLifecycleError(
+          "A placement with a scheduled end cannot be extended.",
+          409,
+          "PLACEMENT_STATE_CONFLICT",
+        );
+      }
+      if (
+        input.changeType === "schedule_change"
+        && (
+          (
+            !row.current_no_fixed_end_date
+            && row.current_estimated_end_date
+            && input.effectiveDate > row.current_estimated_end_date
+          )
+          || (row.scheduled_end_date && input.effectiveDate > row.scheduled_end_date)
+        )
+      ) {
+        throw new PlacementLifecycleError(
+          "The change cannot take effect after the placement ends.",
+          400,
+          "INVALID_PLACEMENT_CHANGE",
+        );
       }
       const id = uuid(++changeSequence);
       row.placement_change_offers.unshift({
@@ -316,6 +473,28 @@ function fakeLifecycleAdapter() {
         if (failNextResponse) {
           failNextResponse = false;
           throw new PlacementLifecycleError("Atomic change failed.", 409, "PLACEMENT_STATE_CONFLICT");
+        }
+        if (
+          input.accept
+          && (
+            (change.change_type === "extension" && row.scheduled_end_date)
+            || (
+              change.change_type === "schedule_change"
+              && (
+                (
+                  !row.current_no_fixed_end_date
+                  && row.current_estimated_end_date
+                  && change.effective_date > row.current_estimated_end_date
+                )
+                || (row.scheduled_end_date && change.effective_date > row.scheduled_end_date)
+              )
+            )
+          )
+        ) {
+          return {
+            outcome: "scheduled_end_conflict",
+            change_offer_id: change.id,
+          };
         }
         change.status = input.accept ? "accepted" : "declined";
         change.responded_at = "2026-09-16T11:00:00.000Z";
@@ -464,9 +643,10 @@ test("worker can request an end only for their own canonical placement", async (
 
 test("company completion preserves the placement and removes it from committed capacity", async () => {
   const adapter = fakeLifecycleAdapter();
+  adapter.placements.get(PLACEMENT_A).current_start_date = "2026-09-01";
   const service = createPlacementLifecycleService({ adapter });
   const placement = await service.complete(companyPrincipal(), PLACEMENT_A, {
-    effectiveDate: "2026-12-18",
+    effectiveDate: TEST_TODAY,
   });
   assert.equal(placement.id, PLACEMENT_A);
   assert.equal(placement.status, "completed");
@@ -476,6 +656,188 @@ test("company completion preserves the placement and removes it from committed c
     service.complete(companyPrincipal("Supervisor"), PLACEMENT_B, {}),
     (error) => error.code === "PLACEMENT_PERMISSION_DENIED",
   );
+});
+
+test("manual completion rejects future and invalid historical dates without releasing capacity", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const row = adapter.placements.get(PLACEMENT_A);
+  row.current_start_date = "2026-09-01";
+  const service = createPlacementLifecycleService({ adapter });
+
+  await assert.rejects(
+    service.complete(companyPrincipal(), PLACEMENT_A, {
+      effectiveDate: "2026-09-17",
+    }),
+    (error) => error.code === "INVALID_COMPLETION_DATE",
+  );
+  assert.equal(row.status, "upcoming");
+  assert.equal(CAPACITY_STATUSES.includes(row.status), true);
+  assert.equal(row.placement_lifecycle_events.length, 0);
+
+  await assert.rejects(
+    service.complete(companyPrincipal(), PLACEMENT_A, {
+      effectiveDate: "2026-08-31",
+    }),
+    (error) => error.code === "INVALID_COMPLETION_DATE",
+  );
+  assert.equal(row.status, "upcoming");
+});
+
+test("standard company release retries are idempotent and conflicting schedules fail", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const service = createPlacementLifecycleService({ adapter });
+  const input = {
+    releaseType: "standard_release",
+    effectiveDate: "2026-09-23",
+    reason: "Site no longer requires worker",
+    notes: "Programme reduced",
+    replacementRequested: true,
+  };
+
+  await service.release(companyPrincipal(), PLACEMENT_A, input);
+  const first = structuredClone(adapter.placements.get(PLACEMENT_A));
+  await service.release(companyPrincipal(), PLACEMENT_A, input);
+  const afterRetry = adapter.placements.get(PLACEMENT_A);
+  assert.equal(afterRetry.placement_lifecycle_events.length, 1);
+  assert.equal(
+    afterRetry.placement_lifecycle_events[0].id,
+    first.placement_lifecycle_events[0].id,
+  );
+  assert.equal(afterRetry.status, "upcoming");
+
+  await assert.rejects(
+    service.release(companyPrincipal(), PLACEMENT_A, {
+      ...input,
+      effectiveDate: "2026-09-24",
+    }),
+    (error) => error.code === "PLACEMENT_STATE_CONFLICT",
+  );
+  assert.equal(afterRetry.scheduled_end_date, "2026-09-23");
+  assert.equal(afterRetry.placement_lifecycle_events.length, 1);
+});
+
+test("worker scheduled-end retries are idempotent and conflicting requests fail", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const service = createPlacementLifecycleService({ adapter });
+  const input = {
+    effectiveDate: "2026-09-23",
+    reason: "Project no longer suitable",
+    notes: "Changing assignment",
+  };
+
+  await service.requestWorkerEnd(workerPrincipal(), PLACEMENT_A, input);
+  const firstEvent = adapter.placements.get(PLACEMENT_A).placement_lifecycle_events[0];
+  await service.requestWorkerEnd(workerPrincipal(), PLACEMENT_A, input);
+  const row = adapter.placements.get(PLACEMENT_A);
+  assert.equal(row.placement_lifecycle_events.length, 1);
+  assert.equal(row.placement_lifecycle_events[0].id, firstEvent.id);
+
+  await assert.rejects(
+    service.requestWorkerEnd(workerPrincipal(), PLACEMENT_A, {
+      ...input,
+      effectiveDate: "2026-09-24",
+    }),
+    (error) => error.code === "PLACEMENT_STATE_CONFLICT",
+  );
+  assert.equal(row.scheduled_end_date, "2026-09-23");
+  assert.equal(row.placement_lifecycle_events.length, 1);
+});
+
+test("schedule changes cannot outlive fixed or scheduled placement ends", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const service = createPlacementLifecycleService({ adapter });
+  const fields = {
+    changeType: "schedule_change",
+    shiftStartTime: "20:00",
+    shiftFinishTime: "05:00",
+  };
+
+  await assert.rejects(
+    service.proposeChange(companyPrincipal(), PLACEMENT_A, {
+      ...fields,
+      effectiveDate: "2026-12-19",
+    }),
+    (error) => error.code === "INVALID_PLACEMENT_CHANGE",
+  );
+
+  const row = adapter.placements.get(PLACEMENT_A);
+  row.scheduled_end_date = "2026-10-10";
+  row.scheduled_end_type = "company_release";
+  await assert.rejects(
+    service.proposeChange(companyPrincipal(), PLACEMENT_A, {
+      ...fields,
+      effectiveDate: "2026-10-11",
+    }),
+    (error) => error.code === "INVALID_PLACEMENT_CHANGE",
+  );
+
+  const valid = await service.proposeChange(companyPrincipal(), PLACEMENT_A, {
+    ...fields,
+    effectiveDate: "2026-10-10",
+  });
+  assert.equal(valid.changeOffer.effectiveDate, "2026-10-10");
+});
+
+test("extensions reject scheduled ends at proposal and acceptance time", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const service = createPlacementLifecycleService({ adapter });
+  const row = adapter.placements.get(PLACEMENT_A);
+  row.scheduled_end_date = "2026-10-10";
+  row.scheduled_end_type = "company_release";
+  await assert.rejects(
+    service.proposeExtension(companyPrincipal(), PLACEMENT_A, {
+      estimatedEndDate: "2027-01-15",
+    }),
+    (error) => error.code === "PLACEMENT_STATE_CONFLICT",
+  );
+
+  row.scheduled_end_date = null;
+  row.scheduled_end_type = null;
+  const proposed = await service.proposeExtension(companyPrincipal(), PLACEMENT_A, {
+    estimatedEndDate: "2027-01-15",
+  });
+  row.scheduled_end_date = "2026-10-10";
+  row.scheduled_end_type = "worker_end";
+  await assert.rejects(
+    service.respondChange(workerPrincipal(), proposed.changeOffer.id, true),
+    (error) => error.code === "PLACEMENT_SCHEDULED_END_CONFLICT",
+  );
+  assert.equal(row.current_estimated_end_date, "2026-12-18");
+  assert.equal(row.placement_change_offers[0].status, "pending");
+});
+
+test("normalization releases capacity only when an end becomes effective", async () => {
+  const adapter = fakeLifecycleAdapter();
+  const service = createPlacementLifecycleService({ adapter });
+  const row = adapter.placements.get(PLACEMENT_A);
+  const natural = adapter.placements.get(PLACEMENT_B);
+  row.current_start_date = "2026-09-01";
+  row.status = "active";
+  row.scheduled_end_date = "2026-09-17";
+  row.scheduled_end_type = "company_release";
+  natural.current_start_date = "2026-09-01";
+  natural.current_estimated_end_date = "2026-09-17";
+  natural.status = "active";
+
+  await service.list(workerPrincipal());
+  assert.equal(row.status, "active");
+  assert.equal(CAPACITY_STATUSES.includes(row.status), true);
+  await service.list(workerPrincipal(WORKER_B));
+  assert.equal(natural.status, "active");
+
+  row.scheduled_end_date = TEST_TODAY;
+  natural.current_estimated_end_date = "2026-09-15";
+  await service.list(workerPrincipal());
+  await service.list(workerPrincipal(WORKER_B));
+  assert.equal(row.status, "released");
+  assert.equal(CAPACITY_STATUSES.includes(row.status), false);
+  assert.equal(natural.status, "completed");
+  assert.equal(CAPACITY_STATUSES.includes(natural.status), false);
+
+  await service.list(workerPrincipal());
+  await service.list(workerPrincipal(WORKER_B));
+  assert.equal(row.status, "released");
+  assert.equal(natural.status, "completed");
 });
 
 test("extension acceptance updates effective terms atomically and preserves accepted terms", async () => {
@@ -621,6 +983,16 @@ test("migration preserves history, least privilege, capacity states, and atomic 
     /status = 'pending'[\s\S]*select placement\.\*[\s\S]*for update;[\s\S]*select change_offer\.\*[\s\S]*for update;[\s\S]*set status = 'expired'/,
   );
   assert.match(sql, /select placement\.\*[\s\S]*for update;[\s\S]*select change_offer\.\*[\s\S]*for update;/);
+  assert.match(sql, /A completion date cannot be in the future/);
+  assert.match(sql, /A completion date cannot be before the placement start date/);
+  assert.match(sql, /company_release:[\s\S]*p_release_type[\s\S]*v_effective_date/);
+  assert.match(sql, /worker_end:[\s\S]*v_placement\.id[\s\S]*v_effective_date/);
+  assert.doesNotMatch(sql, /company_release:' \|\| v_placement\.id \|\| ':' \|\| gen_random_uuid/);
+  assert.doesNotMatch(sql, /worker_end:' \|\| v_placement\.id \|\| ':' \|\| gen_random_uuid/);
+  assert.match(sql, /A placement with a scheduled end cannot be extended/);
+  assert.match(sql, /The change cannot take effect after the placement end date/);
+  assert.match(sql, /The change cannot take effect after the scheduled end date/);
+  assert.match(sql, /scheduled_end_conflict/);
   assert.doesNotMatch(sql, /update public\.placements\s+set\s+agreed_/i);
   assert.doesNotMatch(sql, /update public\.placements\s+set\s+project_requirement_id/i);
   assert.doesNotMatch(sql, /insert into public\.(attendance|timesheets|invoices|worker_reliability)/i);
