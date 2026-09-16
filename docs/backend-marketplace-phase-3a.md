@@ -50,6 +50,12 @@ Migration `202609160004_marketplace_applications.sql` creates
 - a partial unique index preventing more than one active application for the
   same worker and requirement.
 
+Requirements with application history cannot be deleted: the requirement
+foreign key uses `ON DELETE RESTRICT`. Because project replacement runs inside
+the transactional `save_company_project` RPC, attempting to omit a requirement
+that has applications rejects the complete save without changing the project,
+its other requirements, or its applications.
+
 Application ownership comes exclusively from the authenticated server
 principal. Browser-supplied worker or company IDs are rejected. A worker may
 read only their own applications and may only transition their own `applied`
@@ -115,6 +121,13 @@ The following remain browser-local or deferred:
 - planned absences and complete server-side matching/capacity evaluation;
 - worker credentials beyond the canonical profile fields currently available;
 - real vacancy reduction from confirmed placements.
+
+The worker-profile foreign key continues to use `ON DELETE CASCADE` to preserve
+the existing Phase 1 auth-registration rollback behaviour. OnSite does not yet
+have a defined production account-deletion and marketplace-history retention
+policy or an anonymised worker record. That policy must be decided before
+launch; retaining application history will require an explicit anonymisation or
+tombstone design rather than simply changing this foreign key in isolation.
 
 Until placements are canonical, `vacancies` equals the canonical requirement's
 `workers_required` quantity. Phase 3B should add canonical offers and placements,

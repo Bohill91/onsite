@@ -83,8 +83,10 @@ function projectInput(overrides = {}) {
 
 function fakeProjectAdapter() {
   const projects = new Map();
+  const applications = new Map();
   let projectSequence = 100;
   let requirementSequence = 500;
+  let applicationSequence = 900;
   const uuid = (value) =>
     `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
   const clone = (value) => structuredClone(value);
@@ -167,6 +169,16 @@ function fakeProjectAdapter() {
   return {
     configured: true,
     projects,
+    applications,
+    addApplication(requirementId) {
+      const id = uuid(++applicationSequence);
+      applications.set(id, {
+        id,
+        project_requirement_id: requirementId,
+        status: "applied",
+      });
+      return clone(applications.get(id));
+    },
     async listCompanyProjects(companyId) {
       return [...projects.values()]
         .filter((row) => row.company_id === companyId)
@@ -187,7 +199,7 @@ function fakeProjectAdapter() {
         row.project_requirements = clone(existing?.project_requirements || []);
       } else {
         const previous = existing?.project_requirements || [];
-        row.project_requirements = requirements.map((requirement) => {
+        const nextRequirements = requirements.map((requirement) => {
           if (requirement.id) {
             const owned = previous.find((item) => item.id === requirement.id);
             const belongsElsewhere = [...projects.values()].some(
@@ -205,6 +217,22 @@ function fakeProjectAdapter() {
           }
           return requirementRow(requirement, id, requirement.id);
         });
+        const nextRequirementIds = new Set(nextRequirements.map((requirement) => requirement.id));
+        const protectedRemoval = previous.some(
+          (requirement) =>
+            !nextRequirementIds.has(requirement.id) &&
+            [...applications.values()].some(
+              (application) => application.project_requirement_id === requirement.id,
+            ),
+        );
+        if (protectedRemoval) {
+          throw new ProjectServiceError(
+            "This labour requirement has worker applications and cannot be removed.",
+            409,
+            "PROJECT_REQUIREMENT_HAS_APPLICATIONS",
+          );
+        }
+        row.project_requirements = nextRequirements;
       }
       projects.set(id, clone(row));
       return clone(row);
@@ -306,6 +334,7 @@ test("requirement replacement cannot mutate another company's requirement", asyn
     projectInput({ project: { jobNumber: "B-002", projectName: "Other Site" } }),
   );
   const foreignRequirement = projectB.labourRequirements[0];
+  const foreignApplication = adapter.addApplication(foreignRequirement.id);
   await rejectsCode(
     service.update(principal(), projectA.id, {
       requirements: [
@@ -320,12 +349,18 @@ test("requirement replacement cannot mutate another company's requirement", asyn
   const untouched = await service.get(principal(COMPANY_B), projectB.id);
   assert.equal(untouched.labourRequirements.length, 2);
   assert.equal(untouched.labourRequirements[0].quantity, 4);
+  assert.equal(
+    adapter.applications.get(foreignApplication.id).project_requirement_id,
+    foreignRequirement.id,
+  );
 });
 
-test("owned requirement updates stay attached to their canonical project", async () => {
-  const service = createProjectService({ adapter: fakeProjectAdapter() });
+test("requirements without applications can be removed from their canonical project", async () => {
+  const adapter = fakeProjectAdapter();
+  const service = createProjectService({ adapter });
   const created = await service.create(principal(), projectInput());
   const electrician = created.labourRequirements[0];
+  const removedRequirementId = created.labourRequirements[1].id;
   const updated = await service.update(principal(), created.id, {
     requirements: [
       {
@@ -338,6 +373,55 @@ test("owned requirement updates stay attached to their canonical project", async
   assert.equal(updated.labourRequirements[0].id, electrician.id);
   assert.equal(updated.labourRequirements[0].quantity, 6);
   assert.equal(updated.labourRequirements[0].clientReferenceId, "local-electricians");
+  assert.equal(
+    adapter.projects
+      .get(created.id)
+      .project_requirements.some((requirement) => requirement.id === removedRequirementId),
+    false,
+  );
+});
+
+test("application-backed requirement removal fails atomically and preserves history", async () => {
+  const adapter = fakeProjectAdapter();
+  const service = createProjectService({ adapter });
+  const created = await service.create(principal(), projectInput());
+  const protectedRequirement = created.labourRequirements[0];
+  const unrelatedRequirement = created.labourRequirements[1];
+  const application = adapter.addApplication(protectedRequirement.id);
+
+  await assert.rejects(
+    service.update(principal(), created.id, {
+      project: { projectName: "This update must roll back" },
+      requirements: [{ ...unrelatedRequirement, quantity: 9 }],
+    }),
+    (error) => {
+      assert.equal(error?.statusCode, 409);
+      assert.equal(error?.code, "PROJECT_REQUIREMENT_HAS_APPLICATIONS");
+      assert.equal(
+        error?.message,
+        "This labour requirement has worker applications and cannot be removed.",
+      );
+      return true;
+    },
+  );
+
+  const unchanged = await service.get(principal(), created.id);
+  assert.equal(unchanged.projectName, "Northgate Tower");
+  assert.equal(unchanged.labourRequirements.length, 2);
+  assert.equal(
+    unchanged.labourRequirements.find((requirement) => requirement.id === protectedRequirement.id)
+      .quantity,
+    protectedRequirement.quantity,
+  );
+  assert.equal(
+    unchanged.labourRequirements.find((requirement) => requirement.id === unrelatedRequirement.id)
+      .quantity,
+    unrelatedRequirement.quantity,
+  );
+  assert.equal(
+    adapter.applications.get(application.id).project_requirement_id,
+    protectedRequirement.id,
+  );
 });
 
 test("canonical project persists across service reload and client-state clearing", async () => {
@@ -434,6 +518,49 @@ test("Supabase project adapter is secret-key-only and fails closed", () => {
     },
   });
   assert.deepEqual(incomplete, { configured: false });
+});
+
+test("Supabase project adapter translates protected requirement deletion safely", async () => {
+  const adapter = createSupabaseProjectAdapter({
+    env: {
+      SUPABASE_URL: "https://onsite-test.supabase.co",
+      SUPABASE_SECRET_KEY: "sb_secret_test",
+    },
+    clientFactory() {
+      return {
+        async rpc() {
+          return {
+            data: null,
+            error: {
+              code: "23503",
+              message:
+                'update or delete on table "project_requirements" violates foreign key constraint "worker_applications_project_requirement_id_fkey"',
+              details: "Key is still referenced from table worker_applications.",
+            },
+          };
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    adapter.saveCompanyProject({
+      actorUserId: USER_A,
+      projectId: "00000000-0000-4000-8000-000000000100",
+      project: { companyId: COMPANY_A },
+      requirements: [],
+    }),
+    (error) => {
+      assert.equal(error?.statusCode, 409);
+      assert.equal(error?.code, "PROJECT_REQUIREMENT_HAS_APPLICATIONS");
+      assert.equal(
+        error?.message,
+        "This labour requirement has worker applications and cannot be removed.",
+      );
+      assert.doesNotMatch(error?.message || "", /foreign key|project_requirements/i);
+      return true;
+    },
+  );
 });
 
 test("migration is transactional, ownership-scoped and least privilege", () => {

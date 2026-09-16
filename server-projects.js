@@ -27,6 +27,9 @@ const WORKING_DAYS = new Set([
   "sunday",
 ]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const APPLICATION_REQUIREMENT_CONSTRAINT = "worker_applications_project_requirement_id_fkey";
+const PROTECTED_REQUIREMENT_MESSAGE =
+  "This labour requirement has worker applications and cannot be removed.";
 
 class ProjectServiceError extends Error {
   constructor(message, statusCode = 400, code = "PROJECT_ERROR") {
@@ -566,6 +569,17 @@ function databaseProjectToClient(row = {}) {
 function unwrapDatabaseResult(result, fallbackMessage) {
   if (result?.error) {
     const databaseCode = result.error.code || "PROJECT_DATABASE_ERROR";
+    const databaseContext = [
+      result.error.constraint,
+      result.error.message,
+      result.error.details,
+      result.error.hint,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const protectedRequirementDelete =
+      databaseCode === "23503" &&
+      databaseContext.includes(APPLICATION_REQUIREMENT_CONSTRAINT);
     const statusByCode = {
       P0002: 404,
       "42501": 403,
@@ -573,16 +587,22 @@ function unwrapDatabaseResult(result, fallbackMessage) {
       "22023": 400,
       "23514": 400,
     };
-    const status =
-      statusByCode[databaseCode] ||
-      Number(result.error.status || result.error.statusCode) ||
-      500;
-    const code = databaseCode === "P0002"
-      ? "PROJECT_NOT_FOUND"
-      : databaseCode === "42501"
-        ? "PROJECT_PERMISSION_DENIED"
-        : databaseCode;
-    throw new ProjectServiceError(result.error.message || fallbackMessage, status, code);
+    const status = protectedRequirementDelete
+      ? 409
+      : statusByCode[databaseCode] ||
+        Number(result.error.status || result.error.statusCode) ||
+        500;
+    const code = protectedRequirementDelete
+      ? "PROJECT_REQUIREMENT_HAS_APPLICATIONS"
+      : databaseCode === "P0002"
+        ? "PROJECT_NOT_FOUND"
+        : databaseCode === "42501"
+          ? "PROJECT_PERMISSION_DENIED"
+          : databaseCode;
+    const message = protectedRequirementDelete
+      ? PROTECTED_REQUIREMENT_MESSAGE
+      : result.error.message || fallbackMessage;
+    throw new ProjectServiceError(message, status, code);
   }
   return result && typeof result === "object" && Object.hasOwn(result, "data")
     ? result.data

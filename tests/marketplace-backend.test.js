@@ -507,8 +507,14 @@ test("marketplace migration is transactional, RLS-scoped and least privilege", (
   assert.match(source, /^begin;/);
   assert.match(source, /commit;\s*$/);
   assert.match(source, /create table if not exists public\.worker_applications/);
-  assert.match(source, /worker_id uuid not null references public\.worker_profiles\(id\) on delete cascade/);
-  assert.match(source, /project_requirement_id uuid not null references public\.project_requirements\(id\) on delete cascade/);
+  assert.match(
+    source,
+    /constraint worker_applications_worker_id_fkey[\s\S]*references public\.worker_profiles\(id\)[\s\S]*on delete cascade/,
+  );
+  assert.match(
+    source,
+    /constraint worker_applications_project_requirement_id_fkey[\s\S]*references public\.project_requirements\(id\)[\s\S]*on delete restrict/,
+  );
   assert.match(source, /where status = 'applied'/);
   assert.match(source, /alter table public\.worker_applications enable row level security/);
   assert.match(source, /worker\.user_id = auth\.uid\(\)/);

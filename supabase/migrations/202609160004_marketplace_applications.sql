@@ -2,14 +2,22 @@ begin;
 
 create table if not exists public.worker_applications (
   id uuid primary key default gen_random_uuid(),
-  worker_id uuid not null references public.worker_profiles(id) on delete cascade,
-  project_requirement_id uuid not null references public.project_requirements(id) on delete cascade,
+  worker_id uuid not null,
+  project_requirement_id uuid not null,
   status text not null default 'applied',
   worker_note text,
   withdrawal_reason text,
   withdrawn_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint worker_applications_worker_id_fkey
+    foreign key (worker_id)
+    references public.worker_profiles(id)
+    on delete cascade,
+  constraint worker_applications_project_requirement_id_fkey
+    foreign key (project_requirement_id)
+    references public.project_requirements(id)
+    on delete restrict,
   constraint worker_applications_status_valid
     check (status in ('applied', 'withdrawn')),
   constraint worker_applications_withdrawal_valid
