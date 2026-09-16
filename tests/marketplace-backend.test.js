@@ -56,6 +56,7 @@ function publishedRequirement({
   tradeKey = "electrical",
   endDate = "2026-12-18",
   fullRate = true,
+  placements = [],
 } = {}) {
   return {
     id,
@@ -84,6 +85,7 @@ function publishedRequirement({
     matching_preferences: { requestedWorkerIds: [WORKER_B], preferredFirst: true },
     created_at: "2026-09-16T08:00:00.000Z",
     updated_at: "2026-09-16T08:00:00.000Z",
+    placements,
     projects: {
       id: projectId,
       company_id: companyId,
@@ -254,6 +256,36 @@ test("worker-facing rate is derived without serializing the raw all-in budget", 
   assert.equal(job.advertisedDayRate, Math.floor(250 / 1.15));
   assert.equal(job.weekendRates.saturday, Math.floor(300 / 1.15));
   assert.equal(Object.hasOwn(job, "labourBudgetMax"), false);
+});
+
+test("canonical placements reduce vacancies and filled requirements are unavailable", async () => {
+  const adapter = fakeMarketplaceAdapter();
+  adapter.requirements.set(
+    REQUIREMENT_A,
+    publishedRequirement({
+      placements: [
+        { id: "placement-one", status: "upcoming" },
+        { id: "placement-two", status: "active" },
+        { id: "placement-history", status: "completed" },
+      ],
+    }),
+  );
+  const service = createMarketplaceService({ adapter });
+  assert.equal((await service.getJob(workerPrincipal(), REQUIREMENT_A)).vacancies, 2);
+
+  adapter.requirements.set(
+    REQUIREMENT_A,
+    publishedRequirement({
+      placements: [
+        { id: "placement-one", status: "upcoming" },
+        { id: "placement-two", status: "active" },
+        { id: "placement-three", status: "active" },
+        { id: "placement-four", status: "upcoming" },
+      ],
+    }),
+  );
+  await rejectsCode(service.getJob(workerPrincipal(), REQUIREMENT_A), "JOB_NOT_FOUND");
+  await rejectsCode(service.apply(workerPrincipal(), REQUIREMENT_A), "JOB_NOT_FOUND");
 });
 
 test("publication eligibility excludes invalid, closed and ended requirements", async () => {

@@ -6677,8 +6677,21 @@ function saveState() {
     const persistedState = {
       ...state,
       applications: (state.applications || []).filter(
-        (application) => !application.canonicalMarketplaceApplication,
+        (application) =>
+          !application.canonicalMarketplaceApplication &&
+          !application.canonicalMarketplaceOffer,
       ),
+      jobs: (state.jobs || []).map((job) => {
+        if (!job.canonicalProject) return job;
+        const persistedJob = {
+          ...job,
+          placementSlots: (job.placementSlots || []).filter(
+            (slot) => !slot.canonicalPlacement,
+          ),
+        };
+        placementSlotsEngine()?.syncLegacyAssignmentFields(persistedJob);
+        return persistedJob;
+      }),
       workers: (state.workers || []).filter(
         (worker) => !worker.canonicalApplicant,
       ),
@@ -6731,14 +6744,27 @@ async function marketplaceApiRequest(path, options = {}) {
 }
 
 let canonicalWorkerMarketplaceJobs = [];
+let canonicalWorkerOffers = [];
+let canonicalWorkerPlacements = [];
 let canonicalWorkerMarketplaceSyncInFlight = null;
 let canonicalCompanyApplicationSyncInFlight = null;
 
 function clearCanonicalMarketplaceCompatibility() {
   canonicalWorkerMarketplaceJobs = [];
   state.applications = (state.applications || []).filter(
-    (application) => !application.canonicalMarketplaceApplication,
+    (application) =>
+      !application.canonicalMarketplaceApplication &&
+      !application.canonicalMarketplaceOffer,
   );
+  canonicalWorkerOffers = [];
+  canonicalWorkerPlacements = [];
+  (state.jobs || []).forEach((job) => {
+    if (!job.canonicalProject) return;
+    job.placementSlots = (job.placementSlots || []).filter(
+      (slot) => !slot.canonicalPlacement,
+    );
+    normalizeProjectPlacements(job, state);
+  });
   state.workers = (state.workers || []).filter(
     (worker) => !worker.canonicalApplicant,
   );
@@ -6800,6 +6826,115 @@ function replaceCanonicalApplications(applications, user, { company = false } = 
   });
 }
 
+function upsertCanonicalWorker(worker = {}) {
+  if (!worker.id) return;
+  const existingIndex = state.workers.findIndex((candidate) => candidate.id === worker.id);
+  const compatibleWorker = {
+    ...(existingIndex >= 0 ? state.workers[existingIndex] : {}),
+    ...worker,
+    canonicalApplicant:
+      existingIndex < 0 || !!state.workers[existingIndex]?.canonicalApplicant,
+  };
+  if (existingIndex >= 0) state.workers[existingIndex] = compatibleWorker;
+  else state.workers.push(compatibleWorker);
+}
+
+function canonicalOfferCompatibility(offer, worker = {}, { company = false } = {}) {
+  const status = {
+    pending: "offered",
+    accepted: "confirmed",
+    declined: "declined_by_worker",
+    expired: "expired",
+    cancelled: "cancelled_by_company",
+  }[offer.status] || offer.status;
+  return {
+    id: offer.id,
+    offerId: offer.id,
+    canonicalMarketplaceOffer: true,
+    canonicalStatus: offer.status,
+    sourceApplicationId: offer.applicationId || "",
+    priorOfferId: offer.priorOfferId || "",
+    jobId: offer.projectId || "",
+    projectId: offer.projectId || "",
+    requirementId: offer.requirementId || "",
+    labourRequirementId: offer.requirementId || "",
+    workerId: offer.workerId || worker.id || "",
+    workerName: worker.name || "Worker",
+    workerTrade: worker.trade || offer.trade || "",
+    companyId: company ? offer.companyId || "" : "",
+    companyName: offer.companyName || "Company",
+    status,
+    source: offer.source || "application",
+    offeredDayRate: offer.offeredDayRate ?? null,
+    offeredAt: offer.createdAt || "",
+    expiresAt: offer.expiresAt || "",
+    workerRespondedAt: offer.respondedAt || "",
+    workerDeclineReason: offer.declineReason || "",
+    workerDeclineComment: offer.declineComment || "",
+    createdAt: offer.createdAt || "",
+    updatedAt: offer.updatedAt || "",
+    offerTerms: { ...offer },
+    matchSnapshot: {
+      budget: offer.offeredDayRate ?? null,
+      requirementId: offer.requirementId || "",
+    },
+  };
+}
+
+function replaceCanonicalOffers(offers, { company = false } = {}) {
+  state.applications = (state.applications || []).filter(
+    (application) => !application.canonicalMarketplaceOffer,
+  );
+  (offers || []).forEach((offer) => {
+    const worker = company ? offer.worker || {} : getSessionUser() || {};
+    if (company) upsertCanonicalWorker(worker);
+    state.applications.push(canonicalOfferCompatibility(offer, worker, { company }));
+  });
+}
+
+function applyCanonicalCompanyPlacements(placements = []) {
+  (state.jobs || []).forEach((job) => {
+    if (!job.canonicalProject) return;
+    job.placementSlots = (job.placementSlots || []).filter(
+      (slot) => !slot.canonicalPlacement,
+    );
+    normalizeProjectPlacements(job, state);
+  });
+  placements.forEach((placement) => {
+    if (!["upcoming", "active"].includes(placement.status)) return;
+    upsertCanonicalWorker(placement.worker || {});
+    const job = findJob(placement.projectId);
+    if (!job) return;
+    normalizeProjectPlacements(job, state);
+    let slot = (job.placementSlots || []).find(
+      (candidate) =>
+        candidate.requirementId === placement.requirementId &&
+        ["open", "released"].includes(candidate.status),
+    );
+    if (!slot) {
+      slot = {
+        slotId: `placement-${placement.id}`,
+        requirementId: placement.requirementId,
+        ordinal: (job.placementSlots || []).length + 1,
+        history: [],
+      };
+      job.placementSlots.push(slot);
+    }
+    Object.assign(slot, {
+      canonicalPlacement: true,
+      canonicalPlacementId: placement.id,
+      status: placement.status === "active" ? "active" : "confirmed",
+      workerId: placement.workerId,
+      applicationId: placement.applicationId || "",
+      bookingId: placement.id,
+      filledAt: placement.createdAt || "",
+      agreedDayRate: placement.agreedDayRate,
+      pricing: { workerPay: placement.agreedDayRate },
+    });
+    placementSlotsEngine()?.syncLegacyAssignmentFields(job);
+  });
+}
+
 async function syncCanonicalWorkerMarketplace(user = getSessionUser()) {
   if (user?.type !== "worker" || !user.serverAuthenticated) return;
   if (canonicalWorkerMarketplaceSyncInFlight) {
@@ -6807,12 +6942,22 @@ async function syncCanonicalWorkerMarketplace(user = getSessionUser()) {
   }
   canonicalWorkerMarketplaceSyncInFlight = (async () => {
     try {
-      const [{ jobs = [] }, { applications = [] }] = await Promise.all([
+      const [
+        { jobs = [] },
+        { applications = [] },
+        { offers = [] },
+        { placements = [] },
+      ] = await Promise.all([
         marketplaceApiRequest("/api/jobs"),
         marketplaceApiRequest("/api/applications"),
+        marketplaceApiRequest("/api/offers"),
+        marketplaceApiRequest("/api/placements"),
       ]);
       canonicalWorkerMarketplaceJobs = jobs;
+      canonicalWorkerOffers = offers;
+      canonicalWorkerPlacements = placements;
       replaceCanonicalApplications(applications, user);
+      replaceCanonicalOffers(offers);
       saveAndRender();
     } catch (error) {
       canonicalWorkerMarketplaceJobs = [];
@@ -6835,10 +6980,18 @@ async function syncCanonicalCompanyApplications(
   }
   canonicalCompanyApplicationSyncInFlight = (async () => {
     try {
-      const { applications = [] } = await marketplaceApiRequest(
-        "/api/company/applications",
-      );
+      const [
+        { applications = [] },
+        { offers = [] },
+        { placements = [] },
+      ] = await Promise.all([
+        marketplaceApiRequest("/api/company/applications"),
+        marketplaceApiRequest("/api/company/offers"),
+        marketplaceApiRequest("/api/company/placements"),
+      ]);
       replaceCanonicalApplications(applications, user, { company: true });
+      replaceCanonicalOffers(offers, { company: true });
+      applyCanonicalCompanyPlacements(placements);
       if (render) saveAndRender();
     } catch (error) {
       console.error("[Marketplace] Canonical company application sync failed:", error);
@@ -9627,12 +9780,50 @@ function offerStatusLabel(status) {
     expired: "Expired",
     confirmed: "Confirmed",
     declined_by_company: "Declined by company",
+    cancelled_by_company: "Cancelled",
     superseded: "Filled",
   }[status || "interested"] || "Interested";
 }
 
 function applicationJob(app) {
-  return findJob(app?.jobId);
+  const local = findJob(app?.jobId);
+  if (local) return local;
+  const published = canonicalWorkerMarketplaceJobs.find(
+    (job) =>
+      job.projectId === app?.projectId ||
+      job.requirementId === app?.requirementId,
+  );
+  if (published) return published;
+  const terms = app?.offerTerms;
+  if (!terms) return null;
+  const start = terms.startDate
+    ? `${terms.startDate}T${terms.shiftStartTime || "00:00"}`
+    : "";
+  return {
+    id: terms.projectId || app.projectId || app.jobId || "",
+    projectName: terms.projectName || "",
+    jobNumber: terms.jobNumber || "",
+    companyName: terms.companyName || "",
+    trade: terms.trade || app.workerTrade || "",
+    specialism: terms.role || "",
+    grade: terms.grade || "",
+    location: terms.location || "",
+    workActivity: terms.workActivity || "",
+    start,
+    startDate: terms.startDate || "",
+    estimatedEndDate: terms.estimatedEndDate || "",
+    noFixedEndDate: !!terms.noFixedEndDate,
+    duration: terms.duration || "",
+    workingDays: terms.workingDays || [],
+    shiftStartTime: terms.shiftStartTime || "",
+    shiftFinishTime: terms.shiftFinishTime || "",
+    accommodationPaid: !!terms.accommodationPaid,
+    accommodationArrangement: terms.accommodationArrangement || "",
+    accommodationAllowancePerNight: terms.accommodationAllowancePerNight ?? null,
+    overtimeAvailable: !!terms.overtimeAvailable,
+    overtimeRates: terms.overtimeRates || null,
+    weekendRates: terms.weekendRates || null,
+  };
 }
 
 function applicationWorker(app) {
@@ -10597,6 +10788,70 @@ function ensureApplicationForOffer(job, worker, requirementId = "") {
   return app;
 }
 
+function canonicalOfferRequestPayload(job, worker, requirement, source, options = {}) {
+  const matchingJob = placementJobForRequirement(job, requirement);
+  const offeredDayRate = workerPayDisplay(matchingJob, worker);
+  return {
+    workerId: worker.id,
+    requirementId: requirement.requirementId || requirement.id,
+    applicationId: options.applicationId || "",
+    priorOfferId: options.priorOfferId || "",
+    source,
+    offeredDayRate,
+    startDate: String(job.startDate || job.start || "").slice(0, 10),
+    estimatedEndDate: job.estimatedEndDate || job.endDate || "",
+    noFixedEndDate: !!job.noFixedEndDate,
+    duration: job.duration || "",
+    workingDays: normalizeWorkingDays(requirement.workingDays || job.workingDays),
+    shiftStartTime: requirement.shiftStartTime || job.shiftStartTime || "",
+    shiftFinishTime: requirement.shiftFinishTime || job.shiftFinishTime || "",
+    workActivity: requirement.workActivity || job.workActivity || "",
+    accommodationPaid: !!requirement.accommodationPaid,
+    accommodationArrangement: requirement.accommodationArrangement || "",
+    accommodationAllowancePerNight:
+      requirement.accommodationAllowancePerNight ?? null,
+    overtimeAvailable: !!requirement.overtimeAvailable,
+    overtimeRates: requirement.overtimeRates || null,
+    weekendRates: requirement.weekendRates || job.weekendRates || null,
+  };
+}
+
+async function createCanonicalJobOffer(job, worker, source = "manual", options = {}) {
+  const user = getSessionUser();
+  if (user?.type !== "company" || !user.serverAuthenticated || !job?.canonicalProject) {
+    return { ok: false, reason: "Canonical offer persistence is unavailable" };
+  }
+  const requirement = placementSlotsEngine()?.requirementForWorker(
+    job,
+    worker,
+    options.requirementId || "",
+  );
+  if (!requirement) return { ok: false, reason: "Labour requirement not found" };
+  const previous = (state.applications || [])
+    .filter(
+      (application) =>
+        application.canonicalMarketplaceOffer &&
+        application.workerId === worker.id &&
+        application.requirementId === (requirement.requirementId || requirement.id) &&
+        ["declined_by_worker", "expired", "cancelled_by_company"].includes(application.status),
+    )
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))[0];
+  try {
+    const { offer } = await marketplaceApiRequest("/api/offers", {
+      method: "POST",
+      body: canonicalOfferRequestPayload(job, worker, requirement, source, {
+        ...options,
+        priorOfferId: options.priorOfferId || previous?.id || "",
+      }),
+    });
+    await syncCanonicalCompanyApplications(user, { render: false });
+    saveAndRender();
+    return { ok: true, offer };
+  } catch (error) {
+    return { ok: false, reason: error.message || "Offer could not be sent" };
+  }
+}
+
 function createJobOffer(
   jobId,
   workerId,
@@ -10607,6 +10862,20 @@ function createJobOffer(
   const job = findJob(jobId);
   const worker = findWorker(workerId);
   if (!job || !worker) return { ok: false, reason: "Job or worker not found" };
+  const user = getSessionUser();
+  const canonicalSource = !["project_transfer", "shift_change"].includes(source);
+  if (
+    canonicalSource &&
+    user?.type === "company" &&
+    user.serverAuthenticated &&
+    job.canonicalProject
+  ) {
+    return {
+      ok: true,
+      canonicalPending: true,
+      promise: createCanonicalJobOffer(job, worker, source, options),
+    };
+  }
   normalizeProjectPlacements(job);
   const requirement = placementSlotsEngine()?.requirementForWorker(
     job,
@@ -10797,6 +11066,7 @@ function expireJobOffers() {
   let changed = false;
   const now = Date.now();
   (state.applications || []).forEach((app) => {
+    if (app.canonicalMarketplaceOffer) return;
     if (app.status !== "offered" || !app.expiresAt) return;
     if (new Date(app.expiresAt).getTime() > now) return;
     app.status = "expired";
@@ -10872,8 +11142,22 @@ function expireJobOffers() {
   return changed;
 }
 
-function workerAcceptOffer(applicationId) {
+async function workerAcceptOffer(applicationId) {
   const app = (state.applications || []).find((a) => a.id === applicationId);
+  if (app?.canonicalMarketplaceOffer) {
+    try {
+      await marketplaceApiRequest(`/api/offers/${app.id}/accept`, {
+        method: "POST",
+        body: {},
+      });
+      await syncCanonicalWorkerMarketplace(getSessionUser());
+      showToast("Offer accepted — placement confirmed");
+    } catch (error) {
+      await syncCanonicalWorkerMarketplace(getSessionUser());
+      showToast(error.message || "Offer could not be accepted");
+    }
+    return;
+  }
   const job = applicationJob(app);
   const worker = applicationWorker(app);
   if (!app || !job || !worker) return;
@@ -10950,8 +11234,22 @@ function workerAcceptOffer(applicationId) {
   showToast("Offer accepted — awaiting company review");
 }
 
-function workerDeclineOffer(applicationId, reason, comment = "") {
+async function workerDeclineOffer(applicationId, reason, comment = "") {
   const app = (state.applications || []).find((a) => a.id === applicationId);
+  if (app?.canonicalMarketplaceOffer) {
+    try {
+      await marketplaceApiRequest(`/api/offers/${app.id}/decline`, {
+        method: "POST",
+        body: { reason, comment },
+      });
+      await syncCanonicalWorkerMarketplace(getSessionUser());
+      showToast("Offer declined — your reliability is unaffected");
+    } catch (error) {
+      await syncCanonicalWorkerMarketplace(getSessionUser());
+      showToast(error.message || "Offer could not be declined");
+    }
+    return;
+  }
   const job = applicationJob(app);
   const worker = applicationWorker(app);
   if (!app || !reason || app.status !== "offered") return;
@@ -16585,9 +16883,14 @@ function renderWorkerHome(user) {
   const workerOffers = (state.applications || []).filter(
     (a) =>
       a.workerId === user.id &&
-      ["offered", "under_company_review", "confirmed", "declined_by_worker", "expired"].includes(
-        a.status,
-      ),
+      [
+        "offered",
+        "under_company_review",
+        "confirmed",
+        "declined_by_worker",
+        "expired",
+        "cancelled_by_company",
+      ].includes(a.status),
   );
   const activeOffers = workerOffers.filter((a) => a.status === "offered");
   const recentOfferHistory = workerOffers
@@ -16681,7 +16984,7 @@ function renderWorkerHome(user) {
     : "";
   const offerCardHtml = (app) => {
     const job = applicationJob(app);
-    const pay = job ? workerPayDisplay(job, workerProfile || user) : null;
+    const pay = app.offeredDayRate ?? (job ? workerPayDisplay(job, workerProfile || user) : null);
     if (!job) return "";
     return `
       <div class="wh-offer-card">
@@ -17194,7 +17497,7 @@ function workerNotificationItems(user, workerProfile, booking) {
 
 function workerOfferDecisionCardHTML(app, user) {
   const job = applicationJob(app);
-  const pay = job ? workerPayDisplay(job, user) : null;
+  const pay = app.offeredDayRate ?? (job ? workerPayDisplay(job, user) : null);
   if (!job) return "";
   const active = app.status === "offered";
   return `
@@ -17241,6 +17544,7 @@ function renderWorkerOffersPage(user) {
     "expired",
     "confirmed",
     "superseded",
+    "cancelled_by_company",
   ]);
   const apps = (state.applications || [])
     .filter(
@@ -22300,6 +22604,7 @@ function companyProjectRequirementsHTML(job, summary) {
             <span class="company-project-offer-status is-interested" data-label="Status">Applied</span>
             <span data-label="Applied">${app.createdAt ? formatDate(app.createdAt) : "Not recorded"}</span>
             <span data-label="Worker note">${escapeHtml(app.workerNote || "No note supplied")}</span>
+            <button class="company-project-inline-action" type="button" data-company-send-offer="${app.id}">Send offer &rarr;</button>
           </div>`;
         })
         .join("")
@@ -26813,6 +27118,35 @@ function companyOfferReviewPanelHTML(user) {
 }
 
 function bindCompanyOfferButtons(scope) {
+  scope.querySelectorAll("[data-company-send-offer]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const application = (state.applications || []).find(
+        (candidate) => candidate.id === btn.dataset.companySendOffer,
+      );
+      const job = applicationJob(application);
+      const worker = applicationWorker(application);
+      if (!application || !job || !worker) {
+        showToast("Worker application could not be loaded");
+        return;
+      }
+      btn.disabled = true;
+      const result = job.canonicalProject
+        ? await createCanonicalJobOffer(job, worker, "application", {
+            applicationId: application.id,
+            requirementId: application.requirementId || "",
+          })
+        : createJobOffer(job.id, worker.id, "manual", null, {
+            requirementId: application.requirementId || "",
+          });
+      btn.disabled = false;
+      if (!result.ok) {
+        showToast(result.reason);
+        return;
+      }
+      if (!job.canonicalProject) saveAndRender();
+      showToast(`Job offer sent to ${worker.name || "worker"}`);
+    });
+  });
   scope.querySelectorAll("[data-company-offer-accept]").forEach((btn) => {
     btn.addEventListener("click", () =>
       companyAcceptWorker(btn.dataset.companyOfferAccept),
@@ -30007,11 +30341,12 @@ function renderMatches() {
       });
 
   matchResults.querySelectorAll("[data-auto-assign]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const job = findJob(btn.dataset.autoAssign);
       const [best] = getMatches(job);
       if (!best) return;
-      const res = createJobOffer(job.id, best.id, "best_match", 1);
+      let res = createJobOffer(job.id, best.id, "best_match", 1);
+      if (res.promise) res = await res.promise;
       if (!res.ok) {
         showToast(res.reason);
         return;

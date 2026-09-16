@@ -113,15 +113,12 @@ existing offer pipeline. This does not create or imply an offer.
 
 ## Phase boundary and current limitations
 
-The following remain browser-local or deferred:
+The following remain browser-local or deferred after Phase 3B:
 
-- offers, offer expiry, offer improvement, and company decisions;
-- placement slots and confirmed placements;
+- replacement, release, extension, transfer, and shift-change offer workflows;
 - agreements, attendance, timesheets, invoices, disputes, and notifications;
 - planned absences and complete server-side matching/capacity evaluation;
 - worker credentials beyond the canonical profile fields currently available;
-- real vacancy reduction from confirmed placements.
-
 The worker-profile foreign key continues to use `ON DELETE CASCADE` to preserve
 the existing Phase 1 auth-registration rollback behaviour. OnSite does not yet
 have a defined production account-deletion and marketplace-history retention
@@ -129,10 +126,9 @@ policy or an anonymised worker record. That policy must be decided before
 launch; retaining application history will require an explicit anonymisation or
 tombstone design rather than simply changing this foreign key in isolation.
 
-Until placements are canonical, `vacancies` equals the canonical requirement's
-`workers_required` quantity. Phase 3B should add canonical offers and placements,
-then derive vacancies from placement state while retaining application IDs as
-the `application -> offer -> placement` chain root.
+Phase 3B adds canonical standard offers and placements. Vacancies are now
+derived from upcoming and active placements while retaining application IDs as
+the `application -> offer -> placement` chain root where an application exists.
 
 ## Live setup
 

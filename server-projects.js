@@ -27,9 +27,20 @@ const WORKING_DAYS = new Set([
   "sunday",
 ]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const APPLICATION_REQUIREMENT_CONSTRAINT = "worker_applications_project_requirement_id_fkey";
-const PROTECTED_REQUIREMENT_MESSAGE =
-  "This labour requirement has worker applications and cannot be removed.";
+const PROTECTED_REQUIREMENT_CONSTRAINTS = new Map([
+  [
+    "worker_applications_project_requirement_id_fkey",
+    "This labour requirement has worker applications and cannot be removed.",
+  ],
+  [
+    "worker_offers_project_requirement_id_fkey",
+    "This labour requirement has worker offers and cannot be removed.",
+  ],
+  [
+    "placements_project_requirement_id_fkey",
+    "This labour requirement has worker placements and cannot be removed.",
+  ],
+]);
 
 class ProjectServiceError extends Error {
   constructor(message, statusCode = 400, code = "PROJECT_ERROR") {
@@ -577,9 +588,12 @@ function unwrapDatabaseResult(result, fallbackMessage) {
     ]
       .filter(Boolean)
       .join(" ");
-    const protectedRequirementDelete =
-      databaseCode === "23503" &&
-      databaseContext.includes(APPLICATION_REQUIREMENT_CONSTRAINT);
+    const protectedRequirementConstraint = databaseCode === "23503"
+      ? [...PROTECTED_REQUIREMENT_CONSTRAINTS.keys()].find((constraint) =>
+          databaseContext.includes(constraint),
+        )
+      : "";
+    const protectedRequirementDelete = !!protectedRequirementConstraint;
     const statusByCode = {
       P0002: 404,
       "42501": 403,
@@ -600,7 +614,7 @@ function unwrapDatabaseResult(result, fallbackMessage) {
           ? "PROJECT_PERMISSION_DENIED"
           : databaseCode;
     const message = protectedRequirementDelete
-      ? PROTECTED_REQUIREMENT_MESSAGE
+      ? PROTECTED_REQUIREMENT_CONSTRAINTS.get(protectedRequirementConstraint)
       : result.error.message || fallbackMessage;
     throw new ProjectServiceError(message, status, code);
   }

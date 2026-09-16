@@ -84,6 +84,8 @@ function projectInput(overrides = {}) {
 function fakeProjectAdapter() {
   const projects = new Map();
   const applications = new Map();
+  const offers = new Map();
+  const placements = new Map();
   let projectSequence = 100;
   let requirementSequence = 500;
   let applicationSequence = 900;
@@ -170,6 +172,8 @@ function fakeProjectAdapter() {
     configured: true,
     projects,
     applications,
+    offers,
+    placements,
     addApplication(requirementId) {
       const id = uuid(++applicationSequence);
       applications.set(id, {
@@ -178,6 +182,16 @@ function fakeProjectAdapter() {
         status: "applied",
       });
       return clone(applications.get(id));
+    },
+    addOffer(requirementId) {
+      const id = uuid(++applicationSequence);
+      offers.set(id, { id, project_requirement_id: requirementId, status: "pending" });
+      return clone(offers.get(id));
+    },
+    addPlacement(requirementId) {
+      const id = uuid(++applicationSequence);
+      placements.set(id, { id, project_requirement_id: requirementId, status: "upcoming" });
+      return clone(placements.get(id));
     },
     async listCompanyProjects(companyId) {
       return [...projects.values()]
@@ -221,8 +235,16 @@ function fakeProjectAdapter() {
         const protectedRemoval = previous.some(
           (requirement) =>
             !nextRequirementIds.has(requirement.id) &&
-            [...applications.values()].some(
-              (application) => application.project_requirement_id === requirement.id,
+            (
+              [...applications.values()].some(
+                (application) => application.project_requirement_id === requirement.id,
+              ) ||
+              [...offers.values()].some(
+                (offer) => offer.project_requirement_id === requirement.id,
+              ) ||
+              [...placements.values()].some(
+                (placement) => placement.project_requirement_id === requirement.id,
+              )
             ),
         );
         if (protectedRemoval) {
@@ -422,6 +444,37 @@ test("application-backed requirement removal fails atomically and preserves hist
     adapter.applications.get(application.id).project_requirement_id,
     protectedRequirement.id,
   );
+});
+
+test("offer and placement history each block atomic requirement replacement", async () => {
+  for (const recordType of ["offer", "placement"]) {
+    const adapter = fakeProjectAdapter();
+    const service = createProjectService({ adapter });
+    const created = await service.create(principal(), projectInput());
+    const protectedRequirement = created.labourRequirements[0];
+    const unrelatedRequirement = created.labourRequirements[1];
+    const record = recordType === "offer"
+      ? adapter.addOffer(protectedRequirement.id)
+      : adapter.addPlacement(protectedRequirement.id);
+
+    await rejectsCode(
+      service.update(principal(), created.id, {
+        project: { projectName: `Failed ${recordType} removal` },
+        requirements: [{ ...unrelatedRequirement, quantity: 8 }],
+      }),
+      "PROJECT_REQUIREMENT_HAS_APPLICATIONS",
+    );
+
+    const unchanged = await service.get(principal(), created.id);
+    assert.equal(unchanged.projectName, "Northgate Tower");
+    assert.equal(unchanged.labourRequirements.length, 2);
+    assert.equal(
+      unchanged.labourRequirements.find((item) => item.id === unrelatedRequirement.id).quantity,
+      unrelatedRequirement.quantity,
+    );
+    const records = recordType === "offer" ? adapter.offers : adapter.placements;
+    assert.equal(records.get(record.id).project_requirement_id, protectedRequirement.id);
+  }
 });
 
 test("canonical project persists across service reload and client-state clearing", async () => {

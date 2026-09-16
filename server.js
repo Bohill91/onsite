@@ -18,6 +18,10 @@ const {
   createMarketplaceService,
 } = require('./server-marketplace');
 const {
+  OfferServiceError,
+  createOfferService,
+} = require('./server-offers');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -37,6 +41,7 @@ const documentFileStore = createDocumentFileStore({
 const authService = createAuthService();
 const projectService = createProjectService();
 const marketplaceService = createMarketplaceService();
+const offerService = createOfferService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -508,6 +513,91 @@ async function handleMarketplaceApi(req, res, url) {
   }
 }
 
+function publicOfferError(error) {
+  if (error instanceof OfferServiceError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Offers] Unexpected error:', error);
+  return new OfferServiceError('Offer service error.', 500, 'OFFER_INTERNAL_ERROR');
+}
+
+async function handleOfferApi(req, res, url) {
+  try {
+    const restored = await resolveAuthenticatedPrincipal(req);
+    const cookies = sessionCookies(req, restored.session);
+    const responseHeaders = cookies.length
+      ? { 'Set-Cookie': cookies, Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    const offerMatch = url.pathname.match(/^\/api\/offers\/([0-9a-f-]{36})$/i);
+    const acceptMatch = url.pathname.match(/^\/api\/offers\/([0-9a-f-]{36})\/accept$/i);
+    const declineMatch = url.pathname.match(/^\/api\/offers\/([0-9a-f-]{36})\/decline$/i);
+
+    if (req.method === 'POST' && url.pathname === '/api/offers') {
+      const offer = await offerService.create(restored.principal, await readJsonRequest(req));
+      sendJson(res, 201, { offer }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/offers') {
+      const offers = await offerService.listWorkerOffers(restored.principal);
+      sendJson(res, 200, { offers }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && offerMatch) {
+      const offer = await offerService.getWorkerOffer(restored.principal, offerMatch[1]);
+      sendJson(res, 200, { offer }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && acceptMatch) {
+      const accepted = await offerService.accept(
+        restored.principal,
+        acceptMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, accepted, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && declineMatch) {
+      const offer = await offerService.decline(
+        restored.principal,
+        declineMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { offer }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/company/offers') {
+      const offers = await offerService.listCompanyOffers(restored.principal);
+      sendJson(res, 200, { offers }, responseHeaders);
+      return;
+    }
+
+    if (
+      req.method === 'GET'
+      && (url.pathname === '/api/placements' || url.pathname === '/api/company/placements')
+    ) {
+      const placements = await offerService.listPlacements(restored.principal);
+      sendJson(res, 200, { placements }, responseHeaders);
+      return;
+    }
+
+    sendJson(res, 404, {
+      error: 'Offer route not found.',
+      code: 'OFFER_ROUTE_NOT_FOUND',
+    });
+  } catch (rawError) {
+    const error = publicOfferError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
+}
+
 function requestHeader(req, name, maxLength = 200) {
   const value = Array.isArray(req.headers[name])
     ? req.headers[name][0]
@@ -644,6 +734,17 @@ const server = http.createServer((req, res) => {
     || url.pathname === '/api/company/applications'
   ) {
     handleMarketplaceApi(req, res, url);
+    return;
+  }
+
+  if (
+    url.pathname === '/api/offers'
+    || url.pathname.startsWith('/api/offers/')
+    || url.pathname === '/api/company/offers'
+    || url.pathname === '/api/placements'
+    || url.pathname === '/api/company/placements'
+  ) {
+    handleOfferApi(req, res, url);
     return;
   }
 

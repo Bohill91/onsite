@@ -32,6 +32,7 @@ const PUBLISHED_REQUIREMENT_SELECTION = [
   "weekend_rates",
   "created_at",
   "updated_at",
+  "placements(id,status)",
   "projects!inner(id,company_id,job_number,project_name,assignment_type,location_label,start_date,estimated_end_date,no_fixed_end_date,duration_label,status,companies(name))",
 ].join(",");
 
@@ -98,6 +99,16 @@ function advertisedWorkerRate(row = {}) {
   return Math.floor(advertised / 1.15);
 }
 
+function confirmedPlacementCount(row = {}) {
+  return (Array.isArray(row.placements) ? row.placements : []).filter((placement) =>
+    ["upcoming", "active"].includes(cleanText(placement?.status, 32)),
+  ).length;
+}
+
+function availableVacancies(row = {}) {
+  return Math.max(0, (Number(row.workers_required) || 0) - confirmedPlacementCount(row));
+}
+
 function workerFacingWeekendRates(row = {}) {
   const rates = row.weekend_rates;
   if (!rates || typeof rates !== "object" || Array.isArray(rates)) return null;
@@ -118,6 +129,7 @@ function publicationEligible(row, today = new Date().toISOString().slice(0, 10))
   if (!PUBLISHED_PROJECT_STATUSES.has(cleanText(project.status, 32))) return false;
   if (!cleanText(row.trade, 160) || !cleanText(row.role, 200)) return false;
   if (!Number.isInteger(Number(row.workers_required)) || Number(row.workers_required) < 1) return false;
+  if (availableVacancies(row) < 1) return false;
   const endDate = dateOnly(project.estimated_end_date);
   if (!project.no_fixed_end_date && endDate && endDate < today) return false;
   return advertisedWorkerRate(row) != null;
@@ -150,7 +162,7 @@ function workerSafeRequirement(row = {}) {
     workActivity: cleanText(row.work_activity, 1000),
     quantity: Number(row.workers_required) || 1,
     workersRequired: Number(row.workers_required) || 1,
-    vacancies: Number(row.workers_required) || 1,
+    vacancies: availableVacancies(row),
     startDate,
     start: startDate ? `${startDate}T${timeOnly(row.shift_start_time) || "00:00"}` : "",
     estimatedEndDate: dateOnly(project.estimated_end_date),
@@ -173,7 +185,7 @@ function workerSafeRequirement(row = {}) {
         : null,
     weekendRates: workerFacingWeekendRates(row),
     status: "open",
-    applicationAvailable: true,
+    applicationAvailable: availableVacancies(row) > 0,
     workerSafeMarketplace: true,
     publishedAt: row.created_at || "",
     updatedAt: row.updated_at || "",
@@ -523,6 +535,7 @@ function createMarketplaceService({ adapter, env = process.env, now = () => new 
 module.exports = {
   MarketplaceServiceError,
   advertisedWorkerRate,
+  availableVacancies,
   companyApplication,
   createMarketplaceService,
   createSupabaseMarketplaceAdapter,
