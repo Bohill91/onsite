@@ -459,15 +459,8 @@ const OFFER_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const MISSED_OFFERS_LIMIT = 2;
 const MISSED_OFFERS_NOTICE =
   "You've missed 2 job offers and have been set to unavailable. Toggle yourself back to available when you're ready to receive new offers.";
-const WORKER_DECLINE_REASONS = [
-  "Unavailable / In Work",
-  "Rate Too Low",
-  "Location / Travel",
-  "Start Date Not Suitable",
-  "Project Duration Not Suitable",
-  "Work Activity Not Suitable",
-  "Other",
-];
+const WORKER_DECLINE_REASONS =
+  globalThis.OnSiteOfferDeclineReasons?.WORKER_DECLINE_REASONS || [];
 const COMPANY_DECLINE_REASONS = [
   "Reliability Score",
   "Experience Level",

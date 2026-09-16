@@ -9,6 +9,9 @@ const {
   createOfferService,
   createSupabaseOfferAdapter,
 } = require("../server-offers.js");
+const {
+  WORKER_DECLINE_REASONS,
+} = require("../offer-decline-reasons.js");
 
 const COMPANY_A = "00000000-0000-4000-8000-000000000001";
 const COMPANY_B = "00000000-0000-4000-8000-000000000002";
@@ -277,6 +280,7 @@ function fakeOfferAdapter() {
     placements,
     requirements,
     applications,
+    projects,
     setFailPlacementInsert(value) {
       failPlacementInsert = value;
     },
@@ -295,6 +299,9 @@ function fakeOfferAdapter() {
       const project = projects.get(requirement?.project_id);
       if (!project || project.company_id !== actorCompany(input.actorUserId)) {
         throw new OfferServiceError("Company cannot create this offer.", 403, "OFFER_PERMISSION_DENIED");
+      }
+      if (!["open", "active"].includes(project.status)) {
+        throw new OfferServiceError("This labour requirement is not open.", 409, "OFFER_STATE_CONFLICT");
       }
       if (!workers.has(input.workerId)) {
         throw new OfferServiceError("Worker not found.", 404, "OFFER_NOT_FOUND");
@@ -355,6 +362,10 @@ function fakeOfferAdapter() {
         };
       }
       const requirement = requirements.get(offer.project_requirement_id);
+      const project = projects.get(requirement?.project_id);
+      if (!project || !["open", "active"].includes(project.status)) {
+        return { outcome: "requirement_closed", offer_id: offer.id };
+      }
       const filled = [...placements.values()].filter(
         (placement) => placement.project_requirement_id === offer.project_requirement_id && ["upcoming", "active"].includes(placement.status),
       ).length;
@@ -590,6 +601,24 @@ test("acceptance failure rolls back offer and placement state", async () => {
   assert.equal(adapter.placements.size, 0);
 });
 
+test("project closure after offer creation blocks placement acceptance", async () => {
+  const adapter = fakeOfferAdapter();
+  const service = createOfferService({ adapter });
+  const offer = await service.create(companyPrincipal(), offerInput());
+  adapter.projects.get(PROJECT_A).status = "cancelled";
+  await rejectsCode(service.accept(workerPrincipal(), offer.id), "REQUIREMENT_CLOSED");
+  assert.equal(adapter.offers.get(offer.id).status, "pending");
+  assert.equal(adapter.placements.size, 0);
+});
+
+test("closed project cannot receive a new pending offer", async () => {
+  const adapter = fakeOfferAdapter();
+  adapter.projects.get(PROJECT_A).status = "completed";
+  const service = createOfferService({ adapter });
+  await rejectsCode(service.create(companyPrincipal(), offerInput()), "OFFER_STATE_CONFLICT");
+  assert.equal(adapter.offers.size, 0);
+});
+
 test("overlapping canonical placement blocks offer acceptance", async () => {
   const adapter = fakeOfferAdapter();
   const service = createOfferService({ adapter });
@@ -644,18 +673,20 @@ test("capacity-full requirement rejects new offers", async () => {
   );
 });
 
-test("worker can decline own pending offer with structured reason and no placement", async () => {
-  const adapter = fakeOfferAdapter();
-  const service = createOfferService({ adapter });
-  const offer = await service.create(companyPrincipal(), offerInput());
-  const declined = await service.decline(workerPrincipal(), offer.id, {
-    reason: "Rate Too Low",
-    comment: "Rate does not cover travel.",
-  });
-  assert.equal(declined.status, "declined");
-  assert.equal(declined.declineReason, "Rate Too Low");
-  assert.equal(declined.declineComment, "Rate does not cover travel.");
-  assert.equal(adapter.placements.size, 0);
+test("worker can decline with every canonical frontend reason", async () => {
+  for (const reason of WORKER_DECLINE_REASONS) {
+    const adapter = fakeOfferAdapter();
+    const service = createOfferService({ adapter });
+    const offer = await service.create(companyPrincipal(), offerInput());
+    const declined = await service.decline(workerPrincipal(), offer.id, {
+      reason,
+      comment: "Optional worker context.",
+    });
+    assert.equal(declined.status, "declined");
+    assert.equal(declined.declineReason, reason);
+    assert.equal(declined.declineComment, "Optional worker context.");
+    assert.equal(adapter.placements.size, 0);
+  }
 });
 
 test("invalid decline reason and another worker decline fail closed", async () => {
@@ -763,11 +794,86 @@ test("offers and placements migration is atomic, restrictive and least privilege
   assert.doesNotMatch(source, /grant (insert|update|delete)[\s\S]*to anon/i);
   assert.doesNotMatch(source, /grant (insert|update|delete)[^;]*to service_role/i);
   assert.match(source, /application\.status = 'applied'/);
+  const sqlDeclineReasonBlock = source.match(
+    /v_allowed_reasons constant text\[\] := array\[([\s\S]*?)\];/,
+  );
+  assert.ok(sqlDeclineReasonBlock);
+  assert.deepEqual(
+    [...sqlDeclineReasonBlock[1].matchAll(/'([^']+)'/g)].map((match) => match[1]),
+    WORKER_DECLINE_REASONS,
+  );
   const authenticatedOfferGrant = source.match(
     /grant select \(([\s\S]*?)\) on public\.worker_offers to authenticated;/,
   );
   assert.ok(authenticatedOfferGrant);
   assert.doesNotMatch(authenticatedOfferGrant[1], /created_by_user_id/);
+});
+
+test("offer transactions follow the project-save lock order", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "supabase", "migrations", "202609160005_offers_placements.sql"),
+    "utf8",
+  );
+  const projectMigration = fs.readFileSync(
+    path.join(__dirname, "..", "supabase", "migrations", "202609160003_projects_foundation.sql"),
+    "utf8",
+  );
+  const createBody = migration.slice(
+    migration.indexOf("create or replace function public.create_worker_offer"),
+    migration.indexOf("create or replace function public.accept_worker_offer"),
+  );
+  const acceptBody = migration.slice(
+    migration.indexOf("create or replace function public.accept_worker_offer"),
+    migration.indexOf("create or replace function public.decline_worker_offer"),
+  );
+  const saveBody = projectMigration.slice(
+    projectMigration.indexOf("create or replace function public.save_company_project"),
+  );
+  const createProjectLock = createBody.indexOf("where project.id = v_project_id\n  for update;");
+  const createRequirementLock = createBody.indexOf(
+    "and requirement.project_id = v_project.id\n  for update;",
+  );
+  const createStatusCheck = createBody.indexOf(
+    "if v_project.status not in ('open', 'active') then",
+  );
+  const offerInsert = createBody.indexOf("insert into public.worker_offers");
+  const acceptWorkerLock = acceptBody.indexOf(
+    "where worker.user_id = p_actor_user_id\n  for update;",
+  );
+  const acceptOfferLock = acceptBody.indexOf(
+    "and offer.project_requirement_id = v_requirement.id\n  for update;",
+  );
+  const acceptProjectLock = acceptBody.indexOf("where project.id = v_project_id\n  for update;");
+  const acceptRequirementLock = acceptBody.indexOf(
+    "and requirement.project_id = v_project.id\n  for update;",
+  );
+  const acceptStatusCheck = acceptBody.indexOf(
+    "if v_project.status not in ('open', 'active') then",
+  );
+  const capacityCount = acceptBody.indexOf("select count(*)", acceptRequirementLock);
+  const placementInsert = acceptBody.indexOf("insert into public.placements");
+
+  assert.ok(createProjectLock >= 0 && createProjectLock < createRequirementLock);
+  assert.ok(createRequirementLock < createStatusCheck);
+  assert.ok(createStatusCheck < offerInsert);
+  assert.ok(acceptWorkerLock >= 0 && acceptWorkerLock < acceptProjectLock);
+  assert.ok(acceptProjectLock < acceptRequirementLock);
+  assert.ok(acceptRequirementLock < acceptOfferLock);
+  assert.ok(acceptOfferLock < acceptStatusCheck);
+  assert.ok(acceptRequirementLock < capacityCount);
+  assert.ok(capacityCount < placementInsert);
+  assert.ok(acceptStatusCheck < placementInsert);
+  assert.ok(saveBody.indexOf("update public.projects") < saveBody.indexOf("update public.project_requirements"));
+});
+
+test("frontend and backend use one canonical worker decline-reason module", () => {
+  const app = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  const index = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  assert.match(app, /OnSiteOfferDeclineReasons\?\.WORKER_DECLINE_REASONS/);
+  assert.ok(
+    index.indexOf('src="offer-decline-reasons.js"') < index.indexOf('src="app.js"'),
+  );
+  assert.equal(WORKER_DECLINE_REASONS.includes("Rate Too Low"), true);
 });
 
 test("offer and placement history blocks ordinary requirement deletion", () => {

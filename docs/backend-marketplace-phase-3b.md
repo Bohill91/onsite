@@ -19,8 +19,12 @@ are never reset to pending.
 
 Pending offers expire after 24 hours, matching the existing product rule.
 Expiry is enforced server-side on reads and responses rather than relying on a
-browser timer. A structured worker decline reason and optional comment are
-retained on the historical offer.
+browser timer. Worker and server decline controls use the shared canonical
+reasons `Unavailable / In Work`, `Rate Too Low`, `Location / Travel`, `Start
+Date Not Suitable`, `Project Duration Not Suitable`, `Work Activity Not
+Suitable`, and `Other`. An optional comment is retained on the historical
+offer. `Rate Too Low` remains because it is an established worker reason in the
+existing offer UI and matching-history behavior.
 
 ## Accepted terms and placements
 
@@ -29,13 +33,17 @@ role, grade, work activity, dates, duration, working days, shift times,
 accommodation, overtime, and weekend terms. It does not contain the company's
 budget or the worker's private minimum rate.
 
-Worker acceptance calls `accept_worker_offer`. The function locks the worker,
-offer, and requirement, verifies worker ownership, status, expiry, project
-validity, capacity, and overlapping canonical commitments, then creates one
-placement and marks the offer accepted in the same transaction. The worker lock
-serializes concurrent acceptances across different requirements. The placement
-copies the accepted offer snapshot, so later project edits cannot change agreed
-terms.
+Worker acceptance calls `accept_worker_offer`. It locks the worker, resolves
+the immutable offer-to-requirement relationship, then locks project,
+requirement, and offer in that order. The offer is re-read and revalidated under lock before any
+capacity or placement write. Project saves and offer creation also lock project
+before requirement; placing the offer lock after those rows avoids a hidden
+cycle with restrictive foreign-key checks during requirement deletion. The
+transaction verifies ownership, status, expiry, project validity, capacity, and
+overlapping canonical commitments, then creates one placement and marks the
+offer accepted. The worker lock serializes concurrent acceptances across
+different requirements. The placement copies the accepted offer snapshot, so
+later project edits cannot change agreed terms.
 
 Placements use the minimal statuses `upcoming`, `active`, `completed`, and
 `cancelled`. `upcoming` and `active` consume requirement capacity. Pending,

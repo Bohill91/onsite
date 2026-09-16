@@ -1,21 +1,14 @@
 "use strict";
 
 const { createClient } = require("@supabase/supabase-js");
+const { WORKER_DECLINE_REASONS } = require("./offer-decline-reasons.js");
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const COMPANY_ROLES = new Set(["administrator", "manager", "supervisor"]);
 const COMPANY_WRITE_ROLES = new Set(["administrator", "manager"]);
 const OFFER_STATUSES = new Set(["pending", "accepted", "declined", "expired", "cancelled"]);
 const PLACEMENT_STATUSES = new Set(["upcoming", "active", "completed", "cancelled"]);
-const DECLINE_REASONS = new Set([
-  "Unavailable / In Work",
-  "Rate Too Low",
-  "Location / Travel",
-  "Start Date Not Suitable",
-  "Project Duration Not Suitable",
-  "Work Activity Not Suitable",
-  "Other",
-]);
+const DECLINE_REASONS = new Set(WORKER_DECLINE_REASONS);
 
 const OFFER_SELECTION = [
   "id",

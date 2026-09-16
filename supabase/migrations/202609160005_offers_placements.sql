@@ -258,6 +258,7 @@ as $$
 declare
   v_requirement public.project_requirements%rowtype;
   v_project public.projects%rowtype;
+  v_project_id uuid;
   v_company_name text;
   v_application public.worker_applications%rowtype;
   v_prior public.worker_offers%rowtype;
@@ -283,8 +284,9 @@ begin
     raise exception using errcode = '42501', message = 'Company cannot create this offer.';
   end if;
 
-  select requirement.*
-  into v_requirement
+  -- Match the canonical project mutation order: project, then requirement.
+  select requirement.project_id
+  into v_project_id
   from public.project_requirements requirement
   where requirement.id = p_project_requirement_id;
 
@@ -295,7 +297,23 @@ begin
   select project.*
   into v_project
   from public.projects project
-  where project.id = v_requirement.project_id;
+  where project.id = v_project_id
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Project not found.';
+  end if;
+
+  select requirement.*
+  into v_requirement
+  from public.project_requirements requirement
+  where requirement.id = p_project_requirement_id
+    and requirement.project_id = v_project.id
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Labour requirement not found.';
+  end if;
 
   select company.name
   into v_company_name
@@ -470,7 +488,9 @@ declare
   v_worker_id uuid;
   v_offer public.worker_offers%rowtype;
   v_requirement public.project_requirements%rowtype;
-  v_project_status text;
+  v_project public.projects%rowtype;
+  v_project_id uuid;
+  v_requirement_id uuid;
   v_filled integer;
   v_placement_id uuid;
 begin
@@ -484,11 +504,46 @@ begin
     raise exception using errcode = '42501', message = 'Worker access is required.';
   end if;
 
+  -- Resolve IDs first, then lock project, requirement, and offer in that order.
+  select offer.project_requirement_id, requirement.project_id
+  into v_requirement_id, v_project_id
+  from public.worker_offers offer
+  join public.project_requirements requirement
+    on requirement.id = offer.project_requirement_id
+  where offer.id = p_offer_id
+    and offer.worker_id = v_worker_id;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Offer not found.';
+  end if;
+
+  select project.*
+  into v_project
+  from public.projects project
+  where project.id = v_project_id
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Project not found.';
+  end if;
+
+  select requirement.*
+  into v_requirement
+  from public.project_requirements requirement
+  where requirement.id = v_requirement_id
+    and requirement.project_id = v_project.id
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Labour requirement not found.';
+  end if;
+
   select offer.*
   into v_offer
   from public.worker_offers offer
   where offer.id = p_offer_id
     and offer.worker_id = v_worker_id
+    and offer.project_requirement_id = v_requirement.id
   for update;
 
   if not found then
@@ -508,22 +563,7 @@ begin
     return jsonb_build_object('outcome', v_offer.status, 'offer_id', v_offer.id);
   end if;
 
-  select requirement.*
-  into v_requirement
-  from public.project_requirements requirement
-  where requirement.id = v_offer.project_requirement_id
-  for update;
-
-  if not found then
-    raise exception using errcode = 'P0002', message = 'Labour requirement not found.';
-  end if;
-
-  select project.status
-  into v_project_status
-  from public.projects project
-  where project.id = v_requirement.project_id;
-
-  if v_project_status not in ('open', 'active') then
+  if v_project.status not in ('open', 'active') then
     return jsonb_build_object('outcome', 'requirement_closed', 'offer_id', v_offer.id);
   end if;
 
