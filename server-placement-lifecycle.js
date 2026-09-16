@@ -624,6 +624,38 @@ function createPlacementLifecycleService({ adapter, env = process.env } = {}) {
     return { placement, changeOffer };
   }
 
+  async function workerPlacementForChange(worker, changeOfferId, placementId) {
+    let row = null;
+    if (UUID_PATTERN.test(placementId || "")) {
+      row = await lifecycleAdapter.getPlacement(placementId);
+    } else {
+      const rows = await lifecycleAdapter.listWorkerPlacements(worker.workerId);
+      row = (Array.isArray(rows) ? rows : []).find(
+        (candidate) =>
+          candidate?.worker_id === worker.workerId
+          && Array.isArray(candidate.placement_change_offers)
+          && candidate.placement_change_offers.some(
+            (changeOffer) => changeOffer?.id === changeOfferId,
+          ),
+      );
+    }
+    if (
+      !row
+      || row.worker_id !== worker.workerId
+      || !Array.isArray(row.placement_change_offers)
+      || !row.placement_change_offers.some(
+        (changeOffer) => changeOffer?.id === changeOfferId,
+      )
+    ) {
+      throw new PlacementLifecycleError(
+        "Placement change could not be verified.",
+        500,
+        "PLACEMENT_CHANGE_ERROR",
+      );
+    }
+    return row;
+  }
+
   async function list(principal) {
     requireConfigured();
     await normalize();
@@ -773,14 +805,28 @@ function createPlacementLifecycleService({ adapter, env = process.env } = {}) {
       });
       const expected = accept ? "accepted" : "declined";
       if (result?.outcome !== expected) throw changeOutcomeError(result?.outcome);
-      const row = await lifecycleAdapter.getPlacement(result.placement_id);
-      if (!row || row.worker_id !== worker.workerId) {
-        throw new PlacementLifecycleError("Placement change could not be verified.", 500, "PLACEMENT_CHANGE_ERROR");
-      }
+      const row = await workerPlacementForChange(
+        worker,
+        changeOfferId,
+        result?.placement_id,
+      );
       const placement = placementLifecycleProjection(row);
+      const changeOffer = placement.changeOffers.find(
+        (change) => change.id === changeOfferId,
+      );
+      if (!changeOffer) {
+        throw new PlacementLifecycleError(
+          "Placement change could not be verified.",
+          500,
+          "PLACEMENT_CHANGE_ERROR",
+        );
+      }
       return {
+        outcome: result.outcome,
+        placementId: placement.id,
+        changeOfferId,
         placement,
-        changeOffer: placement.changeOffers.find((change) => change.id === changeOfferId) || null,
+        changeOffer,
       };
     },
   };

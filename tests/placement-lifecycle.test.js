@@ -150,6 +150,7 @@ function fakeLifecycleAdapter() {
   let changeSequence = 700;
   let eventSequence = 800;
   let failNextResponse = false;
+  const placementLookupIds = [];
   const uuid = (value) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
   const actorCompany = (userId) => {
     if ([ADMIN_A, MANAGER_A, SUPERVISOR_A].includes(userId)) return COMPANY_A;
@@ -181,6 +182,7 @@ function fakeLifecycleAdapter() {
     configured: true,
     placements,
     setFailNextResponse(value) { failNextResponse = value; },
+    placementLookupIds,
     async normalize() {
       for (const row of placements.values()) {
         if (
@@ -202,7 +204,17 @@ function fakeLifecycleAdapter() {
         }
       }
     },
-    async getPlacement(id) { return clone(placements.get(id) || null); },
+    async getPlacement(id) {
+      placementLookupIds.push(id);
+      if (!/^[0-9a-f-]{36}$/i.test(id || "")) {
+        throw new PlacementLifecycleError(
+          `invalid input syntax for type uuid: "${String(id)}"`,
+          400,
+          "22P02",
+        );
+      }
+      return clone(placements.get(id) || null);
+    },
     async listWorkerPlacements(workerId) {
       return clone([...placements.values()].filter((row) => row.worker_id === workerId));
     },
@@ -470,6 +482,9 @@ function fakeLifecycleAdapter() {
           change.status = "expired";
           return { outcome: "expired", change_offer_id: change.id };
         }
+        if (!["upcoming", "active"].includes(row.status)) {
+          return { outcome: "placement_ended", change_offer_id: change.id };
+        }
         if (failNextResponse) {
           failNextResponse = false;
           throw new PlacementLifecycleError("Atomic change failed.", 409, "PLACEMENT_STATE_CONFLICT");
@@ -519,7 +534,11 @@ function fakeLifecycleAdapter() {
           effective_at: change.responded_at,
           metadata: { change_offer_id: change.id, accepted_terms: clone(change.proposed_terms) },
         });
-        return { outcome: change.status, change_offer_id: change.id, placement_id: row.id };
+        return {
+          outcome: change.status,
+          change_offer_id: change.id,
+          ...(input.accept ? { placement_id: row.id } : {}),
+        };
       }
       throw new PlacementLifecycleError("Placement change not found.", 404, "PLACEMENT_CHANGE_NOT_FOUND");
     },
@@ -857,6 +876,22 @@ test("extension acceptance updates effective terms atomically and preserves acce
   assert.equal(accepted.placement.originalTerms.dayRate, 250);
   assert.equal(accepted.placement.effectiveTerms.estimatedEndDate, "2027-01-15");
   assert.equal(accepted.placement.effectiveTerms.dayRate, 275);
+  assert.equal(accepted.outcome, "accepted");
+  assert.equal(accepted.placementId, PLACEMENT_A);
+  assert.equal(accepted.changeOfferId, proposed.changeOffer.id);
+  const acceptedEvents = adapter.placements.get(PLACEMENT_A).placement_lifecycle_events
+    .filter((event) => event.event_type === "change_accepted");
+  assert.equal(acceptedEvents.length, 1);
+  await assert.rejects(
+    service.respondChange(workerPrincipal(), proposed.changeOffer.id, true),
+    (error) => error.code === "PLACEMENT_CHANGE_ACCEPTED",
+  );
+  assert.equal(
+    adapter.placements.get(PLACEMENT_A).placement_lifecycle_events
+      .filter((event) => event.event_type === "change_accepted").length,
+    1,
+  );
+  assert.equal(adapter.placementLookupIds.every((id) => /^[0-9a-f-]{36}$/i.test(id)), true);
   const reloaded = await service.get(workerPrincipal(), PLACEMENT_A);
   assert.equal(reloaded.id, PLACEMENT_A);
   assert.equal(reloaded.effectiveTerms.estimatedEndDate, "2027-01-15");
@@ -872,14 +907,44 @@ test("declined, expired, duplicate, foreign, and failed change responses remain 
     workerPrincipal(),
     decline.changeOffer.id,
     false,
-    { reason: "Extension not suitable" },
+    { reason: "Extension not suitable", comment: "Already committed elsewhere" },
   );
+  assert.equal(declined.outcome, "declined");
+  assert.equal(declined.placementId, PLACEMENT_A);
+  assert.equal(declined.changeOfferId, decline.changeOffer.id);
   assert.equal(declined.changeOffer.status, "declined");
+  assert.equal(declined.changeOffer.placementId, PLACEMENT_A);
+  assert.equal(declined.changeOffer.declineReason, "Extension not suitable");
+  assert.equal(declined.changeOffer.declineComment, "Already committed elsewhere");
   assert.equal(declined.placement.originalTerms.estimatedEndDate, "2026-12-18");
+  const declinedRow = adapter.placements.get(PLACEMENT_A);
+  const persistedDecline = declinedRow.placement_change_offers.find(
+    (change) => change.id === decline.changeOffer.id,
+  );
+  assert.equal(persistedDecline.status, "declined");
+  assert.equal(persistedDecline.decline_reason, "Extension not suitable");
+  assert.equal(persistedDecline.decline_comment, "Already committed elsewhere");
+  assert.ok(persistedDecline.responded_at);
+  assert.equal(
+    declinedRow.placement_lifecycle_events
+      .filter((event) => event.event_type === "change_declined").length,
+    1,
+  );
+  const fresh = await service.get(workerPrincipal(), PLACEMENT_A);
+  assert.equal(
+    fresh.changeOffers.find((change) => change.id === decline.changeOffer.id)?.status,
+    "declined",
+  );
   await assert.rejects(
     service.respondChange(workerPrincipal(), decline.changeOffer.id, false),
     (error) => error.code === "PLACEMENT_CHANGE_DECLINED",
   );
+  assert.equal(
+    declinedRow.placement_lifecycle_events
+      .filter((event) => event.event_type === "change_declined").length,
+    1,
+  );
+  assert.equal(adapter.placementLookupIds.every((id) => /^[0-9a-f-]{36}$/i.test(id)), true);
 
   const foreign = await service.proposeExtension(companyPrincipal(), PLACEMENT_A, {
     estimatedEndDate: "2027-01-11",
@@ -896,6 +961,7 @@ test("declined, expired, duplicate, foreign, and failed change responses remain 
     service.respondChange(workerPrincipal(), foreign.changeOffer.id, true),
     (error) => error.code === "PLACEMENT_CHANGE_EXPIRED",
   );
+  assert.equal(adapter.placementLookupIds.every((id) => /^[0-9a-f-]{36}$/i.test(id)), true);
 
   const atomic = await service.proposeExtension(companyPrincipal(), PLACEMENT_A, {
     estimatedEndDate: "2027-01-12",
@@ -907,6 +973,58 @@ test("declined, expired, duplicate, foreign, and failed change responses remain 
     (error) => error.code === "PLACEMENT_STATE_CONFLICT",
   );
   assert.deepEqual(adapter.placements.get(PLACEMENT_A), before);
+});
+
+test("terminal and conflict placement-change outcomes never trigger invalid UUID reloads", async () => {
+  const terminalAdapter = fakeLifecycleAdapter();
+  const terminalService = createPlacementLifecycleService({ adapter: terminalAdapter });
+  const terminalChange = await terminalService.proposeExtension(
+    companyPrincipal(),
+    PLACEMENT_A,
+    { estimatedEndDate: "2027-01-10" },
+  );
+  terminalAdapter.placements.get(PLACEMENT_A).status = "completed";
+  await assert.rejects(
+    terminalService.respondChange(
+      workerPrincipal(),
+      terminalChange.changeOffer.id,
+      false,
+      { reason: "No longer required" },
+    ),
+    (error) => error.code === "PLACEMENT_ENDED",
+  );
+  assert.equal(
+    terminalAdapter.placements.get(PLACEMENT_A).placement_change_offers[0].status,
+    "pending",
+  );
+  assert.equal(
+    terminalAdapter.placementLookupIds.every((id) => /^[0-9a-f-]{36}$/i.test(id)),
+    true,
+  );
+
+  for (const [outcome, code] of [
+    ["schedule_conflict", "PLACEMENT_SCHEDULE_CONFLICT"],
+    ["scheduled_end_conflict", "PLACEMENT_SCHEDULED_END_CONFLICT"],
+    ["cancelled", "PLACEMENT_CHANGE_CANCELLED"],
+  ]) {
+    const adapter = fakeLifecycleAdapter();
+    const service = createPlacementLifecycleService({ adapter });
+    const proposed = await service.proposeExtension(companyPrincipal(), PLACEMENT_A, {
+      estimatedEndDate: "2027-01-10",
+    });
+    adapter.respondChange = async () => ({
+      outcome,
+      change_offer_id: proposed.changeOffer.id,
+    });
+    await assert.rejects(
+      service.respondChange(workerPrincipal(), proposed.changeOffer.id, true),
+      (error) => error.code === code,
+    );
+    assert.equal(
+      adapter.placementLookupIds.every((id) => /^[0-9a-f-]{36}$/i.test(id)),
+      true,
+    );
+  }
 });
 
 test("material schedule changes require worker acceptance before effective terms change", async () => {
@@ -1000,15 +1118,29 @@ test("migration preserves history, least privilege, capacity states, and atomic 
 
 test("transfer and replacement retain new-offer/new-placement identity", () => {
   const appSource = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+  const serverSource = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
   const offerMigration = fs.readFileSync(
     path.join(__dirname, "../supabase/migrations/202609160005_offers_placements.sql"),
     "utf8",
   );
-  assert.match(appSource, /createJobOffer\([\s\S]*"project_transfer"/);
+  const transferStart = appSource.indexOf("async function createProjectTransferOffer");
+  const transferEnd = appSource.indexOf("function openShiftChangeModal", transferStart);
+  const transferSource = appSource.slice(transferStart, transferEnd);
+  assert.ok(transferStart > -1 && transferEnd > transferStart);
+  assert.match(
+    transferSource,
+    /createJobOffer\(\s*toJob\.id,\s*worker\.id,\s*"project_transfer"/,
+  );
+  assert.match(appSource, /marketplaceApiRequest\("\/api\/offers"/);
+  assert.match(appSource, /marketplaceApiRequest\(`\/api\/offers\/\$\{app\.id\}\/accept`/);
+  assert.doesNotMatch(transferSource, /marketplaceApiRequest\([^)]*transfer/i);
+  assert.doesNotMatch(serverSource, /\/api\/(?:project-)?transfers?/i);
   assert.match(appSource, /const canonicalSource = source !== "shift_change"/);
   assert.match(appSource, /createReplacementTask/);
   assert.match(offerMigration, /insert into public\.placements/);
+  assert.match(offerMigration, /project_requirement_id[\s\S]*p_project_requirement_id/);
   assert.doesNotMatch(offerMigration, /update public\.placements\s+set\s+worker_id/i);
+  assert.doesNotMatch(offerMigration, /update public\.placements\s+set\s+project_requirement_id/i);
 });
 
 test("frontend derives canonical compatibility records without persisting duplicate authority", () => {
@@ -1034,4 +1166,8 @@ test("server routes expose only authenticated lifecycle operations", () => {
   assert.match(source, /placementLifecycleService\.release/);
   assert.match(source, /placementLifecycleService\.requestWorkerEnd/);
   assert.match(source, /placementLifecycleService\.respondChange/);
+  assert.match(
+    source,
+    /if \(req\.method === 'POST' && declineChangeMatch\)[\s\S]*placementLifecycleService\.respondChange\([\s\S]*false,[\s\S]*sendJson\(res, 200, result, responseHeaders\)/,
+  );
 });

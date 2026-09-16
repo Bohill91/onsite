@@ -81,6 +81,14 @@ activity, and rate fields. Original `agreed_*` terms remain recoverable.
 Accepted future schedule changes are applied lazily on or after their effective
 date. Repeated accept/decline attempts return explicit conflict outcomes.
 
+The live lifecycle RPC predates a uniform response shape and omits
+`placement_id` from successful decline results. The server therefore validates
+an RPC-supplied placement UUID before using it and otherwise reloads the
+worker-owned placement through the canonical change-offer relationship. This
+keeps accepted and declined HTTP responses canonical without attempting an
+undefined UUID lookup. Existing non-success outcomes remain explicit business
+conflicts and are never sent through placement response shaping.
+
 A schedule change may take effect on the placement's final working day, but not
 after its fixed or already scheduled end. A placement with a scheduled end
 cannot be extended. These rules are rechecked when the worker accepts so a
@@ -99,7 +107,10 @@ requirement. Acceptance therefore creates a new placement and never rewrites
 the source placement's `project_requirement_id`. Canonical overlap checks
 prevent acceptance while the source commitment still conflicts. Transfer
 provenance is still a compatibility record and is not yet a dedicated backend
-relationship.
+relationship. The current UI deliberately posts the target offer through
+`POST /api/offers`; there is no separate transfer endpoint. The browser-local
+transfer record supports compatibility presentation only and is not canonical
+marketplace authority.
 
 A released placement stops consuming capacity. The existing replacement prompt
 may then create a normal canonical offer; acceptance creates a new placement.
