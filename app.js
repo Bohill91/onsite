@@ -1243,7 +1243,16 @@ function bookingsNeedingExtension() {
 }
 
 function companyOwnsJob(job, companyId) {
-  return !!companyId && job?.companyId === companyId;
+  const user = getSessionUser();
+  const requiresCanonicalProject =
+    user?.serverAuthenticated &&
+    user?.type === "company" &&
+    user.id === companyId;
+  return (
+    !!companyId &&
+    job?.companyId === companyId &&
+    (!requiresCanonicalProject || job.canonicalProject === true)
+  );
 }
 
 function extensionReminderCard(job) {
@@ -6666,6 +6675,179 @@ function saveState() {
   } catch (_) {
     return false;
   }
+}
+
+async function projectApiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || "Project persistence failed.");
+    error.code = payload.code || "PROJECT_API_ERROR";
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function canonicalProjectWritePayload(job, { includeRequirements = true } = {}) {
+  const project = {
+    jobNumber: job.jobNumber,
+    projectName: job.projectName,
+    assignmentType: job.assignmentType || job.jobType,
+    clientReference: job.clientReference || "",
+    location: job.location,
+    locationData: job.locationData || null,
+    siteName: job.siteName || "",
+    siteRef: job.siteRef || "",
+    siteAddress: job.siteAddress || "",
+    sitePin: job.sitePin || null,
+    arrivalPointConfirmed: !!job.arrivalPointConfirmed,
+    start: job.start || job.startDate,
+    shiftStartTime: job.shiftStartTime || "",
+    estimatedEndDate: job.estimatedEndDate || job.endDate || "",
+    noFixedEndDate: !!job.noFixedEndDate,
+    shiftFinishTime: job.shiftFinishTime || "",
+    workingDays: normalizeWorkingDays(job.workingDays),
+    duration: job.duration || "",
+    siteContact: job.siteContact || {},
+    attendanceManager: job.attendanceManager || {},
+    arrivalInstructions: job.arrivalInstructions || "",
+    parking: job.parking || "",
+    ppe: job.ppe || "",
+    gateAccess: job.gateAccess || "",
+    sitePhotoMeta: job.sitePhotoMeta || {},
+    vehicleArrangement: job.vehicleArrangement || "",
+    noticePeriodDays: job.noticePeriodDays || DEFAULT_NOTICE_DAYS,
+    requestVersion: job.requestVersion || 1,
+    status: job.status || "open",
+  };
+  if (!includeRequirements) return { project };
+  const requestedWorkerIds = Array.isArray(job.requestedWorkerIds)
+    ? job.requestedWorkerIds
+    : Array.isArray(job.preferredWorkerIds)
+      ? job.preferredWorkerIds
+      : [];
+  const requirements = labourRequirementsForJob(job).map((requirement) => ({
+    ...requirement,
+    requestedWorkerIds:
+      requirement.requestedWorkerIds || requestedWorkerIds,
+    preferredFirst:
+      requirement.preferredFirst ?? requestedWorkerIds.length > 0,
+  }));
+  return { project, requirements };
+}
+
+function canonicalRequirementIdMap(localProject, canonicalProject) {
+  const ids = new Map();
+  const localRequirements = localProject?.labourRequirements || [];
+  (canonicalProject?.labourRequirements || []).forEach((requirement, index) => {
+    const localId =
+      requirement.clientReferenceId ||
+      requirement.legacyRequirementId ||
+      localRequirements[index]?.requirementId ||
+      localRequirements[index]?.id;
+    if (localId && requirement.requirementId) {
+      ids.set(String(localId), requirement.requirementId);
+    }
+  });
+  return ids;
+}
+
+function remapCanonicalProjectReferences(project, idMap) {
+  if (!idMap.size) return;
+  (project.preStartDocuments || []).forEach((requirement) => {
+    const audience = requirement?.audience;
+    if (!audience) return;
+    if (audience.labourRequirementId) {
+      audience.labourRequirementId =
+        idMap.get(String(audience.labourRequirementId)) ||
+        audience.labourRequirementId;
+    }
+    if (Array.isArray(audience.labourRequirementIds)) {
+      audience.labourRequirementIds = audience.labourRequirementIds.map(
+        (id) => idMap.get(String(id)) || id,
+      );
+    }
+  });
+  (project.placementSlots || []).forEach((slot) => {
+    slot.requirementId = idMap.get(String(slot.requirementId)) || slot.requirementId;
+  });
+}
+
+function mergeCanonicalProject(localProject, canonicalProject) {
+  const localRequirements = localProject?.labourRequirements || [];
+  const canonicalRequirements = (canonicalProject.labourRequirements || []).map(
+    (requirement, index) => {
+      const local =
+        localRequirements.find((candidate) =>
+          [
+            candidate.requirementId,
+            candidate.id,
+            candidate.clientReferenceId,
+          ]
+            .filter(Boolean)
+            .includes(requirement.clientReferenceId),
+        ) || localRequirements[index] || {};
+      return { ...local, ...requirement };
+    },
+  );
+  const merged = {
+    ...(localProject || {}),
+    ...canonicalProject,
+    companyName: canonicalProject.companyName || localProject?.companyName || "",
+    labourRequirements: canonicalRequirements,
+    canonicalProject: true,
+  };
+  const idMap = canonicalRequirementIdMap(localProject, canonicalProject);
+  remapCanonicalProjectReferences(merged, idMap);
+  merged.preStartDocuments = (merged.preStartDocuments || [])
+    .map((requirement) =>
+      normalizePreStartDocument({ ...requirement, projectId: merged.id }),
+    )
+    .filter(Boolean);
+  normalizeProjectPlacements(merged, state);
+  return merged;
+}
+
+let canonicalProjectSyncInFlight = null;
+
+async function syncCanonicalCompanyProjects(user = getSessionUser()) {
+  if (user?.type !== "company" || !user.serverAuthenticated) return;
+  if (canonicalProjectSyncInFlight) return canonicalProjectSyncInFlight;
+  canonicalProjectSyncInFlight = (async () => {
+    try {
+      const { projects = [] } = await projectApiRequest("/api/projects");
+      const existingById = new Map(
+        state.jobs
+          .filter((job) => job.canonicalProject)
+          .map((job) => [job.id, job]),
+      );
+      const canonical = projects.map((project) =>
+        mergeCanonicalProject(existingById.get(project.id), project),
+      );
+      state.jobs = [
+        ...state.jobs.filter(
+          (job) => !(job.canonicalProject && job.companyId === user.id),
+        ),
+        ...canonical,
+      ];
+      saveAndRender();
+    } catch (error) {
+      console.error("[Projects] Canonical project sync failed:", error);
+      showToast(error.message || "Projects could not be loaded");
+    } finally {
+      canonicalProjectSyncInFlight = null;
+    }
+  })();
+  return canonicalProjectSyncInFlight;
 }
 
 window.addEventListener("storage", (event) => {
@@ -16128,6 +16310,7 @@ function applyRoleView(user) {
         switchTab("dashboard");
       }
     }
+    void syncCanonicalCompanyProjects(user);
   } else {
     // Admin / demo — restore original nav and dashboard
     restoreNav();
@@ -18375,9 +18558,11 @@ function companyProjectTitle(job) {
 }
 
 function canEditCompanyProject(job, user) {
-  // TODO: Replace this owner check with granular project-edit permissions when
-  // the company permission model exists.
-  return user?.type === "company" && companyOwnsJob(job, user.id);
+  if (user?.type !== "company" || !companyOwnsJob(job, user.id)) return false;
+  if (!user.serverAuthenticated) return true;
+  return ["administrator", "manager"].includes(
+    String(user.permissionRole || user.companyRole || "").toLowerCase(),
+  );
 }
 
 function companyProjectSearchText(job, summary = companyProjectSummary(job, getSessionUser() || {})) {
@@ -25626,7 +25811,7 @@ function validateProjectEdit(values) {
   return "";
 }
 
-function saveProjectEdit(jobId) {
+async function saveProjectEdit(jobId) {
   const job = findJob(jobId);
   const user = getSessionUser();
   if (!job || !canEditCompanyProject(job, user)) return;
@@ -25677,40 +25862,58 @@ function saveProjectEdit(jobId) {
     );
   });
 
-  job.jobNumber = values.jobNumber;
-  job.projectName = values.projectName;
-  job.location = values.location;
-  job.assignmentType = nextAssignmentType;
-  job.jobType = nextAssignmentType;
-  job.ongoing = nextAssignmentType === "ongoing_placement";
-  job.noFixedEndDate = values.noFixedEndDate;
-  job.start = values.start;
-  job.startDate = values.start;
-  job.estimatedEndDate = values.estimatedEndDate;
-  job.shiftStartTime = values.shiftStartTime;
-  job.shiftFinishTime = values.shiftFinishTime;
-  job.workingDays = values.workingDays;
-  job.defaultWorkingDays = values.workingDays;
-  job.requiresSaturday = values.workingDays.includes("saturday");
-  job.requiresSunday = values.workingDays.includes("sunday");
-  job.siteAddress = values.siteAddress;
-  job.sitePin = newPin;
-  job.siteContact = values.siteContact;
-  job.arrivalInstructions = values.arrivalInstructions;
-  job.parking = values.parking;
-  job.ppe = values.ppe;
-  job.gateAccess = values.gateAccess;
-  job.sitePhotos = { ...projectEditPhotos };
-  job.sitePhotoMeta = { ...projectEditPhotoMeta };
+  const candidate = structuredClone(job);
+  candidate.jobNumber = values.jobNumber;
+  candidate.projectName = values.projectName;
+  candidate.location = values.location;
+  candidate.assignmentType = nextAssignmentType;
+  candidate.jobType = nextAssignmentType;
+  candidate.ongoing = nextAssignmentType === "ongoing_placement";
+  candidate.noFixedEndDate = values.noFixedEndDate;
+  candidate.start = values.start;
+  candidate.startDate = values.start;
+  candidate.estimatedEndDate = values.estimatedEndDate;
+  candidate.shiftStartTime = values.shiftStartTime;
+  candidate.shiftFinishTime = values.shiftFinishTime;
+  candidate.workingDays = values.workingDays;
+  candidate.defaultWorkingDays = values.workingDays;
+  candidate.requiresSaturday = values.workingDays.includes("saturday");
+  candidate.requiresSunday = values.workingDays.includes("sunday");
+  candidate.siteAddress = values.siteAddress;
+  candidate.sitePin = newPin;
+  candidate.siteContact = values.siteContact;
+  candidate.arrivalInstructions = values.arrivalInstructions;
+  candidate.parking = values.parking;
+  candidate.ppe = values.ppe;
+  candidate.gateAccess = values.gateAccess;
+  candidate.sitePhotos = { ...projectEditPhotos };
+  candidate.sitePhotoMeta = { ...projectEditPhotoMeta };
   if (values.attendanceManager.name || values.attendanceManager.email || values.attendanceManager.phone) {
-    job.attendanceManager = {
-      ...(job.attendanceManager || {}),
+    candidate.attendanceManager = {
+      ...(candidate.attendanceManager || {}),
       name: values.attendanceManager.name,
       email: values.attendanceManager.email,
       phone: values.attendanceManager.phone,
     };
   } else {
-    delete job.attendanceManager;
+    delete candidate.attendanceManager;
+  }
+
+  if (user.serverAuthenticated && job.canonicalProject) {
+    try {
+      const { project } = await projectApiRequest(`/api/projects/${job.id}`, {
+        method: "PATCH",
+        body: canonicalProjectWritePayload(candidate, {
+          includeRequirements: false,
+        }),
+      });
+      Object.assign(job, mergeCanonicalProject(candidate, project));
+    } catch (saveError) {
+      showToast(saveError.message || "Project changes could not be saved");
+      return;
+    }
+  } else {
+    Object.assign(job, candidate);
   }
 
   recordProjectEditActivity(job, changes, user);
@@ -25760,7 +25963,7 @@ function bindProjectEditControls(scope) {
   });
   scope.querySelector("[data-project-edit-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    saveProjectEdit(event.currentTarget.dataset.projectEditForm);
+    void saveProjectEdit(event.currentTarget.dataset.projectEditForm);
   });
   scope
     .querySelector("#projectEditNoFixedEndDate")
@@ -28558,7 +28761,7 @@ workerForm.addEventListener("submit", (e) => {
   switchTab("workers");
 });
 
-jobForm.addEventListener("submit", (e) => {
+jobForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const companyWizardSubmission =
     jobWizardActive &&
@@ -28701,7 +28904,7 @@ jobForm.addEventListener("submit", (e) => {
     }
   }
 
-  const job = {
+  let job = {
     id: createId(),
     jobType: assignmentType,
     assignmentType,
@@ -28871,6 +29074,20 @@ jobForm.addEventListener("submit", (e) => {
   });
   if (Object.keys(photos).length) job.sitePhotos = photos;
   if (Object.keys(photoMeta).length) job.sitePhotoMeta = photoMeta;
+
+  if (poster?.type === "company" && poster.serverAuthenticated) {
+    try {
+      const { project } = await projectApiRequest("/api/projects", {
+        method: "POST",
+        body: canonicalProjectWritePayload(job),
+      });
+      job = mergeCanonicalProject(job, project);
+    } catch (saveError) {
+      if (companyWizardSubmission) resetJobWizardSubmissionState();
+      showToast(saveError.message || "Project could not be created");
+      return;
+    }
+  }
 
   job.preStartDocuments = (job.preStartDocuments || [])
     .map((requirement) =>

@@ -10,6 +10,10 @@ const {
   sessionCookies,
 } = require('./server-auth');
 const {
+  ProjectServiceError,
+  createProjectService,
+} = require('./server-projects');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -27,6 +31,7 @@ const documentFileStore = createDocumentFileStore({
   rootDir: process.env.ONSITE_FILE_STORAGE_DIR || path.join(__dirname, '.onsite-storage'),
 });
 const authService = createAuthService();
+const projectService = createProjectService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -347,6 +352,71 @@ async function handleAuthApi(req, res, url) {
   }
 }
 
+function publicProjectError(error) {
+  if (error instanceof ProjectServiceError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Projects] Unexpected error:', error);
+  return new ProjectServiceError(
+    'Project service error.',
+    500,
+    'PROJECT_INTERNAL_ERROR',
+  );
+}
+
+async function handleProjectApi(req, res, url) {
+  try {
+    const restored = await resolveAuthenticatedPrincipal(req);
+    const cookies = sessionCookies(req, restored.session);
+    const responseHeaders = cookies.length
+      ? { 'Set-Cookie': cookies, Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    const projectMatch = url.pathname.match(/^\/api\/projects\/([0-9a-f-]{36})$/i);
+
+    if (req.method === 'GET' && url.pathname === '/api/projects') {
+      const projects = await projectService.list(restored.principal);
+      sendJson(res, 200, { projects }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/projects') {
+      const project = await projectService.create(
+        restored.principal,
+        await readJsonRequest(req, 2 * 1024 * 1024),
+      );
+      sendJson(res, 201, { project }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && projectMatch) {
+      const project = await projectService.get(restored.principal, projectMatch[1]);
+      sendJson(res, 200, { project }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'PATCH' && projectMatch) {
+      const project = await projectService.update(
+        restored.principal,
+        projectMatch[1],
+        await readJsonRequest(req, 2 * 1024 * 1024),
+      );
+      sendJson(res, 200, { project }, responseHeaders);
+      return;
+    }
+
+    sendJson(res, projectMatch ? 405 : 404, {
+      error: projectMatch ? 'Method not allowed.' : 'Project route not found.',
+      code: projectMatch ? 'METHOD_NOT_ALLOWED' : 'PROJECT_NOT_FOUND',
+    });
+  } catch (rawError) {
+    const error = publicProjectError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
+}
+
 function requestHeader(req, name, maxLength = 200) {
   const value = Array.isArray(req.headers[name])
     ? req.headers[name][0]
@@ -467,6 +537,11 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname.startsWith('/api/auth/')) {
     handleAuthApi(req, res, url);
+    return;
+  }
+
+  if (url.pathname === '/api/projects' || url.pathname.startsWith('/api/projects/')) {
+    handleProjectApi(req, res, url);
     return;
   }
 
