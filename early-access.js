@@ -10,6 +10,13 @@
   const workerRole = document.getElementById("eaWorkerRole");
   const companyCategories = document.getElementById("eaCompanyCategories");
   const referralInput = document.getElementById("eaReferralCode");
+  const referralCaptured = document.getElementById("eaReferralCaptured");
+  const referralReveal = document.getElementById("eaReferralReveal");
+  const referralFallbackFields = document.getElementById("eaReferralFallbackFields");
+  const referralHint = document.getElementById("eaReferralHint");
+  const REFERRAL_STORAGE_KEY = "onsite_early_access_referral_v1";
+  const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const REFERRAL_CODE_PATTERN = /^OSW-[A-Z0-9]{12,24}$/;
 
   function escapeHtml(value) {
     return String(value || "")
@@ -18,6 +25,92 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function normaliseReferralCode(value) {
+    return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function isValidReferralFormat(value) {
+    return REFERRAL_CODE_PATTERN.test(normaliseReferralCode(value));
+  }
+
+  function referralStorage() {
+    try {
+      return window["local" + "Storage"];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearStoredReferral() {
+    try {
+      referralStorage()?.removeItem(REFERRAL_STORAGE_KEY);
+    } catch (_) {}
+  }
+
+  function readStoredReferral(now = Date.now()) {
+    const storage = referralStorage();
+    if (!storage) return null;
+    try {
+      const stored = JSON.parse(storage.getItem(REFERRAL_STORAGE_KEY) || "null");
+      const code = normaliseReferralCode(stored?.code);
+      const capturedAt = Number(stored?.capturedAt);
+      const expiresAt = Number(stored?.expiresAt);
+      if (!isValidReferralFormat(code) || !Number.isFinite(capturedAt) || !Number.isFinite(expiresAt) || expiresAt <= now) {
+        clearStoredReferral();
+        return null;
+      }
+      return { code, capturedAt, expiresAt };
+    } catch (_) {
+      clearStoredReferral();
+      return null;
+    }
+  }
+
+  function captureReferral(value, now = Date.now()) {
+    const code = normaliseReferralCode(value);
+    if (!isValidReferralFormat(code)) return null;
+    const record = { code, capturedAt: now, expiresAt: now + REFERRAL_TTL_MS };
+    try {
+      referralStorage()?.setItem(REFERRAL_STORAGE_KEY, JSON.stringify(record));
+    } catch (_) {}
+    return record;
+  }
+
+  function setReferralState(record) {
+    if (!referralInput) return;
+    const captured = Boolean(record);
+    referralInput.value = record?.code || "";
+    referralInput.readOnly = captured;
+    referralInput.classList.toggle("ea-referral-input--captured", captured);
+    if (referralCaptured) referralCaptured.hidden = !captured;
+    if (referralReveal) referralReveal.hidden = captured;
+    if (referralFallbackFields) referralFallbackFields.hidden = captured;
+    if (referralHint && captured) referralHint.textContent = "Referral link captured for 30 days.";
+  }
+
+  function initialiseReferral() {
+    let record = readStoredReferral();
+    if (!record) {
+      const incoming = new URLSearchParams(window.location.search).get("ref") || "";
+      if (isValidReferralFormat(incoming)) record = captureReferral(incoming);
+    }
+    setReferralState(record);
+  }
+
+  function revealReferralFallback({ allowReplacement = false } = {}) {
+    if (!referralInput) return;
+    if (allowReplacement) {
+      clearStoredReferral();
+      referralInput.value = "";
+      referralInput.readOnly = false;
+      referralInput.classList.remove("ea-referral-input--captured");
+      if (referralCaptured) referralCaptured.hidden = true;
+    }
+    if (referralReveal) referralReveal.hidden = true;
+    if (referralFallbackFields) referralFallbackFields.hidden = false;
+    referralInput.focus();
   }
 
   function sourceAttribution() {
@@ -62,7 +155,7 @@
         tradeKey: data.get("tradeKey") || "",
         roleKey: data.get("roleKey") || "",
         homeArea: data.get("homeArea") || "",
-        referralCode: data.get("referralCode") || "",
+        referralCode: normaliseReferralCode(data.get("referralCode") || ""),
       };
     }
     return {
@@ -108,7 +201,10 @@
       renderSuccess(payload, type);
     } catch (error) {
       formError(form, error.message || "Early Access signup could not be completed.");
-      if (error.code === "INVALID_REFERRAL_CODE") referralInput?.focus();
+      if (error.code === "INVALID_REFERRAL_CODE") {
+        revealReferralFallback({ allowReplacement: true });
+        if (referralHint) referralHint.textContent = "That referral link was not accepted. Enter another code or leave it blank.";
+      }
     } finally {
       setSubmitting(form, false);
     }
@@ -126,18 +222,18 @@
       return;
     }
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
-    success.innerHTML = `<span class="ea-success-badge">Founding Worker</span>
+    success.innerHTML = `<span class="ea-success-badge">Sub-contractor Early Access</span>
       <h2>Your Early Access place is confirmed.</h2>
-      <p>${escapeHtml(payload.firstName || "Thanks")}, you now have Founding Worker status and priority access when full onboarding opens.</p>
+      <p>${escapeHtml(payload.firstName || "Thanks")}, you now have priority access when OnSite opens.</p>
       ${hasReferral ? `<div class="ea-referral-result">
-        <small>Your referral code</small>
+        <small>Your personal referral link</small>
         <div class="ea-referral-code">${escapeHtml(payload.referralCode)}</div>
         <div class="ea-referral-url">${escapeHtml(payload.referralUrl)}</div>
         <div class="ea-share-actions">
           <button type="button" data-copy-referral>Copy link</button>
           <button type="button" data-share-referral>Share invite</button>
         </div>
-        <div class="ea-progress-zero"><span>Workers joined through your link</span><strong>${Number(payload.referralProgress?.joinedCount) || 0}</strong></div>
+        <div class="ea-progress-zero"><span>Sub-contractors joined through your link</span><strong>${Number(payload.referralProgress?.joinedCount) || 0}</strong></div>
       </div>` : `<p>Your registration is safely recorded. We will send your referral details to the email address supplied.</p>`}`;
     if (!hasReferral) return;
     success.querySelector("[data-copy-referral]")?.addEventListener("click", async (event) => {
@@ -148,7 +244,7 @@
       if (navigator.share) {
         await navigator.share({
           title: "Join OnSite Early Access",
-          text: "Join me as an OnSite Founding Worker.",
+          text: "Join me as an OnSite sub-contractor.",
           url: payload.referralUrl,
         });
       } else {
@@ -174,8 +270,9 @@
   workerTrade?.addEventListener("change", () => {
     window.OnSiteTaxonomy?.populateRoleSelect(workerRole, workerTrade.value);
   });
+  referralReveal?.addEventListener("click", () => revealReferralFallback());
   referralInput?.addEventListener("blur", () => {
-    referralInput.value = referralInput.value.trim().toUpperCase();
+    referralInput.value = normaliseReferralCode(referralInput.value);
   });
 
   window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
@@ -185,9 +282,5 @@
     option.textContent = trade.name;
     companyCategories?.appendChild(option);
   });
-  const referralCode = new URLSearchParams(window.location.search).get("ref") || "";
-  if (referralCode && referralInput) {
-    referralInput.value = referralCode.trim().toUpperCase();
-    document.getElementById("eaReferralHint").textContent = "Referral code added from your invitation link.";
-  }
+  initialiseReferral();
 })();

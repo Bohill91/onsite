@@ -31,15 +31,15 @@
         <div class="ea-signup-card" id="join">
           <p class="ea-choice-label">Choose your route into OnSite</p>
           <div class="ea-path-toggle" role="tablist" aria-label="Choose an Early Access path">
-            <button type="button" role="tab" aria-selected="true" aria-controls="workerPanel" id="workerTab" data-signup-path="worker">I'm looking for work</button>
+            <button type="button" role="tab" aria-selected="true" aria-controls="workerPanel" id="workerTab" data-signup-path="worker">I'm a sub-contractor</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="companyPanel" id="companyTab" data-signup-path="company">I'm hiring</button>
           </div>
 
-          <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab">
+          <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab" data-internal-label="Founding Worker">
             <div class="ea-form-heading">
-              <p class="ea-kicker">Founding Worker</p>
-              <h2>Join OnSite early</h2>
-              <p>Secure Founding Worker status and get your personal referral link.</p>
+              <p class="ea-kicker">Sub-contractor Early Access</p>
+              <h2>Join OnSite Early Access</h2>
+              <p>Join before launch and get priority access when OnSite opens.</p>
             </div>
             <form id="workerEarlyAccessForm" novalidate>
               <div class="ea-form-grid ea-form-grid--two">
@@ -55,14 +55,20 @@
                 <label>Role / grade<select name="roleKey" id="eaWorkerRole" required disabled><option value="">Select a trade first</option></select></label>
               </div>
               <label>Postcode or home area<input name="homeArea" type="text" autocomplete="postal-code" maxlength="160" placeholder="e.g. Leeds or LS1" required /></label>
-              <label>Referral code <span>Optional</span><input name="referralCode" id="eaReferralCode" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="OSW-..." /><small id="eaReferralHint">If another worker invited you, enter their code.</small></label>
+              <div class="ea-referral-choice" id="eaReferralChoice">
+                <p class="ea-referral-captured" id="eaReferralCaptured" hidden>You've been referred to OnSite.</p>
+                <button class="ea-referral-reveal" id="eaReferralReveal" type="button">Were you referred by someone?</button>
+                <div class="ea-referral-fallback-fields" id="eaReferralFallbackFields" hidden>
+                  <label>Referral code <span>Optional</span><input name="referralCode" id="eaReferralCode" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="OSW-..." /><small id="eaReferralHint">Enter the code you were given.</small></label>
+                </div>
+              </div>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage my Early Access place.</span></label>
                 <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
               </div>
               <div class="ea-form-error" role="alert" aria-live="polite"></div>
-              <button class="ea-primary ea-submit" type="submit">Join as a Founding Worker</button>
+              <button class="ea-primary ea-submit" type="submit">Join Early Access</button>
               <p class="ea-submit-note">No password needed. Full profile setup comes later.</p>
             </form>
           </section>
@@ -85,7 +91,7 @@
               </div>
               <label>Main trade / labour categories<select name="labourCategoryKeys" id="eaCompanyCategories" multiple size="5" required aria-describedby="eaCategoryHint"></select><small id="eaCategoryHint">Select all that apply.</small></label>
               <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
-              <label>Temporary workers typically required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+              <label>Temporary sub-contractors typically required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
               <label>Anything we should know? <span>Optional</span><textarea name="note" rows="3" maxlength="1200" placeholder="Trades, regions or upcoming labour needs"></textarea></label>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
@@ -102,36 +108,36 @@
         </div>
       </section>
 
-      <section class="ea-value-section" aria-labelledby="foundingWorkerValue">
+      <section class="ea-value-section" aria-labelledby="earlyAccessValue">
         <div class="ea-section-heading">
           <p class="ea-kicker">Join early. Build trust.</p>
-          <h2 id="foundingWorkerValue">A practical head start for reliable tradespeople.</h2>
+          <h2 id="earlyAccessValue">A practical head start for reliable sub-contractors.</h2>
         </div>
         <div class="ea-value-grid">
-          <article><span>01</span><h3>Founding Worker status</h3><p>Keep your original Early Access date and receive priority access when full Worker onboarding opens.</p></article>
-          <article><span>02</span><h3>Direct opportunities</h3><p>Connect with UK contractors without a recruitment agency sitting between the company and the worker.</p></article>
+          <article><span>01</span><h3>Priority access</h3><p>Join before launch and get priority access when OnSite opens.</p></article>
+          <article><span>02</span><h3>Direct opportunities</h3><p>Connect with UK contractors without a recruitment agency sitting between the company and the sub-contractor.</p></article>
           <article><span>03</span><h3>Reliability-led matching</h3><p>OnSite is being built around availability, attendance and dependable working history, not an unqualified contact list.</p></article>
         </div>
       </section>
 
       <section class="ea-referral-section" aria-labelledby="referralValue">
         <div>
-          <p class="ea-kicker">Founding Worker referrals</p>
-          <h2 id="referralValue">Refer good workers before launch.</h2>
-          <p>Share your personal link. If a referred worker later completes qualifying paid work through OnSite, both workers can become eligible for the normal post-launch rewards.</p>
+          <p class="ea-kicker">OnSite Referral Programme</p>
+          <h2 id="referralValue">Refer other sub-contractors.</h2>
+          <p>Share your personal link. If a referred sub-contractor later completes qualifying paid work through OnSite, both people can become eligible for the normal post-launch rewards.</p>
           <p class="ea-example">Twenty qualifying referrals could represent up to <strong>£2,000</strong> in potential future referral rewards. Signing up alone does not earn cash.</p>
         </div>
         <div class="ea-reward-steps">
           <article><strong>5 paid days</strong><span>Referrer potentially eligible for £50</span></article>
           <article><strong>20 paid days</strong><span>Referrer potentially eligible for another £50</span></article>
-          <article><strong>New worker</strong><span>Potentially eligible for £25 after their first 5 paid days</span></article>
+          <article><strong>Referred sub-contractor</strong><span>Potentially eligible for £25 after their first 5 paid days</span></article>
         </div>
       </section>
     </main>
 
     <footer id="privacy" class="ea-footer">
       <div class="ea-wordmark" aria-label="OnSite">On<span>S</span>ite</div>
-      <p><strong>Early Access privacy information.</strong> OnSite uses the details submitted here to manage Early Access, prevent duplicate registrations, attribute Worker referrals and prepare future account conversion. Marketing consent is optional and separate. Early Access details are not displayed publicly or shared with other Workers or companies.</p>
+      <p><strong>Early Access privacy information.</strong> OnSite uses the details submitted here to manage Early Access, prevent duplicate registrations, attribute sub-contractor referrals and prepare future account conversion. Marketing consent is optional and separate. Early Access details are not displayed publicly or shared with other sub-contractors or hiring companies.</p>
       <p>© 2026 OnSite. Reliable trades. On demand.</p>
     </footer>
 
