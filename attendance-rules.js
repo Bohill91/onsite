@@ -244,7 +244,7 @@ function placementEffectiveAttendanceEndDate(placement = {}) {
       : [];
   lifecycleEvents
     .filter((event) =>
-      ["released", "completed", "cancelled"].includes(
+      ["released", "completed", "worker_end_requested", "cancelled"].includes(
         String(event.event_type || event.type || ""),
       ),
     )
@@ -254,9 +254,17 @@ function placementEffectiveAttendanceEndDate(placement = {}) {
       if (effectiveDate) hasTerminalEvidence = true;
     });
   if (terminal) {
-    addCandidate(placement.ended_at || placement.endedAt);
-    if (cleanDate(placement.ended_at || placement.endedAt)) {
-      hasTerminalEvidence = true;
+    const endedAt = placement.ended_at || placement.endedAt;
+    if (!hasTerminalEvidence && endedAt) {
+      const timeZone =
+        placement.project_requirements?.projects?.timezone ||
+        placement.projectRequirements?.project?.timezone ||
+        placement.projectTimezone ||
+        placement.project_timezone ||
+        "Europe/London";
+      const endedDate = projectTimeParts(endedAt, timeZone)?.date || "";
+      addCandidate(endedDate);
+      hasTerminalEvidence = !!endedDate;
     }
     if (!hasTerminalEvidence) {
       const startDate = cleanDate(

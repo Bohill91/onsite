@@ -614,11 +614,16 @@ begin
     and p_placement.scheduled_end_date is not null then
     v_has_terminal_evidence := true;
   end if;
-  select min((lifecycle_event.effective_at at time zone v_timezone)::date)
+  -- Phase 3C stores lifecycle effective dates as date::timestamptz. Preserve
+  -- that canonical date instead of shifting midnight UTC through the project
+  -- timezone. scheduled_end_date remains authoritative when it is present.
+  select min((lifecycle_event.effective_at at time zone 'UTC')::date)
   into v_lifecycle_end
   from public.placement_lifecycle_events lifecycle_event
   where lifecycle_event.placement_id = p_placement.id
-    and lifecycle_event.event_type in ('released', 'completed')
+    and lifecycle_event.event_type in (
+      'released', 'completed', 'worker_end_requested'
+    )
     and lifecycle_event.effective_at is not null;
   if v_lifecycle_end is not null
     and (v_end_date is null or v_lifecycle_end < v_end_date) then
@@ -627,7 +632,11 @@ begin
   if v_lifecycle_end is not null then
     v_has_terminal_evidence := true;
   end if;
+  -- ended_at is a real timestamp for normalised natural completion and
+  -- immediate release. Use it only when no canonical date-semantic terminal
+  -- evidence exists.
   if p_placement.status in ('released', 'completed', 'cancelled')
+    and not v_has_terminal_evidence
     and p_placement.ended_at is not null then
     v_ended_date := (p_placement.ended_at at time zone v_timezone)::date;
     if v_end_date is null or v_ended_date < v_end_date then
@@ -895,7 +904,6 @@ as $$
 declare
   v_project public.projects%rowtype;
   v_work_date date;
-  v_local_now timestamp;
   v_day_end timestamptz;
   v_overnight_end timestamptz;
   v_expiry timestamptz;
@@ -906,28 +914,10 @@ begin
   if v_project.status not in ('open', 'active') then
     raise exception using errcode = '22023', message = 'Site sign-in is not available for this project.', detail = 'PROJECT_NOT_ACTIVE';
   end if;
-  v_local_now := now() at time zone v_project.timezone;
-  v_work_date := coalesce(p_work_date, v_local_now::date);
-  if p_work_date is null and exists (
-    select 1
-    from public.placements placement
-    join public.project_requirements requirement
-      on requirement.id = placement.project_requirement_id
-    join lateral public.attendance_placement_terms(
-      placement, v_local_now::date - 1
-    ) terms on true
-    where requirement.project_id = p_project_id
-      and public.attendance_placement_expected(
-        placement, v_local_now::date - 1
-      )
-      and terms.shift_finish_time <= terms.shift_start_time
-      and public.attendance_timestamp_matches_work_date(
-        now(), v_local_now::date - 1, terms.shift_start_time,
-        terms.shift_finish_time, v_project.timezone
-      )
-  ) then
-    v_work_date := v_local_now::date - 1;
-  end if;
+  v_work_date := coalesce(
+    p_work_date,
+    (now() at time zone v_project.timezone)::date
+  );
   v_day_end := ((v_work_date + 1)::timestamp at time zone v_project.timezone);
   select max(
     ((v_work_date + 1)::timestamp + terms.shift_finish_time)
@@ -1331,24 +1321,27 @@ begin
   if v_day.id is null then
     raise exception using errcode = '22023', message = 'Submitted attendance cannot be changed by scanning.', detail = 'ATTENDANCE_SUBMITTED';
   end if;
-  insert into public.attendance_events (
-    attendance_day_id, placement_id, event_type, actor_user_id,
-    actor_type, recorded_at, effective_at, metadata, idempotency_key
-  ) values (
-    v_day.id, v_placement.id, 'supervisor_worker_qr_scan', p_actor_user_id,
-    v_actor_type, v_capture, v_arrival,
-    jsonb_build_object(
-      'capture_method', 'supervisor_worker_qr',
-      'previous', v_previous,
-      'new', jsonb_build_object(
-        'status', v_day.status,
-        'effective_arrival_at', v_day.effective_arrival_at,
-        'captured_at', v_day.captured_at,
-        'minutes_late', v_day.minutes_late
-      )
-    ),
-    'supervisor_worker_qr_scan:' || v_day.id::text || ':' || md5(v_arrival::text)
-  ) on conflict (idempotency_key) do nothing;
+  if v_arrival = v_day.effective_arrival_at then
+    insert into public.attendance_events (
+      attendance_day_id, placement_id, event_type, actor_user_id,
+      actor_type, recorded_at, effective_at, metadata, idempotency_key
+    ) values (
+      v_day.id, v_placement.id, 'supervisor_worker_qr_scan', p_actor_user_id,
+      v_actor_type, v_capture, v_day.effective_arrival_at,
+      jsonb_build_object(
+        'capture_method', 'supervisor_worker_qr',
+        'previous', v_previous,
+        'new', jsonb_build_object(
+          'status', v_day.status,
+          'effective_arrival_at', v_day.effective_arrival_at,
+          'captured_at', v_day.captured_at,
+          'minutes_late', v_day.minutes_late
+        )
+      ),
+      'supervisor_worker_qr_scan:' || v_day.id::text || ':' ||
+        p_actor_user_id::text || ':' || md5(v_day.effective_arrival_at::text)
+    ) on conflict (idempotency_key) do nothing;
+  end if;
   return jsonb_build_object('outcome', 'signed_in', 'attendance_day_id', v_day.id);
 end;
 $$;
@@ -1563,12 +1556,12 @@ begin
   end if;
   v_explanation := nullif(trim(p_explanation), '');
   if v_day.worker_reason_category = p_reason_category
-    and v_day.worker_reason_explanation is not distinct from v_explanation
-    and v_day.worker_reason_review_outcome = 'pending' then
+    and v_day.worker_reason_explanation is not distinct from v_explanation then
     return jsonb_build_object(
       'outcome', 'already_submitted',
       'attendance_day_id', v_day.id,
-      'reason_revision', v_day.worker_reason_revision
+      'reason_revision', v_day.worker_reason_revision,
+      'review_outcome', v_day.worker_reason_review_outcome
     );
   end if;
   v_previous := jsonb_build_object(
@@ -1606,7 +1599,8 @@ begin
   return jsonb_build_object(
     'outcome', 'submitted',
     'attendance_day_id', v_day.id,
-    'reason_revision', v_day.worker_reason_revision
+    'reason_revision', v_day.worker_reason_revision,
+    'review_outcome', v_day.worker_reason_review_outcome
   );
 end;
 $$;

@@ -29,6 +29,7 @@ const COMPANY_B = "00000000-0000-4000-8000-000000000002";
 const ADMIN_A = "00000000-0000-4000-8000-000000000011";
 const MANAGER_A = "00000000-0000-4000-8000-000000000012";
 const SUPERVISOR_A = "00000000-0000-4000-8000-000000000013";
+const SUPERVISOR_A_2 = "00000000-0000-4000-8000-000000000016";
 const ADMIN_B = "00000000-0000-4000-8000-000000000014";
 const ATTENDANCE_MANAGER = "00000000-0000-4000-8000-000000000015";
 const WORKER_A = "00000000-0000-4000-8000-000000000101";
@@ -159,6 +160,7 @@ function attendanceRow(overrides = {}) {
     worker_reason_submitted_at: null,
     worker_reason_revision: 0,
     worker_reason_review_outcome: null,
+    worker_reason_reviewed_by_user_id: null,
     worker_reason_reviewed_at: null,
     worker_reason_review_revision: 0,
     capture_latitude: null,
@@ -180,6 +182,7 @@ function fakeAttendanceAdapter(options = {}) {
   const managers = new Map();
   let currentNow = options.now || TEST_NOW;
   let placementTemplate = placementRow(options.placement || {});
+  const projectTimezone = options.timezone || "Europe/London";
   let sequence = 600;
   const uuid = () =>
     `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
@@ -187,6 +190,7 @@ function fakeAttendanceAdapter(options = {}) {
     if (actor === ADMIN_A) return "administrator";
     if (actor === MANAGER_A) return "manager";
     if (actor === SUPERVISOR_A) return "supervisor";
+    if (actor === SUPERVISOR_A_2) return "supervisor";
     if (actor === ADMIN_B) return "administrator";
     return "";
   };
@@ -215,7 +219,7 @@ function fakeAttendanceAdapter(options = {}) {
           project_name: projectId === PROJECT_A ? "Northgate Tower" : "Nexus",
           job_number: projectId === PROJECT_A ? "HS2-001" : "M2055",
           location_label: projectId === PROJECT_A ? "London" : "Manchester",
-          timezone: "Europe/London",
+          timezone: projectTimezone,
         },
       },
     });
@@ -273,7 +277,7 @@ function fakeAttendanceAdapter(options = {}) {
         role:
           role && actorCompany(actorUserId) === companyId ? role : "",
         is_attendance_manager: isManager,
-        timezone: "Europe/London",
+        timezone: projectTimezone,
       };
     },
     async listProjectAttendance(_actor, projectId, weekStart) {
@@ -290,17 +294,25 @@ function fakeAttendanceAdapter(options = {}) {
       );
     },
     async issueSiteToken(values) {
+      const workDate =
+        values.workDate || projectTimeParts(currentNow, projectTimezone)?.date;
       const row = {
         id: uuid(),
         project_id: values.projectId,
-        work_date: values.workDate || TEST_DATE,
+        work_date: workDate,
         token_hash: values.tokenHash,
         expires_at: "2026-09-16T22:59:59.000Z",
         revoked_at: null,
       };
       if (values.revokeExisting) {
         for (const token of siteTokens.values()) {
-          if (token.project_id === values.projectId) token.revoked_at = TEST_NOW;
+          if (
+            token.project_id === values.projectId &&
+            token.work_date === workDate &&
+            !token.revoked_at
+          ) {
+            token.revoked_at = currentNow;
+          }
         }
       }
       siteTokens.set(values.tokenHash, row);
@@ -413,6 +425,12 @@ function fakeAttendanceAdapter(options = {}) {
         timeZone: day.project_timezone_snapshot,
       });
       const already = !!day.effective_arrival_at;
+      const previous = {
+        status: day.status,
+        effectiveArrivalAt: day.effective_arrival_at,
+        capturedAt: day.captured_at,
+        minutesLate: day.minutes_late,
+      };
       if (!already || new Date(arrival) < new Date(day.effective_arrival_at)) {
         Object.assign(day, {
           status: calculated.status,
@@ -422,19 +440,31 @@ function fakeAttendanceAdapter(options = {}) {
           capture_method: "supervisor_worker_qr",
         });
       }
-      if (!day.attendance_events.some((event) =>
+      const eventKey = [
+        day.id,
+        values.actorUserId,
+        day.effective_arrival_at,
+      ].join(":");
+      if (arrival === day.effective_arrival_at && !day.attendance_events.some((event) =>
         event.event_type === "supervisor_worker_qr_scan" &&
-        event.effective_at === arrival
+        event.idempotency_key === eventKey
       )) {
         day.attendance_events.push({
           id: uuid(),
           event_type: "supervisor_worker_qr_scan",
           actor_type: "supervisor",
+          actor_user_id: values.actorUserId,
           recorded_at: currentNow,
-          effective_at: arrival,
+          effective_at: day.effective_arrival_at,
+          idempotency_key: eventKey,
           metadata: {
-            effectiveArrivalAt: arrival,
-            capturedAt: currentNow,
+            previous,
+            new: {
+              status: day.status,
+              effectiveArrivalAt: day.effective_arrival_at,
+              capturedAt: day.captured_at,
+              minutesLate: day.minutes_late,
+            },
           },
         });
       }
@@ -495,13 +525,13 @@ function fakeAttendanceAdapter(options = {}) {
       const explanation = values.explanation || "";
       if (
         day.worker_reason_category === values.category &&
-        (day.worker_reason_explanation || "") === explanation &&
-        day.worker_reason_review_outcome === "pending"
+        (day.worker_reason_explanation || "") === explanation
       ) {
         return {
           outcome: "already_submitted",
           attendance_day_id: day.id,
           reason_revision: day.worker_reason_revision,
+          review_outcome: day.worker_reason_review_outcome,
         };
       }
       const previous = {
@@ -515,6 +545,7 @@ function fakeAttendanceAdapter(options = {}) {
       day.worker_reason_submitted_at = currentNow;
       day.worker_reason_revision += 1;
       day.worker_reason_review_outcome = "pending";
+      day.worker_reason_reviewed_by_user_id = null;
       day.worker_reason_reviewed_at = null;
       day.attendance_events.push({
         id: uuid(),
@@ -534,6 +565,7 @@ function fakeAttendanceAdapter(options = {}) {
         outcome: "submitted",
         attendance_day_id: day.id,
         reason_revision: day.worker_reason_revision,
+        review_outcome: day.worker_reason_review_outcome,
       };
     },
     async reviewLateReason(values) {
@@ -560,6 +592,7 @@ function fakeAttendanceAdapter(options = {}) {
         revision: day.worker_reason_review_revision,
       };
       day.worker_reason_review_outcome = values.outcome;
+      day.worker_reason_reviewed_by_user_id = values.actorUserId;
       day.worker_reason_reviewed_at = currentNow;
       day.worker_reason_review_revision += 1;
       day.attendance_events.push({
@@ -740,6 +773,15 @@ test("attendance timing uses the project timezone and existing ten-minute grace"
     }).status,
     "late",
   );
+  assert.deepEqual(
+    arrivalStatus({
+      arrivalAt: "2026-09-16T06:00:00.000Z",
+      workDate: TEST_DATE,
+      shiftStartTime: "07:30",
+      timeZone: "Europe/London",
+    }),
+    { status: "on_time", minutesLate: 0, localDate: TEST_DATE, localTime: "07:00" },
+  );
 });
 
 test("expected work days respect placement dates, weekdays and effective terminal dates", () => {
@@ -797,6 +839,101 @@ test("completed and released placements retain only historically valid expected 
   });
   assert.equal(placementExpectedOnDate(released, "2026-09-15"), true);
   assert.equal(placementExpectedOnDate(released, "2026-09-17"), false);
+});
+
+test("Phase 3C date-semantic terminal evidence is stable across project timezones", () => {
+  for (const timezone of [
+    "Europe/London",
+    "America/New_York",
+    "Asia/Tokyo",
+  ]) {
+    const manualCompletion = placementRow({
+      status: "completed",
+      current_estimated_end_date: "2026-10-31",
+      ended_at: "2026-09-17T00:00:00.000Z",
+      placement_lifecycle_events: [{
+        event_type: "completed",
+        effective_at: "2026-09-17T00:00:00.000Z",
+      }],
+      project_requirements: {
+        ...placementRow().project_requirements,
+        projects: {
+          ...placementRow().project_requirements.projects,
+          timezone,
+        },
+      },
+    });
+    assert.equal(
+      placementEffectiveAttendanceEndDate(manualCompletion),
+      "2026-09-17",
+      timezone,
+    );
+  }
+});
+
+test("terminal attendance uses canonical scheduled and lifecycle dates before ended_at", () => {
+  const scenarios = [
+    placementRow({
+      status: "active",
+      scheduled_end_date: "2026-09-17",
+    }),
+    placementRow({
+      status: "released",
+      scheduled_end_date: "2026-09-17",
+      placement_lifecycle_events: [{
+        event_type: "worker_end_requested",
+        effective_at: "2026-09-17T00:00:00.000Z",
+      }],
+    }),
+    placementRow({
+      status: "completed",
+      placement_lifecycle_events: [{
+        event_type: "completed",
+        effective_at: "2026-09-17T00:00:00.000Z",
+      }],
+      ended_at: "2026-09-17T00:00:00.000Z",
+    }),
+    placementRow({
+      status: "completed",
+      current_estimated_end_date: "2026-09-17",
+      placement_lifecycle_events: [{
+        event_type: "completed",
+        reason_code: "natural_completion",
+        effective_at: "2026-09-17T00:00:00.000Z",
+      }],
+      ended_at: "2026-09-18T02:00:00.000Z",
+    }),
+    placementRow({
+      status: "released",
+      scheduled_end_date: "2026-09-17",
+      placement_lifecycle_events: [{
+        event_type: "released",
+        effective_at: "2026-09-17T00:00:00.000Z",
+      }],
+      ended_at: "2026-09-17T02:00:00.000Z",
+    }),
+  ];
+  for (const placement of scenarios) {
+    assert.equal(placementEffectiveAttendanceEndDate(placement), "2026-09-17");
+  }
+
+  const realTimestampFallback = placementRow({
+    status: "released",
+    current_no_fixed_end_date: true,
+    current_estimated_end_date: null,
+    ended_at: "2026-09-17T02:00:00.000Z",
+    project_requirements: {
+      ...placementRow().project_requirements,
+      projects: {
+        ...placementRow().project_requirements.projects,
+        timezone: "America/New_York",
+      },
+    },
+  });
+  assert.equal(
+    placementEffectiveAttendanceEndDate(realTimestampFallback),
+    "2026-09-16",
+  );
 });
 
 test("early completion and pre-start stand-down stop expected attendance at the effective date", () => {
@@ -1075,12 +1212,80 @@ test("daily site QR is opaque, hashed at rest, date-scoped and safely regenerate
   const stored = adapter.siteTokens.get(hashCapability(first.token));
   assert.equal(stored.token_hash, hashCapability(first.token));
   assert.equal(JSON.stringify(stored).includes(first.token), false);
+  const additionalIssue = await api.issueSiteQr(companyPrincipal(), PROJECT_A, {
+    workDate: TEST_DATE,
+  });
   const next = await api.issueSiteQr(companyPrincipal(), PROJECT_A, {
     workDate: TEST_DATE,
     revokeExisting: true,
   });
   assert.equal(adapter.siteTokens.get(hashCapability(first.token)).revoked_at, TEST_NOW);
+  assert.equal(
+    adapter.siteTokens.get(hashCapability(additionalIssue.token)).revoked_at,
+    TEST_NOW,
+  );
   assert.notEqual(next.id, first.id);
+  assert.equal(
+    [...adapter.siteTokens.values()].filter((token) => !token.revoked_at).length,
+    1,
+  );
+});
+
+test("default site QR uses the project-local date on mixed day and night projects", async () => {
+  const afterMidnight = "2026-09-17T04:45:00.000Z";
+  const overnightAdapter = fakeAttendanceAdapter({
+    now: afterMidnight,
+    placement: {
+      agreed_working_days: ["wednesday"],
+      agreed_shift_start_time: "20:00",
+      agreed_shift_finish_time: "06:00",
+    },
+  });
+  const overnightApi = service(overnightAdapter, afterMidnight);
+  const previousQr = await overnightApi.issueSiteQr(
+    companyPrincipal(),
+    PROJECT_A,
+    { workDate: "2026-09-16" },
+  );
+  const previousScan = await overnightApi.scanSiteQr(workerPrincipal(), {
+    token: previousQr.token,
+  });
+  assert.equal(previousScan.attendance.workDate, "2026-09-16");
+  const defaultQr = await overnightApi.issueSiteQr(
+    companyPrincipal(),
+    PROJECT_A,
+  );
+  assert.equal(defaultQr.workDate, "2026-09-17");
+
+  const dayAdapter = fakeAttendanceAdapter({
+    now: afterMidnight,
+    placement: {
+      agreed_working_days: ["thursday"],
+      agreed_shift_start_time: "05:30",
+      agreed_shift_finish_time: "14:00",
+    },
+  });
+  const dayApi = service(dayAdapter, afterMidnight);
+  const todayQr = await dayApi.issueSiteQr(companyPrincipal(), PROJECT_A);
+  const todayScan = await dayApi.scanSiteQr(workerPrincipal(), {
+    token: todayQr.token,
+  });
+  assert.equal(todayQr.workDate, "2026-09-17");
+  assert.equal(todayScan.attendance.workDate, "2026-09-17");
+
+  const newYorkNow = "2026-09-17T02:00:00.000Z";
+  const newYorkApi = service(
+    fakeAttendanceAdapter({
+      now: newYorkNow,
+      timezone: "America/New_York",
+    }),
+    newYorkNow,
+  );
+  const newYorkQr = await newYorkApi.issueSiteQr(
+    companyPrincipal(),
+    PROJECT_A,
+  );
+  assert.equal(newYorkQr.workDate, "2026-09-16");
 });
 
 test("worker site scan creates one canonical attendance day and duplicate scan is idempotent", async () => {
@@ -1203,6 +1408,120 @@ test("supervisor after-midnight scan resolves the prior overnight shift and pres
   assert.equal(result.attendance.effectiveArrivalAt, observedAt);
   assert.equal(result.attendance.capturedAt, capturedAt);
   assert.equal(result.attendance.minutesLate, 260);
+});
+
+test("supervisor retries key audit history from the final canonical arrival", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const api = service(adapter);
+  const qr = await api.issueWorkerQr(workerPrincipal());
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  adapter.setNow("2026-09-16T06:36:00.000Z");
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  const day = await adapter.getAttendanceDay(DAY_A);
+  const events = day.attendance_events.filter(
+    (event) => event.event_type === "supervisor_worker_qr_scan",
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0].effective_at, TEST_NOW);
+});
+
+test("an earlier supervisor arrival changes attendance and creates one new audit event", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const api = service(adapter);
+  const qr = await api.issueWorkerQr(workerPrincipal());
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  adapter.setNow("2026-09-16T06:36:00.000Z");
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+    observedArrivalAt: "2026-09-16T06:25:00.000Z",
+  });
+  const day = await adapter.getAttendanceDay(DAY_A);
+  const events = day.attendance_events.filter(
+    (event) => event.event_type === "supervisor_worker_qr_scan",
+  );
+  assert.equal(day.effective_arrival_at, "2026-09-16T06:25:00.000Z");
+  assert.equal(events.length, 2);
+  assert.equal(events[1].metadata.previous.effectiveArrivalAt, TEST_NOW);
+  assert.equal(
+    events[1].metadata.new.effectiveArrivalAt,
+    "2026-09-16T06:25:00.000Z",
+  );
+});
+
+test("different authorised actors can attest the same canonical supervisor arrival", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const api = service(adapter);
+  const qr = await api.issueWorkerQr(workerPrincipal());
+  const observedArrivalAt = "2026-09-16T06:25:00.000Z";
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+    observedArrivalAt,
+  });
+  await api.scanWorkerQr({
+    ...companyPrincipal("Supervisor"),
+    authUserId: SUPERVISOR_A_2,
+  }, {
+    projectId: PROJECT_A,
+    token: qr.token,
+    observedArrivalAt,
+  });
+  const day = await adapter.getAttendanceDay(DAY_A);
+  const events = day.attendance_events.filter(
+    (event) => event.event_type === "supervisor_worker_qr_scan",
+  );
+  assert.equal(events.length, 2);
+  assert.deepEqual(
+    events.map((event) => event.actor_user_id),
+    [SUPERVISOR_A, SUPERVISOR_A_2],
+  );
+});
+
+test("a later supervisor retry cannot inherit another actor's earlier attestation", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const api = service(adapter);
+  const qr = await api.issueWorkerQr(workerPrincipal());
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  adapter.setNow("2026-09-16T06:36:00.000Z");
+  await api.scanWorkerQr({
+    ...companyPrincipal("Supervisor"),
+    authUserId: SUPERVISOR_A_2,
+  }, {
+    projectId: PROJECT_A,
+    token: qr.token,
+    observedArrivalAt: "2026-09-16T06:25:00.000Z",
+  });
+  adapter.setNow("2026-09-16T06:37:00.000Z");
+  await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+  });
+  const day = await adapter.getAttendanceDay(DAY_A);
+  const events = day.attendance_events.filter(
+    (event) => event.event_type === "supervisor_worker_qr_scan",
+  );
+  assert.equal(events.length, 2);
+  assert.deepEqual(
+    events.map((event) => event.actor_user_id),
+    [SUPERVISOR_A, SUPERVISOR_A_2],
+  );
 });
 
 test("issuing a new worker QR revokes the previous active capability", async () => {
@@ -1422,6 +1741,91 @@ test("lateness reason retries are idempotent and changed explanations remain aud
   );
   assert.equal(events.length, 2);
   assert.equal(events[1].metadata.previous.explanation, "Collision on M1");
+});
+
+test("identical lateness retries preserve approved and rejected reviews", async () => {
+  for (const outcome of ["approved_exception", "rejected"]) {
+    const adapter = fakeAttendanceAdapter();
+    adapter.days.set(
+      `${PLACEMENT_A}:${TEST_DATE}`,
+      attendanceRow({
+        status: "late",
+        effective_arrival_at: TEST_NOW,
+        captured_at: TEST_NOW,
+        minutes_late: 15,
+      }),
+    );
+    const api = service(adapter);
+    await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+      category: "Road traffic",
+      explanation: "Collision on M1",
+    });
+    await api.reviewLatenessReason(
+      companyPrincipal("Manager"),
+      PROJECT_A,
+      DAY_A,
+      { outcome, reason: "Reviewed evidence" },
+    );
+    const before = await adapter.getAttendanceDay(DAY_A);
+    const retry = await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+      category: "Road traffic",
+      explanation: "Collision on M1",
+    });
+    const after = await adapter.getAttendanceDay(DAY_A);
+    assert.equal(retry.latenessReason.revision, 1);
+    assert.equal(retry.latenessReason.reviewOutcome, outcome);
+    assert.equal(after.worker_reason_review_outcome, outcome);
+    assert.equal(after.worker_reason_reviewed_at, before.worker_reason_reviewed_at);
+    assert.equal(
+      after.attendance_events.length,
+      before.attendance_events.length,
+    );
+  }
+});
+
+test("changed lateness explanation after review creates a new pending revision", async () => {
+  const adapter = fakeAttendanceAdapter();
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({
+      status: "late",
+      effective_arrival_at: TEST_NOW,
+      captured_at: TEST_NOW,
+      minutes_late: 15,
+    }),
+  );
+  const api = service(adapter);
+  await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+    category: "Road traffic",
+    explanation: "Collision on M1",
+  });
+  await api.reviewLatenessReason(
+    companyPrincipal("Manager"),
+    PROJECT_A,
+    DAY_A,
+    { outcome: "approved_exception", reason: "Incident verified" },
+  );
+  const changed = await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+    category: "Road traffic",
+    explanation: "Collision cleared; diversion remains",
+  });
+  const stored = await adapter.getAttendanceDay(DAY_A);
+  assert.equal(changed.latenessReason.revision, 2);
+  assert.equal(changed.latenessReason.reviewOutcome, "pending");
+  assert.equal(stored.worker_reason_reviewed_by_user_id, null);
+  assert.equal(stored.worker_reason_reviewed_at, null);
+  assert.equal(
+    stored.attendance_events.filter(
+      (event) => event.event_type === "lateness_exception_approved",
+    ).length,
+    1,
+  );
+  assert.equal(
+    stored.attendance_events.filter(
+      (event) => event.event_type === "worker_lateness_reason_submitted",
+    ).length,
+    2,
+  );
 });
 
 test("lateness review retries are idempotent and a changed decision is audited", async () => {
@@ -1814,7 +2218,25 @@ test("migration preserves terminal history and validates cross-midnight shifts b
     "utf8",
   );
   assert.match(sql, /attendance_placement_effective_end_date/);
-  assert.match(sql, /placement_lifecycle_events[\s\S]*event_type in \('released', 'completed'\)/);
+  const effectiveEndFunction = sql.match(
+    /create or replace function public\.attendance_placement_effective_end_date[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.match(
+    effectiveEndFunction,
+    /effective_at at time zone 'UTC'/,
+  );
+  assert.doesNotMatch(
+    effectiveEndFunction,
+    /effective_at at time zone v_timezone/,
+  );
+  assert.match(
+    effectiveEndFunction,
+    /'released', 'completed', 'worker_end_requested'/,
+  );
+  assert.match(
+    effectiveEndFunction,
+    /not v_has_terminal_evidence[\s\S]*ended_at at time zone v_timezone/,
+  );
   const expectedFunction = sql.match(
     /create or replace function public\.attendance_placement_expected[\s\S]*?\$\$;/,
   )?.[0] || "";
@@ -1827,6 +2249,47 @@ test("migration preserves terminal history and validates cross-midnight shifts b
   assert.match(sql, /SITE_QR_WRONG_DATE/);
   assert.match(sql, /v_arrival := coalesce\(p_observed_arrival_at, v_capture\)/);
   assert.match(sql, /capture_method = 'expected_day'[\s\S]*effective_arrival_at is null/);
+});
+
+test("migration defaults site QR issuance to the project-local date without an overnight backshift", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  const issueFunction = sql.match(
+    /create or replace function public\.issue_attendance_site_qr[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.match(
+    issueFunction,
+    /coalesce\(\s*p_work_date,\s*\(now\(\) at time zone v_project\.timezone\)::date\s*\)/,
+  );
+  assert.doesNotMatch(issueFunction, /v_local_now::date - 1/);
+  assert.match(
+    issueFunction,
+    /project_id = p_project_id[\s\S]*work_date = v_work_date[\s\S]*revoked_at is null/,
+  );
+});
+
+test("migration keys supervisor scans from actor and final canonical arrival", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  const scanFunction = sql.match(
+    /create or replace function public\.capture_supervisor_worker_qr[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.match(
+    scanFunction,
+    /p_actor_user_id::text \|\| ':' \|\| md5\(v_day\.effective_arrival_at::text\)/,
+  );
+  assert.match(
+    scanFunction,
+    /v_actor_type, v_capture, v_day\.effective_arrival_at/,
+  );
+  assert.match(
+    scanFunction,
+    /if v_arrival = v_day\.effective_arrival_at then/,
+  );
 });
 
 test("migration revisions make weekly submission and lateness retries auditable", () => {
@@ -1843,6 +2306,18 @@ test("migration revisions make weekly submission and lateness retries auditable"
   assert.match(sql, /'already_reviewed'[\s\S]*review_revision/);
   assert.match(sql, /'previous', v_previous[\s\S]*'new'/);
   assert.match(sql, /'sent_home'\)[\s\S]*ATTENDANCE_REASON_REQUIRED/);
+  const latenessFunction = sql.match(
+    /create or replace function public\.submit_attendance_lateness_reason[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.match(
+    latenessFunction,
+    /worker_reason_explanation is not distinct from v_explanation then/,
+  );
+  assert.doesNotMatch(
+    latenessFunction,
+    /worker_reason_review_outcome = 'pending' then/,
+  );
+  assert.match(latenessFunction, /'review_outcome', v_day\.worker_reason_review_outcome/);
 });
 
 test("worker QR issuance is serialised and constrained to one active token", () => {

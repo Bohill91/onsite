@@ -61,10 +61,16 @@ changes. Expected attendance is date-effective: it asks whether the worker was
 expected on that placement on the requested work date, rather than whether the
 placement is active now. The resolver combines the current fixed end, accepted
 extension state, scheduled end, terminal lifecycle effective date and terminal
-`ended_at` in the project timezone. Released and completed placements therefore
-retain legitimate attendance on or before their effective terminal date while
-rejecting dates after it. A terminal placement with no trustworthy end fails
-closed before its start date rather than creating future expected attendance.
+`ended_at`. Phase 3C lifecycle effective dates were stored as
+`date::timestamptz`, so attendance preserves their UTC date component instead
+of reinterpreting midnight through the project timezone. Canonical
+`scheduled_end_date` and `current_estimated_end_date` values take precedence;
+`ended_at` is converted in the project timezone only as a fallback for a real
+terminal timestamp with no date-semantic evidence. Released and completed
+placements therefore retain legitimate attendance on or before their effective
+terminal date without moving a New York date one day early. A terminal
+placement with no trustworthy end fails closed before its start date rather
+than creating future expected attendance.
 
 Accepted Phase 3C schedule changes are resolved by each attendance work date,
 including changes accepted now for later in the same week. Until a row is
@@ -83,7 +89,21 @@ only its SHA-256 hash, and returns the raw capability plus a standards-compliant
 SVG only in that issue response. A day-shift code expires at project-local
 midnight. Where an expected accepted shift crosses midnight, expiry may extend
 only through the latest legitimate overnight finish for that work date.
-Regeneration revokes active codes for the same project/date.
+When no work date is supplied, issuance always uses the current project-local
+calendar date. It never backshifts the new code because another worker remains
+on a previous-day overnight shift. The previous day's code remains valid until
+that shift's calculated expiry; issuing or regenerating that date after
+midnight requires the previous date explicitly.
+
+The server intentionally permits more than one unrevoked issue response for a
+project/date because it stores capability hashes only and cannot recover a raw
+code after the issue response. This keeps an already printed sign valid when a
+browser session has lost its in-memory copy. The UI still presents one current
+daily code. Explicit regeneration, under the locked project row, revokes every
+unrevoked code for that exact project/date before issuing the replacement, so
+all previous printed or saved copies stop working. A future recoverable-secret
+design could enforce a database-level single-active-token constraint without
+silently invalidating printed signs on an ordinary page reload.
 
 A worker scan authenticates the worker, resolves the capability server-side,
 derives project/date from the token, validates an eligible canonical placement,
@@ -114,8 +134,12 @@ optional observed arrival, resolves current-day versus previous overnight-shift
 work date, rejects future or invalid observations, and audits the actor. This
 prevents a delayed supervisor scan from automatically making the worker late.
 `captured_at` remains the real scan time while `effective_arrival_at` remains the
-attested arrival. Identical retries are idempotent; a genuinely earlier attested
-arrival creates reconstructable previous/new audit metadata. Concurrent
+attested arrival. Supervisor event identity is based on the attendance day,
+actor and final canonical effective arrival, so an omitted-time network retry
+or later scan that leaves the earlier arrival unchanged does not create another
+semantic event. A genuinely earlier attested arrival does, with reconstructable
+previous/new metadata; a different authorised actor may record a separate
+attestation of the same effective arrival. Concurrent
 worker/site and supervisor/worker scans keep the earliest valid effective
 arrival and its matching capture evidence.
 
@@ -135,6 +159,11 @@ decision; reliability scoring is not coupled to the value. Arrival is
 calculated against the snapshotted shift start in the project timezone, including
 DST. The browser cannot assert On time or Late for a QR scan.
 
+Phase 4 does not impose an early-arrival threshold. An otherwise valid scan
+before shift start is currently accepted and classified On time with zero late
+minutes. Whether substantially early scans should be restricted remains an
+explicit pre-launch product-policy decision.
+
 No scan never becomes a No show automatically. Materialised expected days remain
 Needs review until an authorised human resolves them. No show,
 `non_worker_fault`, `approved_absence` and `sent_home` require a reason.
@@ -152,6 +181,11 @@ Reason and review revisions make identical network retries idempotent while
 preserving previous/new category, explanation, outcome and review-note history
 when a worker or authorised reviewer makes a genuine change. An authorised
 reviewer can record `approved_exception` or `rejected`; both actions are audited.
+An identical category and normalised explanation remains idempotent after either
+review outcome: it returns the current revision/outcome without resetting the
+review, reviewer or timestamp and without adding another event. A changed
+category or explanation starts a new pending reason revision while retaining
+the earlier review event.
 
 The current product does not encode an exact ordinary monthly allowance or a
 separate strike allowance/cap. `LATE_EXCEPTION_POLICY` records that explicit
