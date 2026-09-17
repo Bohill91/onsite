@@ -205,7 +205,7 @@ label small { color: var(--ea-muted); font-size: .68rem; font-weight: 500; line-
   .ea-value-grid { margin-top: 28px; }
   .ea-referral-section { border-radius: 0; gap: 36px; margin-bottom: 72px; padding: 40px 20px; }
 }
-@media (max-width: 380px) {
+@media (max-width: 420px) {
   .ea-wordmark { font-size: 1.35rem; }
   .ea-path-toggle { grid-template-columns: 1fr; }
   .ea-share-actions { align-items: stretch; flex-direction: column; }
