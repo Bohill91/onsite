@@ -204,46 +204,177 @@ function projectTimeParts(value, timeZone = "Europe/London") {
   };
 }
 
-function placementExpectedOnDate(placement = {}, workDate) {
+function dateOffset(workDate, days) {
   const date = cleanDate(workDate);
-  if (!date) return false;
-  if (!["upcoming", "active"].includes(String(placement.status || ""))) {
-    return false;
+  if (!date || !Number.isInteger(days)) return "";
+  const value = new Date(`${date}T12:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function placementEffectiveAttendanceEndDate(placement = {}) {
+  const candidates = [];
+  const terminal = ["released", "completed", "cancelled"].includes(
+    placement.status,
+  );
+  let hasTerminalEvidence = false;
+  const addCandidate = (value) => {
+    const date = cleanDate(value);
+    if (date) candidates.push(date);
+  };
+  addCandidate(placement.scheduled_end_date || placement.scheduledEndDate);
+  if (
+    terminal &&
+    cleanDate(placement.scheduled_end_date || placement.scheduledEndDate)
+  ) {
+    hasTerminalEvidence = true;
   }
-  const startDate = cleanDate(
-    placement.current_start_date || placement.currentStartDate,
-  );
-  const fixedEndDate = cleanDate(
-    placement.current_estimated_end_date || placement.currentEstimatedEndDate,
-  );
-  const scheduledEndDate = cleanDate(
-    placement.scheduled_end_date || placement.scheduledEndDate,
-  );
   const noFixedEnd = !!(
     placement.current_no_fixed_end_date ?? placement.currentNoFixedEndDate
   );
+  if (!noFixedEnd) {
+    addCandidate(
+      placement.current_estimated_end_date || placement.currentEstimatedEndDate,
+    );
+  }
+  const lifecycleEvents = Array.isArray(placement.placement_lifecycle_events)
+    ? placement.placement_lifecycle_events
+    : Array.isArray(placement.lifecycleEvents)
+      ? placement.lifecycleEvents
+      : [];
+  lifecycleEvents
+    .filter((event) =>
+      ["released", "completed", "cancelled"].includes(
+        String(event.event_type || event.type || ""),
+      ),
+    )
+    .forEach((event) => {
+      const effectiveDate = cleanDate(event.effective_at || event.effectiveAt);
+      addCandidate(effectiveDate);
+      if (effectiveDate) hasTerminalEvidence = true;
+    });
+  if (terminal) {
+    addCandidate(placement.ended_at || placement.endedAt);
+    if (cleanDate(placement.ended_at || placement.endedAt)) {
+      hasTerminalEvidence = true;
+    }
+    if (!hasTerminalEvidence) {
+      const startDate = cleanDate(
+        placement.current_start_date || placement.currentStartDate,
+      );
+      return startDate ? dateOffset(startDate, -1) : "";
+    }
+  }
+  return candidates.sort()[0] || "";
+}
+
+function placementExpectedOnDate(placement = {}, workDate) {
+  const date = cleanDate(workDate);
+  if (!date) return false;
+  const startDate = cleanDate(
+    placement.current_start_date || placement.currentStartDate,
+  );
+  const endDate = placementEffectiveAttendanceEndDate(placement);
   if (!startDate || date < startDate) return false;
-  if (scheduledEndDate && date > scheduledEndDate) return false;
-  if (!noFixedEnd && fixedEndDate && date > fixedEndDate) return false;
+  if (endDate && date > endDate) return false;
   return placementTermsOnDate(placement, date).workingDays.includes(
     weekdayForDate(date),
   );
+}
+
+function timestampMatchesWorkDate({
+  timestamp,
+  workDate,
+  shiftStartTime,
+  shiftFinishTime,
+  timeZone = "Europe/London",
+} = {}) {
+  const local = projectTimeParts(timestamp, timeZone);
+  const date = cleanDate(workDate);
+  const start = cleanTime(shiftStartTime);
+  const finish = cleanTime(shiftFinishTime);
+  if (!local || !date || !start) return false;
+  if (local.date === date) return true;
+  if (!finish) return false;
+  const overnight = finish <= start;
+  return (
+    overnight &&
+    local.date === dateOffset(date, 1) &&
+    local.time <= finish
+  );
+}
+
+function resolvePlacementWorkDate(
+  placement = {},
+  timestamp,
+  timeZone = "Europe/London",
+) {
+  const local = projectTimeParts(timestamp, timeZone);
+  if (!local) return "";
+  const previousDate = dateOffset(local.date, -1);
+  const previousTerms = placementTermsOnDate(placement, previousDate);
+  if (
+    placementExpectedOnDate(placement, previousDate) &&
+    previousTerms.shiftFinishTime <= previousTerms.shiftStartTime &&
+    timestampMatchesWorkDate({
+      timestamp,
+      workDate: previousDate,
+      shiftStartTime: previousTerms.shiftStartTime,
+      shiftFinishTime: previousTerms.shiftFinishTime,
+      timeZone,
+    })
+  ) {
+    return previousDate;
+  }
+  const currentTerms = placementTermsOnDate(placement, local.date);
+  return placementExpectedOnDate(placement, local.date) &&
+    timestampMatchesWorkDate({
+      timestamp,
+      workDate: local.date,
+      shiftStartTime: currentTerms.shiftStartTime,
+      shiftFinishTime: currentTerms.shiftFinishTime,
+      timeZone,
+    })
+    ? local.date
+    : "";
 }
 
 function arrivalStatus({
   arrivalAt,
   workDate,
   shiftStartTime,
+  shiftFinishTime = "",
   timeZone = "Europe/London",
   graceMinutes = ATTENDANCE_GRACE_MINUTES,
 } = {}) {
   const local = projectTimeParts(arrivalAt, timeZone);
   const date = cleanDate(workDate);
   const start = cleanTime(shiftStartTime);
-  if (!local || !date || !start || local.date !== date) return null;
+  if (
+    !local ||
+    !date ||
+    !start ||
+    !timestampMatchesWorkDate({
+      timestamp: arrivalAt,
+      workDate: date,
+      shiftStartTime: start,
+      shiftFinishTime,
+      timeZone,
+    })
+  ) {
+    return null;
+  }
   const [hours, minutes] = start.split(":").map(Number);
   const shiftMinutes = hours * 60 + minutes;
-  const minutesLate = Math.max(0, local.minutes - shiftMinutes);
+  const dayOffset = Math.round(
+    (Date.parse(`${local.date}T12:00:00.000Z`) -
+      Date.parse(`${date}T12:00:00.000Z`)) /
+      86400000,
+  );
+  const minutesLate = Math.max(
+    0,
+    local.minutes + dayOffset * 1440 - shiftMinutes,
+  );
   return {
     status: minutesLate <= graceMinutes ? "on_time" : "late",
     minutesLate,
@@ -287,9 +418,12 @@ module.exports = {
   cleanDate,
   cleanTime,
   normalizeWorkingDays,
+  placementEffectiveAttendanceEndDate,
   placementExpectedOnDate,
   placementTermsOnDate,
   projectTimeParts,
   reliabilityInput,
+  resolvePlacementWorkDate,
+  timestampMatchesWorkDate,
   weekdayForDate,
 };

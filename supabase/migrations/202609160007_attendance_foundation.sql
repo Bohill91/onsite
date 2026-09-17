@@ -64,6 +64,7 @@ create table public.attendance_week_submissions (
   week_start date not null,
   week_end date not null,
   status text not null default 'draft',
+  submission_revision integer not null default 0,
   submitted_by_user_id uuid,
   submitted_at timestamptz,
   reopened_by_user_id uuid,
@@ -91,6 +92,11 @@ create table public.attendance_week_submissions (
     check (extract(isodow from week_start) = 1),
   constraint attendance_week_submissions_status_valid
     check (status in ('draft', 'submitted', 'reopened')),
+  constraint attendance_week_submissions_revision_valid
+    check (
+      submission_revision >= 0
+      and (status = 'draft' or submission_revision >= 1)
+    ),
   constraint attendance_week_submissions_state_valid
     check (
       (status = 'draft' and submitted_at is null)
@@ -121,9 +127,11 @@ create table public.attendance_days (
   worker_reason_category text,
   worker_reason_explanation text,
   worker_reason_submitted_at timestamptz,
+  worker_reason_revision integer not null default 0,
   worker_reason_review_outcome text,
   worker_reason_reviewed_by_user_id uuid,
   worker_reason_reviewed_at timestamptz,
+  worker_reason_review_revision integer not null default 0,
   outcome_reason text,
   private_company_notes text,
   capture_latitude double precision,
@@ -196,6 +204,11 @@ create table public.attendance_days (
         'rejected',
         'not_required'
       )
+    ),
+  constraint attendance_days_reason_revisions_valid
+    check (
+      worker_reason_revision >= 0
+      and worker_reason_review_revision >= 0
     ),
   constraint attendance_days_location_valid
     check (
@@ -341,6 +354,10 @@ create index worker_attendance_qr_tokens_lookup_idx
   on public.worker_attendance_qr_tokens(token_hash, expires_at)
   where revoked_at is null;
 
+create unique index worker_attendance_qr_tokens_one_active_idx
+  on public.worker_attendance_qr_tokens(worker_id)
+  where revoked_at is null;
+
 create or replace function public.set_attendance_updated_at()
 returns trigger
 language plpgsql
@@ -412,6 +429,11 @@ language plpgsql
 set search_path = pg_catalog, public
 as $$
 begin
+  if current_user = 'postgres'
+    and current_setting('onsite.attendance_event_maintenance', true) = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
   raise exception using
     errcode = '42501',
     message = 'Attendance audit events are append-only.';
@@ -562,6 +584,65 @@ begin
 end;
 $$;
 
+create or replace function public.attendance_placement_effective_end_date(
+  p_placement public.placements
+)
+returns date
+language plpgsql
+stable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_end_date date;
+  v_lifecycle_end date;
+  v_ended_date date;
+  v_timezone text := 'Europe/London';
+  v_has_terminal_evidence boolean := false;
+begin
+  select coalesce(project.timezone, 'Europe/London') into v_timezone
+  from public.project_requirements requirement
+  join public.projects project on project.id = requirement.project_id
+  where requirement.id = p_placement.project_requirement_id;
+  if not p_placement.current_no_fixed_end_date then
+    v_end_date := p_placement.current_estimated_end_date;
+  end if;
+  if p_placement.scheduled_end_date is not null
+    and (v_end_date is null or p_placement.scheduled_end_date < v_end_date) then
+    v_end_date := p_placement.scheduled_end_date;
+  end if;
+  if p_placement.status in ('released', 'completed', 'cancelled')
+    and p_placement.scheduled_end_date is not null then
+    v_has_terminal_evidence := true;
+  end if;
+  select min((lifecycle_event.effective_at at time zone v_timezone)::date)
+  into v_lifecycle_end
+  from public.placement_lifecycle_events lifecycle_event
+  where lifecycle_event.placement_id = p_placement.id
+    and lifecycle_event.event_type in ('released', 'completed')
+    and lifecycle_event.effective_at is not null;
+  if v_lifecycle_end is not null
+    and (v_end_date is null or v_lifecycle_end < v_end_date) then
+    v_end_date := v_lifecycle_end;
+  end if;
+  if v_lifecycle_end is not null then
+    v_has_terminal_evidence := true;
+  end if;
+  if p_placement.status in ('released', 'completed', 'cancelled')
+    and p_placement.ended_at is not null then
+    v_ended_date := (p_placement.ended_at at time zone v_timezone)::date;
+    if v_end_date is null or v_ended_date < v_end_date then
+      v_end_date := v_ended_date;
+    end if;
+    v_has_terminal_evidence := true;
+  end if;
+  if p_placement.status in ('released', 'completed', 'cancelled')
+    and not v_has_terminal_evidence then
+    return p_placement.current_start_date - 1;
+  end if;
+  return v_end_date;
+end;
+$$;
+
 create or replace function public.attendance_placement_expected(
   p_placement public.placements,
   p_work_date date
@@ -572,16 +653,10 @@ stable
 set search_path = pg_catalog, public
 as $$
   select
-    p_placement.status in ('upcoming', 'active')
-    and p_work_date >= p_placement.current_start_date
+    p_work_date >= p_placement.current_start_date
     and (
-      p_placement.scheduled_end_date is null
-      or p_work_date <= p_placement.scheduled_end_date
-    )
-    and (
-      p_placement.current_no_fixed_end_date
-      or p_placement.current_estimated_end_date is null
-      or p_work_date <= p_placement.current_estimated_end_date
+      public.attendance_placement_effective_end_date(p_placement) is null
+      or p_work_date <= public.attendance_placement_effective_end_date(p_placement)
     )
     and exists (
       select 1
@@ -589,6 +664,77 @@ as $$
       where lower(trim(working_day)) = lower(trim(to_char(p_work_date, 'FMDay')))
     )
   from public.attendance_placement_terms(p_placement, p_work_date) terms;
+$$;
+
+create or replace function public.attendance_timestamp_matches_work_date(
+  p_timestamp timestamptz,
+  p_work_date date,
+  p_shift_start time,
+  p_shift_finish time,
+  p_timezone text
+)
+returns boolean
+language plpgsql
+stable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_local timestamp := p_timestamp at time zone p_timezone;
+begin
+  if v_local::date = p_work_date then return true; end if;
+  return p_shift_finish <= p_shift_start
+    and v_local::date = p_work_date + 1
+    and v_local::time <= p_shift_finish;
+end;
+$$;
+
+create or replace function public.attendance_resolve_placement_work_date(
+  p_placement public.placements,
+  p_timestamp timestamptz,
+  p_timezone text
+)
+returns date
+language plpgsql
+stable
+set search_path = pg_catalog, public
+as $$
+declare
+  v_local_date date := (p_timestamp at time zone p_timezone)::date;
+  v_candidate date;
+  v_terms record;
+begin
+  v_candidate := v_local_date - 1;
+  select * into v_terms
+  from public.attendance_placement_terms(p_placement, v_candidate);
+  if public.attendance_placement_expected(p_placement, v_candidate)
+    and v_terms.shift_finish_time <= v_terms.shift_start_time
+    and public.attendance_timestamp_matches_work_date(
+      p_timestamp, v_candidate, v_terms.shift_start_time,
+      v_terms.shift_finish_time, p_timezone
+    ) then
+    return v_candidate;
+  end if;
+  v_candidate := v_local_date;
+  select * into v_terms
+  from public.attendance_placement_terms(p_placement, v_candidate);
+  if public.attendance_placement_expected(p_placement, v_candidate)
+    and public.attendance_timestamp_matches_work_date(
+      p_timestamp, v_candidate, v_terms.shift_start_time,
+      v_terms.shift_finish_time, p_timezone
+    ) then
+    return v_candidate;
+  end if;
+  return null;
+end;
+$$;
+
+create or replace function public.attendance_grace_minutes()
+returns integer
+language sql
+immutable
+set search_path = pg_catalog, public
+as $$
+  select 10;
 $$;
 
 create or replace function public.attendance_arrival_minutes_late(
@@ -625,17 +771,18 @@ as $$
 declare
   v_authority jsonb;
 begin
+  v_authority := public.attendance_project_authority(p_actor_user_id, p_project_id);
+  if coalesce(v_authority->>'role', '') = 'administrator' then return 'administrator'; end if;
+  if coalesce((v_authority->>'is_attendance_manager')::boolean, false) then return 'attendance_manager'; end if;
+  if coalesce(v_authority->>'role', '') = 'supervisor' then return 'supervisor'; end if;
+  if coalesce(v_authority->>'role', '') in ('manager') then return 'company'; end if;
   if exists (
     select 1 from public.worker_profiles worker
     where worker.user_id = p_actor_user_id
   ) then
     return 'worker';
   end if;
-  v_authority := public.attendance_project_authority(p_actor_user_id, p_project_id);
-  if coalesce(v_authority->>'role', '') = 'administrator' then return 'administrator'; end if;
-  if coalesce((v_authority->>'is_attendance_manager')::boolean, false) then return 'attendance_manager'; end if;
-  if coalesce(v_authority->>'role', '') = 'supervisor' then return 'supervisor'; end if;
-  return 'company';
+  return 'system';
 end;
 $$;
 
@@ -748,7 +895,9 @@ as $$
 declare
   v_project public.projects%rowtype;
   v_work_date date;
+  v_local_now timestamp;
   v_day_end timestamptz;
+  v_overnight_end timestamptz;
   v_expiry timestamptz;
   v_row public.attendance_site_qr_tokens%rowtype;
 begin
@@ -757,8 +906,43 @@ begin
   if v_project.status not in ('open', 'active') then
     raise exception using errcode = '22023', message = 'Site sign-in is not available for this project.', detail = 'PROJECT_NOT_ACTIVE';
   end if;
-  v_work_date := coalesce(p_work_date, (now() at time zone v_project.timezone)::date);
+  v_local_now := now() at time zone v_project.timezone;
+  v_work_date := coalesce(p_work_date, v_local_now::date);
+  if p_work_date is null and exists (
+    select 1
+    from public.placements placement
+    join public.project_requirements requirement
+      on requirement.id = placement.project_requirement_id
+    join lateral public.attendance_placement_terms(
+      placement, v_local_now::date - 1
+    ) terms on true
+    where requirement.project_id = p_project_id
+      and public.attendance_placement_expected(
+        placement, v_local_now::date - 1
+      )
+      and terms.shift_finish_time <= terms.shift_start_time
+      and public.attendance_timestamp_matches_work_date(
+        now(), v_local_now::date - 1, terms.shift_start_time,
+        terms.shift_finish_time, v_project.timezone
+      )
+  ) then
+    v_work_date := v_local_now::date - 1;
+  end if;
   v_day_end := ((v_work_date + 1)::timestamp at time zone v_project.timezone);
+  select max(
+    ((v_work_date + 1)::timestamp + terms.shift_finish_time)
+      at time zone v_project.timezone
+  )
+  into v_overnight_end
+  from public.placements placement
+  join public.project_requirements requirement
+    on requirement.id = placement.project_requirement_id
+  join lateral public.attendance_placement_terms(placement, v_work_date) terms
+    on true
+  where requirement.project_id = p_project_id
+    and public.attendance_placement_expected(placement, v_work_date)
+    and terms.shift_finish_time <= terms.shift_start_time;
+  v_day_end := greatest(v_day_end, coalesce(v_overnight_end, v_day_end));
   v_expiry := least(coalesce(p_expires_at, v_day_end), v_day_end);
   if p_token_hash !~ '^[0-9a-f]{64}$' or v_expiry <= now() then
     raise exception using errcode = '22023', message = 'Site QR details are invalid.', detail = 'INVALID_SITE_QR';
@@ -800,7 +984,8 @@ declare
 begin
   select * into v_worker
   from public.worker_profiles worker
-  where worker.user_id = p_actor_user_id;
+  where worker.user_id = p_actor_user_id
+  for update;
   if not found then
     raise exception using errcode = '42501', message = 'Worker access is required.', detail = 'WORKER_REQUIRED';
   end if;
@@ -862,9 +1047,6 @@ begin
   if not found then
     raise exception using errcode = '22023', message = 'This site QR is invalid or has expired.', detail = 'INVALID_SITE_QR';
   end if;
-  if (v_arrival at time zone v_project.timezone)::date <> v_token.work_date then
-    raise exception using errcode = '22023', message = 'This site QR is not valid today.', detail = 'SITE_QR_WRONG_DATE';
-  end if;
   select * into v_worker from public.worker_profiles worker where worker.user_id = p_actor_user_id;
   if not found then
     raise exception using errcode = '42501', message = 'Worker access is required.', detail = 'WORKER_REQUIRED';
@@ -883,13 +1065,25 @@ begin
   end if;
   select * into v_terms
   from public.attendance_placement_terms(v_placement, v_token.work_date);
+  if not public.attendance_timestamp_matches_work_date(
+    v_arrival,
+    v_token.work_date,
+    v_terms.shift_start_time,
+    v_terms.shift_finish_time,
+    v_project.timezone
+  ) then
+    raise exception using errcode = '22023', message = 'This site QR is not valid for the worker shift.', detail = 'SITE_QR_WRONG_DATE';
+  end if;
   v_minutes := public.attendance_arrival_minutes_late(
     v_arrival,
     v_token.work_date,
     v_terms.shift_start_time,
     v_project.timezone
   );
-  v_status := case when v_minutes <= 10 then 'on_time' else 'late' end;
+  v_status := case
+    when v_minutes <= public.attendance_grace_minutes() then 'on_time'
+    else 'late'
+  end;
   select day.effective_arrival_at into v_existing_arrival
   from public.attendance_days day
   where day.placement_id = v_placement.id and day.work_date = v_token.work_date;
@@ -993,15 +1187,18 @@ declare
   v_token public.worker_attendance_qr_tokens%rowtype;
   v_project public.projects%rowtype;
   v_placement public.placements%rowtype;
+  v_placement_id uuid;
   v_terms record;
   v_day public.attendance_days%rowtype;
   v_capture timestamptz := clock_timestamp();
-  v_arrival timestamptz := coalesce(p_observed_arrival_at, clock_timestamp());
+  v_arrival timestamptz;
   v_work_date date;
   v_minutes integer;
   v_status text;
   v_actor_type text;
+  v_previous jsonb;
 begin
+  v_arrival := coalesce(p_observed_arrival_at, v_capture);
   perform public.attendance_require_authority(p_actor_user_id, p_project_id, 'scan');
   select * into v_project from public.projects project where project.id = p_project_id for update;
   select * into v_token
@@ -1016,28 +1213,56 @@ begin
   if v_arrival > v_capture then
     raise exception using errcode = '22023', message = 'Observed arrival cannot be in the future.', detail = 'INVALID_OBSERVED_ARRIVAL';
   end if;
-  v_work_date := (v_capture at time zone v_project.timezone)::date;
-  if (v_arrival at time zone v_project.timezone)::date <> v_work_date then
-    raise exception using errcode = '22023', message = 'Observed arrival must be for the current project work date.', detail = 'INVALID_OBSERVED_ARRIVAL';
-  end if;
-  select placement.* into v_placement
+  select placement.id,
+    public.attendance_resolve_placement_work_date(
+      placement, v_arrival, v_project.timezone
+    )
+  into v_placement_id, v_work_date
   from public.placements placement
   join public.project_requirements requirement on requirement.id = placement.project_requirement_id
   where placement.worker_id = v_token.worker_id
     and requirement.project_id = p_project_id
-    and public.attendance_placement_expected(placement, v_work_date)
+    and public.attendance_resolve_placement_work_date(
+      placement, v_arrival, v_project.timezone
+    ) is not null
   order by placement.id
-  limit 1
-  for update of placement;
+  limit 1;
   if not found then
+    raise exception using errcode = '42501', message = 'This worker is not expected on the project today.', detail = 'NOT_EXPECTED_TODAY';
+  end if;
+  select * into v_placement
+  from public.placements placement
+  where placement.id = v_placement_id
+  for update;
+  v_work_date := public.attendance_resolve_placement_work_date(
+    v_placement, v_arrival, v_project.timezone
+  );
+  if v_work_date is null then
     raise exception using errcode = '42501', message = 'This worker is not expected on the project today.', detail = 'NOT_EXPECTED_TODAY';
   end if;
   select * into v_terms
   from public.attendance_placement_terms(v_placement, v_work_date);
+  select * into v_day
+  from public.attendance_days day
+  where day.placement_id = v_placement.id
+    and day.work_date = v_work_date
+  for update;
+  if found and v_day.finalised_at is not null then
+    raise exception using errcode = '22023', message = 'Submitted attendance cannot be changed by scanning.', detail = 'ATTENDANCE_SUBMITTED';
+  end if;
+  v_previous := case when v_day.id is null then null else jsonb_build_object(
+    'status', v_day.status,
+    'effective_arrival_at', v_day.effective_arrival_at,
+    'captured_at', v_day.captured_at,
+    'minutes_late', v_day.minutes_late
+  ) end;
   v_minutes := public.attendance_arrival_minutes_late(
     v_arrival, v_work_date, v_terms.shift_start_time, v_project.timezone
   );
-  v_status := case when v_minutes <= 10 then 'on_time' else 'late' end;
+  v_status := case
+    when v_minutes <= public.attendance_grace_minutes() then 'on_time'
+    else 'late'
+  end;
   v_actor_type := public.attendance_event_actor_type(p_actor_user_id, p_project_id);
   insert into public.attendance_days (
     placement_id, project_id, work_date, expected, status,
@@ -1112,8 +1337,17 @@ begin
   ) values (
     v_day.id, v_placement.id, 'supervisor_worker_qr_scan', p_actor_user_id,
     v_actor_type, v_capture, v_arrival,
-    jsonb_build_object('capture_method', 'supervisor_worker_qr'),
-    'supervisor_worker_qr_scan:' || v_day.id::text || ':' || p_actor_user_id::text
+    jsonb_build_object(
+      'capture_method', 'supervisor_worker_qr',
+      'previous', v_previous,
+      'new', jsonb_build_object(
+        'status', v_day.status,
+        'effective_arrival_at', v_day.effective_arrival_at,
+        'captured_at', v_day.captured_at,
+        'minutes_late', v_day.minutes_late
+      )
+    ),
+    'supervisor_worker_qr_scan:' || v_day.id::text || ':' || md5(v_arrival::text)
   ) on conflict (idempotency_key) do nothing;
   return jsonb_build_object('outcome', 'signed_in', 'attendance_day_id', v_day.id);
 end;
@@ -1215,7 +1449,13 @@ begin
   if p_status in ('on_time', 'late') then
     p_effective_arrival_at := coalesce(p_effective_arrival_at, v_day.effective_arrival_at);
     if p_effective_arrival_at is null
-      or (p_effective_arrival_at at time zone v_project.timezone)::date <> p_work_date
+      or not public.attendance_timestamp_matches_work_date(
+        p_effective_arrival_at,
+        p_work_date,
+        v_day.shift_start_snapshot,
+        v_day.shift_finish_snapshot,
+        v_day.project_timezone_snapshot
+      )
       or p_effective_arrival_at > clock_timestamp() then
       raise exception using errcode = '22023', message = 'A valid observed arrival time is required.', detail = 'INVALID_OBSERVED_ARRIVAL';
     end if;
@@ -1225,12 +1465,16 @@ begin
       v_day.shift_start_snapshot,
       v_day.project_timezone_snapshot
     );
-    p_status := case when v_minutes <= 10 then 'on_time' else 'late' end;
+    p_status := case
+      when v_minutes <= public.attendance_grace_minutes() then 'on_time'
+      else 'late'
+    end;
   else
     p_effective_arrival_at := null;
     v_minutes := null;
   end if;
-  if p_status in ('no_show', 'non_worker_fault', 'approved_absence') and nullif(trim(p_reason), '') is null then
+  if p_status in ('no_show', 'non_worker_fault', 'approved_absence', 'sent_home')
+    and nullif(trim(p_reason), '') is null then
     raise exception using errcode = '22023', message = 'Add a reason for this attendance outcome.', detail = 'ATTENDANCE_REASON_REQUIRED';
   end if;
   v_actor_type := public.attendance_event_actor_type(p_actor_user_id, p_project_id);
@@ -1293,6 +1537,8 @@ declare
   v_worker public.worker_profiles%rowtype;
   v_day public.attendance_days%rowtype;
   v_placement public.placements%rowtype;
+  v_explanation text;
+  v_previous jsonb;
 begin
   select * into v_worker from public.worker_profiles worker where worker.user_id = p_actor_user_id;
   if not found then
@@ -1315,10 +1561,27 @@ begin
   ) then
     raise exception using errcode = '22023', message = 'Choose a valid lateness reason.', detail = 'INVALID_LATENESS_REASON';
   end if;
+  v_explanation := nullif(trim(p_explanation), '');
+  if v_day.worker_reason_category = p_reason_category
+    and v_day.worker_reason_explanation is not distinct from v_explanation
+    and v_day.worker_reason_review_outcome = 'pending' then
+    return jsonb_build_object(
+      'outcome', 'already_submitted',
+      'attendance_day_id', v_day.id,
+      'reason_revision', v_day.worker_reason_revision
+    );
+  end if;
+  v_previous := jsonb_build_object(
+    'reason_category', v_day.worker_reason_category,
+    'explanation', v_day.worker_reason_explanation,
+    'review_outcome', v_day.worker_reason_review_outcome,
+    'reason_revision', v_day.worker_reason_revision
+  );
   update public.attendance_days
   set worker_reason_category = p_reason_category,
-      worker_reason_explanation = nullif(trim(p_explanation), ''),
+      worker_reason_explanation = v_explanation,
       worker_reason_submitted_at = clock_timestamp(),
+      worker_reason_revision = worker_reason_revision + 1,
       worker_reason_review_outcome = 'pending',
       worker_reason_reviewed_by_user_id = null,
       worker_reason_reviewed_at = null
@@ -1329,10 +1592,22 @@ begin
   ) values (
     v_day.id, v_day.placement_id, 'worker_lateness_reason_submitted',
     p_actor_user_id, 'worker',
-    jsonb_build_object('reason_category', p_reason_category),
-    'lateness_reason:' || v_day.id::text || ':' || extract(epoch from v_day.worker_reason_submitted_at)::bigint::text
+    jsonb_build_object(
+      'previous', v_previous,
+      'new', jsonb_build_object(
+        'reason_category', p_reason_category,
+        'explanation', v_explanation,
+        'reason_revision', v_day.worker_reason_revision
+      )
+    ),
+    'lateness_reason:' || v_day.id::text || ':' ||
+      v_day.worker_reason_revision::text
   );
-  return jsonb_build_object('outcome', 'submitted', 'attendance_day_id', v_day.id);
+  return jsonb_build_object(
+    'outcome', 'submitted',
+    'attendance_day_id', v_day.id,
+    'reason_revision', v_day.worker_reason_revision
+  );
 end;
 $$;
 
@@ -1351,6 +1626,9 @@ declare
   v_day public.attendance_days%rowtype;
   v_actor_type text;
   v_event_type text;
+  v_reason text;
+  v_previous_reason text;
+  v_previous jsonb;
 begin
   select * into v_day from public.attendance_days day where day.id = p_attendance_day_id for update;
   if not found then
@@ -1364,10 +1642,33 @@ begin
     or p_review_outcome not in ('approved_exception', 'rejected') then
     raise exception using errcode = '22023', message = 'This lateness reason cannot be reviewed.', detail = 'INVALID_LATENESS_REVIEW';
   end if;
+  v_reason := nullif(trim(p_reason), '');
+  select event.private_company_notes into v_previous_reason
+  from public.attendance_events event
+  where event.attendance_day_id = v_day.id
+    and event.event_type in (
+      'lateness_exception_approved', 'lateness_exception_rejected'
+    )
+  order by event.created_at desc, event.id desc
+  limit 1;
+  if v_day.worker_reason_review_outcome = p_review_outcome
+    and v_previous_reason is not distinct from v_reason then
+    return jsonb_build_object(
+      'outcome', 'already_reviewed',
+      'attendance_day_id', v_day.id,
+      'review_revision', v_day.worker_reason_review_revision
+    );
+  end if;
+  v_previous := jsonb_build_object(
+    'review_outcome', v_day.worker_reason_review_outcome,
+    'review_reason', v_previous_reason,
+    'review_revision', v_day.worker_reason_review_revision
+  );
   update public.attendance_days
   set worker_reason_review_outcome = p_review_outcome,
       worker_reason_reviewed_by_user_id = p_actor_user_id,
-      worker_reason_reviewed_at = clock_timestamp()
+      worker_reason_reviewed_at = clock_timestamp(),
+      worker_reason_review_revision = worker_reason_review_revision + 1
   where id = v_day.id returning * into v_day;
   v_actor_type := public.attendance_event_actor_type(p_actor_user_id, v_day.project_id);
   v_event_type := case when p_review_outcome = 'approved_exception'
@@ -1378,11 +1679,23 @@ begin
   ) values (
     v_day.id, v_day.placement_id, v_event_type, p_actor_user_id,
     v_actor_type,
-    jsonb_build_object('review_outcome', p_review_outcome),
-    nullif(trim(p_reason), ''),
-    'lateness_review:' || v_day.id::text || ':' || extract(epoch from v_day.worker_reason_reviewed_at)::bigint::text
+    jsonb_build_object(
+      'previous', v_previous,
+      'new', jsonb_build_object(
+        'review_outcome', p_review_outcome,
+        'review_reason', v_reason,
+        'review_revision', v_day.worker_reason_review_revision
+      )
+    ),
+    v_reason,
+    'lateness_review:' || v_day.id::text || ':' ||
+      v_day.worker_reason_review_revision::text
   );
-  return jsonb_build_object('outcome', p_review_outcome, 'attendance_day_id', v_day.id);
+  return jsonb_build_object(
+    'outcome', p_review_outcome,
+    'attendance_day_id', v_day.id,
+    'review_revision', v_day.worker_reason_review_revision
+  );
 end;
 $$;
 
@@ -1399,6 +1712,7 @@ as $$
 declare
   v_submission public.attendance_week_submissions%rowtype;
   v_unresolved integer;
+  v_pending_reviews integer;
   v_now timestamptz := clock_timestamp();
 begin
   perform public.attendance_require_authority(p_actor_user_id, p_project_id, 'submit');
@@ -1419,15 +1733,27 @@ begin
   if v_unresolved > 0 then
     raise exception using errcode = '22023', message = 'Resolve every expected attendance day before submitting the week.', detail = 'ATTENDANCE_WEEK_UNRESOLVED';
   end if;
+  select count(*) into v_pending_reviews
+  from public.attendance_days day
+  where day.project_id = p_project_id
+    and day.work_date between p_week_start and p_week_start + 6
+    and day.expected
+    and day.status = 'late'
+    and day.worker_reason_category is not null
+    and day.worker_reason_review_outcome = 'pending';
+  if v_pending_reviews > 0 then
+    raise exception using errcode = '22023', message = 'Resolve pending lateness reviews before submitting the week.', detail = 'ATTENDANCE_LATENESS_REVIEW_PENDING';
+  end if;
   insert into public.attendance_week_submissions (
-    project_id, week_start, week_end, status,
+    project_id, week_start, week_end, status, submission_revision,
     submitted_by_user_id, submitted_at
   ) values (
-    p_project_id, p_week_start, p_week_start + 6, 'submitted',
+    p_project_id, p_week_start, p_week_start + 6, 'submitted', 1,
     p_actor_user_id, v_now
   )
   on conflict (project_id, week_start) do update set
     status = 'submitted',
+    submission_revision = attendance_week_submissions.submission_revision + 1,
     submitted_by_user_id = excluded.submitted_by_user_id,
     submitted_at = excluded.submitted_at
   where attendance_week_submissions.status in ('draft', 'reopened')
@@ -1436,7 +1762,11 @@ begin
     select * into v_submission
     from public.attendance_week_submissions submission
     where submission.project_id = p_project_id and submission.week_start = p_week_start;
-    return jsonb_build_object('outcome', 'already_submitted', 'submission_id', v_submission.id);
+    return jsonb_build_object(
+      'outcome', 'already_submitted',
+      'submission_id', v_submission.id,
+      'submission_revision', v_submission.submission_revision
+    );
   end if;
   update public.attendance_days
   set finalised_at = v_now,
@@ -1451,12 +1781,21 @@ begin
   )
   select day.id, day.placement_id, 'week_submitted', p_actor_user_id,
     public.attendance_event_actor_type(p_actor_user_id, p_project_id),
-    jsonb_build_object('submission_id', v_submission.id, 'week_start', p_week_start),
-    'week_submitted:' || v_submission.id::text || ':' || day.id::text
+    jsonb_build_object(
+      'submission_id', v_submission.id,
+      'week_start', p_week_start,
+      'submission_revision', v_submission.submission_revision
+    ),
+    'week_submitted:' || v_submission.id::text || ':' ||
+      v_submission.submission_revision::text || ':' || day.id::text
   from public.attendance_days day
   where day.weekly_submission_id = v_submission.id
   on conflict (idempotency_key) do nothing;
-  return jsonb_build_object('outcome', 'submitted', 'submission_id', v_submission.id);
+  return jsonb_build_object(
+    'outcome', 'submitted',
+    'submission_id', v_submission.id,
+    'submission_revision', v_submission.submission_revision
+  );
 end;
 $$;
 
@@ -1502,12 +1841,20 @@ begin
     actor_type, metadata, private_company_notes, idempotency_key
   )
   select day.id, day.placement_id, 'week_reopened', p_actor_user_id,
-    'administrator', jsonb_build_object('submission_id', v_submission.id),
+    'administrator', jsonb_build_object(
+      'submission_id', v_submission.id,
+      'submission_revision', v_submission.submission_revision
+    ),
     trim(p_reason),
-    'week_reopened:' || v_submission.id::text || ':' || day.id::text || ':' || extract(epoch from v_now)::bigint::text
+    'week_reopened:' || v_submission.id::text || ':' ||
+      v_submission.submission_revision::text || ':' || day.id::text
   from public.attendance_days day
   where day.weekly_submission_id = v_submission.id;
-  return jsonb_build_object('outcome', 'reopened', 'submission_id', v_submission.id);
+  return jsonb_build_object(
+    'outcome', 'reopened',
+    'submission_id', v_submission.id,
+    'submission_revision', v_submission.submission_revision
+  );
 end;
 $$;
 
@@ -1689,8 +2036,9 @@ grant select (
   shift_finish_snapshot, working_days_snapshot, project_timezone_snapshot,
   minutes_late, capture_method, finalised_at, weekly_submission_id,
   worker_reason_category, worker_reason_explanation,
-  worker_reason_submitted_at, worker_reason_review_outcome,
-  worker_reason_reviewed_at, outcome_reason,
+  worker_reason_submitted_at, worker_reason_revision,
+  worker_reason_review_outcome, worker_reason_reviewed_at,
+  worker_reason_review_revision, outcome_reason,
   capture_latitude, capture_longitude, capture_accuracy_m,
   created_at, updated_at
 ) on public.attendance_days to authenticated;
@@ -1714,7 +2062,11 @@ revoke all on function public.validate_attendance_day_links() from public, anon,
 revoke all on function public.attendance_project_authority(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.attendance_require_authority(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.attendance_placement_terms(public.placements, date) from public, anon, authenticated;
+revoke all on function public.attendance_placement_effective_end_date(public.placements) from public, anon, authenticated;
 revoke all on function public.attendance_placement_expected(public.placements, date) from public, anon, authenticated;
+revoke all on function public.attendance_timestamp_matches_work_date(timestamptz, date, time, time, text) from public, anon, authenticated;
+revoke all on function public.attendance_resolve_placement_work_date(public.placements, timestamptz, text) from public, anon, authenticated;
+revoke all on function public.attendance_grace_minutes() from public, anon, authenticated;
 revoke all on function public.attendance_arrival_minutes_late(timestamptz, date, time, text) from public, anon, authenticated;
 revoke all on function public.attendance_event_actor_type(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.materialize_project_attendance_week(uuid, uuid, date) from public, anon, authenticated;
@@ -1734,7 +2086,11 @@ grant execute on function public.validate_attendance_day_links() to service_role
 grant execute on function public.attendance_project_authority(uuid, uuid) to service_role;
 grant execute on function public.attendance_require_authority(uuid, uuid, text) to service_role;
 grant execute on function public.attendance_placement_terms(public.placements, date) to service_role;
+grant execute on function public.attendance_placement_effective_end_date(public.placements) to service_role;
 grant execute on function public.attendance_placement_expected(public.placements, date) to service_role;
+grant execute on function public.attendance_timestamp_matches_work_date(timestamptz, date, time, time, text) to service_role;
+grant execute on function public.attendance_resolve_placement_work_date(public.placements, timestamptz, text) to service_role;
+grant execute on function public.attendance_grace_minutes() to service_role;
 grant execute on function public.attendance_arrival_minutes_late(timestamptz, date, time, text) to service_role;
 grant execute on function public.attendance_event_actor_type(uuid, uuid) to service_role;
 grant execute on function public.materialize_project_attendance_week(uuid, uuid, date) to service_role;

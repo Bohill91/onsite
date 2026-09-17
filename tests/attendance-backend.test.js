@@ -8,10 +8,13 @@ const {
   ATTENDANCE_GRACE_MINUTES,
   LATE_EXCEPTION_POLICY,
   arrivalStatus,
+  placementEffectiveAttendanceEndDate,
   placementExpectedOnDate,
   placementTermsOnDate,
   projectTimeParts,
   reliabilityInput,
+  resolvePlacementWorkDate,
+  timestampMatchesWorkDate,
 } = require("../attendance-rules.js");
 const {
   AttendanceServiceError,
@@ -97,6 +100,8 @@ function placementRow(overrides = {}) {
     agreed_shift_start_time: "07:30",
     agreed_shift_finish_time: "16:30",
     scheduled_end_date: null,
+    ended_at: null,
+    placement_lifecycle_events: [],
     worker_profiles: {
       id: WORKER_A,
       name: "Alice Carter",
@@ -150,7 +155,12 @@ function attendanceRow(overrides = {}) {
     finalised_at: null,
     weekly_submission_id: null,
     worker_reason_category: null,
+    worker_reason_explanation: null,
+    worker_reason_submitted_at: null,
+    worker_reason_revision: 0,
     worker_reason_review_outcome: null,
+    worker_reason_reviewed_at: null,
+    worker_reason_review_revision: 0,
     capture_latitude: null,
     capture_longitude: null,
     attendance_events: [],
@@ -161,13 +171,15 @@ function attendanceRow(overrides = {}) {
   };
 }
 
-function fakeAttendanceAdapter() {
+function fakeAttendanceAdapter(options = {}) {
   const clone = (value) => structuredClone(value);
   const days = new Map();
   const siteTokens = new Map();
   const workerTokens = new Map();
   const submissions = new Map();
   const managers = new Map();
+  let currentNow = options.now || TEST_NOW;
+  let placementTemplate = placementRow(options.placement || {});
   let sequence = 600;
   const uuid = () =>
     `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
@@ -184,6 +196,7 @@ function fakeAttendanceAdapter() {
 
   function relation(projectId = PROJECT_A, workerId = WORKER_A, placementId = PLACEMENT_A) {
     return placementRow({
+      ...clone(placementTemplate),
       id: placementId,
       worker_id: workerId,
       project_requirement_id:
@@ -216,6 +229,8 @@ function fakeAttendanceAdapter() {
   } = {}) {
     const key = `${placementId}:${workDate}`;
     if (!days.has(key)) {
+      const placement = relation(projectId, workerId, placementId);
+      const terms = placementTermsOnDate(placement, workDate);
       days.set(
         key,
         attendanceRow({
@@ -223,7 +238,10 @@ function fakeAttendanceAdapter() {
           placement_id: placementId,
           project_id: projectId,
           work_date: workDate,
-          placements: relation(projectId, workerId, placementId),
+          shift_start_snapshot: terms.shiftStartTime,
+          shift_finish_snapshot: terms.shiftFinishTime,
+          working_days_snapshot: terms.workingDays,
+          placements: placement,
         }),
       );
     }
@@ -237,6 +255,12 @@ function fakeAttendanceAdapter() {
     workerTokens,
     submissions,
     managers,
+    setNow(value) {
+      currentNow = value;
+    },
+    setPlacement(value) {
+      placementTemplate = placementRow(value);
+    },
     async projectAuthority(actorUserId, projectId) {
       const role = actorRole(actorUserId);
       const companyId = projectId === PROJECT_A ? COMPANY_A : COMPANY_B;
@@ -299,21 +323,36 @@ function fakeAttendanceAdapter() {
           "NOT_EXPECTED_TODAY",
         );
       }
-      const day = ensureDay();
+      const day = ensureDay({ workDate: token.work_date });
+      const terms = placementTermsOnDate(day.placements, token.work_date);
+      if (!timestampMatchesWorkDate({
+        timestamp: currentNow,
+        workDate: token.work_date,
+        shiftStartTime: terms.shiftStartTime,
+        shiftFinishTime: terms.shiftFinishTime,
+        timeZone: day.project_timezone_snapshot,
+      })) {
+        throw new AttendanceServiceError(
+          "This site QR is not valid for the worker shift.",
+          400,
+          "SITE_QR_WRONG_DATE",
+        );
+      }
       if (day.effective_arrival_at) {
         return { outcome: "already_signed_in", attendance_day_id: day.id };
       }
       const calculated = arrivalStatus({
-        arrivalAt: TEST_NOW,
-        workDate: TEST_DATE,
+        arrivalAt: currentNow,
+        workDate: token.work_date,
         shiftStartTime: day.shift_start_snapshot,
+        shiftFinishTime: day.shift_finish_snapshot,
         timeZone: day.project_timezone_snapshot,
       });
       Object.assign(day, {
         status: calculated.status,
         minutes_late: calculated.minutesLate,
-        effective_arrival_at: TEST_NOW,
-        captured_at: TEST_NOW,
+        effective_arrival_at: currentNow,
+        captured_at: currentNow,
         capture_method: "worker_site_qr",
         capture_latitude: values.latitude,
         capture_longitude: values.longitude,
@@ -322,8 +361,8 @@ function fakeAttendanceAdapter() {
         id: uuid(),
         event_type: "worker_site_qr_scan",
         actor_type: "worker",
-        recorded_at: TEST_NOW,
-        effective_at: TEST_NOW,
+        recorded_at: currentNow,
+        effective_at: currentNow,
         metadata: {},
       });
       return { outcome: "signed_in", attendance_day_id: day.id };
@@ -331,26 +370,46 @@ function fakeAttendanceAdapter() {
     async issueWorkerToken(values) {
       const workerId = actorWorker(values.actorUserId);
       if (!workerId) throw new AttendanceServiceError("Worker required", 403);
+      for (const token of workerTokens.values()) {
+        if (token.worker_id === workerId && !token.revoked_at) {
+          token.revoked_at = currentNow;
+        }
+      }
       const row = {
         id: uuid(),
         worker_id: workerId,
         token_hash: values.tokenHash,
         expires_at: "2026-09-16T06:40:00.000Z",
+        revoked_at: null,
       };
       workerTokens.set(values.tokenHash, row);
       return clone(row);
     },
     async scanWorkerToken(values) {
       const token = workerTokens.get(values.tokenHash);
-      if (!token) {
+      if (!token || token.revoked_at) {
         throw new AttendanceServiceError("Invalid worker QR", 400, "INVALID_WORKER_QR");
       }
-      const day = ensureDay({ workerId: token.worker_id });
-      const arrival = values.observedArrivalAt || TEST_NOW;
+      const placement = relation(PROJECT_A, token.worker_id, PLACEMENT_A);
+      const arrival = values.observedArrivalAt || currentNow;
+      const workDate = resolvePlacementWorkDate(
+        placement,
+        arrival,
+        "Europe/London",
+      );
+      if (!workDate) {
+        throw new AttendanceServiceError(
+          "This worker is not expected on the project today.",
+          403,
+          "NOT_EXPECTED_TODAY",
+        );
+      }
+      const day = ensureDay({ workerId: token.worker_id, workDate });
       const calculated = arrivalStatus({
         arrivalAt: arrival,
-        workDate: TEST_DATE,
+        workDate,
         shiftStartTime: day.shift_start_snapshot,
+        shiftFinishTime: day.shift_finish_snapshot,
         timeZone: day.project_timezone_snapshot,
       });
       const already = !!day.effective_arrival_at;
@@ -359,18 +418,24 @@ function fakeAttendanceAdapter() {
           status: calculated.status,
           minutes_late: calculated.minutesLate,
           effective_arrival_at: arrival,
-          captured_at: TEST_NOW,
+          captured_at: currentNow,
           capture_method: "supervisor_worker_qr",
         });
       }
-      if (!day.attendance_events.some((event) => event.event_type === "supervisor_worker_qr_scan")) {
+      if (!day.attendance_events.some((event) =>
+        event.event_type === "supervisor_worker_qr_scan" &&
+        event.effective_at === arrival
+      )) {
         day.attendance_events.push({
           id: uuid(),
           event_type: "supervisor_worker_qr_scan",
           actor_type: "supervisor",
-          recorded_at: TEST_NOW,
+          recorded_at: currentNow,
           effective_at: arrival,
-          metadata: {},
+          metadata: {
+            effectiveArrivalAt: arrival,
+            capturedAt: currentNow,
+          },
         });
       }
       return {
@@ -382,7 +447,15 @@ function fakeAttendanceAdapter() {
       const day = ensureDay({
         projectId: values.projectId,
         placementId: values.placementId,
+        workDate: values.workDate,
       });
+      if (!placementExpectedOnDate(day.placements, values.workDate)) {
+        throw new AttendanceServiceError(
+          "The worker is not expected on this project date.",
+          400,
+          "NOT_EXPECTED_TODAY",
+        );
+      }
       const submission = submissions.get(`${values.projectId}:${WEEK_START}`);
       if (submission?.status === "submitted") {
         throw new AttendanceServiceError(
@@ -419,17 +492,99 @@ function fakeAttendanceAdapter() {
       if (!day || day.placements.worker_id !== actorWorker(values.actorUserId)) {
         throw new AttendanceServiceError("Attendance not found", 404, "ATTENDANCE_NOT_FOUND");
       }
+      const explanation = values.explanation || "";
+      if (
+        day.worker_reason_category === values.category &&
+        (day.worker_reason_explanation || "") === explanation &&
+        day.worker_reason_review_outcome === "pending"
+      ) {
+        return {
+          outcome: "already_submitted",
+          attendance_day_id: day.id,
+          reason_revision: day.worker_reason_revision,
+        };
+      }
+      const previous = {
+        category: day.worker_reason_category,
+        explanation: day.worker_reason_explanation,
+        reviewOutcome: day.worker_reason_review_outcome,
+        revision: day.worker_reason_revision,
+      };
       day.worker_reason_category = values.category;
-      day.worker_reason_explanation = values.explanation;
-      day.worker_reason_submitted_at = TEST_NOW;
+      day.worker_reason_explanation = explanation;
+      day.worker_reason_submitted_at = currentNow;
+      day.worker_reason_revision += 1;
       day.worker_reason_review_outcome = "pending";
-      return { attendance_day_id: day.id };
+      day.worker_reason_reviewed_at = null;
+      day.attendance_events.push({
+        id: uuid(),
+        event_type: "worker_lateness_reason_submitted",
+        actor_type: "worker",
+        recorded_at: currentNow,
+        metadata: {
+          previous,
+          new: {
+            category: values.category,
+            explanation,
+            revision: day.worker_reason_revision,
+          },
+        },
+      });
+      return {
+        outcome: "submitted",
+        attendance_day_id: day.id,
+        reason_revision: day.worker_reason_revision,
+      };
     },
     async reviewLateReason(values) {
       const day = [...days.values()].find((candidate) => candidate.id === values.attendanceId);
+      const previousReview = [...day.attendance_events]
+        .reverse()
+        .find((event) => [
+          "lateness_exception_approved",
+          "lateness_exception_rejected",
+        ].includes(event.event_type));
+      if (
+        day.worker_reason_review_outcome === values.outcome &&
+        (previousReview?.private_company_notes || "") === (values.reason || "")
+      ) {
+        return {
+          outcome: "already_reviewed",
+          attendance_day_id: day.id,
+          review_revision: day.worker_reason_review_revision,
+        };
+      }
+      const previous = {
+        outcome: day.worker_reason_review_outcome,
+        reason: previousReview?.private_company_notes || "",
+        revision: day.worker_reason_review_revision,
+      };
       day.worker_reason_review_outcome = values.outcome;
-      day.worker_reason_reviewed_at = TEST_NOW;
-      return { attendance_day_id: day.id };
+      day.worker_reason_reviewed_at = currentNow;
+      day.worker_reason_review_revision += 1;
+      day.attendance_events.push({
+        id: uuid(),
+        event_type:
+          values.outcome === "approved_exception"
+            ? "lateness_exception_approved"
+            : "lateness_exception_rejected",
+        actor_type: "attendance_manager",
+        recorded_at: currentNow,
+        private_company_notes: values.reason || "",
+        metadata: {
+          previous,
+          new: {
+            outcome: values.outcome,
+            reason: values.reason || "",
+            revision: day.worker_reason_review_revision,
+          },
+        },
+      });
+      return {
+        outcome: values.outcome,
+        attendance_day_id: day.id,
+        review_revision: day.worker_reason_review_revision,
+      };
     },
     async submitWeek(values) {
       const projectDays = [...days.values()].filter(
@@ -442,31 +597,67 @@ function fakeAttendanceAdapter() {
           "ATTENDANCE_WEEK_UNRESOLVED",
         );
       }
+      if (projectDays.some((day) =>
+        day.expected &&
+        day.status === "late" &&
+        day.worker_reason_category &&
+        day.worker_reason_review_outcome === "pending"
+      )) {
+        throw new AttendanceServiceError(
+          "Resolve pending lateness reviews before submitting the week.",
+          400,
+          "ATTENDANCE_LATENESS_REVIEW_PENDING",
+        );
+      }
       const key = `${values.projectId}:${values.weekStart}`;
-      const submission = submissions.get(key) || {
+      const existing = submissions.get(key);
+      if (existing?.status === "submitted") {
+        return {
+          outcome: "already_submitted",
+          submission_id: existing.id,
+          submission_revision: existing.submission_revision,
+        };
+      }
+      const submission = existing || {
         id: uuid(),
         project_id: values.projectId,
         week_start: values.weekStart,
         week_end: "2026-09-20",
-        created_at: TEST_NOW,
+        submission_revision: 0,
+        created_at: currentNow,
       };
       Object.assign(submission, {
         status: "submitted",
-        submitted_at: TEST_NOW,
+        submission_revision: submission.submission_revision + 1,
+        submitted_at: currentNow,
       });
       submissions.set(key, submission);
       for (const day of projectDays) {
-        day.finalised_at = TEST_NOW;
+        day.finalised_at = currentNow;
         day.weekly_submission_id = submission.id;
+        day.attendance_events.push({
+          id: uuid(),
+          event_type: "week_submitted",
+          actor_type: "administrator",
+          recorded_at: currentNow,
+          metadata: {
+            submissionId: submission.id,
+            submissionRevision: submission.submission_revision,
+          },
+        });
       }
-      return { outcome: "submitted", submission_id: submission.id };
+      return {
+        outcome: "submitted",
+        submission_id: submission.id,
+        submission_revision: submission.submission_revision,
+      };
     },
     async reopenWeek(values) {
       const submission = submissions.get(`${values.projectId}:${values.weekStart}`);
       if (!submission) throw new AttendanceServiceError("Not submitted", 400);
       Object.assign(submission, {
         status: "reopened",
-        reopened_at: TEST_NOW,
+        reopened_at: currentNow,
         reopen_reason: values.reason,
       });
       for (const day of days.values()) {
@@ -476,12 +667,16 @@ function fakeAttendanceAdapter() {
             id: uuid(),
             event_type: "week_reopened",
             actor_type: "administrator",
-            recorded_at: TEST_NOW,
-            metadata: {},
+            recorded_at: currentNow,
+            metadata: { submissionRevision: submission.submission_revision },
           });
         }
       }
-      return { outcome: "reopened", submission_id: submission.id };
+      return {
+        outcome: "reopened",
+        submission_id: submission.id,
+        submission_revision: submission.submission_revision,
+      };
     },
     async assignManager(values) {
       const row = {
@@ -507,7 +702,7 @@ function fakeAttendanceAdapter() {
   };
 }
 
-function service(adapter = fakeAttendanceAdapter()) {
+function service(adapter = fakeAttendanceAdapter(), now = TEST_NOW) {
   let tokenSequence = 0;
   return createAttendanceService({
     adapter,
@@ -515,7 +710,7 @@ function service(adapter = fakeAttendanceAdapter()) {
       tokenSequence += 1;
       return `${prefix}_${String(tokenSequence).padStart(2, "0")}${"a".repeat(41)}`;
     },
-    clock: () => new Date(TEST_NOW),
+    clock: () => new Date(now),
   });
 }
 
@@ -547,7 +742,7 @@ test("attendance timing uses the project timezone and existing ten-minute grace"
   );
 });
 
-test("expected work days respect placement dates, weekdays, scheduled ends and terminal state", () => {
+test("expected work days respect placement dates, weekdays and effective terminal dates", () => {
   const placement = placementRow();
   assert.equal(placementExpectedOnDate(placement, TEST_DATE), true);
   assert.equal(placementExpectedOnDate(placement, "2026-08-31"), false);
@@ -555,6 +750,14 @@ test("expected work days respect placement dates, weekdays, scheduled ends and t
   assert.equal(
     placementExpectedOnDate({ ...placement, scheduled_end_date: "2026-09-15" }, TEST_DATE),
     false,
+  );
+  assert.equal(
+    placementExpectedOnDate({
+      ...placement,
+      status: "released",
+      ended_at: "2026-09-16T17:00:00.000Z",
+    }, TEST_DATE),
+    true,
   );
   assert.equal(
     placementExpectedOnDate({ ...placement, status: "released" }, TEST_DATE),
@@ -567,6 +770,100 @@ test("expected work days respect placement dates, weekdays, scheduled ends and t
   assert.equal(
     placementExpectedOnDate({ ...placement, current_no_fixed_end_date: true }, "2027-09-16"),
     true,
+  );
+});
+
+test("completed and released placements retain only historically valid expected days", () => {
+  const completed = placementRow({
+    status: "completed",
+    ended_at: "2026-09-16T18:00:00.000Z",
+    placement_lifecycle_events: [{
+      event_type: "completed",
+      effective_at: "2026-09-16T00:00:00.000Z",
+    }],
+  });
+  assert.equal(placementEffectiveAttendanceEndDate(completed), "2026-09-16");
+  assert.equal(placementExpectedOnDate(completed, "2026-09-14"), true);
+  assert.equal(placementExpectedOnDate(completed, "2026-09-16"), true);
+  assert.equal(placementExpectedOnDate(completed, "2026-09-17"), false);
+
+  const released = placementRow({
+    status: "released",
+    scheduled_end_date: "2026-09-16",
+    placement_lifecycle_events: [{
+      event_type: "released",
+      effective_at: "2026-09-16T00:00:00.000Z",
+    }],
+  });
+  assert.equal(placementExpectedOnDate(released, "2026-09-15"), true);
+  assert.equal(placementExpectedOnDate(released, "2026-09-17"), false);
+});
+
+test("early completion and pre-start stand-down stop expected attendance at the effective date", () => {
+  const earlyCompletion = placementRow({
+    status: "completed",
+    current_estimated_end_date: "2026-10-31",
+    placement_lifecycle_events: [{
+      event_type: "completed",
+      effective_at: "2026-09-15T00:00:00.000Z",
+    }],
+  });
+  assert.equal(placementExpectedOnDate(earlyCompletion, "2026-09-15"), true);
+  assert.equal(placementExpectedOnDate(earlyCompletion, TEST_DATE), false);
+
+  const stoodDown = placementRow({
+    status: "released",
+    current_start_date: "2026-09-01",
+    current_no_fixed_end_date: true,
+    current_estimated_end_date: null,
+    placement_lifecycle_events: [{
+      event_type: "released",
+      effective_at: "2026-08-31T00:00:00.000Z",
+    }],
+  });
+  assert.equal(placementExpectedOnDate(stoodDown, "2026-09-01"), false);
+});
+
+test("overnight attendance resolves to the shift-start work date", () => {
+  const nightPlacement = placementRow({
+    agreed_working_days: ["wednesday"],
+    agreed_shift_start_time: "20:00",
+    agreed_shift_finish_time: "05:00",
+  });
+  const beforeMidnight = "2026-09-16T19:10:00.000Z";
+  const afterMidnight = "2026-09-16T23:20:00.000Z";
+  assert.equal(
+    resolvePlacementWorkDate(nightPlacement, beforeMidnight, "Europe/London"),
+    TEST_DATE,
+  );
+  assert.equal(
+    resolvePlacementWorkDate(nightPlacement, afterMidnight, "Europe/London"),
+    TEST_DATE,
+  );
+  assert.deepEqual(
+    arrivalStatus({
+      arrivalAt: afterMidnight,
+      workDate: TEST_DATE,
+      shiftStartTime: "20:00",
+      shiftFinishTime: "05:00",
+      timeZone: "Europe/London",
+    }),
+    {
+      status: "late",
+      minutesLate: 260,
+      localDate: "2026-09-17",
+      localTime: "00:20",
+    },
+  );
+  assert.equal(
+    timestampMatchesWorkDate({
+      timestamp: afterMidnight,
+      workDate: TEST_DATE,
+      shiftStartTime: "07:30",
+      shiftFinishTime: "16:30",
+      timeZone: "Europe/London",
+    }),
+    false,
   );
 });
 
@@ -807,6 +1104,41 @@ test("worker site scan creates one canonical attendance day and duplicate scan i
   assert.equal(first.attendance.locationEvidence.latitude, 51.5);
 });
 
+test("overnight site QR scans keep one attendance day on the shift-start date", async () => {
+  const afterMidnight = "2026-09-16T23:20:00.000Z";
+  const adapter = fakeAttendanceAdapter({
+    now: afterMidnight,
+    placement: {
+      agreed_working_days: ["wednesday"],
+      agreed_shift_start_time: "20:00",
+      agreed_shift_finish_time: "05:00",
+    },
+  });
+  const api = service(adapter, afterMidnight);
+  const qr = await api.issueSiteQr(companyPrincipal(), PROJECT_A, {
+    workDate: TEST_DATE,
+  });
+  const first = await api.scanSiteQr(workerPrincipal(), { token: qr.token });
+  const retry = await api.scanSiteQr(workerPrincipal(), { token: qr.token });
+  assert.equal(first.attendance.workDate, TEST_DATE);
+  assert.equal(retry.attendance.id, first.attendance.id);
+  assert.equal(adapter.days.size, 1);
+  assert.equal(first.attendance.minutesLate, 260);
+});
+
+test("a previous-day QR cannot sign a worker into an unrelated day shift", async () => {
+  const afterMidnight = "2026-09-16T23:20:00.000Z";
+  const adapter = fakeAttendanceAdapter({ now: afterMidnight });
+  const api = service(adapter, afterMidnight);
+  const qr = await api.issueSiteQr(companyPrincipal(), PROJECT_A, {
+    workDate: TEST_DATE,
+  });
+  await assert.rejects(
+    api.scanSiteQr(workerPrincipal(), { token: qr.token }),
+    (error) => error.code === "SITE_QR_WRONG_DATE",
+  );
+});
+
 test("revoked, invalid and wrong-project site QR scans fail closed", async () => {
   const adapter = fakeAttendanceAdapter();
   const api = service(adapter);
@@ -847,6 +1179,50 @@ test("worker QR is short-lived, own-worker issued and supervisor observed arriva
   assert.equal(result.attendance.effectiveArrivalAt, "2026-09-16T06:25:00.000Z");
   assert.equal(result.attendance.capturedAt, TEST_NOW);
   assert.equal(result.attendance.captureMethod, "supervisor_worker_qr");
+});
+
+test("supervisor after-midnight scan resolves the prior overnight shift and preserves capture time", async () => {
+  const capturedAt = "2026-09-17T05:30:00.000Z";
+  const observedAt = "2026-09-16T23:20:00.000Z";
+  const adapter = fakeAttendanceAdapter({
+    now: capturedAt,
+    placement: {
+      agreed_working_days: ["wednesday"],
+      agreed_shift_start_time: "20:00",
+      agreed_shift_finish_time: "05:00",
+    },
+  });
+  const api = service(adapter, capturedAt);
+  const qr = await api.issueWorkerQr(workerPrincipal());
+  const result = await api.scanWorkerQr(companyPrincipal("Supervisor"), {
+    projectId: PROJECT_A,
+    token: qr.token,
+    observedArrivalAt: observedAt,
+  });
+  assert.equal(result.attendance.workDate, TEST_DATE);
+  assert.equal(result.attendance.effectiveArrivalAt, observedAt);
+  assert.equal(result.attendance.capturedAt, capturedAt);
+  assert.equal(result.attendance.minutesLate, 260);
+});
+
+test("issuing a new worker QR revokes the previous active capability", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const api = service(adapter);
+  const first = await api.issueWorkerQr(workerPrincipal());
+  const second = await api.issueWorkerQr(workerPrincipal());
+  assert.equal(adapter.workerTokens.get(hashCapability(first.token)).revoked_at, TEST_NOW);
+  assert.equal(adapter.workerTokens.get(hashCapability(second.token)).revoked_at, null);
+  assert.equal(
+    [...adapter.workerTokens.values()].filter((token) => !token.revoked_at).length,
+    1,
+  );
+  await assert.rejects(
+    api.scanWorkerQr(companyPrincipal("Supervisor"), {
+      projectId: PROJECT_A,
+      token: first.token,
+    }),
+    (error) => error.code === "INVALID_WORKER_QR",
+  );
 });
 
 test("future supervisor observed arrival is rejected before persistence", async () => {
@@ -890,6 +1266,60 @@ test("authorised manual No show and non-worker-fault outcomes require reasons an
   });
   assert.equal(siteIssue.status, "non_worker_fault");
   assert.equal(siteIssue.reliabilityInput, null);
+});
+
+test("sent home is an exceptional outcome and requires an audit reason", async () => {
+  const api = service();
+  await assert.rejects(
+    api.mark(companyPrincipal(), PROJECT_A, {
+      placementId: PLACEMENT_A,
+      workDate: TEST_DATE,
+      status: "sent_home",
+    }),
+    (error) => error.code === "ATTENDANCE_REASON_REQUIRED",
+  );
+  const marked = await api.mark(companyPrincipal(), PROJECT_A, {
+    placementId: PLACEMENT_A,
+    workDate: TEST_DATE,
+    status: "sent_home",
+    reason: "Site closed early",
+  });
+  assert.equal(marked.status, "sent_home");
+  assert.equal(marked.outcomeReason, "Site closed early");
+});
+
+test("Administrator can correct a historically valid day after placement completion", async () => {
+  const terminalPlacement = placementRow({
+    status: "completed",
+    ended_at: "2026-09-16T17:00:00.000Z",
+    placement_lifecycle_events: [{
+      event_type: "completed",
+      effective_at: "2026-09-16T00:00:00.000Z",
+    }],
+  });
+  const adapter = fakeAttendanceAdapter({ placement: terminalPlacement });
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({ placements: terminalPlacement }),
+  );
+  const corrected = await service(adapter).mark(companyPrincipal(), PROJECT_A, {
+    placementId: PLACEMENT_A,
+    workDate: TEST_DATE,
+    status: "no_show",
+    reason: "Worker did not attend",
+    correctionReason: "Historical attendance review",
+  });
+  assert.equal(corrected.status, "no_show");
+  await assert.rejects(
+    service(adapter).mark(companyPrincipal(), PROJECT_A, {
+      placementId: PLACEMENT_A,
+      workDate: "2026-09-17",
+      status: "no_show",
+      reason: "Worker did not attend",
+      correctionReason: "Historical attendance review",
+    }),
+    (error) => error.code === "NOT_EXPECTED_TODAY",
+  );
 });
 
 test("only an Administrator may submit an explicit attendance correction", async () => {
@@ -952,6 +1382,91 @@ test("late worker can submit a reason but another worker cannot", async () => {
   );
 });
 
+test("lateness reason retries are idempotent and changed explanations remain auditable", async () => {
+  const adapter = fakeAttendanceAdapter();
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({
+      status: "late",
+      effective_arrival_at: TEST_NOW,
+      captured_at: TEST_NOW,
+      minutes_late: 15,
+    }),
+  );
+  const api = service(adapter);
+  const first = await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+    category: "Road traffic",
+    explanation: "Collision on M1",
+  });
+  const retry = await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+    category: "Road traffic",
+    explanation: "Collision on M1",
+  });
+  assert.equal(first.latenessReason.revision, 1);
+  assert.equal(retry.latenessReason.revision, 1);
+  let stored = await adapter.getAttendanceDay(DAY_A);
+  assert.equal(
+    stored.attendance_events.filter(
+      (event) => event.event_type === "worker_lateness_reason_submitted",
+    ).length,
+    1,
+  );
+  const changed = await api.submitLatenessReason(workerPrincipal(), DAY_A, {
+    category: "Road traffic",
+    explanation: "Collision cleared; diversion remains",
+  });
+  assert.equal(changed.latenessReason.revision, 2);
+  stored = await adapter.getAttendanceDay(DAY_A);
+  const events = stored.attendance_events.filter(
+    (event) => event.event_type === "worker_lateness_reason_submitted",
+  );
+  assert.equal(events.length, 2);
+  assert.equal(events[1].metadata.previous.explanation, "Collision on M1");
+});
+
+test("lateness review retries are idempotent and a changed decision is audited", async () => {
+  const adapter = fakeAttendanceAdapter();
+  const day = attendanceRow({
+    status: "late",
+    effective_arrival_at: TEST_NOW,
+    captured_at: TEST_NOW,
+    minutes_late: 15,
+    worker_reason_category: "Road traffic",
+    worker_reason_explanation: "Collision on M1",
+    worker_reason_revision: 1,
+    worker_reason_review_outcome: "pending",
+  });
+  adapter.days.set(`${PLACEMENT_A}:${TEST_DATE}`, day);
+  const api = service(adapter);
+  const approved = await api.reviewLatenessReason(
+    companyPrincipal("Manager"),
+    PROJECT_A,
+    DAY_A,
+    { outcome: "approved_exception", reason: "Incident verified" },
+  );
+  const retry = await api.reviewLatenessReason(
+    companyPrincipal("Manager"),
+    PROJECT_A,
+    DAY_A,
+    { outcome: "approved_exception", reason: "Incident verified" },
+  );
+  assert.equal(approved.latenessReason.reviewRevision, 1);
+  assert.equal(retry.latenessReason.reviewRevision, 1);
+  const rejected = await api.reviewLatenessReason(
+    companyPrincipal("Manager"),
+    PROJECT_A,
+    DAY_A,
+    { outcome: "rejected", reason: "Evidence was withdrawn" },
+  );
+  assert.equal(rejected.latenessReason.reviewRevision, 2);
+  const stored = await adapter.getAttendanceDay(DAY_A);
+  const reviewEvents = stored.attendance_events.filter((event) =>
+    event.event_type.startsWith("lateness_exception_"),
+  );
+  assert.equal(reviewEvents.length, 2);
+  assert.equal(reviewEvents[1].metadata.previous.outcome, "approved_exception");
+});
+
 test("Attendance Manager lateness review persists a non-penalising final input after submission", async () => {
   const adapter = fakeAttendanceAdapter();
   adapter.managers.set(PROJECT_A, { user_id: ATTENDANCE_MANAGER });
@@ -1004,6 +1519,105 @@ test("weekly submission blocks unresolved days and links every resolved day atom
   const day = await adapter.getAttendanceDay(DAY_A);
   assert.equal(day.weekly_submission_id, submitted.submission.id);
   assert.equal(day.finalised_at, TEST_NOW);
+});
+
+test("weekly submission blocks a submitted lateness reason until review resolves", async () => {
+  const adapter = fakeAttendanceAdapter();
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({
+      status: "late",
+      effective_arrival_at: TEST_NOW,
+      captured_at: TEST_NOW,
+      minutes_late: 15,
+      worker_reason_category: "Road traffic",
+      worker_reason_revision: 1,
+      worker_reason_review_outcome: "pending",
+    }),
+  );
+  const api = service(adapter);
+  await assert.rejects(
+    api.submitWeek(companyPrincipal(), PROJECT_A, { weekStart: WEEK_START }),
+    (error) => error.code === "ATTENDANCE_LATENESS_REVIEW_PENDING",
+  );
+  await api.reviewLatenessReason(companyPrincipal("Manager"), PROJECT_A, DAY_A, {
+    outcome: "approved_exception",
+    reason: "Incident verified",
+  });
+  const submitted = await api.submitWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+  });
+  assert.equal(submitted.submission.status, "submitted");
+});
+
+test("a rejected lateness review also permits weekly submission", async () => {
+  const adapter = fakeAttendanceAdapter();
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({
+      status: "late",
+      effective_arrival_at: TEST_NOW,
+      captured_at: TEST_NOW,
+      minutes_late: 15,
+      worker_reason_category: "Road traffic",
+      worker_reason_revision: 1,
+      worker_reason_review_outcome: "pending",
+    }),
+  );
+  const api = service(adapter);
+  await api.reviewLatenessReason(companyPrincipal("Manager"), PROJECT_A, DAY_A, {
+    outcome: "rejected",
+    reason: "Reason not accepted",
+  });
+  const submitted = await api.submitWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+  });
+  assert.equal(submitted.submission.status, "submitted");
+});
+
+test("weekly reopen and resubmit increments revision while exact retries stay idempotent", async () => {
+  const adapter = fakeAttendanceAdapter();
+  adapter.days.set(
+    `${PLACEMENT_A}:${TEST_DATE}`,
+    attendanceRow({
+      status: "on_time",
+      effective_arrival_at: TEST_NOW,
+      captured_at: TEST_NOW,
+      minutes_late: 5,
+    }),
+  );
+  const api = service(adapter);
+  const first = await api.submitWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+  });
+  const retry = await api.submitWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+  });
+  assert.equal(first.submission.revision, 1);
+  assert.equal(retry.outcome, "already_submitted");
+  assert.equal(retry.submission.revision, 1);
+  await api.reopenWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+    reason: "Correct the reviewed week",
+  });
+  const resubmitted = await api.submitWeek(companyPrincipal(), PROJECT_A, {
+    weekStart: WEEK_START,
+  });
+  assert.equal(resubmitted.submission.revision, 2);
+  const stored = await adapter.getAttendanceDay(DAY_A);
+  const submissionEvents = stored.attendance_events.filter(
+    (event) => event.event_type === "week_submitted",
+  );
+  assert.deepEqual(
+    submissionEvents.map((event) => event.metadata.submissionRevision),
+    [1, 2],
+  );
+  assert.equal(
+    stored.attendance_events.filter(
+      (event) => event.event_type === "week_reopened",
+    ).length,
+    1,
+  );
 });
 
 test("worker, Supervisor and unrelated company cannot submit or reopen weeks", async () => {
@@ -1154,18 +1768,25 @@ test("attendance migration is atomic, history-preserving, RLS-scoped and least p
   assert.match(sql, /unique \(placement_id, work_date\)/i);
   assert.match(sql, /attendance_events_prevent_update/);
   assert.match(sql, /attendance_events_prevent_delete/);
+  assert.match(sql, /current_user = 'postgres'[\s\S]*onsite\.attendance_event_maintenance/);
+  assert.doesNotMatch(sql, /grant (update|delete)[^;]*attendance_events to service_role/i);
   assert.match(sql, /attendance_days_validate_links/);
   assert.match(sql, /ATTENDANCE_PROJECT_MISMATCH/);
   assert.match(sql, /ATTENDANCE_SUBMISSION_MISMATCH/);
 });
 
-test("migration centralises daily QR expiry, server arrival calculation and weekly unresolved guard", () => {
+test("migration centralises QR timing, grace policy and weekly review guards", () => {
   const sql = fs.readFileSync(
     path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
     "utf8",
   );
   assert.match(sql, /clock_timestamp\(\)/);
-  assert.match(sql, /v_minutes <= 10/);
+  assert.doesNotMatch(sql, /v_minutes <= 10/);
+  assert.equal(
+    (sql.match(/v_minutes <= public\.attendance_grace_minutes\(\)/g) || []).length,
+    3,
+  );
+  assert.match(sql, /create or replace function public\.attendance_grace_minutes\(\)[\s\S]*select 10;/);
   assert.match(sql, /at time zone v_project\.timezone/);
   assert.match(sql, /token\.expires_at > now\(\)/);
   assert.match(sql, /token\.revoked_at is null/);
@@ -1184,6 +1805,70 @@ test("migration centralises daily QR expiry, server arrival calculation and week
   assert.match(sql, /shift_start_snapshot = v_terms\.shift_start_time/);
   assert.match(sql, /attendance_arrival_minutes_late\([\s\S]*\)\nreturns integer\nlanguage sql\nstable/);
   assert.match(sql, /v_day\.finalised_at is not null[\s\S]*ATTENDANCE_SUBMITTED/);
+  assert.match(sql, /ATTENDANCE_LATENESS_REVIEW_PENDING/);
+});
+
+test("migration preserves terminal history and validates cross-midnight shifts by work date", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  assert.match(sql, /attendance_placement_effective_end_date/);
+  assert.match(sql, /placement_lifecycle_events[\s\S]*event_type in \('released', 'completed'\)/);
+  const expectedFunction = sql.match(
+    /create or replace function public\.attendance_placement_expected[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.doesNotMatch(expectedFunction, /status in \('upcoming', 'active'\)/);
+  assert.match(expectedFunction, /attendance_placement_effective_end_date/);
+  assert.match(sql, /attendance_timestamp_matches_work_date/);
+  assert.match(sql, /attendance_resolve_placement_work_date/);
+  assert.match(sql, /v_local::date = p_work_date \+ 1/);
+  assert.match(sql, /greatest\(v_day_end, coalesce\(v_overnight_end, v_day_end\)\)/);
+  assert.match(sql, /SITE_QR_WRONG_DATE/);
+  assert.match(sql, /v_arrival := coalesce\(p_observed_arrival_at, v_capture\)/);
+  assert.match(sql, /capture_method = 'expected_day'[\s\S]*effective_arrival_at is null/);
+});
+
+test("migration revisions make weekly submission and lateness retries auditable", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  assert.match(sql, /submission_revision integer not null default 0/);
+  assert.match(sql, /submission_revision = attendance_week_submissions\.submission_revision \+ 1/);
+  assert.match(sql, /'week_submitted:'[\s\S]*submission_revision/);
+  assert.match(sql, /worker_reason_revision = worker_reason_revision \+ 1/);
+  assert.match(sql, /worker_reason_review_revision = worker_reason_review_revision \+ 1/);
+  assert.match(sql, /'already_submitted'[\s\S]*reason_revision/);
+  assert.match(sql, /'already_reviewed'[\s\S]*review_revision/);
+  assert.match(sql, /'previous', v_previous[\s\S]*'new'/);
+  assert.match(sql, /'sent_home'\)[\s\S]*ATTENDANCE_REASON_REQUIRED/);
+});
+
+test("worker QR issuance is serialised and constrained to one active token", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  assert.match(sql, /worker_attendance_qr_tokens_one_active_idx[\s\S]*where revoked_at is null/);
+  const issueFunction = sql.match(
+    /create or replace function public\.issue_worker_attendance_qr[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.match(issueFunction, /from public\.worker_profiles[\s\S]*for update/);
+  assert.match(issueFunction, /set revoked_at = now\(\)[\s\S]*insert into public\.worker_attendance_qr_tokens/);
+});
+
+test("project authority takes precedence over worker identity in attendance audit actors", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/202609160007_attendance_foundation.sql"),
+    "utf8",
+  );
+  const actorFunction = sql.match(
+    /create or replace function public\.attendance_event_actor_type[\s\S]*?\$\$;/,
+  )?.[0] || "";
+  assert.ok(actorFunction.indexOf("= 'administrator'") < actorFunction.indexOf("worker_profiles"));
+  assert.ok(actorFunction.indexOf("= 'supervisor'") < actorFunction.indexOf("worker_profiles"));
+  assert.match(sql, /'worker_site_qr_scan'[\s\S]*'worker'/);
 });
 
 test("server and frontend expose canonical attendance integration points", () => {

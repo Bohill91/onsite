@@ -42,9 +42,11 @@ const ATTENDANCE_SELECTION = [
   "worker_reason_category",
   "worker_reason_explanation",
   "worker_reason_submitted_at",
+  "worker_reason_revision",
   "worker_reason_review_outcome",
   "worker_reason_reviewed_by_user_id",
   "worker_reason_reviewed_at",
+  "worker_reason_review_revision",
   "outcome_reason",
   "capture_latitude",
   "capture_longitude",
@@ -167,12 +169,14 @@ function attendanceDayProjection(row = {}, { company = false } = {}) {
           category: cleanText(row.worker_reason_category, 200),
           explanation: cleanText(row.worker_reason_explanation, 2000),
           submittedAt: row.worker_reason_submitted_at || "",
+          revision: Number(row.worker_reason_revision) || 0,
           reviewOutcome: LATE_REVIEW_SET.has(
             row.worker_reason_review_outcome,
           )
             ? row.worker_reason_review_outcome
             : "pending",
           reviewedAt: row.worker_reason_reviewed_at || "",
+          reviewRevision: Number(row.worker_reason_review_revision) || 0,
         }
       : null,
     outcomeReason: cleanText(row.outcome_reason, 1000),
@@ -226,6 +230,7 @@ function weekSubmissionProjection(row = {}) {
     weekStart: row.week_start || row.weekStart || "",
     weekEnd: row.week_end || row.weekEnd || "",
     status: cleanText(row.status, 40) || "draft",
+    revision: Number(row.submission_revision ?? row.submissionRevision) || 0,
     submittedAt: row.submitted_at || row.submittedAt || "",
     reopenedAt: row.reopened_at || row.reopenedAt || "",
     reopenReason: cleanText(row.reopen_reason || row.reopenReason, 1000),
@@ -892,6 +897,19 @@ function createAttendanceService({
           "ATTENDANCE_CORRECTION_ADMIN_REQUIRED",
         );
       }
+      const reason = cleanText(input.reason, 1000);
+      if (
+        ["no_show", "approved_absence", "non_worker_fault", "sent_home"].includes(
+          status,
+        ) &&
+        !reason
+      ) {
+        throw new AttendanceServiceError(
+          "Add a reason for this attendance outcome.",
+          400,
+          "ATTENDANCE_REASON_REQUIRED",
+        );
+      }
       const result = await attendanceAdapter.markAttendance({
         actorUserId: access.actorUserId,
         projectId,
@@ -899,7 +917,7 @@ function createAttendanceService({
         workDate,
         status,
         effectiveArrivalAt: cleanText(input.effectiveArrivalAt, 80),
-        reason: cleanText(input.reason, 1000),
+        reason,
         correctionReason,
       });
       const row = await verifiedDay(result.attendance_day_id || result.id);
