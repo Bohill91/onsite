@@ -26,6 +26,10 @@ const {
   createPlacementLifecycleService,
 } = require('./server-placement-lifecycle');
 const {
+  AttendanceServiceError,
+  createAttendanceService,
+} = require('./server-attendance');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -47,6 +51,7 @@ const projectService = createProjectService();
 const marketplaceService = createMarketplaceService();
 const offerService = createOfferService();
 const placementLifecycleService = createPlacementLifecycleService();
+const attendanceService = createAttendanceService();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -731,6 +736,177 @@ async function handlePlacementLifecycleApi(req, res, url) {
   }
 }
 
+function publicAttendanceError(error) {
+  if (error instanceof AttendanceServiceError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Attendance] Unexpected error:', error);
+  return new AttendanceServiceError(
+    'Attendance service error.',
+    500,
+    'ATTENDANCE_INTERNAL_ERROR',
+  );
+}
+
+async function handleAttendanceApi(req, res, url) {
+  try {
+    const restored = await resolveAuthenticatedPrincipal(req);
+    const cookies = sessionCookies(req, restored.session);
+    const responseHeaders = cookies.length
+      ? { 'Set-Cookie': cookies, Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    const projectAttendanceMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance$/i,
+    );
+    const projectQrMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance\/qr$/i,
+    );
+    const projectMarkMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance\/mark$/i,
+    );
+    const projectWeekSubmitMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance\/week\/submit$/i,
+    );
+    const projectWeekReopenMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance\/week\/reopen$/i,
+    );
+    const projectManagerMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance-manager$/i,
+    );
+    const projectLatenessReviewMatch = url.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]{36})\/attendance\/([0-9a-f-]{36})\/lateness-review$/i,
+    );
+    const latenessReasonMatch = url.pathname.match(
+      /^\/api\/attendance\/([0-9a-f-]{36})\/lateness-reason$/i,
+    );
+
+    if (req.method === 'GET' && url.pathname === '/api/attendance') {
+      const attendance = await attendanceService.listWorker(restored.principal);
+      sendJson(res, 200, { attendance }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/attendance/scan') {
+      const result = await attendanceService.scanSiteQr(
+        restored.principal,
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/attendance/worker-qr') {
+      const qr = await attendanceService.issueWorkerQr(
+        restored.principal,
+        await readJsonRequest(req),
+      );
+      sendJson(res, 201, { qr }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/attendance/worker-qr/scan') {
+      const result = await attendanceService.scanWorkerQr(
+        restored.principal,
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && latenessReasonMatch) {
+      const attendance = await attendanceService.submitLatenessReason(
+        restored.principal,
+        latenessReasonMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { attendance }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'GET' && projectAttendanceMatch) {
+      const result = await attendanceService.listProject(
+        restored.principal,
+        projectAttendanceMatch[1],
+        { weekStart: url.searchParams.get('weekStart') || undefined },
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectQrMatch) {
+      const qr = await attendanceService.issueSiteQr(
+        restored.principal,
+        projectQrMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 201, { qr }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectMarkMatch) {
+      const attendance = await attendanceService.mark(
+        restored.principal,
+        projectMarkMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { attendance }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectWeekSubmitMatch) {
+      const result = await attendanceService.submitWeek(
+        restored.principal,
+        projectWeekSubmitMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectWeekReopenMatch) {
+      const result = await attendanceService.reopenWeek(
+        restored.principal,
+        projectWeekReopenMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, result, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectManagerMatch) {
+      const attendanceManager = await attendanceService.assignManager(
+        restored.principal,
+        projectManagerMatch[1],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { attendanceManager }, responseHeaders);
+      return;
+    }
+
+    if (req.method === 'POST' && projectLatenessReviewMatch) {
+      const attendance = await attendanceService.reviewLatenessReason(
+        restored.principal,
+        projectLatenessReviewMatch[1],
+        projectLatenessReviewMatch[2],
+        await readJsonRequest(req),
+      );
+      sendJson(res, 200, { attendance }, responseHeaders);
+      return;
+    }
+
+    sendJson(res, 404, {
+      error: 'Attendance route not found.',
+      code: 'ATTENDANCE_ROUTE_NOT_FOUND',
+    });
+  } catch (rawError) {
+    const error = publicAttendanceError(rawError);
+    const headers = error.statusCode === 401
+      ? { 'Set-Cookie': clearSessionCookies(req), Vary: 'Cookie' }
+      : { Vary: 'Cookie' };
+    sendJson(res, error.statusCode, { error: error.message, code: error.code }, headers);
+  }
+}
+
 function requestHeader(req, name, maxLength = 200) {
   const value = Array.isArray(req.headers[name])
     ? req.headers[name][0]
@@ -851,6 +1027,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname.startsWith('/api/auth/')) {
     handleAuthApi(req, res, url);
+    return;
+  }
+
+  if (
+    url.pathname === '/api/attendance'
+    || url.pathname.startsWith('/api/attendance/')
+    || /^\/api\/projects\/[0-9a-f-]{36}\/attendance(?:\/|$)/i.test(url.pathname)
+    || /^\/api\/projects\/[0-9a-f-]{36}\/attendance-manager$/i.test(url.pathname)
+  ) {
+    handleAttendanceApi(req, res, url);
     return;
   }
 

@@ -6882,6 +6882,202 @@ async function marketplaceApiRequest(path, options = {}) {
   return payload;
 }
 
+async function attendanceApiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error || "Attendance request failed.");
+    error.code = payload.code || "ATTENDANCE_API_ERROR";
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+const canonicalAttendanceSyncInFlight = new Map();
+let canonicalAttendanceLoadedScope = "";
+let canonicalAttendanceWeekSubmission = null;
+const canonicalSiteQrCodes = new Map();
+const canonicalSiteQrIssueInFlight = new Map();
+
+function canonicalAttendanceStatus(status) {
+  return {
+    on_time: "onTime",
+    late: "late",
+    no_show: "noShow",
+    approved_absence: "excused",
+    non_worker_fault: "siteCancelled",
+    sent_home: "sentHome",
+    needs_review: "unconfirmed",
+  }[status] || "unconfirmed";
+}
+
+function canonicalAttendanceCompatibility(day, user = getSessionUser()) {
+  const status = canonicalAttendanceStatus(day.status);
+  const arrivalMs = day.effectiveArrivalAt
+    ? new Date(day.effectiveArrivalAt).getTime()
+    : 0;
+  return {
+    id: day.id,
+    canonicalAttendance: true,
+    placementId: day.placementId,
+    workerId: day.worker?.id || (user?.type === "worker" ? user.id : ""),
+    workerName: day.worker?.name || (user?.type === "worker" ? user.name : ""),
+    jobId: day.projectId,
+    projectName: day.project?.name || "",
+    jobNumber: day.project?.jobNumber || "",
+    jobLocation: day.project?.location || "",
+    date: day.workDate,
+    status,
+    rating: 0,
+    recordedAt: day.capturedAt ? new Date(day.capturedAt).getTime() : 0,
+    checkInTime: arrivalMs || null,
+    scanTime: arrivalMs
+      ? new Date(arrivalMs).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "",
+    suggestedStatus: ["onTime", "late"].includes(status) ? status : "",
+    expectedStartTime: day.shiftStartTime || "",
+    expectedFinishTime: day.shiftFinishTime || "",
+    selfReported: day.captureMethod === "worker_site_qr",
+    supervisorConfirmed: !!day.finalisedAt,
+    supervisorDecision: day.finalisedAt ? status : "",
+    confirmedAt: day.finalisedAt
+      ? new Date(day.finalisedAt).getTime()
+      : null,
+    approvalStatus: day.finalisedAt ? "company_confirmed" : "draft",
+    lateReport: day.latenessReason
+      ? {
+          reason: day.latenessReason.category,
+          note: day.latenessReason.explanation || "",
+          reportedAt: day.latenessReason.submittedAt || "",
+          supervisorDecision:
+            day.latenessReason.reviewOutcome === "approved_exception"
+              ? "valid_reason"
+              : day.latenessReason.reviewOutcome === "rejected"
+                ? "invalid_reason"
+                : "",
+        }
+      : null,
+    gpsLat: day.locationEvidence?.latitude ?? null,
+    gpsLng: day.locationEvidence?.longitude ?? null,
+    gpsAccuracy: day.locationEvidence?.accuracyM ?? null,
+    canonicalReliabilityInput: day.reliabilityInput || null,
+  };
+}
+
+function replaceCanonicalAttendance(days, user, projectId = "") {
+  attendanceRecords = attendanceRecords.filter((record) => {
+    if (record.canonicalAttendance) {
+      if (user?.type === "worker") return record.workerId !== user.id;
+      if (projectId) return record.jobId !== projectId;
+      return false;
+    }
+    if (user?.type === "worker") return record.workerId !== user.id;
+    if (projectId) return record.jobId !== projectId;
+    return true;
+  });
+  attendanceRecords.unshift(
+    ...(days || []).map((day) => canonicalAttendanceCompatibility(day, user)),
+  );
+}
+
+async function syncCanonicalAttendance(user = getSessionUser(), projectId = "") {
+  if (!user?.serverAuthenticated || !["worker", "company"].includes(user.type)) return;
+  const scope = user.type === "worker" ? `worker:${user.id}` : `project:${projectId}`;
+  if (user.type === "company" && !projectId) return;
+  if (canonicalAttendanceSyncInFlight.has(scope)) {
+    return canonicalAttendanceSyncInFlight.get(scope);
+  }
+  const request = (async () => {
+    try {
+      const payload = user.type === "worker"
+        ? await attendanceApiRequest("/api/attendance")
+        : await attendanceApiRequest(`/api/projects/${projectId}/attendance`);
+      replaceCanonicalAttendance(payload.attendance || [], user, projectId);
+      canonicalAttendanceWeekSubmission = payload.submission || null;
+      canonicalAttendanceLoadedScope = scope;
+      renderAttendance();
+    } catch (error) {
+      console.error("[Attendance] Canonical sync failed:", error);
+      showToast(error.message || "Attendance could not be loaded");
+    } finally {
+      canonicalAttendanceSyncInFlight.delete(scope);
+    }
+  })();
+  canonicalAttendanceSyncInFlight.set(scope, request);
+  return request;
+}
+
+async function submitCanonicalAttendanceWeek(projectId) {
+  const user = getSessionUser();
+  if (user?.type !== "company" || !user.serverAuthenticated) return;
+  const button = document.getElementById("submitAttendanceWeekBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Submitting…";
+  }
+  try {
+    await attendanceApiRequest(
+      `/api/projects/${projectId}/attendance/week/submit`,
+      {
+        method: "POST",
+        body: { weekStart: mondayOf(todayDateStr()) },
+      },
+    );
+    canonicalAttendanceLoadedScope = "";
+    await syncCanonicalAttendance(user, projectId);
+    showToast("Attendance week submitted");
+  } catch (error) {
+    console.error("[Attendance] Weekly submission failed:", error);
+    showToast(error.message || "Attendance week could not be submitted");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Submit Week";
+    }
+  }
+}
+
+async function syncCanonicalAttendanceManager(project, user = getSessionUser()) {
+  const manager = project?.attendanceManager;
+  if (
+    !project?.canonicalProject ||
+    user?.type !== "company" ||
+    !user.serverAuthenticated ||
+    String(user.permissionRole || user.companyRole || "").toLowerCase() !==
+      "administrator" ||
+    !manager?.email
+  ) {
+    return null;
+  }
+  const sameUser =
+    user.email &&
+    String(user.email).trim().toLowerCase() ===
+      String(manager.email).trim().toLowerCase();
+  return attendanceApiRequest(
+    `/api/projects/${project.id}/attendance-manager`,
+    {
+      method: "POST",
+      body: {
+        managerUserId: sameUser ? user.authUserId || "" : "",
+        inviteEmail: manager.email,
+        displayName: manager.name || "",
+        phone: manager.phone || "",
+      },
+    },
+  );
+}
+
 let canonicalWorkerMarketplaceJobs = [];
 let canonicalWorkerOffers = [];
 let canonicalWorkerPlacements = [];
@@ -7378,6 +7574,7 @@ function canonicalProjectWritePayload(job, { includeRequirements = true } = {}) 
     sitePin: job.sitePin || null,
     arrivalPointConfirmed: !!job.arrivalPointConfirmed,
     start: job.start || job.startDate,
+    timezone: job.timezone || "Europe/London",
     shiftStartTime: job.shiftStartTime || "",
     estimatedEndDate: job.estimatedEndDate || job.endDate || "",
     noFixedEndDate: !!job.noFixedEndDate,
@@ -17176,6 +17373,14 @@ function syncLegacyWorkerFormAccess(user) {
 function applyRoleView(user) {
   const role = user?.type || null;
   clearCanonicalMarketplaceCompatibility();
+  canonicalAttendanceLoadedScope = "";
+  canonicalAttendanceWeekSubmission = null;
+  canonicalAttendanceSyncInFlight.clear();
+  attendanceRecords = attendanceRecords.filter(
+    (record) => !record.canonicalAttendance,
+  );
+  canonicalSiteQrCodes.clear();
+  canonicalSiteQrIssueInFlight.clear();
   syncLegacyWorkerFormAccess(user);
 
   if (role === "worker") {
@@ -17190,6 +17395,7 @@ function applyRoleView(user) {
     render();
     switchTab("dashboard");
     void syncCanonicalWorkerMarketplace(user);
+    void syncCanonicalAttendance(user);
   } else if (role === "company") {
     rebuildNav(CONTRACTOR_TABS, "dashboard");
     // Companies: show job form only, hide worker form and toggle bar
@@ -23304,11 +23510,23 @@ function companyProjectAttendanceSetupHTML(job) {
 function companyProjectSignInHTML(job, stage) {
   const code = ensureSiteCode(job.id);
   if (!code) {
+    if (stage === "completed" && job.canonicalProject) {
+      return `<section class="company-project-workspace-card"><div class="company-project-workspace-empty is-compact"><strong>Site Sign-In QR inactive.</strong><span>Daily sign-in codes are no longer issued after project completion.</span></div></section>`;
+    }
+    if (job.canonicalProject && getSessionUser()?.serverAuthenticated) {
+      void ensureCanonicalSiteCode(job)
+        .then(() => render())
+        .catch((error) => {
+          console.error("[Attendance] Project QR issue failed:", error);
+          showToast(error.message || "Site Sign-In QR could not be prepared");
+        });
+      return `<section class="company-project-workspace-card"><div class="loading-state" aria-live="polite">Preparing today&apos;s secure project QR</div></section>`;
+    }
     return `<section class="company-project-workspace-card"><div class="company-project-workspace-empty is-compact"><strong>Site Sign-In QR unavailable.</strong><span>The project QR could not be prepared. Refresh this project or review the site sign-in setup.</span></div></section>`;
   }
   return `<section class="company-project-workspace-card company-project-signin-card">
     <header class="company-project-workspace-head">
-      <div><p class="company-project-workspace-kicker">Site Sign-In</p><h2>Project QR</h2><span>Workers scan this QR when arriving on site. It remains valid until manually regenerated.</span></div>
+      <div><p class="company-project-workspace-kicker">Site Sign-In</p><h2>Project QR</h2><span>Workers scan this secure QR when arriving on site. Canonical codes are valid for the current work date.</span></div>
     </header>
     ${projectSignInQrHTML(job, code, { showToken: false })}
     ${stage !== "completed" ? `<div class="company-project-signin-actions"><button class="secondary-btn" type="button" data-project-qr-print="${job.id}">Print sign-in sheet</button><button class="secondary-btn" type="button" data-project-qr-regenerate="${job.id}">Regenerate QR</button></div>` : `<p class="company-project-workspace-quiet-state">This project has completed. The QR is retained for the project record.</p>`}
@@ -26864,6 +27082,11 @@ async function saveProjectEdit(jobId) {
         }),
       });
       Object.assign(job, mergeCanonicalProject(candidate, project));
+      try {
+        await syncCanonicalAttendanceManager(job, user);
+      } catch (managerError) {
+        console.error("[Attendance] Manager assignment failed:", managerError);
+      }
     } catch (saveError) {
       showToast(saveError.message || "Project changes could not be saved");
       return;
@@ -30060,6 +30283,11 @@ jobForm.addEventListener("submit", async (e) => {
         body: canonicalProjectWritePayload(job),
       });
       job = mergeCanonicalProject(job, project);
+      try {
+        await syncCanonicalAttendanceManager(job, poster);
+      } catch (managerError) {
+        console.error("[Attendance] Manager assignment failed:", managerError);
+      }
     } catch (saveError) {
       if (companyWizardSubmission) resetJobWizardSubmissionState();
       showToast(saveError.message || "Project could not be created");
@@ -32709,7 +32937,12 @@ function loadAttendanceRecords() {
 }
 function saveAttendanceRecords() {
   try {
-    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(attendanceRecords));
+    localStorage.setItem(
+      ATTENDANCE_KEY,
+      JSON.stringify(
+        attendanceRecords.filter((record) => !record.canonicalAttendance),
+      ),
+    );
   } catch (_) {}
 }
 function todayDateStr() {
@@ -32814,6 +33047,7 @@ const LATE_REPORT_REASONS = [
   "Vehicle breakdown",
   "Family emergency",
   "Medical appointment",
+  "Strike disruption",
   "Other",
 ];
 
@@ -33168,6 +33402,9 @@ function renderCompanyAttendanceShell(user, selectedProject, visibleProjects, al
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 Confirm Attendance
               </button>
+              ${selectedProject.canonicalProject && user.serverAuthenticated
+                ? `<button id="submitAttendanceWeekBtn" class="secondary-btn att-submit-btn" type="button" ${canonicalAttendanceWeekSubmission?.status === "submitted" ? "disabled" : ""}>${canonicalAttendanceWeekSubmission?.status === "submitted" ? "Week Submitted" : "Submit Week"}</button>`
+                : ""}
             </div>
             <section class="jw-card attendance-history-card">
               <div class="panel-header" id="attHistoryHeader">
@@ -33360,6 +33597,16 @@ function isDateWithinProjectDates(job, date = todayDateStr()) {
 }
 
 function getSiteCode(jobId) {
+  if (canonicalSiteQrCodes.has(jobId)) {
+    const canonicalCode = canonicalSiteQrCodes.get(jobId);
+    if (
+      !canonicalCode.expiresAt ||
+      new Date(canonicalCode.expiresAt).getTime() > Date.now()
+    ) {
+      return canonicalCode;
+    }
+    canonicalSiteQrCodes.delete(jobId);
+  }
   return (
     (state.siteCodes || [])
       .filter(
@@ -33408,7 +33655,55 @@ function generateSiteCode(jobId) {
 }
 
 function ensureSiteCode(jobId) {
-  return getSiteCode(jobId) || generateSiteCode(jobId);
+  const existing = getSiteCode(jobId);
+  if (existing) return existing;
+  const job = findJob(jobId);
+  const user = getSessionUser();
+  if (job?.canonicalProject && user?.serverAuthenticated) return null;
+  return generateSiteCode(jobId);
+}
+
+async function issueCanonicalSiteCode(job, { revokeExisting = false } = {}) {
+  if (!job?.canonicalProject) return ensureSiteCode(job?.id);
+  const { qr } = await attendanceApiRequest(
+    `/api/projects/${job.id}/attendance/qr`,
+    {
+      method: "POST",
+      body: {
+        revokeExisting,
+      },
+    },
+  );
+  const code = {
+    id: qr.id,
+    jobId: job.id,
+    scope: "daily",
+    date: qr.workDate,
+    token: qr.token,
+    startTime: jobExpectedStartTime(job),
+    validFrom: qr.workDate,
+    validUntil: qr.workDate,
+    expiresAt: qr.expiresAt,
+    qrSvg: qr.svg || "",
+    active: true,
+    canonicalAttendanceQr: true,
+  };
+  canonicalSiteQrCodes.set(job.id, code);
+  return code;
+}
+
+async function ensureCanonicalSiteCode(job) {
+  const existing = job ? getSiteCode(job.id) : null;
+  if (existing) return existing;
+  if (!job?.canonicalProject) return ensureSiteCode(job?.id);
+  if (canonicalSiteQrIssueInFlight.has(job.id)) {
+    return canonicalSiteQrIssueInFlight.get(job.id);
+  }
+  const request = issueCanonicalSiteCode(job).finally(() => {
+    canonicalSiteQrIssueInFlight.delete(job.id);
+  });
+  canonicalSiteQrIssueInFlight.set(job.id, request);
+  return request;
 }
 
 function projectSignInQrHTML(job, code, { showToken = true } = {}) {
@@ -33419,7 +33714,7 @@ function projectSignInQrHTML(job, code, { showToken = true } = {}) {
   const projectLocation = job?.siteAddress || job?.location || "Location not set";
   return `<div class="site-signin-qr">
     <div class="site-signin-qr-code">
-      ${renderQrGlyph(code.token)}
+      ${renderQrArtwork(code)}
       <strong>Scan to sign in</strong>
       ${showToken ? `<span class="qr-token">${escapeHtml(code.token)}</span>` : ""}
     </div>
@@ -33432,6 +33727,10 @@ function projectSignInQrHTML(job, code, { showToken = true } = {}) {
       <div class="qr-meta-row"><span>Project end</span><strong>${escapeHtml(endDate)}</strong></div>
     </div>
   </div>`;
+}
+
+function renderQrArtwork(code) {
+  return code?.qrSvg || renderQrGlyph(code?.token || "");
 }
 
 // Render a deterministic QR-style grid from a token (visual only — simulated scan).
@@ -33466,7 +33765,7 @@ function renderQrGlyph(token) {
 
 function openProjectSignInPrintSheet(jobId) {
   const job = findJob(jobId);
-  const code = job ? ensureSiteCode(job.id) : null;
+  const code = job ? getSiteCode(job.id) || ensureSiteCode(job.id) : null;
   if (!job || !code) {
     showToast("Select a project before printing the sign-in sheet");
     return;
@@ -33485,7 +33784,7 @@ function openProjectSignInPrintSheet(jobId) {
         <p>All workers must sign in every day.</p>
       </div>
       <div class="signin-print-qr">
-        ${renderQrGlyph(code.token)}
+        ${renderQrArtwork(code)}
       </div>
       <div class="signin-print-project">
         <h2>${escapeHtml(companyProjectTitle(job))}</h2>
@@ -33553,9 +33852,24 @@ function openQrRegenerationConfirm(jobId) {
   modal.addEventListener("click", (event) => {
     if (event.target === modal) closeQrRegenerationConfirm();
   });
-  modal.querySelector("[data-qr-regen-confirm]")?.addEventListener("click", () => {
-    const code = generateSiteCode(jobId);
+  modal.querySelector("[data-qr-regen-confirm]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Regenerating…";
     const job = findJob(jobId);
+    let code = null;
+    try {
+      code =
+        job?.canonicalProject && getSessionUser()?.serverAuthenticated
+          ? await issueCanonicalSiteCode(job, { revokeExisting: true })
+          : generateSiteCode(jobId);
+    } catch (error) {
+      console.error("[Attendance] QR regeneration failed:", error);
+      showToast(error.message || "Project sign-in QR could not be regenerated");
+      button.disabled = false;
+      button.textContent = "Confirm Regeneration";
+      return;
+    }
     if (job && code) {
       addProjectActivity(job, {
         type: PROJECT_ACTIVITY_TYPES.QR_REGENERATED,
@@ -33776,7 +34090,7 @@ function ratingBadgeHTML(label) {
 }
 
 // ─── Submit Day Attendance ─────────────────────────────────
-function submitDayAttendance() {
+async function submitDayAttendance() {
   const today = todayDateStr();
   let count = 0;
   const sessionUser = getSessionUser();
@@ -33810,6 +34124,77 @@ function submitDayAttendance() {
       `⚠ Potential Attendance Conflict Detected\n\nGPS evidence suggests the following worker(s) may have been on site:\n\n${conflicts.join("\n")}\n\nContinue marking as No Show?`,
     );
     if (!ok) return;
+  }
+
+  if (
+    sessionUser?.type === "company" &&
+    sessionUser.serverAuthenticated &&
+    scopedProject?.canonicalProject
+  ) {
+    const canonicalUpdates = Object.entries(todayAttendanceMap)
+      .filter(([wid, data]) => scopedWorkerIds?.has(wid) && data.status)
+      .map(async ([wid, data]) => {
+        const placement = canonicalPlacementForJobWorker(scopedProject, wid);
+        if (!placement?.id) return null;
+        const existing = attendanceRecords.find(
+          (record) =>
+            record.canonicalAttendance &&
+            record.workerId === wid &&
+            record.jobId === scopedProject.id &&
+            record.date === today,
+        );
+        const status = {
+          onTime: "on_time",
+          late: "late",
+          noShow: "no_show",
+          excused: "approved_absence",
+          sentHome: "sent_home",
+          notRequired: "non_worker_fault",
+          siteCancelled: "non_worker_fault",
+        }[data.status];
+        if (!status) return null;
+        let effectiveArrivalAt = existing?.checkInTime
+          ? new Date(existing.checkInTime).toISOString()
+          : "";
+        if (!effectiveArrivalAt && status === "on_time") {
+          const startTime = jobExpectedStartTime(scopedProject);
+          effectiveArrivalAt = new Date(`${today}T${startTime}:00`).toISOString();
+        }
+        if (!effectiveArrivalAt && status === "late") {
+          effectiveArrivalAt = new Date().toISOString();
+        }
+        const reason = {
+          no_show: "No attendance confirmed by Attendance Manager",
+          approved_absence: "Approved absence",
+          non_worker_fault:
+            data.status === "siteCancelled"
+              ? "Project or site unavailable"
+              : "Worker not required on site",
+        }[status] || "";
+        return attendanceApiRequest(
+          `/api/projects/${scopedProject.id}/attendance/mark`,
+          {
+            method: "POST",
+            body: {
+              placementId: placement.id,
+              workDate: today,
+              status,
+              effectiveArrivalAt,
+              reason,
+            },
+          },
+        );
+      });
+    try {
+      await Promise.all(canonicalUpdates);
+      canonicalAttendanceLoadedScope = "";
+      await syncCanonicalAttendance(sessionUser, scopedProject.id);
+      showToast("Today's attendance updated");
+    } catch (error) {
+      console.error("[Attendance] Canonical daily review failed:", error);
+      showToast(error.message || "Attendance could not be updated");
+    }
+    return;
   }
 
   Object.entries(todayAttendanceMap).forEach(([wid, data]) => {
@@ -34416,6 +34801,25 @@ function workerSelfAttCard(worker, today) {
           <div class="wsa-state-sub">Confirmed by your supervisor</div>
         </div>
       </div>`;
+  } else if (
+    rec?.canonicalAttendance &&
+    ["onTime", "late"].includes(rec.status)
+  ) {
+    const cfg = ATT_CFG[rec.status];
+    const time = rec.checkInTime
+      ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+    body = `
+      <div class="wsa-state wsa-state--pending">
+        <span class="wsa-state-icon" style="color:${cfg.color}">${cfg.icon}</span>
+        <div>
+          <div class="wsa-state-title">Signed in${time ? ` at ${time}` : ""}</div>
+          <div class="wsa-state-sub">${cfg.label} · awaiting weekly attendance submission</div>
+        </div>
+      </div>`;
   } else if (rec && rec.status === "checkedIn") {
     const t = rec.checkInTime
       ? new Date(rec.checkInTime).toLocaleTimeString("en-GB", {
@@ -34455,12 +34859,23 @@ function workerSelfAttCard(worker, today) {
       <button class="wsa-report-btn" data-att-report="${worker.id}" type="button">Report running late</button>`;
   }
 
+  const workerQrAction =
+    job.canonicalWorkerPlacementProject && getSessionUser()?.serverAuthenticated
+      ? `<button class="wsa-report-btn" data-att-present-qr="${worker.id}" type="button">Show my worker QR</button>`
+      : "";
+  const canonicalLateReasonAction =
+    rec?.canonicalAttendance && rec.status === "late" && !rec.supervisorConfirmed
+      ? `<button class="wsa-report-btn" data-att-report="${worker.id}" type="button">${rec.lateReport ? "Update lateness reason" : "Report lateness reason"}</button>`
+      : "";
+
   return `
   <article class="attendance-card wsa-card" id="att-card-${worker.id}">
     <div class="wsa-date-row"><span class="wsa-date-label">${formatAttDate(today)}</span></div>
     ${siteLine}
     ${statsRow}
     ${body}
+    ${canonicalLateReasonAction}
+    ${workerQrAction}
   </article>`;
 }
 
@@ -34471,6 +34886,9 @@ function bindWorkerAttEvents(container, uid, workerObj) {
   const reportBtn = container.querySelector(`[data-att-report="${uid}"]`);
   if (reportBtn)
     reportBtn.addEventListener("click", () => openReportModal(uid, workerObj));
+  const presentQrBtn = container.querySelector(`[data-att-present-qr="${uid}"]`);
+  if (presentQrBtn)
+    presentQrBtn.addEventListener("click", () => openWorkerAttendanceQr(uid));
   bindAgreementOpeners(container);
 }
 
@@ -34488,9 +34906,121 @@ function refreshWorkerAttCard(uid, workerObj) {
 }
 
 function closeWorkerQrScanner() {
+  stopQrCameraScanner();
   hideWithMotion(document.getElementById("workerQrScanModal"), null, {
     remove: true,
   });
+}
+
+let qrCameraRuntime = null;
+
+function stopQrCameraScanner() {
+  if (!qrCameraRuntime) return;
+  if (qrCameraRuntime.timer) clearTimeout(qrCameraRuntime.timer);
+  (qrCameraRuntime.stream?.getTracks?.() || []).forEach((track) => track.stop());
+  qrCameraRuntime = null;
+}
+
+async function startQrCameraScanner(modal, onScan) {
+  stopQrCameraScanner();
+  const video = modal.querySelector("[data-qr-camera]");
+  const status = modal.querySelector("[data-qr-camera-status]");
+  const fallback = modal.querySelector("[data-qr-manual-fallback]");
+  if (!video || !navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
+    if (status) status.textContent = "Camera QR scanning is unavailable in this browser. Enter the secure code instead.";
+    fallback?.removeAttribute("hidden");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    if (!modal.isConnected) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    video.srcObject = stream;
+    await video.play();
+    const detector = new BarcodeDetector({ formats: ["qr_code"] });
+    const runtime = { stream, timer: null, processing: false };
+    qrCameraRuntime = runtime;
+    if (status) status.textContent = "Point the camera at the OnSite QR code.";
+    const detect = async () => {
+      if (qrCameraRuntime !== runtime || runtime.processing || !modal.isConnected) return;
+      try {
+        const codes = await detector.detect(video);
+        const value = String(codes?.[0]?.rawValue || "").trim();
+        if (value) {
+          runtime.processing = true;
+          stopQrCameraScanner();
+          await onScan(value);
+          return;
+        }
+      } catch (_) {
+        // A transient frame/decode failure should not end the scan session.
+      }
+      if (qrCameraRuntime === runtime) {
+        runtime.timer = setTimeout(detect, 180);
+      }
+    };
+    runtime.timer = setTimeout(detect, 180);
+  } catch (_) {
+    if (status) status.textContent = "Camera access was unavailable. Enter the secure code instead.";
+    fallback?.removeAttribute("hidden");
+  }
+}
+
+function bindQrManualFallback(modal, onScan) {
+  modal.querySelector("[data-qr-manual-submit]")?.addEventListener("click", async () => {
+    const input = modal.querySelector("[data-qr-manual-token]");
+    const token = String(input?.value || "").trim();
+    if (!token) {
+      input?.focus();
+      return;
+    }
+    await onScan(token);
+  });
+}
+
+function closeWorkerAttendanceQr() {
+  hideWithMotion(document.getElementById("workerAttendanceQrModal"), null, {
+    remove: true,
+  });
+}
+
+async function openWorkerAttendanceQr() {
+  closeWorkerAttendanceQr();
+  try {
+    const { qr } = await attendanceApiRequest("/api/attendance/worker-qr", {
+      method: "POST",
+      body: {},
+    });
+    const modal = document.createElement("div");
+    modal.id = "workerAttendanceQrModal";
+    modal.className = "qr-scan-modal";
+    modal.innerHTML = `
+      <div class="qr-scan-sheet" role="dialog" aria-modal="true" aria-labelledby="workerQrTitle">
+        <button class="qr-scan-close" type="button" aria-label="Close" data-worker-qr-close>&times;</button>
+        <div class="qr-scan-kicker">Attendance</div>
+        <h3 id="workerQrTitle" class="qr-scan-title">My worker QR</h3>
+        <div class="worker-attendance-qr">${qr.svg || ""}</div>
+        <p class="qr-scan-copy">Ask an authorised site supervisor to scan this code. It expires shortly and contains no personal details.</p>
+        <div class="qr-scan-actions">
+          <button class="secondary-btn" type="button" data-worker-qr-close>Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelectorAll("[data-worker-qr-close]").forEach((button) =>
+      button.addEventListener("click", closeWorkerAttendanceQr),
+    );
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeWorkerAttendanceQr();
+    });
+  } catch (error) {
+    console.error("[Attendance] Worker QR issue failed:", error);
+    showToast(error.message || "Worker QR could not be prepared");
+  }
 }
 
 function openWorkerQrScanner(uid, workerObj) {
@@ -34505,6 +35035,7 @@ function openWorkerQrScanner(uid, workerObj) {
       <div class="qr-scan-kicker">Site Sign In</div>
       <h3 id="qrScanTitle" class="qr-scan-title">Scan Site QR</h3>
       <div class="qr-scan-frame" aria-hidden="true">
+        <video class="qr-scan-video" data-qr-camera autoplay playsinline muted></video>
         <span class="qr-scan-corner qr-scan-corner--tl"></span>
         <span class="qr-scan-corner qr-scan-corner--tr"></span>
         <span class="qr-scan-corner qr-scan-corner--bl"></span>
@@ -34512,10 +35043,15 @@ function openWorkerQrScanner(uid, workerObj) {
         <span class="qr-scan-line"></span>
       </div>
       <div class="qr-scan-site">${job ? `${escapeHtml(job.trade)} · ${escapeHtml(job.location)}` : "No active site assigned"}</div>
-      <p class="qr-scan-copy">Use this secure project sign-in flow to validate the active site QR token.</p>
+      <p class="qr-scan-copy" data-qr-camera-status>Preparing the secure QR scanner…</p>
+      <div class="qr-scan-manual" data-qr-manual-fallback hidden>
+        <label for="workerSiteQrToken">Secure sign-in code</label>
+        <input id="workerSiteQrToken" type="text" autocomplete="off" spellcheck="false" data-qr-manual-token />
+        <button class="primary-btn" type="button" data-qr-manual-submit>Sign in</button>
+      </div>
       <div class="qr-scan-actions">
         <button class="secondary-btn" type="button" data-qr-scan-close>Cancel</button>
-        <button class="primary-btn" type="button" data-qr-scan-use>Use Site Sign-In QR</button>
+        ${job?.canonicalWorkerPlacementProject ? "" : '<button class="primary-btn" type="button" data-qr-demo-submit>Use Site Sign-In QR</button>'}
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -34525,15 +35061,26 @@ function openWorkerQrScanner(uid, workerObj) {
   modal.addEventListener("click", (e) => {
     if (e.target === modal) closeWorkerQrScanner();
   });
-  modal.querySelector("[data-qr-scan-use]")?.addEventListener("click", async () => {
-    await workerScanCheckIn(uid, workerObj);
+  const useToken = async (token = "") => {
+    await workerScanCheckIn(uid, workerObj, token);
     closeWorkerQrScanner();
-  });
+  };
+  if (job?.canonicalWorkerPlacementProject && getSessionUser()?.serverAuthenticated) {
+    bindQrManualFallback(modal, useToken);
+    void startQrCameraScanner(modal, useToken);
+  } else {
+    modal.querySelector("[data-qr-camera-status]").textContent =
+      "Use this secure project sign-in flow to validate the active site QR token.";
+    modal.querySelector("[data-qr-camera]")?.remove();
+    modal.querySelector("[data-qr-demo-submit]")?.addEventListener("click", async () => {
+      await useToken();
+    }, { once: true });
+  }
 }
 
-// camera-scanner-ready / future QR camera integration:
-// validates the active project sign-in token without opening a real camera yet.
-async function workerScanCheckIn(uid, workerObj) {
+// Canonical flows use camera QR detection; isolated demo flows retain the
+// local compatibility token path.
+async function workerScanCheckIn(uid, workerObj, scannedToken = "") {
   const today = todayDateStr();
   const job = assignedJobForWorker(uid);
   if (!job) {
@@ -34549,7 +35096,9 @@ async function workerScanCheckIn(uid, workerObj) {
     return;
   }
 
-  const code = activeSiteCode(job.id);
+  const code = scannedToken
+    ? { token: scannedToken, startTime: jobExpectedStartTime(job) }
+    : activeSiteCode(job.id);
   if (!code) {
     showToast(
       "No active site sign-in QR is available for this project today",
@@ -34577,6 +35126,43 @@ async function workerScanCheckIn(uid, workerObj) {
     }
   } catch (_) {
     gps = null;
+  }
+  const session = getSessionUser();
+  if (
+    session?.type === "worker" &&
+    session.serverAuthenticated &&
+    job.canonicalWorkerPlacementProject
+  ) {
+    try {
+      const result = await attendanceApiRequest("/api/attendance/scan", {
+        method: "POST",
+        body: {
+          token: code.token,
+          ...(gps
+            ? {
+                latitude: gps.lat,
+                longitude: gps.lng,
+                accuracyM: gps.accuracy ?? null,
+              }
+            : {}),
+        },
+      });
+      replaceCanonicalAttendance([result.attendance], session);
+      canonicalAttendanceLoadedScope = `worker:${session.id}`;
+      showToast(
+        result.outcome === "already_signed_in"
+          ? "You are already signed in for today"
+          : result.attendance.status === "late"
+            ? "Signed in — marked Late"
+            : "Signed in — On time",
+      );
+      refreshWorkerAttCard(uid, workerObj);
+      return;
+    } catch (error) {
+      console.error("[Attendance] Canonical worker sign-in failed:", error);
+      showToast(error.message || "Site sign-in could not be recorded");
+      return;
+    }
   }
   const previous = attendanceRecords.find(
     (r) => r.workerId === uid && r.jobId === job.id && r.date === today,
@@ -34858,6 +35444,13 @@ function renderAttendance() {
     const visibleProjects = filterAttendanceProjects(projects);
     const selectedProject = projects.find((job) => job.id === activeAttendanceProjectId) || null;
     if (selectedProject) qrSelectedJobId = selectedProject.id;
+    if (
+      selectedProject?.canonicalProject &&
+      user.serverAuthenticated &&
+      canonicalAttendanceLoadedScope !== `project:${selectedProject.id}`
+    ) {
+      void syncCanonicalAttendance(user, selectedProject.id);
+    }
     renderCompanyAttendanceShell(user, selectedProject, visibleProjects, projects);
     const badge = document.getElementById("attTodayBadge");
     if (badge) badge.textContent = formatAttDate(todayDateStr());
@@ -34894,6 +35487,11 @@ function renderAttendance() {
       : "Confirm Attendance";
     submitBtn.onclick = submitDayAttendance;
   }
+  document
+    .getElementById("submitAttendanceWeekBtn")
+    ?.addEventListener("click", () => {
+      if (selectedProject?.id) void submitCanonicalAttendanceWeek(selectedProject.id);
+    });
 
   if (badge) badge.textContent = formatAttDate(todayDateStr());
 
@@ -35116,6 +35714,89 @@ function renderAttendance() {
   });
 }
 
+function closeSupervisorWorkerQrScanner() {
+  stopQrCameraScanner();
+  hideWithMotion(document.getElementById("supervisorWorkerQrModal"), null, {
+    remove: true,
+  });
+}
+
+function openSupervisorWorkerQrScanner(projectId) {
+  closeSupervisorWorkerQrScanner();
+  const project = findJob(projectId);
+  if (!project) return;
+  const modal = document.createElement("div");
+  modal.id = "supervisorWorkerQrModal";
+  modal.className = "qr-scan-modal";
+  modal.innerHTML = `
+    <div class="qr-scan-sheet" role="dialog" aria-modal="true" aria-labelledby="supervisorQrTitle">
+      <button class="qr-scan-close" type="button" aria-label="Close" data-supervisor-qr-close>&times;</button>
+      <div class="qr-scan-kicker">Site Attendance</div>
+      <h3 id="supervisorQrTitle" class="qr-scan-title">Scan Worker QR</h3>
+      <div class="qr-scan-frame" aria-hidden="true">
+        <video class="qr-scan-video" data-qr-camera autoplay playsinline muted></video>
+        <span class="qr-scan-corner qr-scan-corner--tl"></span>
+        <span class="qr-scan-corner qr-scan-corner--tr"></span>
+        <span class="qr-scan-corner qr-scan-corner--bl"></span>
+        <span class="qr-scan-corner qr-scan-corner--br"></span>
+        <span class="qr-scan-line"></span>
+      </div>
+      <div class="qr-scan-site">${escapeHtml(companyProjectTitle(project))}</div>
+      <p class="qr-scan-copy" data-qr-camera-status>Preparing the secure QR scanner…</p>
+      <div class="qr-scan-manual" data-qr-manual-fallback hidden>
+        <label for="supervisorWorkerQrToken">Secure worker code</label>
+        <input id="supervisorWorkerQrToken" type="text" autocomplete="off" spellcheck="false" data-qr-manual-token />
+        <button class="primary-btn" type="button" data-qr-manual-submit>Record arrival</button>
+      </div>
+      <div class="qr-scan-actions">
+        <button class="secondary-btn" type="button" data-supervisor-qr-close>Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll("[data-supervisor-qr-close]").forEach((button) =>
+    button.addEventListener("click", closeSupervisorWorkerQrScanner),
+  );
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeSupervisorWorkerQrScanner();
+  });
+  const recordArrival = async (token) => {
+    const status = modal.querySelector("[data-qr-camera-status]");
+    if (status) status.textContent = "Verifying worker and placement…";
+    let gps = null;
+    try {
+      gps = await getGPS();
+    } catch (_) {
+      gps = null;
+    }
+    try {
+      const result = await attendanceApiRequest("/api/attendance/worker-qr/scan", {
+        method: "POST",
+        body: {
+          projectId,
+          token,
+          ...(gps
+            ? { latitude: gps.lat, longitude: gps.lng, accuracyM: gps.accuracy ?? null }
+            : {}),
+        },
+      });
+      canonicalAttendanceLoadedScope = "";
+      await syncCanonicalAttendance(getSessionUser(), projectId);
+      showToast(
+        result.outcome === "already_signed_in"
+          ? "Worker was already signed in"
+          : "Worker arrival recorded",
+      );
+      closeSupervisorWorkerQrScanner();
+    } catch (error) {
+      console.error("[Attendance] Worker QR scan failed:", error);
+      if (status) status.textContent = error.message || "Worker QR could not be verified.";
+      modal.querySelector("[data-qr-manual-fallback]")?.removeAttribute("hidden");
+    }
+  };
+  bindQrManualFallback(modal, recordArrival);
+  void startQrCameraScanner(modal, recordArrival);
+}
+
 // ─── Project Site Sign-In QR Panel (supervisor / admin) ───
 function renderSiteQrPanel() {
   const panel = document.getElementById("siteQrPanel");
@@ -35146,7 +35827,27 @@ function renderSiteQrPanel() {
     qrSelectedJobId = liveJobs[0].id;
   }
   const job = findJob(qrSelectedJobId);
-  const code = ensureSiteCode(qrSelectedJobId);
+  let code = getSiteCode(qrSelectedJobId);
+  if (!code && job?.canonicalProject && user?.serverAuthenticated) {
+    panel.innerHTML = `
+      <div class="qr-panel">
+        <div class="qr-panel-head">
+          <h3 class="qr-panel-title">Site Sign-In QR</h3>
+          <span class="qr-panel-sub">Preparing today's secure project QR…</span>
+        </div>
+        <div class="loading-state" aria-live="polite">Loading site sign-in QR</div>
+      </div>`;
+    void ensureCanonicalSiteCode(job)
+      .then(() => renderSiteQrPanel())
+      .catch((error) => {
+        console.error("[Attendance] Site QR issue failed:", error);
+        panel.querySelector(".loading-state")?.replaceChildren(
+          document.createTextNode(error.message || "Site QR could not be loaded."),
+        );
+      });
+    return;
+  }
+  code ||= ensureSiteCode(qrSelectedJobId);
 
   const options = liveJobs
     .map(
@@ -35159,6 +35860,7 @@ function renderSiteQrPanel() {
     <div class="qr-actions">
       <button class="qr-gen-btn" id="qrPrintBtn" type="button">Print Sign-In Sheet</button>
       <button class="qr-gen-btn qr-gen-btn--ghost" id="qrGenBtn" type="button">Regenerate QR</button>
+      ${job?.canonicalProject && user?.serverAuthenticated ? '<button class="qr-gen-btn qr-gen-btn--ghost" id="workerQrScanBtn" type="button">Scan Worker QR</button>' : ""}
     </div>`;
 
   panel.innerHTML = `
@@ -35190,6 +35892,9 @@ function renderSiteQrPanel() {
   document
     .getElementById("qrPrintBtn")
     ?.addEventListener("click", () => openProjectSignInPrintSheet(qrSelectedJobId));
+  document
+    .getElementById("workerQrScanBtn")
+    ?.addEventListener("click", () => openSupervisorWorkerQrScanner(qrSelectedJobId));
 }
 
 // ─── Admin Attendance Review (full audit) ─────────────────
@@ -35911,16 +36616,36 @@ function openReportModal(uid) {
   );
   const ri =
     rec && rec.lateReport ? rec.lateReport : {};
+  const canonicalLate = !!(
+    rec?.canonicalAttendance &&
+    rec.status === "late" &&
+    !rec.supervisorConfirmed
+  );
+  const modal = document.getElementById("reportModal");
+  if (modal) modal.dataset.canonicalLateReason = canonicalLate ? "true" : "false";
+  const title = modal?.querySelector(".dispute-sheet-title");
+  const subtitle = modal?.querySelector(".dispute-sheet-sub");
+  const submitButton = document.getElementById("submitReportBtn");
+  if (title) title.textContent = canonicalLate ? "Report Lateness Reason" : "Report Running Late";
+  if (subtitle) {
+    subtitle.textContent = canonicalLate
+      ? "Add context for your Attendance Manager to review."
+      : "Let your supervisor know before your shift starts.";
+  }
+  if (submitButton) submitButton.lastChild.textContent = canonicalLate ? " Submit Reason" : " Send Report";
 
   const reasonSel = document.getElementById("reportReason");
   if (reasonSel && ri.reason) reasonSel.value = ri.reason;
   const eta = document.getElementById("reportEta");
   if (eta) eta.value = ri.estimatedArrivalTime || "";
+  if (eta) eta.required = !canonicalLate;
+  const etaWrap = document.getElementById("reportEtaWrap");
+  if (etaWrap) etaWrap.hidden = canonicalLate;
   const note = document.getElementById("reportNote");
-  if (note) note.value = ri.comment || "";
+  if (note) note.value = ri.comment || ri.note || "";
   syncReportEta();
 
-  document.getElementById("reportModal")?.classList.remove("hidden");
+  modal?.classList.remove("hidden");
   document.body.style.overflow = "hidden";
 }
 
@@ -35931,15 +36656,50 @@ function closeReportModal() {
   });
 }
 
-function submitReport() {
+async function submitReport() {
   const uid = currentReportWorkerId;
   if (!uid) return;
   const today = todayDateStr();
   const reason = document.getElementById("reportReason")?.value || "Other";
   const eta = document.getElementById("reportEta")?.value || "";
   const note = document.getElementById("reportNote")?.value.trim() || "";
-  if (!eta) {
+  const previous = attendanceRecords.find(
+    (r) => r.workerId === uid && r.date === today,
+  );
+  const canonicalLate = !!(
+    previous?.canonicalAttendance &&
+    previous.status === "late" &&
+    !previous.supervisorConfirmed
+  );
+  if (!canonicalLate && !eta) {
     showToast("Enter your estimated arrival time");
+    return;
+  }
+
+  if (canonicalLate) {
+    const submitButton = document.getElementById("submitReportBtn");
+    if (submitButton) submitButton.disabled = true;
+    try {
+      await attendanceApiRequest(
+        `/api/attendance/${previous.id}/lateness-reason`,
+        {
+          method: "POST",
+          body: {
+            category: LATE_REPORT_REASONS.includes(reason) ? reason : "Other",
+            explanation: note,
+          },
+        },
+      );
+      canonicalAttendanceLoadedScope = "";
+      await syncCanonicalAttendance(getSessionUser());
+      closeReportModal();
+      showToast("Lateness reason submitted for review");
+    } catch (error) {
+      console.error("[Attendance] Lateness reason submission failed:", error);
+      showToast(error.message || "Lateness reason could not be submitted");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
     return;
   }
 
@@ -35954,9 +36714,6 @@ function submitReport() {
     return;
   }
 
-  const previous = attendanceRecords.find(
-    (r) => r.workerId === uid && r.date === today,
-  );
   const lateReport = {
     id: previous?.lateReport?.id || createId(),
     type: "runningLate",
