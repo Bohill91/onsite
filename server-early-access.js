@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const net = require("node:net");
 const { createClient } = require("@supabase/supabase-js");
 const taxonomy = require("./taxonomy.js");
 
@@ -500,20 +501,73 @@ function createEarlyAccessService({
   };
 }
 
-function createEarlyAccessRateLimiter({ maxRequests = 8, windowMs = 15 * 60 * 1000 } = {}) {
+function earlyAccessClientKey(req, { env = process.env } = {}) {
+  const peerAddress = String(req?.socket?.remoteAddress || "unknown").trim() || "unknown";
+  const trustProxy = String(env.EARLY_ACCESS_TRUST_PROXY || "").trim().toLowerCase() === "true";
+  if (!trustProxy) return peerAddress;
+
+  const forwardedAddresses = String(req?.headers?.["x-forwarded-for"] || "")
+    .split(",")
+    .map((value) => value.trim());
+  for (let index = forwardedAddresses.length - 1; index >= 0; index -= 1) {
+    if (net.isIP(forwardedAddresses[index])) return forwardedAddresses[index];
+  }
+  return peerAddress;
+}
+
+function createEarlyAccessRateLimiter({
+  maxRequests = 8,
+  windowMs = 15 * 60 * 1000,
+  maxEntries = 10_000,
+} = {}) {
+  const requestLimit = Number.isInteger(maxRequests) && maxRequests > 0 ? maxRequests : 8;
+  const durationMs = Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 15 * 60 * 1000;
+  const entryLimit = Number.isInteger(maxEntries) && maxEntries > 0 ? maxEntries : 10_000;
   const entries = new Map();
+
+  function retryAfterSeconds(expiresAt, now) {
+    return Math.max(1, Math.ceil((expiresAt - now) / 1000));
+  }
+
+  function purgeExpired(now) {
+    let earliestExpiry = Infinity;
+    entries.forEach((entry, key) => {
+      const expiresAt = entry.startedAt + durationMs;
+      if (expiresAt <= now) entries.delete(key);
+      else earliestExpiry = Math.min(earliestExpiry, expiresAt);
+    });
+    return earliestExpiry;
+  }
+
   return {
     consume(key, now = Date.now()) {
       const safeKey = String(key || "unknown");
       const existing = entries.get(safeKey);
-      const entry = !existing || now - existing.startedAt >= windowMs
-        ? { startedAt: now, count: 0 }
-        : existing;
+      if (existing && now - existing.startedAt < durationMs) {
+        existing.count += 1;
+        return {
+          allowed: existing.count <= requestLimit,
+          retryAfterSeconds: retryAfterSeconds(existing.startedAt + durationMs, now),
+        };
+      }
+      if (existing) entries.delete(safeKey);
+
+      if (entries.size >= entryLimit) {
+        const earliestExpiry = purgeExpired(now);
+        if (entries.size >= entryLimit) {
+          return {
+            allowed: false,
+            retryAfterSeconds: retryAfterSeconds(earliestExpiry, now),
+          };
+        }
+      }
+
+      const entry = { startedAt: now, count: 0 };
       entry.count += 1;
       entries.set(safeKey, entry);
       return {
-        allowed: entry.count <= maxRequests,
-        retryAfterSeconds: Math.max(1, Math.ceil((entry.startedAt + windowMs - now) / 1000)),
+        allowed: entry.count <= requestLimit,
+        retryAfterSeconds: retryAfterSeconds(entry.startedAt + durationMs, now),
       };
     },
     size() {
@@ -532,6 +586,7 @@ module.exports = {
   createEarlyAccessService,
   createResendEarlyAccessEmailProvider,
   createSupabaseEarlyAccessAdapter,
+  earlyAccessClientKey,
   normalizeCompanyInput,
   normalizeEmail,
   normalizeMobile,

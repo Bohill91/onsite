@@ -10,6 +10,7 @@ const {
   createEarlyAccessRateLimiter,
   createEarlyAccessService,
   createSupabaseEarlyAccessAdapter,
+  earlyAccessClientKey,
   normalizeCompanyInput,
   normalizeWorkerInput,
   referralCode,
@@ -411,12 +412,72 @@ test("email absence and provider failure never lose a valid signup", async () =>
   assert.equal([...failedEmail.deliveryStatuses.values()][0], "failed");
 });
 
+test("client identity ignores forwarding headers unless proxy trust is explicit", () => {
+  const req = {
+    socket: { remoteAddress: "192.0.2.10" },
+    headers: { "x-forwarded-for": "198.51.100.20" },
+  };
+  assert.equal(earlyAccessClientKey(req, { env: {} }), "192.0.2.10");
+  assert.equal(
+    earlyAccessClientKey({
+      ...req,
+      headers: { "x-forwarded-for": "203.0.113.30" },
+    }, { env: { EARLY_ACCESS_TRUST_PROXY: "false" } }),
+    "192.0.2.10",
+  );
+  assert.equal(
+    earlyAccessClientKey(req, { env: { EARLY_ACCESS_TRUST_PROXY: "1" } }),
+    "192.0.2.10",
+  );
+});
+
+test("trusted proxy mode uses the rightmost valid forwarded IP and falls back safely", () => {
+  const env = { EARLY_ACCESS_TRUST_PROXY: "true" };
+  assert.equal(earlyAccessClientKey({
+    socket: { remoteAddress: "192.0.2.10" },
+    headers: { "x-forwarded-for": "198.51.100.20, malformed, 203.0.113.30" },
+  }, { env }), "203.0.113.30");
+  assert.equal(earlyAccessClientKey({
+    socket: { remoteAddress: "192.0.2.10" },
+    headers: { "x-forwarded-for": "malformed, still-not-an-ip" },
+  }, { env }), "192.0.2.10");
+});
+
 test("rate limiter enforces a bounded in-memory request window", () => {
   const limiter = createEarlyAccessRateLimiter({ maxRequests: 2, windowMs: 1000 });
   assert.equal(limiter.consume("client", 0).allowed, true);
   assert.equal(limiter.consume("client", 100).allowed, true);
   assert.equal(limiter.consume("client", 200).allowed, false);
   assert.equal(limiter.consume("client", 1100).allowed, true);
+});
+
+test("rate limiter fails closed at capacity without disrupting active buckets", () => {
+  const limiter = createEarlyAccessRateLimiter({
+    maxRequests: 2,
+    windowMs: 1000,
+    maxEntries: 2,
+  });
+  assert.equal(limiter.consume("first", 0).allowed, true);
+  assert.equal(limiter.consume("second", 0).allowed, true);
+  const atCapacity = limiter.consume("third", 100);
+  assert.equal(atCapacity.allowed, false);
+  assert.equal(atCapacity.retryAfterSeconds, 1);
+  assert.equal(limiter.size(), 2);
+  assert.equal(limiter.consume("first", 200).allowed, true);
+  assert.equal(limiter.consume("first", 300).allowed, false);
+  assert.equal(limiter.size(), 2);
+});
+
+test("rate limiter reclaims expired buckets before admitting a new key", () => {
+  const limiter = createEarlyAccessRateLimiter({
+    maxRequests: 1,
+    windowMs: 1000,
+    maxEntries: 2,
+  });
+  limiter.consume("first", 0);
+  limiter.consume("second", 0);
+  assert.equal(limiter.consume("third", 1001).allowed, true);
+  assert.equal(limiter.size(), 1);
 });
 
 test("migration 008 locks down tables and preserves historical referral records", () => {
@@ -432,9 +493,43 @@ test("migration 008 locks down tables and preserves historical referral records"
   assert.match(sql, /referred_signup_id[\s\S]*on delete restrict/i);
   assert.match(sql, /enable row level security/gi);
   assert.match(sql, /revoke all on public\.early_access_signups from public, anon, authenticated, service_role/i);
-  assert.doesNotMatch(sql, /grant (?:insert|update|delete)[^;]* to anon/i);
-  assert.doesNotMatch(sql, /grant (?:insert|update|delete)[^;]* to authenticated/i);
-  assert.match(sql, /grant execute on function public\.join_early_access_worker[\s\S]*to service_role/i);
+  assert.doesNotMatch(sql, /grant (?:select|insert|update|delete)[^;]* to (?:anon|authenticated)/i);
+  assert.doesNotMatch(
+    sql,
+    /grant (?:select|insert|update|delete)[^;]*on public\.early_access_[^;]*to service_role/i,
+  );
+  [
+    "protect_early_access_signup_identity",
+    "protect_early_access_referral_identity",
+    "validate_early_access_referral_workers",
+  ].forEach((functionName) => {
+    assert.match(
+      sql,
+      new RegExp(`revoke all on function public\\.${functionName}\\(\\)[\\s\\S]*?from public, anon, authenticated, service_role`, "i"),
+    );
+  });
+  const securityDefinerFunctions = [
+    "join_early_access_worker",
+    "join_early_access_company",
+    "set_early_access_email_delivery_status",
+  ];
+  securityDefinerFunctions.forEach((functionName) => {
+    const start = sql.indexOf(`create or replace function public.${functionName}`);
+    const end = sql.indexOf("$$;", start);
+    assert.notEqual(start, -1);
+    assert.notEqual(end, -1);
+    const definition = sql.slice(start, end + 3);
+    assert.match(definition, /security definer/i);
+    assert.match(definition, /set search_path = pg_catalog, public/i);
+    assert.match(
+      sql,
+      new RegExp(`grant execute on function public\\.${functionName}[\\s\\S]*?to service_role`, "i"),
+    );
+  });
+  assert.equal(
+    (sql.match(/grant execute on function public\./gi) || []).length,
+    securityDefinerFunctions.length,
+  );
   assert.match(sql, /EARLY_ACCESS_REFERRAL_IMMUTABLE/);
   assert.match(sql, /commit;\s*$/i);
 });

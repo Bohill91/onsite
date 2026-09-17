@@ -277,7 +277,7 @@ create or replace function public.join_early_access_worker(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   email_match public.early_access_signups%rowtype;
@@ -431,7 +431,7 @@ create or replace function public.join_early_access_company(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   email_match public.early_access_signups%rowtype;
@@ -506,7 +506,7 @@ create or replace function public.set_early_access_email_delivery_status(
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 begin
   if p_status not in ('skipped', 'sent', 'failed') then
@@ -530,14 +530,17 @@ revoke all on public.early_access_signups from public, anon, authenticated, serv
 revoke all on public.early_access_referrals from public, anon, authenticated, service_role;
 revoke all on public.early_access_referral_rewards from public, anon, authenticated, service_role;
 
-grant select, insert, update on public.early_access_signups to service_role;
-grant select, insert, update on public.early_access_referrals to service_role;
-grant select, insert, update on public.early_access_referral_rewards to service_role;
+revoke all on function public.protect_early_access_signup_identity()
+from public, anon, authenticated, service_role;
+revoke all on function public.protect_early_access_referral_identity()
+from public, anon, authenticated, service_role;
+revoke all on function public.validate_early_access_referral_workers()
+from public, anon, authenticated, service_role;
 
 revoke all on function public.join_early_access_worker(
   text, text, text, text, text, text, text, text, text, text, text,
   boolean, text, text, text, text, text, text
-) from public, anon, authenticated;
+) from public, anon, authenticated, service_role;
 grant execute on function public.join_early_access_worker(
   text, text, text, text, text, text, text, text, text, text, text,
   boolean, text, text, text, text, text, text
@@ -546,14 +549,14 @@ grant execute on function public.join_early_access_worker(
 revoke all on function public.join_early_access_company(
   text, text, text, text, text, text[], text[], text, integer, text,
   boolean, text, text, text, text, text, text
-) from public, anon, authenticated;
+) from public, anon, authenticated, service_role;
 grant execute on function public.join_early_access_company(
   text, text, text, text, text, text[], text[], text, integer, text,
   boolean, text, text, text, text, text, text
 ) to service_role;
 
 revoke all on function public.set_early_access_email_delivery_status(uuid, text)
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 grant execute on function public.set_early_access_email_delivery_status(uuid, text)
 to service_role;
 

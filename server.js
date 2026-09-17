@@ -33,6 +33,7 @@ const {
   EarlyAccessServiceError,
   createEarlyAccessRateLimiter,
   createEarlyAccessService,
+  earlyAccessClientKey,
 } = require('./server-early-access');
 const {
   DocumentFileStoreError,
@@ -255,13 +256,6 @@ function publicAuthError(error) {
   if (error instanceof AuthServiceError) return error;
   console.error('[Auth] Unexpected error:', error);
   return new AuthServiceError('Authentication service error.', 500, 'AUTH_INTERNAL_ERROR');
-}
-
-function earlyAccessClientKey(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '')
-    .split(',')[0]
-    .trim();
-  return [req.socket.remoteAddress || 'unknown', forwarded].filter(Boolean).join('|');
 }
 
 function publicEarlyAccessError(error) {

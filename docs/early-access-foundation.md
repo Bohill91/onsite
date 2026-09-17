@@ -68,10 +68,18 @@ credentials.
 
 The Node route enforces JSON, a 32 KiB request limit, strict field validation,
 an off-screen honeypot, idempotent database behaviour and an in-memory
-per-client rate limit. The in-memory limiter is appropriate for the current
-single-process deployment. A distributed edge limiter or Turnstile remains a
-recommended production hardening step when the service runs across multiple
-instances or faces sustained abuse.
+per-client rate limit. The limiter retains at most 10,000 active client buckets,
+reclaims expired buckets at capacity and fails closed for new clients while all
+retained buckets are active. It is appropriate for the current single-process
+deployment. A distributed edge limiter or Turnstile remains a recommended
+production hardening step when the service runs across multiple instances or
+faces sustained abuse.
+
+By default the limiter identifies clients only from the transport peer address
+and ignores forwarding headers. `EARLY_ACCESS_TRUST_PROXY=true` enables use of
+the rightmost valid `X-Forwarded-For` address. Enable it only behind a trusted
+production reverse proxy that sanitises or appends that header as expected;
+never enable it for direct, untrusted client connections.
 
 ## Confirmation email boundary
 
