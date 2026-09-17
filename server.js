@@ -30,6 +30,11 @@ const {
   createAttendanceService,
 } = require('./server-attendance');
 const {
+  EarlyAccessServiceError,
+  createEarlyAccessRateLimiter,
+  createEarlyAccessService,
+} = require('./server-early-access');
+const {
   DocumentFileStoreError,
   createDocumentFileStore,
   safeFileName,
@@ -52,6 +57,8 @@ const marketplaceService = createMarketplaceService();
 const offerService = createOfferService();
 const placementLifecycleService = createPlacementLifecycleService();
 const attendanceService = createAttendanceService();
+const earlyAccessService = createEarlyAccessService();
+const earlyAccessRateLimiter = createEarlyAccessRateLimiter();
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -248,6 +255,69 @@ function publicAuthError(error) {
   if (error instanceof AuthServiceError) return error;
   console.error('[Auth] Unexpected error:', error);
   return new AuthServiceError('Authentication service error.', 500, 'AUTH_INTERNAL_ERROR');
+}
+
+function earlyAccessClientKey(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim();
+  return [req.socket.remoteAddress || 'unknown', forwarded].filter(Boolean).join('|');
+}
+
+function publicEarlyAccessError(error) {
+  if (error instanceof EarlyAccessServiceError || error instanceof AuthServiceError) {
+    return error;
+  }
+  console.error('[Early Access] Unexpected error:', error);
+  return new EarlyAccessServiceError(
+    'Early Access is temporarily unavailable.',
+    500,
+    'EARLY_ACCESS_INTERNAL_ERROR',
+  );
+}
+
+async function handleEarlyAccessApi(req, res, url) {
+  try {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'Method not allowed.', code: 'METHOD_NOT_ALLOWED' });
+      return;
+    }
+    if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+      sendJson(res, 415, {
+        error: 'Early Access requests must use JSON.',
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+      });
+      return;
+    }
+    const limit = earlyAccessRateLimiter.consume(earlyAccessClientKey(req));
+    if (!limit.allowed) {
+      sendJson(res, 429, {
+        error: 'Too many Early Access requests. Please try again shortly.',
+        code: 'EARLY_ACCESS_RATE_LIMITED',
+      }, { 'Retry-After': String(limit.retryAfterSeconds) });
+      return;
+    }
+    const body = await readJsonRequest(req, 32 * 1024);
+    if (typeof body.website === 'string' && body.website.trim()) {
+      const signupType = url.pathname.endsWith('/company') ? 'company' : 'worker';
+      sendJson(res, 200, {
+        ok: true,
+        signupType,
+        message: 'Your Early Access request has been received.',
+      });
+      return;
+    }
+    const result = url.pathname.endsWith('/worker')
+      ? await earlyAccessService.joinWorker(body)
+      : await earlyAccessService.joinCompany(body);
+    sendJson(res, 200, result);
+  } catch (rawError) {
+    const error = publicEarlyAccessError(rawError);
+    sendJson(res, error.statusCode || 500, {
+      error: error.message,
+      code: error.code || 'EARLY_ACCESS_ERROR',
+    });
+  }
 }
 
 async function resolveAuthenticatedPrincipal(req) {
@@ -1025,6 +1095,14 @@ async function handleDocumentFileAccess(req, res, url, fileId) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
+  if (
+    url.pathname === '/api/early-access/worker'
+    || url.pathname === '/api/early-access/company'
+  ) {
+    handleEarlyAccessApi(req, res, url);
+    return;
+  }
+
   if (url.pathname.startsWith('/api/auth/')) {
     handleAuthApi(req, res, url);
     return;
@@ -1095,6 +1173,28 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith('/api/document-files')) {
     sendJson(res, documentFileMatch ? 405 : 404, {
       error: documentFileMatch ? 'Method not allowed.' : 'Document file not found.',
+    });
+    return;
+  }
+
+  if (
+    (req.method === 'GET' || req.method === 'HEAD')
+    && (url.pathname === '/early-access' || url.pathname === '/early-access/')
+  ) {
+    fs.readFile(path.join(__dirname, 'early-access.html'), (error, data) => {
+      if (error) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Early Access is temporarily unavailable.');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(req.method === 'HEAD' ? undefined : data);
     });
     return;
   }

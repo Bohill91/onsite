@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Join OnSite Early Access for direct access to reliable construction labour and opportunities." />
+    <meta name="theme-color" content="#f97316" />
+    <title>OnSite Early Access</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/early-access.css" />
+  </head>
+  <body>
+    <header class="ea-site-header">
+      <a class="ea-wordmark" href="/early-access" aria-label="OnSite Early Access home">On<span>S</span>ite</a>
+      <a class="ea-sign-in" href="/">Already registered? <strong>Sign in</strong></a>
+    </header>
+
+    <main>
+      <section class="ea-hero" aria-labelledby="earlyAccessTitle">
+        <div class="ea-hero-copy">
+          <p class="ea-kicker">Early Access</p>
+          <h1 id="earlyAccessTitle">Construction work without the agency.</h1>
+          <p class="ea-tagline">Reliable trades. On demand.</p>
+          <p class="ea-intro">OnSite directly connects reliable CIS tradespeople with UK contractors, using availability and real working history to make labour matching more dependable.</p>
+          <button class="ea-primary ea-hero-cta" type="button" data-scroll-to-form>Join Early Access</button>
+          <div class="ea-assurance" aria-label="Early Access assurances">
+            <span>No password</span>
+            <span>No agency</span>
+            <span>No guaranteed-work claims</span>
+          </div>
+        </div>
+
+        <div class="ea-signup-card" id="join">
+          <div class="ea-path-toggle" role="tablist" aria-label="Choose an Early Access path">
+            <button type="button" role="tab" aria-selected="true" aria-controls="workerPanel" id="workerTab" data-signup-path="worker">I'm looking for work</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="companyPanel" id="companyTab" data-signup-path="company">I'm hiring</button>
+          </div>
+
+          <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab">
+            <div class="ea-form-heading">
+              <p class="ea-kicker">Founding Worker</p>
+              <h2>Join before launch</h2>
+              <p>Secure priority access and your personal worker referral code.</p>
+            </div>
+            <form id="workerEarlyAccessForm" novalidate>
+              <div class="ea-form-grid ea-form-grid--two">
+                <label>First name<input name="firstName" type="text" autocomplete="given-name" maxlength="100" required /></label>
+                <label>Last name<input name="lastName" type="text" autocomplete="family-name" maxlength="100" required /></label>
+              </div>
+              <div class="ea-form-grid ea-form-grid--two">
+                <label>Email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
+                <label>Mobile<input name="mobile" type="tel" autocomplete="tel" maxlength="40" placeholder="e.g. 07700 900000" required /></label>
+              </div>
+              <div class="ea-form-grid ea-form-grid--two">
+                <label>Primary trade<select name="tradeKey" id="eaWorkerTrade" required><option value="">Select trade</option></select></label>
+                <label>Role / grade<select name="roleKey" id="eaWorkerRole" required disabled><option value="">Select a trade first</option></select></label>
+              </div>
+              <label>Postcode or home area<input name="homeArea" type="text" autocomplete="postal-code" maxlength="160" placeholder="e.g. Leeds or LS1" required /></label>
+              <label>Referral code <span>Optional</span><input name="referralCode" id="eaReferralCode" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="OSW-..." /><small id="eaReferralHint">If another worker invited you, enter their code.</small></label>
+              <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+              <div class="ea-consents">
+                <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage my Early Access place.</span></label>
+                <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
+              </div>
+              <div class="ea-form-error" role="alert" aria-live="polite"></div>
+              <button class="ea-primary ea-submit" type="submit">Join as a Founding Worker</button>
+            </form>
+          </section>
+
+          <section id="companyPanel" role="tabpanel" aria-labelledby="companyTab" hidden>
+            <div class="ea-form-heading">
+              <p class="ea-kicker">Contractor access</p>
+              <h2>Register your interest</h2>
+              <p>Tell us enough to understand the labour your business uses.</p>
+            </div>
+            <form id="companyEarlyAccessForm" novalidate>
+              <label>Company name<input name="companyName" type="text" autocomplete="organization" maxlength="200" required /></label>
+              <div class="ea-form-grid ea-form-grid--two">
+                <label>Contact first name<input name="firstName" type="text" autocomplete="given-name" maxlength="100" required /></label>
+                <label>Contact last name<input name="lastName" type="text" autocomplete="family-name" maxlength="100" required /></label>
+              </div>
+              <div class="ea-form-grid ea-form-grid--two">
+                <label>Work email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
+                <label>Mobile / telephone<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
+              </div>
+              <label>Main trade / labour categories<select name="labourCategoryKeys" id="eaCompanyCategories" multiple size="5" required aria-describedby="eaCategoryHint"></select><small id="eaCategoryHint">Select all that apply.</small></label>
+              <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
+              <label>Temporary workers typically required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+              <label>Anything we should know? <span>Optional</span><textarea name="note" rows="3" maxlength="1200" placeholder="Trades, regions or upcoming labour needs"></textarea></label>
+              <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+              <div class="ea-consents">
+                <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage our Early Access enquiry.</span></label>
+                <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
+              </div>
+              <div class="ea-form-error" role="alert" aria-live="polite"></div>
+              <button class="ea-primary ea-submit" type="submit">Register company interest</button>
+            </form>
+          </section>
+
+          <section class="ea-success" id="earlyAccessSuccess" aria-live="polite" hidden></section>
+        </div>
+      </section>
+
+      <section class="ea-value-section" aria-labelledby="foundingWorkerValue">
+        <div class="ea-section-heading">
+          <p class="ea-kicker">Join early. Build trust.</p>
+          <h2 id="foundingWorkerValue">A practical head start for reliable tradespeople.</h2>
+        </div>
+        <div class="ea-value-grid">
+          <article><span>01</span><h3>Founding Worker status</h3><p>Keep your original Early Access date and receive priority access when full Worker onboarding opens.</p></article>
+          <article><span>02</span><h3>Direct opportunities</h3><p>Connect with UK contractors without a recruitment agency sitting between the company and the worker.</p></article>
+          <article><span>03</span><h3>Reliability-led matching</h3><p>OnSite is being built around availability, attendance and dependable working history, not an unqualified contact list.</p></article>
+        </div>
+      </section>
+
+      <section class="ea-referral-section" aria-labelledby="referralValue">
+        <div>
+          <p class="ea-kicker">Founding Worker referrals</p>
+          <h2 id="referralValue">Refer good workers before launch.</h2>
+          <p>Share your personal link. If a referred worker later completes qualifying paid work through OnSite, both workers can become eligible for the normal post-launch rewards.</p>
+          <p class="ea-example">Twenty qualifying referrals could represent up to <strong>£2,000</strong> in potential future referral rewards. Signing up alone does not earn cash.</p>
+        </div>
+        <div class="ea-reward-steps">
+          <article><strong>5 paid days</strong><span>Referrer potentially eligible for £50</span></article>
+          <article><strong>20 paid days</strong><span>Referrer potentially eligible for another £50</span></article>
+          <article><strong>New worker</strong><span>Potentially eligible for £25 after their first 5 paid days</span></article>
+        </div>
+      </section>
+    </main>
+
+    <footer id="privacy" class="ea-footer">
+      <div class="ea-wordmark" aria-label="OnSite">On<span>S</span>ite</div>
+      <p><strong>Early Access privacy information.</strong> OnSite uses the details submitted here to manage Early Access, prevent duplicate registrations, attribute Worker referrals and prepare future account conversion. Marketing consent is optional and separate. Early Access details are not displayed publicly or shared with other Workers or companies.</p>
+      <p>© 2026 OnSite. Reliable trades. On demand.</p>
+    </footer>
+
+    <script src="/taxonomy.js"></script>
+    <script src="/early-access.js"></script>
+  </body>
+</html>

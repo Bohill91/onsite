@@ -96,6 +96,39 @@ async function run() {
   try {
     server = await startServer(port, storageDir);
     const baseUrl = `http://127.0.0.1:${port}`;
+    const earlyAccess = await fetch(`${baseUrl}/early-access?ref=OSW-AAAAAAAAAAAAAAAA`);
+    assert.equal(earlyAccess.status, 200);
+    const earlyAccessHtml = await earlyAccess.text();
+    assert.match(earlyAccessHtml, /id="workerEarlyAccessForm"/);
+    assert.match(earlyAccessHtml, /id="companyEarlyAccessForm"/);
+    assert.doesNotMatch(earlyAccessHtml, /id="auth-overlay"/);
+    const normalRoot = await fetch(baseUrl);
+    assert.match(await normalRoot.text(), /id="auth-overlay"/);
+    const unsupportedEarlyAccess = await fetch(`${baseUrl}/api/early-access/worker`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: "not json",
+    });
+    assert.equal(unsupportedEarlyAccess.status, 415);
+    const oversizedEarlyAccess = await fetch(`${baseUrl}/api/early-access/worker`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: "x".repeat(33 * 1024) }),
+    });
+    assert.equal(oversizedEarlyAccess.status, 413);
+    const honeypotEarlyAccess = await fetch(`${baseUrl}/api/early-access/worker`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ website: "spam.example" }),
+    });
+    assert.equal(honeypotEarlyAccess.status, 200);
+    const unconfiguredEarlyAccess = await fetch(`${baseUrl}/api/early-access/worker`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(unconfiguredEarlyAccess.status, 503);
+    assert.equal((await unconfiguredEarlyAccess.json()).code, "EARLY_ACCESS_NOT_CONFIGURED");
     const authStatus = await fetch(`${baseUrl}/api/auth/status`);
     assert.equal(authStatus.status, 200);
     assert.deepEqual(await authStatus.json(), { configured: false });

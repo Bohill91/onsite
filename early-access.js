@@ -1,0 +1,193 @@
+(function initialiseEarlyAccessPage() {
+  "use strict";
+
+  const workerForm = document.getElementById("workerEarlyAccessForm");
+  const companyForm = document.getElementById("companyEarlyAccessForm");
+  const workerPanel = document.getElementById("workerPanel");
+  const companyPanel = document.getElementById("companyPanel");
+  const success = document.getElementById("earlyAccessSuccess");
+  const workerTrade = document.getElementById("eaWorkerTrade");
+  const workerRole = document.getElementById("eaWorkerRole");
+  const companyCategories = document.getElementById("eaCompanyCategories");
+  const referralInput = document.getElementById("eaReferralCode");
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function sourceAttribution() {
+    const query = new URLSearchParams(window.location.search);
+    return {
+      utmSource: query.get("utm_source") || "",
+      utmMedium: query.get("utm_medium") || "",
+      utmCampaign: query.get("utm_campaign") || "",
+      utmContent: query.get("utm_content") || "",
+      landingPath: window.location.pathname,
+    };
+  }
+
+  function setPath(path) {
+    const workerSelected = path === "worker";
+    workerPanel.hidden = !workerSelected;
+    companyPanel.hidden = workerSelected;
+    document.querySelectorAll("[data-signup-path]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.signupPath === path));
+    });
+  }
+
+  function selectedValues(select) {
+    return Array.from(select.selectedOptions).map((option) => option.value).filter(Boolean);
+  }
+
+  function formPayload(form, type) {
+    const data = new FormData(form);
+    const common = {
+      firstName: data.get("firstName") || "",
+      lastName: data.get("lastName") || "",
+      email: data.get("email") || "",
+      mobile: data.get("mobile") || "",
+      privacyAcknowledged: data.get("privacyAcknowledged") === "on",
+      marketingConsent: data.get("marketingConsent") === "on",
+      website: data.get("website") || "",
+      source: sourceAttribution(),
+    };
+    if (type === "worker") {
+      return {
+        ...common,
+        tradeKey: data.get("tradeKey") || "",
+        roleKey: data.get("roleKey") || "",
+        homeArea: data.get("homeArea") || "",
+        referralCode: data.get("referralCode") || "",
+      };
+    }
+    return {
+      ...common,
+      companyName: data.get("companyName") || "",
+      labourCategoryKeys: selectedValues(companyCategories),
+      operatingArea: data.get("operatingArea") || "",
+      approximateWorkers: data.get("approximateWorkers") || "",
+      note: data.get("note") || "",
+    };
+  }
+
+  function setSubmitting(form, isSubmitting) {
+    const button = form.querySelector("button[type='submit']");
+    if (!button) return;
+    if (!button.dataset.label) button.dataset.label = button.textContent;
+    button.disabled = isSubmitting;
+    button.textContent = isSubmitting ? "Joining Early Access…" : button.dataset.label;
+  }
+
+  function formError(form, message) {
+    const element = form.querySelector(".ea-form-error");
+    if (element) element.textContent = message || "";
+  }
+
+  async function submit(form, type) {
+    formError(form, "");
+    if (!form.reportValidity()) return;
+    setSubmitting(form, true);
+    try {
+      const response = await fetch(`/api/early-access/${type}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formPayload(form, type)),
+      });
+      let payload = {};
+      try { payload = await response.json(); } catch (_) {}
+      if (!response.ok) {
+        const error = new Error(payload.error || "Early Access signup could not be completed.");
+        error.code = payload.code || "EARLY_ACCESS_ERROR";
+        throw error;
+      }
+      renderSuccess(payload, type);
+    } catch (error) {
+      formError(form, error.message || "Early Access signup could not be completed.");
+      if (error.code === "INVALID_REFERRAL_CODE") referralInput?.focus();
+    } finally {
+      setSubmitting(form, false);
+    }
+  }
+
+  function renderSuccess(payload, type) {
+    workerPanel.hidden = true;
+    companyPanel.hidden = true;
+    document.querySelector(".ea-path-toggle").hidden = true;
+    success.hidden = false;
+    if (type === "company") {
+      success.innerHTML = `<span class="ea-success-badge">Company Early Access</span>
+        <h2>You're on the list.</h2>
+        <p><strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We will contact you as contractor access opens.</p>`;
+      return;
+    }
+    const hasReferral = !!payload.referralCode && !!payload.referralUrl;
+    success.innerHTML = `<span class="ea-success-badge">Founding Worker</span>
+      <h2>Your Early Access place is confirmed.</h2>
+      <p>${escapeHtml(payload.firstName || "Thanks")}, you now have Founding Worker status and priority access when full onboarding opens.</p>
+      ${hasReferral ? `<div class="ea-referral-result">
+        <small>Your referral code</small>
+        <div class="ea-referral-code">${escapeHtml(payload.referralCode)}</div>
+        <div class="ea-referral-url">${escapeHtml(payload.referralUrl)}</div>
+        <div class="ea-share-actions">
+          <button type="button" data-copy-referral>Copy link</button>
+          <button type="button" data-share-referral>Share invite</button>
+        </div>
+        <div class="ea-progress-zero"><span>Workers joined through your link</span><strong>${Number(payload.referralProgress?.joinedCount) || 0}</strong></div>
+      </div>` : `<p>Your registration is safely recorded. We will send your referral details to the email address supplied.</p>`}`;
+    if (!hasReferral) return;
+    success.querySelector("[data-copy-referral]")?.addEventListener("click", async (event) => {
+      await navigator.clipboard.writeText(payload.referralUrl);
+      event.currentTarget.textContent = "Copied";
+    });
+    success.querySelector("[data-share-referral]")?.addEventListener("click", async () => {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Join OnSite Early Access",
+          text: "Join me as an OnSite Founding Worker.",
+          url: payload.referralUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(payload.referralUrl);
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-signup-path]").forEach((button) => {
+    button.addEventListener("click", () => setPath(button.dataset.signupPath));
+  });
+  document.querySelector("[data-scroll-to-form]")?.addEventListener("click", () => {
+    document.getElementById("join")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  workerForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submit(workerForm, "worker");
+  });
+  companyForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submit(companyForm, "company");
+  });
+  workerTrade?.addEventListener("change", () => {
+    window.OnSiteTaxonomy?.populateRoleSelect(workerRole, workerTrade.value);
+  });
+  referralInput?.addEventListener("blur", () => {
+    referralInput.value = referralInput.value.trim().toUpperCase();
+  });
+
+  window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
+  window.OnSiteTaxonomy?.trades.forEach((trade) => {
+    const option = document.createElement("option");
+    option.value = trade.key;
+    option.textContent = trade.name;
+    companyCategories?.appendChild(option);
+  });
+  const referralCode = new URLSearchParams(window.location.search).get("ref") || "";
+  if (referralCode && referralInput) {
+    referralInput.value = referralCode.trim().toUpperCase();
+    document.getElementById("eaReferralHint").textContent = "Referral code added from your invitation link.";
+  }
+})();

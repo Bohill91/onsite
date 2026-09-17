@@ -233,7 +233,7 @@
     return value;
   }
 
-  global.OnSiteTaxonomy = deepFreeze({
+  const taxonomy = deepFreeze({
     trades,
     findTrade,
     findRole,
@@ -246,4 +246,6 @@
     populateTradeSelect,
     populateRoleSelect,
   });
-})(window);
+  global.OnSiteTaxonomy = taxonomy;
+  if (typeof module !== "undefined" && module.exports) module.exports = taxonomy;
+})(typeof window !== "undefined" ? window : globalThis);
