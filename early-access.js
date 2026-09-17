@@ -9,6 +9,8 @@
   const workerTrade = document.getElementById("eaWorkerTrade");
   const workerRole = document.getElementById("eaWorkerRole");
   const companyCategories = document.getElementById("eaCompanyCategories");
+  const companyCategoryChips = document.getElementById("eaCompanyCategoryChips");
+  const companyCategoryMore = document.getElementById("eaCompanyCategoryMore");
   const referralInput = document.getElementById("eaReferralCode");
   const referralCaptured = document.getElementById("eaReferralCaptured");
   const referralReveal = document.getElementById("eaReferralReveal");
@@ -17,6 +19,8 @@
   const REFERRAL_STORAGE_KEY = "onsite_early_access_referral_v1";
   const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
   const REFERRAL_CODE_PATTERN = /^OSW-[A-Z0-9]{12,24}$/;
+  const CATEGORY_PREVIEW_COUNT = 9;
+  let companyCategoriesExpanded = false;
 
   function escapeHtml(value) {
     return String(value || "")
@@ -137,6 +141,59 @@
     return Array.from(select.selectedOptions).map((option) => option.value).filter(Boolean);
   }
 
+  function setCompanyCategoriesExpanded(expanded) {
+    companyCategoriesExpanded = expanded;
+    Array.from(companyCategoryChips?.querySelectorAll("[data-category-index]") || []).forEach((button) => {
+      button.hidden = !companyCategoriesExpanded && Number(button.dataset.categoryIndex) >= CATEGORY_PREVIEW_COUNT;
+    });
+    if (companyCategoryMore) {
+      companyCategoryMore.textContent = companyCategoriesExpanded ? "Show less" : "Show more";
+      companyCategoryMore.setAttribute("aria-expanded", String(companyCategoriesExpanded));
+    }
+  }
+
+  function syncCompanyCategoryButton(option) {
+    const button = Array.from(companyCategoryChips?.querySelectorAll("[data-category-key]") || [])
+      .find((candidate) => candidate.dataset.categoryKey === option.value);
+    if (!button) return;
+    button.setAttribute("aria-pressed", String(option.selected));
+    button.classList.toggle("is-selected", option.selected);
+  }
+
+  function renderCompanyCategories() {
+    const trades = window.OnSiteTaxonomy?.trades || [];
+    if (!companyCategories || !companyCategoryChips) return;
+    companyCategories.replaceChildren();
+    companyCategoryChips.replaceChildren();
+    trades.forEach((trade, index) => {
+      const option = document.createElement("option");
+      option.value = trade.key;
+      option.textContent = trade.name;
+      companyCategories.appendChild(option);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ea-category-chip";
+      button.dataset.categoryIndex = String(index);
+      button.dataset.categoryKey = trade.key;
+      button.setAttribute("aria-pressed", "false");
+      button.textContent = trade.name;
+      button.addEventListener("click", () => {
+        option.selected = !option.selected;
+        syncCompanyCategoryButton(option);
+      });
+      companyCategoryChips.appendChild(button);
+    });
+    if (companyCategoryMore) {
+      companyCategoryMore.hidden = trades.length <= CATEGORY_PREVIEW_COUNT;
+      companyCategoryMore.addEventListener("click", () => setCompanyCategoriesExpanded(!companyCategoriesExpanded));
+    }
+    setCompanyCategoriesExpanded(false);
+    companyCategories.addEventListener("change", () => {
+      Array.from(companyCategories.options).forEach(syncCompanyCategoryButton);
+    });
+  }
+
   function formPayload(form, type) {
     const data = new FormData(form);
     const common = {
@@ -164,7 +221,7 @@
       labourCategoryKeys: selectedValues(companyCategories),
       operatingArea: data.get("operatingArea") || "",
       approximateWorkers: data.get("approximateWorkers") || "",
-      note: data.get("note") || "",
+      note: "",
     };
   }
 
@@ -183,6 +240,11 @@
 
   async function submit(form, type) {
     formError(form, "");
+    if (type === "company" && !selectedValues(companyCategories).length) {
+      formError(form, "Select at least one trade or labour category.");
+      companyCategoryChips?.querySelector("button")?.focus();
+      return;
+    }
     if (!form.reportValidity()) return;
     setSubmitting(form, true);
     try {
@@ -256,9 +318,6 @@
   document.querySelectorAll("[data-signup-path]").forEach((button) => {
     button.addEventListener("click", () => setPath(button.dataset.signupPath));
   });
-  document.querySelector("[data-scroll-to-form]")?.addEventListener("click", () => {
-    document.getElementById("join")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
   workerForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     submit(workerForm, "worker");
@@ -276,11 +335,6 @@
   });
 
   window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
-  window.OnSiteTaxonomy?.trades.forEach((trade) => {
-    const option = document.createElement("option");
-    option.value = trade.key;
-    option.textContent = trade.name;
-    companyCategories?.appendChild(option);
-  });
+  renderCompanyCategories();
   initialiseReferral();
 })();

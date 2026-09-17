@@ -24,20 +24,18 @@
           <h1 id="earlyAccessTitle">Construction work without the agency.</h1>
           <p class="ea-tagline">Reliable trades. On demand.</p>
           <p class="ea-intro">Join the platform connecting reliable CIS tradespeople directly with UK contractors. No recruitment agency in the middle.</p>
-          <button class="ea-primary ea-hero-cta" type="button" data-scroll-to-form>Join Early Access</button>
           <p class="ea-assurance">Free to join <span aria-hidden="true">·</span> No password needed <span aria-hidden="true">·</span> Full profile setup comes later</p>
         </div>
 
         <div class="ea-signup-card" id="join">
-          <p class="ea-choice-label">Choose your route into OnSite</p>
           <div class="ea-path-toggle" role="tablist" aria-label="Choose an Early Access path">
-            <button type="button" role="tab" aria-selected="true" aria-controls="workerPanel" id="workerTab" data-signup-path="worker">I'm a sub-contractor</button>
+            <button type="button" role="tab" aria-selected="true" aria-controls="workerPanel" id="workerTab" data-signup-path="worker">I'm looking for work</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="companyPanel" id="companyTab" data-signup-path="company">I'm hiring</button>
           </div>
 
           <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab" data-internal-label="Founding Worker">
             <div class="ea-form-heading">
-              <p class="ea-kicker">Sub-contractor Early Access</p>
+              <p class="ea-kicker">FOR CIS SUB-CONTRACTORS</p>
               <h2>Join OnSite Early Access</h2>
               <p>Join before launch and get priority access when OnSite opens.</p>
             </div>
@@ -75,9 +73,9 @@
 
           <section id="companyPanel" role="tabpanel" aria-labelledby="companyTab" hidden>
             <div class="ea-form-heading">
-              <p class="ea-kicker">Contractor access</p>
-              <h2>Register your interest</h2>
-              <p>Tell us where you work and which trades you need.</p>
+              <p class="ea-kicker">For UK contractors</p>
+              <h2>Get early access to OnSite</h2>
+              <p>Join before launch and be among the first contractors able to source reliable CIS sub-contractors directly.</p>
             </div>
             <form id="companyEarlyAccessForm" novalidate>
               <label>Company name<input name="companyName" type="text" autocomplete="organization" maxlength="200" required /></label>
@@ -89,18 +87,25 @@
                 <label>Work email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
                 <label>Mobile / telephone<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
               </div>
-              <label>Main trade / labour categories<select name="labourCategoryKeys" id="eaCompanyCategories" multiple size="5" required aria-describedby="eaCategoryHint"></select><small id="eaCategoryHint">Select all that apply.</small></label>
+              <div class="ea-category-field">
+                <span class="ea-field-label">Main trade / labour categories</span>
+                <div class="ea-category-picker" id="eaCategoryPicker">
+                  <div class="ea-category-chips" id="eaCompanyCategoryChips" role="group" aria-label="Main trade and labour categories"></div>
+                  <button class="ea-category-more" id="eaCompanyCategoryMore" type="button" aria-expanded="false">Show more</button>
+                  <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-describedby="eaCategoryHint"></select>
+                </div>
+                <small id="eaCategoryHint">Select all that apply.</small>
+              </div>
               <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
               <label>Temporary sub-contractors typically required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
-              <label>Anything we should know? <span>Optional</span><textarea name="note" rows="3" maxlength="1200" placeholder="Trades, regions or upcoming labour needs"></textarea></label>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage our Early Access enquiry.</span></label>
                 <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
               </div>
               <div class="ea-form-error" role="alert" aria-live="polite"></div>
-              <button class="ea-primary ea-submit" type="submit">Register company interest</button>
-              <p class="ea-submit-note">No password needed. We’ll follow up by email.</p>
+              <button class="ea-primary ea-submit" type="submit">Join Early Access</button>
+              <p class="ea-submit-note">No account setup yet. We'll contact you when contractor access opens.</p>
             </form>
           </section>
 
@@ -111,7 +116,7 @@
       <section class="ea-value-section" aria-labelledby="earlyAccessValue">
         <div class="ea-section-heading">
           <p class="ea-kicker">Join early. Build trust.</p>
-          <h2 id="earlyAccessValue">A practical head start for reliable sub-contractors.</h2>
+          <h2 id="earlyAccessValue">Why join early?</h2>
         </div>
         <div class="ea-value-grid">
           <article><span>01</span><h3>Priority access</h3><p>Join before launch and get priority access when OnSite opens.</p></article>
@@ -122,15 +127,15 @@
 
       <section class="ea-referral-section" aria-labelledby="referralValue">
         <div>
-          <p class="ea-kicker">OnSite Referral Programme</p>
+          <p class="ea-kicker">ONSITE REFERRAL PROGRAMME</p>
           <h2 id="referralValue">Refer other sub-contractors.</h2>
           <p>Share your personal link. If a referred sub-contractor later completes qualifying paid work through OnSite, both people can become eligible for the normal post-launch rewards.</p>
           <p class="ea-example">Twenty qualifying referrals could represent up to <strong>£2,000</strong> in potential future referral rewards. Signing up alone does not earn cash.</p>
         </div>
         <div class="ea-reward-steps">
-          <article><strong>5 paid days</strong><span>Referrer potentially eligible for £50</span></article>
-          <article><strong>20 paid days</strong><span>Referrer potentially eligible for another £50</span></article>
-          <article><strong>Referred sub-contractor</strong><span>Potentially eligible for £25 after their first 5 paid days</span></article>
+          <article><strong>5 paid days</strong><span>£50 potential referral reward</span></article>
+          <article><strong>20 paid days</strong><span>Another £50 potential referral reward</span></article>
+          <article><strong>Referred sub-contractor</strong><span>£25 potential reward after their first 5 paid days</span></article>
         </div>
       </section>
     </main>
