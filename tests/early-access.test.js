@@ -544,7 +544,10 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(html, /I'm hiring/);
   assert.match(html, /FOR CIS SUB-CONTRACTORS/);
   assert.match(html, /FOR UK CONTRACTORS/);
-  assert.match(html, /Join OnSite Early Access/);
+  assert.match(html, /Register for OnSite Early Access/);
+  assert.match(html, /Register your company for Early Access/);
+  assert.match(html, /Register your interest and we'll notify you when profile setup opens/);
+  assert.match(html, /Register for Early Access/);
   assert.doesNotMatch(html, /Founding Worker/);
   assert.doesNotMatch(html, /\bWorker\b/);
   assert.doesNotMatch(html, /type="password"/);

@@ -357,14 +357,14 @@
     success.hidden = false;
     if (type === "company") {
       success.innerHTML = `<span class="ea-success-badge">Company Early Access</span>
-        <h2>You're on the list.</h2>
-        <p><strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We will contact you as contractor access opens.</p>`;
+        <h2>Your company is registered for Early Access.</h2>
+        <p><strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We will notify you when contractor onboarding opens.</p>`;
       return;
     }
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
     success.innerHTML = `<span class="ea-success-badge">Sub-contractor Early Access</span>
-      <h2>Your Early Access place is confirmed.</h2>
-       <p>${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We'll let you know when OnSite onboarding opens.</p>
+      <h2>Your Early Access registration is confirmed.</h2>
+       <p>${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We will notify you when OnSite onboarding opens.</p>
       ${hasReferral ? `<div class="ea-referral-result">
         <small>Your personal referral link</small>
         <div class="ea-referral-code">${escapeHtml(payload.referralCode)}</div>
@@ -374,7 +374,7 @@
           <button type="button" data-share-referral>Share invite</button>
         </div>
         <div class="ea-progress-zero"><span>Sub-contractors joined through your link</span><strong>${Number(payload.referralProgress?.joinedCount) || 0}</strong></div>
-      </div>` : `<p>Your registration is safely recorded. We will send your referral details to the email address supplied.</p>`}`;
+      </div>` : `<p>Your registration is recorded. We will send your referral details to the email address supplied.</p>`}`;
     if (!hasReferral) return;
     success.querySelector("[data-copy-referral]")?.addEventListener("click", async (event) => {
       await navigator.clipboard.writeText(payload.referralUrl);
@@ -383,8 +383,8 @@
     success.querySelector("[data-share-referral]")?.addEventListener("click", async () => {
       if (navigator.share) {
         await navigator.share({
-          title: "Join OnSite Early Access",
-          text: "Join me as an OnSite sub-contractor.",
+          title: "OnSite Early Access",
+          text: "Register for OnSite Early Access as a sub-contractor.",
           url: payload.referralUrl,
         });
       } else {
