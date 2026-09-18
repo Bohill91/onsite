@@ -7,7 +7,12 @@ const taxonomy = require("./taxonomy.js");
 const { normalisePhone } = require("./phone-utils.js");
 
 const PRIVACY_VERSION = "early-access-v1";
-const REFERRAL_CODE_PATTERN = /^OSW-[A-Z0-9]{12,24}$/;
+const REFERRAL_TERMS_VERSION = "referral-programmes-v1";
+const REFERRAL_CODE_PATTERN = /^OS[WC]-[A-Z0-9]{12,24}$/;
+const REFERRAL_CODE_PATTERNS = Object.freeze({
+  worker: /^OSW-[A-Z0-9]{12,24}$/,
+  company: /^OSC-[A-Z0-9]{12,24}$/,
+});
 const SOURCE_FIELDS = Object.freeze([
   "utmSource",
   "utmMedium",
@@ -72,11 +77,12 @@ function normalizeMobile(value) {
   return mobile;
 }
 
-function normalizeReferralCode(value) {
+function normalizeReferralCode(value, signupType = "") {
   const code = strictText(value, "Referral code", 32)
     .toUpperCase()
     .replace(/\s+/g, "");
-  if (code && !REFERRAL_CODE_PATTERN.test(code)) {
+  const pattern = REFERRAL_CODE_PATTERNS[signupType] || REFERRAL_CODE_PATTERN;
+  if (code && !pattern.test(code)) {
     throw new EarlyAccessServiceError(
       "That referral code is not valid. Remove it to continue without a referral.",
       400,
@@ -117,8 +123,23 @@ function requirePrivacyAcknowledgement(value) {
   }
 }
 
+function requireReferralAcknowledgement(value, signupType) {
+  if (value === true) return;
+  const company = signupType === "company";
+  throw new EarlyAccessServiceError(
+    company
+      ? "Confirm the contractor referral eligibility statement."
+      : "Confirm the CIS sub-contractor referral eligibility statement.",
+    400,
+    company
+      ? "COMPANY_REFERRAL_ACKNOWLEDGEMENT_REQUIRED"
+      : "CIS_REFERRAL_ACKNOWLEDGEMENT_REQUIRED",
+  );
+}
+
 function normalizeWorkerInput(input = {}) {
   requirePrivacyAcknowledgement(input.privacyAcknowledged);
+  requireReferralAcknowledgement(input.cisAcknowledged, "worker");
   const trade = taxonomy.findTrade(input.tradeKey || input.trade);
   const role = taxonomy.findRole(trade?.key, input.roleKey || input.role);
   if (!trade || !role) {
@@ -140,7 +161,9 @@ function normalizeWorkerInput(input = {}) {
     homeArea: strictText(input.homeArea, "Postcode or home area", 160, {
       required: true,
     }),
-    suppliedReferralCode: normalizeReferralCode(input.referralCode),
+    suppliedReferralCode: normalizeReferralCode(input.referralCode, "worker"),
+    cisAcknowledged: true,
+    referralTermsVersion: REFERRAL_TERMS_VERSION,
     marketingConsent: input.marketingConsent === true,
     privacyVersion: PRIVACY_VERSION,
     source: normalizeSource(input.source),
@@ -149,6 +172,7 @@ function normalizeWorkerInput(input = {}) {
 
 function normalizeCompanyInput(input = {}) {
   requirePrivacyAcknowledgement(input.privacyAcknowledged);
+  requireReferralAcknowledgement(input.companyReferralAcknowledged, "company");
   const categoryKeys = Array.isArray(input.labourCategoryKeys)
     ? [...new Set(input.labourCategoryKeys.map((value) => String(value || "").trim()))]
     : [];
@@ -193,14 +217,18 @@ function normalizeCompanyInput(input = {}) {
     }),
     approximateWorkers,
     note: strictText(input.note, "Note", 1200),
+    suppliedReferralCode: normalizeReferralCode(input.referralCode, "company"),
+    companyReferralAcknowledged: true,
+    referralTermsVersion: REFERRAL_TERMS_VERSION,
     marketingConsent: input.marketingConsent === true,
     privacyVersion: PRIVACY_VERSION,
     source: normalizeSource(input.source),
   };
 }
 
-function referralCode() {
-  return `OSW-${crypto.randomBytes(10).toString("hex").toUpperCase().slice(0, 16)}`;
+function referralCode(prefix = "OSW") {
+  const namespace = prefix === "OSC" ? "OSC" : "OSW";
+  return `${namespace}-${crypto.randomBytes(10).toString("hex").toUpperCase().slice(0, 16)}`;
 }
 
 function configuredBaseUrl(env = process.env) {
@@ -261,7 +289,7 @@ function createSupabaseEarlyAccessAdapter({
   return {
     configured: true,
     joinWorker(input) {
-      return rpc("join_early_access_worker", {
+      return rpc("join_early_access_worker_v2", {
         p_first_name: input.firstName,
         p_last_name: input.lastName,
         p_email_normalized: input.email,
@@ -273,6 +301,8 @@ function createSupabaseEarlyAccessAdapter({
         p_home_area: input.homeArea,
         p_issued_referral_code: input.issuedReferralCode,
         p_supplied_referral_code: input.suppliedReferralCode || null,
+        p_cis_acknowledged: input.cisAcknowledged,
+        p_referral_terms_version: input.referralTermsVersion,
         p_marketing_consent: input.marketingConsent,
         p_privacy_version: input.privacyVersion,
         p_utm_source: input.source.utmSource || null,
@@ -283,7 +313,7 @@ function createSupabaseEarlyAccessAdapter({
       }, "Early Access worker signup failed.");
     },
     joinCompany(input) {
-      return rpc("join_early_access_company", {
+      return rpc("join_early_access_company_v2", {
         p_company_name: input.companyName,
         p_first_name: input.firstName,
         p_last_name: input.lastName,
@@ -294,6 +324,10 @@ function createSupabaseEarlyAccessAdapter({
         p_operating_area: input.operatingArea,
         p_approximate_workers: input.approximateWorkers,
         p_note: input.note || null,
+        p_issued_referral_code: input.issuedReferralCode,
+        p_supplied_referral_code: input.suppliedReferralCode || null,
+        p_company_acknowledged: input.companyReferralAcknowledged,
+        p_referral_terms_version: input.referralTermsVersion,
         p_marketing_consent: input.marketingConsent,
         p_privacy_version: input.privacyVersion,
         p_utm_source: input.source.utmSource || null,
@@ -367,7 +401,7 @@ ${url}
 
 Share your link with CIS sub-contractors you know. When a referred sub-contractor completes 5 paid days through OnSite, you earn £50. When they reach 20 paid days, you earn another £50. They also earn £25 after completing their first 5 paid days.
 
-Registration alone does not qualify for a reward.
+You do not need to complete paid work through OnSite yourself. You must complete account setup and pass CIS verification before a referral reward can be paid. Registration alone does not qualify for a reward.
 
 Keep this email so you can find your referral link later.
 
@@ -385,15 +419,18 @@ OnSite`,
             <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your personal referral link</p>
             <p><a href="${safeUrl}" style="color:#171717;overflow-wrap:anywhere">${safeUrl}</a></p>
             <p>Share your link with CIS sub-contractors you know. When a referred sub-contractor completes 5 paid days through OnSite, you earn £50. When they reach 20 paid days, you earn another £50. They also earn £25 after completing their first 5 paid days.</p>
-            <p>Registration alone does not qualify for a reward.</p>
+            <p>You do not need to complete paid work through OnSite yourself. You must complete account setup and pass CIS verification before a referral reward can be paid. Registration alone does not qualify for a reward.</p>
             <p>Keep this email so you can find your referral link later.</p>
             <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>
           </div>
         </div>`,
       });
     },
-    sendCompany(record) {
+    sendCompany(record, envForLinks = env) {
+      const url = canonicalReferralUrl(record.referral_code, envForLinks);
       const firstName = escapeHtml(record.first_name);
+      const safeUrl = escapeHtml(url);
+      const safeReferralCode = escapeHtml(record.referral_code);
       return send({
         to: record.email_normalized,
         subject: "You're registered for OnSite Early Access",
@@ -403,7 +440,15 @@ Your company is registered for OnSite Early Access.
 
 We'll contact you when contractor onboarding opens.
 
-You can then complete your company details and start setting up your labour requirements.
+Your contractor referral code:
+${record.referral_code}
+
+Your contractor referral link:
+${url}
+
+The referred contractor receives £100 OnSite credit towards its first qualifying labour booking. Your company receives £100 credit when the referred contractor completes 5 paid labour days through OnSite, and another £150 credit when it reaches 20 paid labour days.
+
+Company verification is required before referral credit can be applied. OnSite credit is not cash and cannot be withdrawn. Registration alone earns no credit.
 
 Reliable trades. On demand.
 
@@ -414,7 +459,12 @@ OnSite`,
             <p>Hi ${firstName},</p>
             <h1 style="font-size:24px;line-height:1.2;margin:0 0 16px">Your company is registered.</h1>
             <p>We'll contact you when contractor onboarding opens.</p>
-            <p>You can then complete your company details and start setting up your labour requirements.</p>
+            <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your contractor referral code</p>
+            <p style="font-size:20px;font-weight:700;letter-spacing:.08em">${safeReferralCode}</p>
+            <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your contractor referral link</p>
+            <p><a href="${safeUrl}" style="color:#171717;overflow-wrap:anywhere">${safeUrl}</a></p>
+            <p>The referred contractor receives £100 OnSite credit towards its first qualifying labour booking. Your company receives £100 credit when the referred contractor completes 5 paid labour days through OnSite, and another £150 credit when it reaches 20 paid labour days.</p>
+            <p>Company verification is required before referral credit can be applied. OnSite credit is not cash and cannot be withdrawn. Registration alone earns no credit.</p>
             <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>
           </div>
         </div>`,
@@ -504,7 +554,7 @@ function createEarlyAccessService({
         try {
           record = await adapter.joinWorker({
             ...normalized,
-            issuedReferralCode: codeGenerator(),
+            issuedReferralCode: codeGenerator("OSW"),
           });
           break;
         } catch (error) {
@@ -539,18 +589,35 @@ function createEarlyAccessService({
       requireConfigured();
       const normalized = normalizeCompanyInput(input);
       let record;
-      try {
-        record = await adapter.joinCompany(normalized);
-      } catch (error) {
-        throw mapDatabaseError(error);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          record = await adapter.joinCompany({
+            ...normalized,
+            issuedReferralCode: codeGenerator("OSC"),
+          });
+          break;
+        } catch (error) {
+          if (isReferralCodeCollision(error) && attempt < 4) continue;
+          throw mapDatabaseError(error);
+        }
+      }
+      if (!record) {
+        throw new EarlyAccessServiceError(
+          "Early Access is temporarily unavailable.",
+          503,
+          "EARLY_ACCESS_UNAVAILABLE",
+        );
       }
       const emailDeliveryStatus = await sendConfirmation("company", record);
+      const code = String(record.referral_code || "");
       return {
         ok: true,
         signupType: "company",
         message: "Your company Early Access place is confirmed.",
         companyName: String(record.company_name || normalized.companyName),
         firstName: String(record.first_name || normalized.firstName),
+        referralCode: code,
+        referralUrl: canonicalReferralUrl(code, env),
         emailDeliveryStatus,
       };
     },
@@ -637,6 +704,8 @@ module.exports = {
   EarlyAccessServiceError,
   PRIVACY_VERSION,
   REFERRAL_CODE_PATTERN,
+  REFERRAL_CODE_PATTERNS,
+  REFERRAL_TERMS_VERSION,
   canonicalReferralUrl,
   createEarlyAccessRateLimiter,
   createEarlyAccessService,

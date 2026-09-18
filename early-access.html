@@ -112,6 +112,7 @@
               </div>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
+                <label class="ea-check"><input name="cisAcknowledged" type="checkbox" required /><span>I confirm I am a CIS sub-contractor and understand that CIS verification will be required to activate my OnSite account and receive referral rewards.</span></label>
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage my Early Access place.</span></label>
                 <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
               </div>
@@ -167,8 +168,16 @@
               </div>
               <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
               <label>Typical number of sub-contractors required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+              <div class="ea-referral-choice" id="eaCompanyReferralChoice">
+                <p class="ea-referral-captured" id="eaCompanyReferralCaptured" hidden>You've been referred to OnSite.</p>
+                <button class="ea-referral-reveal" id="eaCompanyReferralReveal" type="button">Were you referred by another contractor?</button>
+                <div class="ea-referral-fallback-fields" id="eaCompanyReferralFallbackFields" hidden>
+                  <label>Referral code <span>Optional</span><input name="referralCode" id="eaCompanyReferralCode" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="OSC-..." /><small id="eaCompanyReferralHint">Enter the contractor code you were given.</small></label>
+                </div>
+              </div>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
+                <label class="ea-check"><input name="companyReferralAcknowledged" type="checkbox" required /><span>I confirm I am registering on behalf of a UK contractor and understand that company verification will be required before referral credit can be applied.</span></label>
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage our Early Access enquiry.</span></label>
                 <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
               </div>
@@ -187,14 +196,15 @@
         </div>
       </section>
 
-      <section class="ea-referral-section" aria-labelledby="referralValue">
-        <div>
-          <p class="ea-kicker">ONSITE REFERRAL PROGRAMME</p>
+      <section class="ea-referral-section" id="eaReferralProgramme" aria-labelledby="referralValue">
+        <div id="eaReferralProgrammeCopy">
+          <p class="ea-kicker">ONSITE SUB-CONTRACTOR REFERRAL PROGRAMME</p>
           <h2 id="referralValue">Earn up to £100 per qualifying referral.</h2>
-           <p>Refer a CIS sub-contractor to OnSite. When they complete 5 paid days, you earn £50. When they reach 20 paid days, you earn another £50. The referred sub-contractor also earns £25 after their first 5 paid days.</p>
+           <p>Refer a CIS sub-contractor to OnSite. When they complete 5 paid days through OnSite, you earn £50. When they reach 20 paid days, you earn another £50. The referred sub-contractor also earns £25 after their first 5 paid days.</p>
+           <p>To receive referral rewards, you must complete your OnSite account setup and pass CIS verification. You do not need to complete paid work yourself to earn referral rewards.</p>
            <p class="ea-example">Twenty qualifying referrals could earn you up to <strong>£2,000</strong> in referral rewards. Registration alone does not qualify for a reward.</p>
         </div>
-        <div class="ea-reward-steps">
+        <div class="ea-reward-steps" id="eaReferralProgrammeRewards">
            <article><strong>5 PAID DAYS</strong><span>£50 referral reward</span></article>
            <article><strong>20 PAID DAYS</strong><span>Additional £50 referral reward</span></article>
            <article><strong>REFERRED SUB-CONTRACTOR</strong><span>£25 reward after 5 paid days</span></article>
@@ -204,7 +214,7 @@
 
     <footer id="privacy" class="ea-footer">
       <div class="ea-wordmark" aria-label="OnSite">On<span>S</span>ite</div>
-      <p><strong>Early Access privacy information.</strong> OnSite uses the details submitted here to manage Early Access, prevent duplicate registrations, attribute sub-contractor referrals and prepare future account conversion. Marketing consent is optional and separate. Early Access details are not displayed publicly or shared with other sub-contractors or hiring companies.</p>
+      <p><strong>Early Access privacy information.</strong> OnSite uses the details submitted here to manage Early Access, prevent duplicate registrations, attribute sub-contractor or contractor referrals and prepare future account conversion. Marketing consent is optional and separate. Early Access details are not displayed publicly or shared with other sub-contractors or hiring companies.</p>
       <p>© 2026 OnSite. Reliable trades. On demand.</p>
     </footer>
 

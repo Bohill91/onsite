@@ -558,7 +558,7 @@ function showWorkerSuccess(user, dupeResult, referralResult) {
   if (referralNote) {
     if (referralResult?.ok && referralResult.referral?.foundingWorker) {
       referralNote.style.display = 'block';
-      referralNote.innerHTML = '<strong>Founding Worker status added.</strong> Your referral has been linked. Rewards remain conditional on paid work milestones after launch.';
+      referralNote.innerHTML = '<strong>Referral linked.</strong> Rewards remain conditional on the qualifying paid-work milestones. CIS verification is required before any cash reward can be paid.';
     } else if (workerRegData.referralCode && referralResult && !referralResult.ok) {
       referralNote.style.display = 'block';
       referralNote.textContent = referralResult.reason || 'The referral could not be linked.';

@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const referrals = require("../worker-referrals.js");
 
 const PRELAUNCH = referrals.PROGRAMME_PHASES.PRELAUNCH;
@@ -160,7 +162,8 @@ assert.equal(
   10000,
 );
 
-// Once live, progression follows profile, start, five-day and twenty-day evidence.
+// Once live, referred-worker paid evidence records an entitlement, but browser
+// state never promotes it to payable before canonical CIS verification.
 const liveState = store(LIVE);
 const liveReferrer = worker("live-referrer");
 const liveReferred = worker("live-referred");
@@ -205,7 +208,7 @@ assert.equal(
 );
 assert.equal(
   liveAttribution.rewards.referrerFivePaidDays.status,
-  referrals.REWARD_STATUSES.EARNED,
+  referrals.REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
 );
 assert.equal(
   liveAttribution.rewards.referredFivePaidDays.amountPence,
@@ -213,7 +216,7 @@ assert.equal(
 );
 assert.equal(
   liveAttribution.rewards.referredFivePaidDays.status,
-  referrals.REWARD_STATUSES.EARNED,
+  referrals.REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
 );
 assert.equal(
   liveAttribution.rewards.referrerTwentyPaidDays.status,
@@ -242,7 +245,7 @@ assert.equal(
 );
 assert.equal(
   liveAttribution.rewards.referrerTwentyPaidDays.status,
-  referrals.REWARD_STATUSES.EARNED,
+  referrals.REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
 );
 assert.equal(
   referrals.referralSummary(liveState, liveReferrer.id).earnedRewardPence,
@@ -260,11 +263,27 @@ referrals.syncAllReferralProgress(
 const launchedReferral = prelaunchState.workerReferrals[0];
 assert.equal(
   launchedReferral.rewards.referrerFivePaidDays.status,
-  referrals.REWARD_STATUSES.EARNED,
+  referrals.REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
 );
 assert.equal(
   launchedReferral.rewards.referrerTwentyPaidDays.status,
-  referrals.REWARD_STATUSES.EARNED,
+  referrals.REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
 );
+
+assert.equal(
+  Object.values(launchedReferral.rewards).some(
+    (reward) => reward.status === referrals.REWARD_STATUSES.PAYABLE,
+  ),
+  false,
+);
+
+const appSource = fs.readFileSync(path.resolve(__dirname, "../app.js"), "utf8");
+const paidDaysStart = appSource.indexOf("function workerReferralPaidDayCount");
+const paidDaysEnd = appSource.indexOf("function workerReferralEvidence", paidDaysStart);
+const paidDaysSource = appSource.slice(paidDaysStart, paidDaysEnd);
+assert.match(paidDaysSource, /workerPaymentStatusForLine\(invoice, line\) !== "paid"/);
+assert.doesNotMatch(paidDaysSource, /attendanceRecords\.filter/);
+assert.match(appSource, /You do not need to complete paid work through OnSite yourself/);
+assert.match(appSource, /pass CIS verification before cash can become payable/);
 
 console.log("worker referral programme tests passed");

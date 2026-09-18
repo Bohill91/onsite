@@ -17,6 +17,10 @@
   });
   const REWARD_STATUSES = Object.freeze({
     POTENTIAL: "potential",
+    EARNED_PENDING_VERIFICATION: "earned_pending_verification",
+    PAYABLE: "payable",
+    PAID: "paid",
+    VOID: "void",
     PENDING: "pending",
     EARNED: "earned",
     CREDITED: "credited",
@@ -126,6 +130,9 @@
           : REWARD_STATUSES.PENDING,
       qualifiedAt: "",
       earnedAt: "",
+      payableAt: "",
+      paidAt: "",
+      voidedAt: "",
       creditedAt: "",
     };
   }
@@ -133,6 +140,9 @@
   function normalizeReward(reward, key, referral, phase) {
     const base = defaultReward(key, referral, phase);
     const creditedAt = isoTimestamp(reward?.creditedAt);
+    const paidAt = isoTimestamp(reward?.paidAt || creditedAt);
+    const payableAt = isoTimestamp(reward?.payableAt);
+    const voidedAt = isoTimestamp(reward?.voidedAt);
     const earnedAt = isoTimestamp(reward?.earnedAt || reward?.qualifiedAt);
     return {
       ...base,
@@ -141,10 +151,14 @@
       beneficiaryWorkerId: base.beneficiaryWorkerId,
       amountPence: base.amountPence,
       paidDayThreshold: base.paidDayThreshold,
-      status: creditedAt
-        ? REWARD_STATUSES.CREDITED
-        : earnedAt
-          ? REWARD_STATUSES.EARNED
+      status: voidedAt
+        ? REWARD_STATUSES.VOID
+        : paidAt
+          ? REWARD_STATUSES.PAID
+          : payableAt
+            ? REWARD_STATUSES.PAYABLE
+            : earnedAt
+              ? REWARD_STATUSES.EARNED_PENDING_VERIFICATION
           : [REWARD_STATUSES.POTENTIAL, REWARD_STATUSES.PENDING].includes(
                 reward?.status,
               )
@@ -152,6 +166,9 @@
             : base.status,
       qualifiedAt: isoTimestamp(reward?.qualifiedAt || earnedAt),
       earnedAt,
+      payableAt,
+      paidAt,
+      voidedAt,
       creditedAt,
     };
   }
@@ -381,19 +398,27 @@
   }
 
   function updateReward(reward, paidDayCount, phase, now) {
-    if (reward.creditedAt) {
-      reward.status = REWARD_STATUSES.CREDITED;
+    if (reward.voidedAt) {
+      reward.status = REWARD_STATUSES.VOID;
+      return;
+    }
+    if (reward.paidAt || reward.creditedAt) {
+      reward.status = REWARD_STATUSES.PAID;
+      return;
+    }
+    if (reward.payableAt) {
+      reward.status = REWARD_STATUSES.PAYABLE;
       return;
     }
     if (reward.earnedAt) {
-      reward.status = REWARD_STATUSES.EARNED;
+      reward.status = REWARD_STATUSES.EARNED_PENDING_VERIFICATION;
       return;
     }
     if (
       phase === PROGRAMME_PHASES.LIVE &&
       paidDayCount >= reward.paidDayThreshold
     ) {
-      reward.status = REWARD_STATUSES.EARNED;
+      reward.status = REWARD_STATUSES.EARNED_PENDING_VERIFICATION;
       reward.qualifiedAt = reward.qualifiedAt || now;
       reward.earnedAt = reward.earnedAt || now;
       return;
@@ -484,7 +509,11 @@
         sum +
         [record.rewards.referrerFivePaidDays, record.rewards.referrerTwentyPaidDays]
           .filter((reward) =>
-            [REWARD_STATUSES.EARNED, REWARD_STATUSES.CREDITED].includes(
+            [
+              REWARD_STATUSES.EARNED_PENDING_VERIFICATION,
+              REWARD_STATUSES.PAYABLE,
+              REWARD_STATUSES.PAID,
+            ].includes(
               reward.status,
             ),
           )

@@ -18550,9 +18550,7 @@ function workerNameForReferral(workerId) {
 }
 
 function workerReferralLink(code) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
+  const url = new URL("https://joinonsite.uk/early-access");
   url.searchParams.set("ref", code);
   return url.toString();
 }
@@ -18583,7 +18581,6 @@ function workerReferralProgressHTML(referral) {
         <strong>${escapeHtml(workerNameForReferral(referral.referredWorkerId))}</strong>
         <span>${escapeHtml(workerReferralStatusLabel(referral.status))}</span>
       </div>
-      ${referral.foundingWorker ? '<span class="worker-founding-badge">Founding Worker</span>' : ""}
     </div>
     <div class="worker-referral-progress" role="progressbar" aria-label="Paid-day referral progress" aria-valuemin="0" aria-valuemax="20" aria-valuenow="${Math.min(20, paidDays)}"><span style="width:${progress}%"></span></div>
     <div class="worker-referral-milestones">
@@ -18616,7 +18613,7 @@ function renderWorkerReferralsPage(user) {
       ]
     : [
         ["Joined", summary.joinedCount],
-        ["Rewards earned", formatMoney(summary.earnedRewardPence / 100)],
+        ["Reward milestones", formatMoney(summary.earnedRewardPence / 100)],
         ["Maximum per referral", "£100"],
       ];
   const referralRows = summary.referrals.length
@@ -18630,11 +18627,10 @@ function renderWorkerReferralsPage(user) {
   root.innerHTML = `<div class="worker-referrals-page">
     <header class="worker-referrals-head">
       <div>
-        <p>Founding Worker Referral Programme</p>
-        <h1>Refer skilled workers to OnSite</h1>
-        <span>Invite people you trust and follow their progress towards work-based rewards.</span>
+        <p>OnSite Sub-contractor Referral Programme</p>
+        <h1>Refer CIS sub-contractors to OnSite</h1>
+        <span>Invite people you trust and follow their progress towards qualifying referral rewards.</span>
       </div>
-      ${ownReferral?.foundingWorker ? '<span class="worker-founding-badge">Founding Worker</span>' : ""}
     </header>
 
     <section class="worker-referral-card worker-referral-share" aria-labelledby="workerReferralShareTitle">
@@ -18661,13 +18657,14 @@ function renderWorkerReferralsPage(user) {
 
     <section class="worker-referral-card">
       <p class="worker-referral-kicker">How rewards work</p>
-      <h2>${isPrelaunch ? "Bank potential rewards before launch" : "Rewards follow paid work"}</h2>
+      <h2>${isPrelaunch ? "Track potential rewards before launch" : "Rewards follow the referred person's paid work"}</h2>
       <div class="worker-referral-reward-grid">
-        <div><strong>5 paid working days</strong><span>You earn £50. The referred worker separately becomes eligible for their £25 new-worker reward.</span></div>
+        <div><strong>5 paid working days</strong><span>You earn £50. The referred sub-contractor separately earns £25.</span></div>
         <div><strong>20 paid working days</strong><span>You earn an additional £50, bringing the maximum normal referral reward to £100.</span></div>
       </div>
-      <p class="worker-referral-disclaimer">${isPrelaunch ? "Early-access signups do not generate immediate cash. Potential rewards become eligible only after OnSite launches and the referred worker completes the qualifying paid days." : "Rewards shown as earned represent eligibility only. OnSite does not process referral payouts in this prototype."}</p>
-      ${ownReferral?.foundingWorker ? '<p class="worker-referral-founding-copy"><strong>Your Founding Worker status is active.</strong> You have priority access to complete your full profile when onboarding opens. Your separate £25 new-worker reward remains conditional on completing 5 paid working days.</p>' : ""}
+      <p class="worker-referral-disclaimer">${isPrelaunch ? "Registration alone does not qualify for a reward. Milestones require canonical paid work completed by the referred sub-contractor." : "A paid-day milestone records an entitlement only. You must complete account setup and pass CIS verification before cash can become payable."}</p>
+      <p class="worker-referral-founding-copy"><strong>You do not need to complete paid work through OnSite yourself.</strong> A CIS-verified account may be used entirely for referrals.</p>
+      ${ownReferral ? '<p class="worker-referral-founding-copy">Your separate £25 referred-person reward remains conditional on completing 5 qualifying paid days and passing CIS verification before payout.</p>' : ""}
     </section>
 
     <section class="worker-referral-card">
@@ -18687,8 +18684,7 @@ function renderWorkerReferralsPage(user) {
   root.querySelector("[data-worker-referral-share]")?.addEventListener("click", async () => {
     const shareData = {
       title: "Join OnSite",
-      text: `Join the OnSite Founding Worker Referral Programme with my code ${referralCode}.`,
-      url: referralLink,
+      text: `I've joined OnSite Early Access. If you're a CIS sub-contractor, register using my link:\n\n${referralLink}`,
     };
     try {
       if (navigator.share) await navigator.share(shareData);
@@ -18717,11 +18713,6 @@ function renderWorkerProfile(user) {
       ? (stats.reliability ?? 100)
       : (user.reliability ?? 100);
   const pct = calcWorkerCompletion(user);
-  const referralEngine = workerReferralsEngine();
-  const ownReferral = referralEngine?.referralForReferredWorker(
-    state,
-    linkedAccountIds(user.id),
-  );
 
   // Keep the permanent identity record's score in sync so it can be restored
   // if this worker ever deletes and re-registers.
@@ -18865,7 +18856,6 @@ function renderWorkerProfile(user) {
         <div class="prof-verify ${user.verificationStatus || "incomplete"}">
           ${{ verified: "✓ Verified", pending: "Pending Review", incomplete: "Incomplete Profile" }[user.verificationStatus || "incomplete"]}
         </div>
-        ${ownReferral?.foundingWorker ? '<div class="worker-founding-badge">Founding Worker</div>' : ""}
       </div>
       <div class="prof-ring">
         ${ratingBadgeHTML(rating.reliabilityRating)}
