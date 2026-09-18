@@ -787,8 +787,23 @@ test("migration 009 extends referrals without weakening programme or reward auth
   assert.match(sql, /early_access_referral_rewards_evidence_unique/i);
   assert.match(sql, /validate_early_access_referral_entitlement/i);
   assert.match(sql, /EARLY_ACCESS_ENTITLEMENT_PROGRAMME_MISMATCH/i);
+  assert.match(sql, /referrer_record\.referral_code is distinct from new\.referral_code_snapshot/i);
+  assert.match(sql, /EARLY_ACCESS_REFERRAL_SNAPSHOT_MISMATCH/i);
+  assert.match(sql, /early_access_referral_rewards_evidence_key_check/i);
+  assert.match(sql, /early_access_referral_rewards_lifecycle_check/i);
+  assert.match(sql, /protect_early_access_referral_reward_transition/i);
+  assert.match(sql, /EARLY_ACCESS_REWARD_INITIAL_STATUS/i);
+  assert.match(sql, /EARLY_ACCESS_REWARD_INVALID_TRANSITION/i);
+  assert.match(sql, /paid_at >= payable_at/i);
+  assert.match(sql, /status = 'paid'[\s\S]*benefit_type = 'cash'/i);
+  assert.match(sql, /status = 'credited'[\s\S]*benefit_type = 'account_credit'/i);
   assert.match(sql, /enable row level security/i);
   assert.match(sql, /revoke all on public\.early_access_referral_credit_ledger/i);
+  assert.match(sql, /validate_early_access_referral_credit_ledger/i);
+  assert.match(sql, /EARLY_ACCESS_CREDIT_LEDGER_REWARD_MISMATCH/i);
+  assert.match(sql, /EARLY_ACCESS_CREDIT_LEDGER_REVERSAL_INVALID/i);
+  assert.match(sql, /EARLY_ACCESS_CREDIT_LEDGER_NEGATIVE_BALANCE/i);
+  assert.match(sql, /reversal_of_ledger_id/i);
   assert.match(sql, /revoke execute on function public\.join_early_access_worker[\s\S]*from service_role/i);
   assert.match(sql, /revoke execute on function public\.join_early_access_company[\s\S]*from service_role/i);
   assert.match(sql, /grant execute on function public\.join_early_access_worker_v2[\s\S]*to service_role/i);
@@ -796,6 +811,54 @@ test("migration 009 extends referrals without weakening programme or reward auth
   assert.doesNotMatch(sql, /grant (?:select|insert|update|delete)[^;]*to (?:anon|authenticated)/i);
   assert.doesNotMatch(sql, /attendance/i);
   assert.match(sql, /commit;\s*$/i);
+});
+
+test("verification SQL keeps pre-009 checks compatible with migration 008", () => {
+  const preflight = fs.readFileSync(
+    path.join(rootDir, "docs/early-access-pre-009-verification.sql"),
+    "utf8",
+  );
+  const postflight = fs.readFileSync(
+    path.join(rootDir, "docs/early-access-post-009-verification.sql"),
+    "utf8",
+  );
+  [
+    "early_access_referral_credit_ledger",
+    "qualifying_evidence_key",
+    "programme_type",
+    "benefit_type",
+    "verification_confirmed_at",
+  ].forEach((name) => assert.doesNotMatch(preflight, new RegExp(name, "i")));
+  [
+    "early_access_referral_credit_ledger",
+    "qualifying_evidence_key",
+    "programme_type",
+    "benefit_type",
+    "verification_confirmed_at",
+    "protect_early_access_referral_reward_transition",
+  ].forEach((name) => assert.match(postflight, new RegExp(name, "i")));
+  assert.doesNotMatch(
+    preflight,
+    /^\s*(insert|update|delete|alter|create|drop|grant|revoke)\b/im,
+  );
+  assert.doesNotMatch(
+    postflight,
+    /^\s*(insert|update|delete|alter|create|drop|grant|revoke)\b/im,
+  );
+});
+
+test("migration 008 remains byte-for-byte unchanged", () => {
+  const current = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609170008_early_access_foundation.sql"),
+    "utf8",
+  );
+  const baseline = require("node:child_process")
+    .execFileSync(
+      "git",
+      ["show", "HEAD:supabase/migrations/202609170008_early_access_foundation.sql"],
+      { encoding: "utf8" },
+    );
+  assert.equal(current, baseline);
 });
 
 test("public UI is password-free, API-backed and has sub-contractor and hiring-company paths", () => {

@@ -206,7 +206,8 @@ begin
   if new.programme_type = 'subcontractor_cash' then
     if referrer_record.signup_type <> 'worker'
       or referred_record.signup_type <> 'worker'
-      or new.referral_code_snapshot !~ '^OSW-[A-Z0-9]{12,24}$' then
+      or new.referral_code_snapshot !~ '^OSW-[A-Z0-9]{12,24}$'
+      or referrer_record.referral_code is distinct from new.referral_code_snapshot then
       raise exception using
         errcode = '23514',
         message = 'Sub-contractor referrals require two worker signups and an OSW code.',
@@ -215,7 +216,8 @@ begin
   elsif new.programme_type = 'contractor_credit' then
     if referrer_record.signup_type <> 'company'
       or referred_record.signup_type <> 'company'
-      or new.referral_code_snapshot !~ '^OSC-[A-Z0-9]{12,24}$' then
+      or new.referral_code_snapshot !~ '^OSC-[A-Z0-9]{12,24}$'
+      or referrer_record.referral_code is distinct from new.referral_code_snapshot then
       raise exception using
         errcode = '23514',
         message = 'Contractor referrals require two company signups and an OSC code.',
@@ -223,6 +225,23 @@ begin
     end if;
   end if;
   return new;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from public.early_access_referrals referral
+    join public.early_access_signups referrer
+      on referrer.id = referral.referrer_signup_id
+    where referral.referral_code_snapshot is distinct from referrer.referral_code
+  ) then
+    raise exception using
+      errcode = '23514',
+      message = 'Existing Early Access referral snapshots do not match their referrer codes.',
+      detail = 'EARLY_ACCESS_REFERRAL_SNAPSHOT_MISMATCH';
+  end if;
 end;
 $$;
 
@@ -318,6 +337,68 @@ alter table public.early_access_referral_rewards
       'credited',
       'cancelled'
     )
+  ),
+  add constraint early_access_referral_rewards_evidence_key_check check (
+    qualifying_evidence_key is null
+    or btrim(qualifying_evidence_key) <> ''
+  ),
+  add constraint early_access_referral_rewards_lifecycle_check check (
+    (
+      status = 'potential'
+      and payable_at is null
+      and paid_at is null
+      and voided_at is null
+    )
+    or (
+      status = 'earned_pending_verification'
+      and qualifying_evidence_key is not null
+      and btrim(qualifying_evidence_key) <> ''
+      and verification_confirmed_at is null
+      and payable_at is null
+      and paid_at is null
+      and voided_at is null
+    )
+    or (
+      status = 'payable'
+      and qualifying_evidence_key is not null
+      and btrim(qualifying_evidence_key) <> ''
+      and verification_confirmed_at is not null
+      and payable_at is not null
+      and paid_at is null
+      and voided_at is null
+    )
+    or (
+      status = 'paid'
+      and benefit_type = 'cash'
+      and qualifying_evidence_key is not null
+      and btrim(qualifying_evidence_key) <> ''
+      and verification_confirmed_at is not null
+      and payable_at is not null
+      and paid_at is not null
+      and paid_at >= payable_at
+      and voided_at is null
+    )
+    or (
+      status = 'void'
+      and voided_at is not null
+      and paid_at is null
+    )
+    or (
+      status = 'credited'
+      and benefit_type = 'account_credit'
+      and qualifying_evidence_key is not null
+      and btrim(qualifying_evidence_key) <> ''
+      and verification_confirmed_at is not null
+      and payable_at is not null
+      and paid_at is null
+      and voided_at is null
+    )
+    or (
+      status in ('pending', 'eligible', 'cancelled')
+      and payable_at is null
+      and paid_at is null
+      and voided_at is null
+    )
   );
 
 create unique index if not exists early_access_referral_rewards_evidence_unique
@@ -366,6 +447,75 @@ create trigger early_access_referral_rewards_validate_entitlement
 before insert or update on public.early_access_referral_rewards
 for each row execute function public.validate_early_access_referral_entitlement();
 
+create or replace function public.protect_early_access_referral_reward_transition()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.status <> 'potential' then
+      raise exception using
+        errcode = '23514',
+        message = 'New Early Access rewards must start as potential.',
+        detail = 'EARLY_ACCESS_REWARD_INITIAL_STATUS';
+    end if;
+    return new;
+  end if;
+
+  if old.status is not distinct from new.status then
+    return new;
+  end if;
+
+  if old.status in ('paid', 'credited', 'void', 'cancelled', 'pending', 'eligible') then
+    raise exception using
+      errcode = '23514',
+      message = 'Terminal or legacy Early Access reward statuses cannot transition.',
+      detail = 'EARLY_ACCESS_REWARD_STATUS_TERMINAL';
+  end if;
+
+  if new.status in ('pending', 'eligible', 'cancelled') then
+    raise exception using
+      errcode = '23514',
+      message = 'Legacy Early Access reward statuses cannot be newly assigned.',
+      detail = 'EARLY_ACCESS_REWARD_LEGACY_STATUS';
+  end if;
+
+  if old.status = 'potential'
+    and new.status not in ('earned_pending_verification', 'void') then
+    raise exception using
+      errcode = '23514',
+      message = 'Potential rewards may only become earned-pending-verification or void.',
+      detail = 'EARLY_ACCESS_REWARD_INVALID_TRANSITION';
+  elsif old.status = 'earned_pending_verification'
+    and new.status not in ('payable', 'void') then
+    raise exception using
+      errcode = '23514',
+      message = 'Earned rewards may only become payable or void.',
+      detail = 'EARLY_ACCESS_REWARD_INVALID_TRANSITION';
+  elsif old.status = 'payable'
+    and new.status not in ('paid', 'credited', 'void') then
+    raise exception using
+      errcode = '23514',
+      message = 'Payable rewards may only become paid, credited, or void.',
+      detail = 'EARLY_ACCESS_REWARD_INVALID_TRANSITION';
+  else
+    raise exception using
+      errcode = '23514',
+      message = 'The Early Access reward status transition is not permitted.',
+      detail = 'EARLY_ACCESS_REWARD_INVALID_TRANSITION';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists early_access_referral_rewards_protect_transition
+on public.early_access_referral_rewards;
+create trigger early_access_referral_rewards_protect_transition
+before insert or update of status on public.early_access_referral_rewards
+for each row execute function public.protect_early_access_referral_reward_transition();
+
 create table if not exists public.early_access_referral_credit_ledger (
   id uuid primary key default gen_random_uuid(),
   reward_id uuid not null
@@ -376,12 +526,132 @@ create table if not exists public.early_access_referral_credit_ledger (
   amount_pence integer not null,
   idempotency_key text not null unique,
   external_reference text,
+  reversal_of_ledger_id uuid
+    references public.early_access_referral_credit_ledger(id) on delete restrict,
   created_at timestamptz not null default now(),
   constraint early_access_referral_credit_ledger_type_check
     check (entry_type in ('earned', 'applied', 'reversed')),
   constraint early_access_referral_credit_ledger_amount_check
-    check (amount_pence <> 0)
+    check (amount_pence <> 0),
+  constraint early_access_referral_credit_ledger_reversal_check
+    check (
+      (
+        entry_type in ('earned', 'applied')
+        and reversal_of_ledger_id is null
+      )
+      or (
+        entry_type = 'reversed'
+        and reversal_of_ledger_id is not null
+      )
+    )
 );
+
+create unique index if not exists early_access_referral_credit_ledger_reversal_unique
+  on public.early_access_referral_credit_ledger (reversal_of_ledger_id)
+  where reversal_of_ledger_id is not null;
+
+create unique index if not exists early_access_referral_credit_ledger_reward_earned_unique
+  on public.early_access_referral_credit_ledger (reward_id)
+  where entry_type = 'earned';
+
+create or replace function public.validate_early_access_referral_credit_ledger()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+declare
+  reward_record public.early_access_referral_rewards%rowtype;
+  previous_record public.early_access_referral_credit_ledger%rowtype;
+  current_balance bigint;
+begin
+  if tg_op = 'DELETE' then
+    raise exception using
+      errcode = '23503',
+      message = 'Early Access credit ledger entries cannot be deleted.',
+      detail = 'EARLY_ACCESS_CREDIT_LEDGER_APPEND_ONLY';
+  end if;
+
+  if tg_op = 'UPDATE' then
+    raise exception using
+      errcode = '23514',
+      message = 'Early Access credit ledger entries are append-only.',
+      detail = 'EARLY_ACCESS_CREDIT_LEDGER_APPEND_ONLY';
+  end if;
+
+  select reward.*
+  into reward_record
+  from public.early_access_referral_rewards reward
+  where reward.id = new.reward_id;
+
+  if reward_record.id is null
+    or reward_record.programme_type <> 'contractor_credit'
+    or reward_record.benefit_type <> 'account_credit'
+    or reward_record.beneficiary_type <> 'company'
+    or reward_record.beneficiary_signup_id is distinct from new.company_signup_id then
+    raise exception using
+      errcode = '23514',
+      message = 'Credit ledger entries must belong to the reward beneficiary company.',
+      detail = 'EARLY_ACCESS_CREDIT_LEDGER_REWARD_MISMATCH';
+  end if;
+
+  if new.entry_type = 'earned' then
+    if new.amount_pence <> reward_record.amount_pence
+      or new.amount_pence <= 0
+      or new.reversal_of_ledger_id is not null then
+      raise exception using
+        errcode = '23514',
+        message = 'Earned credit must equal its authorised positive reward amount.',
+        detail = 'EARLY_ACCESS_CREDIT_LEDGER_EARNED_AMOUNT';
+    end if;
+  elsif new.entry_type = 'applied' then
+    if new.amount_pence >= 0
+      or abs(new.amount_pence) > reward_record.amount_pence
+      or new.reversal_of_ledger_id is not null then
+      raise exception using
+        errcode = '23514',
+        message = 'Applied credit must be a bounded negative amount.',
+        detail = 'EARLY_ACCESS_CREDIT_LEDGER_APPLIED_AMOUNT';
+    end if;
+  elsif new.entry_type = 'reversed' then
+    select previous.*
+    into previous_record
+    from public.early_access_referral_credit_ledger previous
+    where previous.id = new.reversal_of_ledger_id;
+
+    if previous_record.id is null
+      or previous_record.entry_type not in ('earned', 'applied')
+      or previous_record.reward_id is distinct from new.reward_id
+      or previous_record.company_signup_id is distinct from new.company_signup_id
+      or new.amount_pence <> -previous_record.amount_pence then
+      raise exception using
+        errcode = '23514',
+        message = 'A reversal must exactly reverse a prior posting for the same reward and company.',
+        detail = 'EARLY_ACCESS_CREDIT_LEDGER_REVERSAL_INVALID';
+    end if;
+  end if;
+
+  select coalesce(sum(amount_pence), 0)::bigint
+  into current_balance
+  from public.early_access_referral_credit_ledger existing
+  where existing.reward_id = new.reward_id
+    and existing.company_signup_id = new.company_signup_id;
+
+  if current_balance + new.amount_pence < 0 then
+    raise exception using
+      errcode = '23514',
+      message = 'Credit ledger balance cannot become negative.',
+      detail = 'EARLY_ACCESS_CREDIT_LEDGER_NEGATIVE_BALANCE';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists early_access_referral_credit_ledger_validate
+on public.early_access_referral_credit_ledger;
+create trigger early_access_referral_credit_ledger_validate
+before insert or update or delete on public.early_access_referral_credit_ledger
+for each row execute function public.validate_early_access_referral_credit_ledger();
 
 alter table public.early_access_referral_credit_ledger enable row level security;
 revoke all on public.early_access_referral_credit_ledger
@@ -719,6 +989,10 @@ from public, anon, authenticated, service_role;
 revoke all on function public.validate_early_access_referral_programme()
 from public, anon, authenticated, service_role;
 revoke all on function public.validate_early_access_referral_entitlement()
+from public, anon, authenticated, service_role;
+revoke all on function public.protect_early_access_referral_reward_transition()
+from public, anon, authenticated, service_role;
+revoke all on function public.validate_early_access_referral_credit_ledger()
 from public, anon, authenticated, service_role;
 
 revoke all on function public.join_early_access_worker_v2(

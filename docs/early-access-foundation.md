@@ -59,8 +59,12 @@ an OnSite account entirely for referrals. Account setup and CIS verification
 are required before cash becomes payable. Registration alone earns nothing.
 
 Entitlements follow `potential` → `earned_pending_verification` → `payable` →
-`paid`, with `void` available for invalidated entitlements. Reaching a milestone
-before CIS verification retains the entitlement in
+`paid`, with `void` available for invalidated entitlements. The database rejects
+skipped or regressive canonical transitions, requires trusted evidence before
+earned/payable/settled states, requires verification before payable, and permits
+`paid` only for cash rewards. A retained legacy `credited` state is restricted
+to verified account-credit rewards and is terminal. Reaching a milestone before
+CIS verification retains the entitlement in
 `earned_pending_verification`; this repository does not make payments or mark
 anything paid.
 
@@ -79,8 +83,11 @@ Contractor referral credit is represented in pence, remains distinct from
 worker cash rewards, is non-withdrawable and non-transferable, and may
 eventually be applied only against eligible OnSite charges without creating a
 negative invoice. A verified contractor account is required before earned
-credit can be applied. The credit ledger has no browser or authenticated-user
-write grant; invoice redemption is intentionally not implemented yet.
+ credit can be applied. The credit ledger has no browser or authenticated-user
+ write grant, is append-only, and validates the reward programme, account-credit
+ benefit, company beneficiary, authorised amount, posting direction and reversal
+ reference. Invoice redemption is intentionally not implemented yet, so the
+ ledger remains write-locked until that future integration is designed.
 
 OSW and OSC attribution cannot cross programmes. Attribution is immutable, one
 referrer may be attached to a signup, first valid attribution wins, duplicate
@@ -95,10 +102,12 @@ completing five qualifying days and five workers completing one qualifying day
 each both equal five paid labour days.
 
 Migration 009 stores idempotent entitlement rows and a nullable unique evidence
-key for the future payment integration. No signup, QR scan or attendance record
-advances a cash reward or company credit. The future canonical payment service
-must supply trusted paid-work evidence, promote earned entitlements only after
-the required CIS/company verification, and write contractor credit ledger
+key for the future payment integration. Non-empty evidence is required before
+an entitlement can become earned, payable, paid or credited, but the migration
+does not pretend to validate that evidence. No signup, QR scan or attendance
+record advances a cash reward or company credit. The future canonical payment
+service must supply trusted paid-work evidence, promote earned entitlements only
+after the required CIS/company verification, and write contractor credit ledger
 entries through server authority.
 
 ## Source and privacy
