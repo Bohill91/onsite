@@ -10,3 +10,4 @@
 - [Requirement editor type switching](requirement-editor-switching.md) — isolate type-radio events from generic input syncing and snapshot each type’s content before re-rendering.
 - [User-facing account terminology](terminology-conventions.md) — use Sub-contractor and Hiring company in copy while preserving internal role values and legal field labels.
 - [Entrance map startup readiness](entrance-map-startup.md) — resolve vector readiness on the first styled render with a bounded timeout; do not require the later full load event.
+- [Viewport visual QA](viewport-visual-qa.md) — use headless browser metrics/screenshots for non-default viewport checks; the app preview capture is fixed at 1280px.
