@@ -160,7 +160,21 @@ form > label, .ea-form-grid label {
   font-weight: 700;
   gap: 8px;
 }
-label > span { color: var(--ea-muted); font-size: .68rem; font-weight: 500; }
+.ea-phone-control {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(145px, .9fr) minmax(0, 1.2fr);
+}
+.ea-phone-control > .os-select,
+.ea-phone-control > input {
+  min-width: 0;
+}
+.ea-phone-control > input {
+  font-size: .8rem;
+  font-weight: 400;
+}
+label > span:not(.ea-phone-control) { color: var(--ea-muted); font-size: .68rem; font-weight: 500; }
 input, select, textarea {
   background: #fff;
   border: 1px solid #cfcfca;
@@ -382,10 +396,12 @@ input[readonly] { background: #fafaf8; color: var(--ea-muted); }
 .ea-success { padding: 16px 4px 4px; }
 .ea-success-badge { align-items: center; background: var(--ea-orange-soft); border-radius: 999px; color: #000; display: inline-flex; font-size: .7rem; font-weight: 800; margin-bottom: 18px; min-height: 28px; padding: 5px 10px; }
 .ea-success > p { color: var(--ea-muted); font-size: .84rem; line-height: 1.6; }
+.ea-email-status { font-weight: 700; }
 .ea-referral-result { background: #f7f7f5; border-radius: 8px; display: grid; gap: 12px; margin-top: 22px; padding: 16px; }
 .ea-referral-result small { color: var(--ea-muted); font-size: .66rem; font-weight: 700; text-transform: uppercase; }
 .ea-referral-code { color: var(--ea-black); font-size: 1.18rem; font-weight: 800; letter-spacing: .04em; }
 .ea-referral-url { color: var(--ea-muted); font-size: .7rem; overflow-wrap: anywhere; }
+.ea-referral-attribution { color: var(--ea-muted); font-size: .72rem; line-height: 1.5; margin: 0; }
 .ea-share-actions { display: flex; gap: 8px; }
 .ea-share-actions button { background: #fff; border: 1px solid var(--ea-border); border-radius: 7px; color: var(--ea-ink); cursor: pointer; font-size: .74rem; font-weight: 700; min-height: 40px; padding: 8px 12px; }
 .ea-progress-zero { align-items: center; border-top: 1px solid #e6e6e3; display: flex; justify-content: space-between; padding-top: 12px; }

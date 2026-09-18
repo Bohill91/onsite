@@ -9,12 +9,14 @@ const {
   EarlyAccessServiceError,
   createEarlyAccessRateLimiter,
   createEarlyAccessService,
+  createResendEarlyAccessEmailProvider,
   createSupabaseEarlyAccessAdapter,
   earlyAccessClientKey,
   normalizeCompanyInput,
   normalizeWorkerInput,
   referralCode,
 } = require("../server-early-access.js");
+const { normalisePhone } = require("../phone-utils.js");
 
 const rootDir = path.resolve(__dirname, "..");
 
@@ -228,6 +230,16 @@ test("worker input is canonicalised with allow-listed source attribution", () =>
   assert.equal(Object.hasOwn(value.source, "ignored"), false);
 });
 
+test("phone normalisation supports selected countries and pasted international formats", () => {
+  assert.equal(normalisePhone("07700 900123", "GB"), "+447700900123");
+  assert.equal(normalisePhone("+447700900123", "GB"), "+447700900123");
+  assert.equal(normalisePhone("0044 07700 900123", "GB"), "+447700900123");
+  assert.equal(normalisePhone("+4407700900123", "GB"), "+447700900123");
+  assert.equal(normalisePhone("087 123 4567", "IE"), "+353871234567");
+  assert.equal(normalisePhone("+353871234567", "GB"), "+353871234567");
+  assert.equal(normalisePhone("not a phone", "GB"), "");
+});
+
 test("server-issued referral codes use the canonical unpredictable format", () => {
   const first = referralCode();
   const second = referralCode();
@@ -270,6 +282,7 @@ test("valid worker signup is canonical, Founding Worker and password-free", asyn
   assert.equal(result.foundingWorker, true);
   assert.equal(result.referralCode, "OSW-AAAAAAAAAAAAAAAA");
   assert.equal(result.referralUrl, "https://joinonsite.uk/early-access?ref=OSW-AAAAAAAAAAAAAAAA");
+  assert.equal(result.emailDeliveryStatus, "skipped");
   assert.deepEqual(result.referralProgress, { joinedCount: 0 });
   assert.deepEqual(Object.keys(result), [
     "ok",
@@ -279,6 +292,7 @@ test("valid worker signup is canonical, Founding Worker and password-free", asyn
     "firstName",
     "referralCode",
     "referralUrl",
+    "emailDeliveryStatus",
     "referralProgress",
   ]);
   assert.equal(Object.hasOwn(adapter.workers.values().next().value, "password"), false);
@@ -397,7 +411,8 @@ test("invalid fields, privacy omission and excessive source values fail closed",
 
 test("email absence and provider failure never lose a valid signup", async () => {
   const withoutEmail = fakeAdapter();
-  await service(withoutEmail).joinWorker(workerInput());
+  const skipped = await service(withoutEmail).joinWorker(workerInput());
+  assert.equal(skipped.emailDeliveryStatus, "skipped");
   assert.equal([...withoutEmail.deliveryStatuses.values()][0], "skipped");
 
   const failedEmail = fakeAdapter();
@@ -410,6 +425,42 @@ test("email absence and provider failure never lose a valid signup", async () =>
   }).joinCompany(companyInput());
   assert.equal(failedEmail.companies.size, 1);
   assert.equal([...failedEmail.deliveryStatuses.values()][0], "failed");
+});
+
+test("Resend provider uses the professional Early Access confirmation copy", async () => {
+  const requests = [];
+  const provider = createResendEarlyAccessEmailProvider({
+    env: {
+      RESEND_API_KEY: "test-key",
+      EARLY_ACCESS_FROM_EMAIL: "OnSite <hello@example.com>",
+      EARLY_ACCESS_BASE_URL: "https://joinonsite.uk",
+    },
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return { ok: true, status: 200 };
+    },
+  });
+  await provider.sendWorker({
+    email_normalized: "sam@example.com",
+    first_name: "Sam",
+    referral_code: "OSW-AAAAAAAAAAAAAAAA",
+  });
+  await provider.sendCompany({
+    email_normalized: "luke@example.com",
+    first_name: "Luke",
+    company_name: "Apex Construction Ltd",
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].subject, "You're registered for OnSite Early Access");
+  assert.match(requests[0].text, /OSW-AAAAAAAAAAAAAAAA/);
+  assert.match(requests[0].text, /https:\/\/joinonsite\.uk\/early-access\?ref=OSW-AAAAAAAAAAAAAAAA/);
+  assert.match(requests[0].text, /5 paid days/);
+  assert.match(requests[0].text, /20 paid days/);
+  assert.doesNotMatch(`${requests[0].text}\n${requests[0].html}`, /Founding Worker/);
+  assert.equal(requests[1].subject, "You're registered for OnSite Early Access");
+  assert.match(requests[1].text, /contractor onboarding/);
+  assert.doesNotMatch(`${requests[1].text}\n${requests[1].html}`, /referral code|referral link|referral reward/i);
 });
 
 test("client identity ignores forwarding headers unless proxy trust is explicit", () => {
@@ -564,7 +615,10 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(client, /\.get\("ref"\)/);
   assert.match(client, /data-copy-referral/);
   assert.match(client, /data-share-referral/);
-  assert.match(client, /referralProgress\?\.joinedCount/);
+  assert.doesNotMatch(client, /referralProgress\?\.joinedCount/);
+  assert.match(client, /Registrations through this link are attributed to you automatically/);
+  assert.match(html, /name="mobileCountry"/);
+  assert.match(client, /normalisePhone/);
   assert.match(html, /name="viewport"/);
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /@media \(max-width: 420px\)/);

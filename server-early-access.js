@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const net = require("node:net");
 const { createClient } = require("@supabase/supabase-js");
 const taxonomy = require("./taxonomy.js");
+const { normalisePhone } = require("./phone-utils.js");
 
 const PRIVACY_VERSION = "early-access-v1";
 const REFERRAL_CODE_PATTERN = /^OSW-[A-Z0-9]{12,24}$/;
@@ -60,12 +61,8 @@ function normalizeEmail(value) {
 }
 
 function normalizeMobile(value) {
-  let mobile = strictText(value, "Mobile number", 40, { required: true })
-    .replace(/[\s().-]/g, "");
-  if (mobile.startsWith("00")) mobile = `+${mobile.slice(2)}`;
-  else if (mobile.startsWith("0")) mobile = `+44${mobile.slice(1)}`;
-  else if (mobile.startsWith("44")) mobile = `+${mobile}`;
-  if (!/^\+[1-9]\d{7,14}$/.test(mobile)) {
+  const mobile = normalisePhone(strictText(value, "Mobile number", 40, { required: true }));
+  if (!mobile) {
     throw new EarlyAccessServiceError(
       "Enter a valid telephone number.",
       400,
@@ -351,21 +348,76 @@ function createResendEarlyAccessEmailProvider({
     sendWorker(record, envForLinks = env) {
       const url = canonicalReferralUrl(record.referral_code, envForLinks);
       const firstName = escapeHtml(record.first_name);
+      const referralCode = escapeHtml(record.referral_code);
       const safeUrl = escapeHtml(url);
       return send({
         to: record.email_normalized,
-        subject: "Your OnSite Founding Worker place is confirmed",
-        text: `Hi ${record.first_name}, your OnSite Early Access place is confirmed. Your referral link is ${url}`,
-        html: `<p>Hi ${firstName},</p><p>Your OnSite Early Access place and Founding Worker status are confirmed.</p><p><a href="${safeUrl}">Share your referral link</a></p><p>Referral rewards remain potential until the qualifying paid-work milestones are completed after launch.</p>`,
+        subject: "You're registered for OnSite Early Access",
+        text: `Hi ${record.first_name},
+
+Your OnSite Early Access registration is confirmed.
+
+We'll email you when profile setup opens.
+
+Your referral code:
+${record.referral_code}
+
+Your personal referral link:
+${url}
+
+Share your link with CIS sub-contractors you know. When a referred sub-contractor completes 5 paid days through OnSite, you earn £50. When they reach 20 paid days, you earn another £50. They also earn £25 after completing their first 5 paid days.
+
+Registration alone does not qualify for a reward.
+
+Keep this email so you can find your referral link later.
+
+Reliable trades. On demand.
+
+OnSite`,
+        html: `<div style="background:#f5f5f2;color:#171717;font-family:Arial,sans-serif;padding:32px 16px">
+          <div style="margin:0 auto;max-width:560px;background:#fff;border:1px solid #dedede;border-radius:10px;padding:32px">
+            <p style="color:#f97316;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">OnSite Early Access</p>
+            <p>Hi ${firstName},</p>
+            <h1 style="font-size:24px;line-height:1.2;margin:0 0 16px">Your registration is confirmed.</h1>
+            <p>We'll email you when profile setup opens.</p>
+            <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your referral code</p>
+            <p style="font-size:20px;font-weight:700;letter-spacing:.08em">${referralCode}</p>
+            <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your personal referral link</p>
+            <p><a href="${safeUrl}" style="color:#171717;overflow-wrap:anywhere">${safeUrl}</a></p>
+            <p>Share your link with CIS sub-contractors you know. When a referred sub-contractor completes 5 paid days through OnSite, you earn £50. When they reach 20 paid days, you earn another £50. They also earn £25 after completing their first 5 paid days.</p>
+            <p>Registration alone does not qualify for a reward.</p>
+            <p>Keep this email so you can find your referral link later.</p>
+            <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>
+          </div>
+        </div>`,
       });
     },
     sendCompany(record) {
       const firstName = escapeHtml(record.first_name);
       return send({
         to: record.email_normalized,
-        subject: "Your OnSite Early Access place is confirmed",
-        text: `Hi ${record.first_name}, ${record.company_name} is registered for OnSite Early Access. We will contact you as contractor access opens.`,
-        html: `<p>Hi ${firstName},</p><p>${escapeHtml(record.company_name)} is registered for OnSite Early Access.</p><p>We will contact you as contractor access opens.</p>`,
+        subject: "You're registered for OnSite Early Access",
+        text: `Hi ${record.first_name},
+
+Your company is registered for OnSite Early Access.
+
+We'll contact you when contractor onboarding opens.
+
+You can then complete your company details and start setting up your labour requirements.
+
+Reliable trades. On demand.
+
+OnSite`,
+        html: `<div style="background:#f5f5f2;color:#171717;font-family:Arial,sans-serif;padding:32px 16px">
+          <div style="margin:0 auto;max-width:560px;background:#fff;border:1px solid #dedede;border-radius:10px;padding:32px">
+            <p style="color:#f97316;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">OnSite Early Access</p>
+            <p>Hi ${firstName},</p>
+            <h1 style="font-size:24px;line-height:1.2;margin:0 0 16px">Your company is registered.</h1>
+            <p>We'll contact you when contractor onboarding opens.</p>
+            <p>You can then complete your company details and start setting up your labour requirements.</p>
+            <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>
+          </div>
+        </div>`,
       });
     },
   };
@@ -416,17 +468,19 @@ function createEarlyAccessService({
   }
 
   async function sendConfirmation(type, record) {
-    if (!record?.signup_id || record.created === false) return;
+    if (!record?.signup_id || record.created === false) return "not_sent";
     if (!emailProvider.configured) {
       await setDeliveryStatus(record.signup_id, "skipped");
-      return;
+      return "skipped";
     }
     try {
       if (type === "worker") await emailProvider.sendWorker(record, env);
       else await emailProvider.sendCompany(record, env);
       await setDeliveryStatus(record.signup_id, "sent");
+      return "sent";
     } catch (_) {
       await setDeliveryStatus(record.signup_id, "failed");
+      return "failed";
     }
   }
 
@@ -465,7 +519,7 @@ function createEarlyAccessService({
           "EARLY_ACCESS_UNAVAILABLE",
         );
       }
-      await sendConfirmation("worker", record);
+      const emailDeliveryStatus = await sendConfirmation("worker", record);
       const code = String(record.referral_code || "");
       return {
         ok: true,
@@ -475,6 +529,7 @@ function createEarlyAccessService({
         firstName: String(record.first_name || normalized.firstName),
         referralCode: code,
         referralUrl: canonicalReferralUrl(code, env),
+        emailDeliveryStatus,
         referralProgress: {
           joinedCount: Math.max(0, Number(record.referred_count) || 0),
         },
@@ -489,13 +544,14 @@ function createEarlyAccessService({
       } catch (error) {
         throw mapDatabaseError(error);
       }
-      await sendConfirmation("company", record);
+      const emailDeliveryStatus = await sendConfirmation("company", record);
       return {
         ok: true,
         signupType: "company",
         message: "Your company Early Access place is confirmed.",
         companyName: String(record.company_name || normalized.companyName),
         firstName: String(record.first_name || normalized.firstName),
+        emailDeliveryStatus,
       };
     },
   };

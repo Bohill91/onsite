@@ -91,7 +91,12 @@
               </div>
               <div class="ea-form-grid ea-form-grid--two">
                 <label>Email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
-                <label>Mobile<input name="mobile" type="tel" autocomplete="tel" maxlength="40" placeholder="e.g. 07700 900000" required /></label>
+                 <label>Mobile
+                   <span class="ea-phone-control">
+                     <select name="mobileCountry" aria-label="Mobile country" required></select>
+                     <input name="mobile" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="e.g. 07700 900000" required />
+                   </span>
+                 </label>
               </div>
               <div class="ea-form-grid ea-form-grid--two">
                 <label>Primary trade<select name="tradeKey" id="eaWorkerTrade" required><option value="">Select trade</option></select></label>
@@ -135,7 +140,12 @@
               </div>
               <div class="ea-form-grid ea-form-grid--two">
                 <label>Work email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
-                <label>Contact number<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
+                 <label>Contact number
+                   <span class="ea-phone-control">
+                     <select name="mobileCountry" aria-label="Contact number country" required></select>
+                     <input name="mobile" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="e.g. 07700 900000" required />
+                   </span>
+                 </label>
               </div>
               <div class="ea-category-field">
                  <label class="ea-field-label" for="eaCompanyCategoryTrigger">Trades / labour categories required</label>
@@ -198,8 +208,9 @@
       <p>© 2026 OnSite. Reliable trades. On demand.</p>
     </footer>
 
-    <script src="/ui.js"></script>
+     <script src="/ui.js"></script>
     <script src="/taxonomy.js"></script>
+     <script src="/phone-utils.js"></script>
     <script src="/early-access.js"></script>
   </body>
 </html>

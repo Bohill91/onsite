@@ -3,6 +3,7 @@
 
   const workerForm = document.getElementById("workerEarlyAccessForm");
   const companyForm = document.getElementById("companyEarlyAccessForm");
+  const phoneCountrySelects = document.querySelectorAll("[name='mobileCountry']");
   const workerPanel = document.getElementById("workerPanel");
   const companyPanel = document.getElementById("companyPanel");
   const success = document.getElementById("earlyAccessSuccess");
@@ -272,11 +273,15 @@
 
   function formPayload(form, type) {
     const data = new FormData(form);
+    const mobile = window.OnSitePhone?.normalisePhone(
+      data.get("mobile") || "",
+      data.get("mobileCountry") || "GB",
+    ) || "";
     const common = {
       firstName: data.get("firstName") || "",
       lastName: data.get("lastName") || "",
       email: data.get("email") || "",
-      mobile: data.get("mobile") || "",
+      mobile,
       privacyAcknowledged: data.get("privacyAcknowledged") === "on",
       marketingConsent: data.get("marketingConsent") === "on",
       website: data.get("website") || "",
@@ -301,6 +306,30 @@
     };
   }
 
+  function updatePhoneValidity(form) {
+    const input = form.querySelector("[name='mobile']");
+    const country = form.querySelector("[name='mobileCountry']");
+    if (!input) return "";
+    const rawValue = input.value.trim();
+    const normalised = window.OnSitePhone?.normalisePhone(rawValue, country?.value || "GB") || "";
+    input.setCustomValidity(rawValue && !normalised ? "Enter a valid telephone number." : "");
+    return normalised;
+  }
+
+  function renderPhoneCountries() {
+    const countries = window.OnSitePhone?.countries || [];
+    phoneCountrySelects.forEach((select) => {
+      select.replaceChildren(...countries.map((country) => {
+        const option = document.createElement("option");
+        option.value = country.iso2;
+        option.textContent = `${country.callingCode} · ${country.name}`;
+        return option;
+      }));
+      select.value = "GB";
+      window.OnSiteUI?.syncSelect(select);
+    });
+  }
+
   function setSubmitting(form, isSubmitting) {
     const button = form.querySelector("button[type='submit']");
     if (!button) return;
@@ -323,6 +352,7 @@
       return;
     }
     companyCategoryTrigger?.classList.remove("is-invalid");
+    updatePhoneValidity(form);
     if (!form.reportValidity()) return;
     setSubmitting(form, true);
     try {
@@ -355,26 +385,42 @@
     companyPanel.hidden = true;
     document.querySelector(".ea-path-toggle").hidden = true;
     success.hidden = false;
+    const emailDeliveryStatus = payload.emailDeliveryStatus;
     if (type === "company") {
+      const emailCopy = {
+        sent: "We've also emailed a confirmation to you.",
+        skipped: "Your registration is complete. Confirmation email delivery is not available right now.",
+        failed: "Your registration is complete, but we couldn't send the confirmation email.",
+        not_sent: "Your registration is complete. A confirmation email was not sent again.",
+      }[emailDeliveryStatus] || "";
       success.innerHTML = `<span class="ea-success-badge">Company Early Access</span>
         <h2>Your company is registered for Early Access.</h2>
-        <p><strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We will notify you when contractor onboarding opens.</p>`;
+         <p><strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We'll notify you when contractor onboarding opens.</p>
+         ${emailCopy ? `<p class="ea-email-status">${emailCopy}</p>` : ""}`;
       return;
     }
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
+    const emailCopy = {
+      sent: "We've also emailed your referral link to you.",
+      skipped: "Your registration is complete. Save or copy your referral link below.",
+      failed: "Your registration is complete, but we couldn't send the confirmation email. Save or copy your referral link below.",
+      not_sent: "Your registration is complete. Save or copy your referral link below.",
+    }[emailDeliveryStatus] || "";
     success.innerHTML = `<span class="ea-success-badge">Sub-contractor Early Access</span>
       <h2>Your Early Access registration is confirmed.</h2>
-       <p>${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We will notify you when OnSite onboarding opens.</p>
+       <p>${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We'll notify you when OnSite onboarding opens.</p>
+       ${emailCopy ? `<p class="ea-email-status">${emailCopy}</p>` : ""}
       ${hasReferral ? `<div class="ea-referral-result">
-        <small>Your personal referral link</small>
+         <small>Your referral code</small>
         <div class="ea-referral-code">${escapeHtml(payload.referralCode)}</div>
+         <small>Your personal referral link</small>
         <div class="ea-referral-url">${escapeHtml(payload.referralUrl)}</div>
         <div class="ea-share-actions">
           <button type="button" data-copy-referral>Copy link</button>
           <button type="button" data-share-referral>Share invite</button>
         </div>
-        <div class="ea-progress-zero"><span>Sub-contractors joined through your link</span><strong>${Number(payload.referralProgress?.joinedCount) || 0}</strong></div>
-      </div>` : `<p>Your registration is recorded. We will send your referral details to the email address supplied.</p>`}`;
+         <p class="ea-referral-attribution">Registrations through this link are attributed to you automatically.</p>
+        </div>` : `<p>Your registration is recorded. Referral details are available for new registrations.</p>`}`;
     if (!hasReferral) return;
     success.querySelector("[data-copy-referral]")?.addEventListener("click", async (event) => {
       await navigator.clipboard.writeText(payload.referralUrl);
@@ -403,6 +449,13 @@
   companyForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     submit(companyForm, "company");
+  });
+  document.querySelectorAll("form [name='mobile']").forEach((input) => {
+    input.addEventListener("input", () => updatePhoneValidity(input.form));
+    input.addEventListener("blur", () => updatePhoneValidity(input.form));
+  });
+  phoneCountrySelects.forEach((select) => {
+    select.addEventListener("change", () => updatePhoneValidity(select.form));
   });
   workerTrade?.addEventListener("change", () => {
     window.OnSiteTaxonomy?.populateRoleSelect(workerRole, workerTrade.value);
@@ -438,6 +491,7 @@
   }, true);
 
   window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
+  renderPhoneCountries();
   renderCompanyCategories();
   initialiseReferral();
 })();
