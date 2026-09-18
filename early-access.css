@@ -109,7 +109,7 @@ a { color: inherit; }
 }
 .ea-primary:hover { background: var(--ea-orange); border-color: var(--ea-orange); box-shadow: 0 8px 18px rgba(249, 115, 22, .2); transform: translateY(-1px); }
 .ea-primary:active { box-shadow: none; transform: none; }
-.ea-primary:focus-visible, .ea-path-toggle button:focus-visible, .os-select-trigger:focus-visible, .ea-multi-select-trigger:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .ea-share-actions button:focus-visible {
+.ea-primary:focus-visible, .ea-path-toggle button:focus-visible, .os-select-trigger:focus-visible, .ea-multi-select-trigger:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .ea-share-actions button:focus-visible, .ea-referral-teaser a:focus-visible {
   outline: 3px solid rgba(249, 115, 22, .22);
   outline-offset: 2px;
 }
@@ -150,6 +150,11 @@ a { color: inherit; }
 .ea-path-toggle button[aria-selected="true"] { background: #fff; box-shadow: inset 3px 0 var(--ea-orange), 0 1px 4px rgba(0, 0, 0, .08); color: var(--ea-black); }
 .ea-form-heading h2, .ea-success h2 { color: var(--ea-black); font-size: 1.55rem; line-height: 1.2; margin: 0; }
 .ea-form-heading > p:last-child { color: var(--ea-muted); font-size: .84rem; line-height: 1.55; margin: 6px 0 14px; }
+.ea-referral-teaser { background: var(--ea-orange-soft); border-left: 3px solid var(--ea-orange); border-radius: 7px; display: grid; gap: 4px; margin: 0 0 16px; padding: 10px 12px; }
+.ea-referral-teaser-label { color: var(--ea-ink); font-size: .65rem; font-weight: 800; letter-spacing: .05em; margin: 0; text-transform: uppercase; }
+.ea-referral-teaser-reward { color: var(--ea-black); font-size: .82rem; font-weight: 800; line-height: 1.35; margin: 0; }
+.ea-referral-teaser a { color: var(--ea-muted); font-size: .7rem; font-weight: 700; justify-self: start; text-decoration: underline; text-decoration-color: rgba(249, 115, 22, .65); text-underline-offset: 3px; }
+.ea-referral-teaser a:hover { color: var(--ea-ink); }
 form { display: grid; gap: 11px; }
 .ea-form-grid { display: grid; gap: 10px; }
 .ea-form-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }

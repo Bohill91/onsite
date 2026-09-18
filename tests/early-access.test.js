@@ -879,6 +879,10 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(html, /Register for OnSite Early Access/);
   assert.match(html, /Register your interest and we'll notify you when profile setup opens/);
   assert.match(html, /Register your interest and we'll contact you when contractor access opens/);
+  assert.match(html, /data-referral-teaser="worker"[\s\S]*?REFERRAL PROGRAMME[\s\S]*?Earn up to £100 per qualifying referral\.[\s\S]*?href="#eaReferralProgramme">See how it works ↓<\/a>/);
+  assert.match(html, /data-referral-teaser="company"[\s\S]*?CONTRACTOR REFERRALS[\s\S]*?Earn up to £250 in OnSite credit per qualifying contractor referral\.[\s\S]*?href="#eaReferralProgramme">See how it works ↓<\/a>/);
+  assert.doesNotMatch(html.match(/<section id="workerPanel"[\s\S]*?<\/section>/)?.[0] || "", /CONTRACTOR REFERRALS|£250 in OnSite credit/);
+  assert.doesNotMatch(html.match(/<section id="companyPanel"[\s\S]*?<\/section>/)?.[0] || "", /REFERRAL PROGRAMME|£100 per qualifying referral/);
   assert.match(html, /We'll contact you when contractor onboarding opens/);
   assert.match(html, /start setting up your labour requirements/);
   assert.match(html, /Register for Early Access/);
@@ -906,6 +910,8 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(client, /Additional £150 OnSite credit/);
   assert.match(client, /OnSite credit is not cash and cannot be withdrawn/);
   assert.match(client, /CONTRACTOR EARLY ACCESS/);
+  assert.match(client, /setPath\(path\)/);
+  assert.match(client, /renderReferralProgramme\(path\)/);
   assert.match(client, /your company is registered for Early Access/i);
   assert.match(client, /YOUR CONTRACTOR REFERRAL PROGRAMME/);
   assert.match(client, /Your company has been referred to OnSite/);
