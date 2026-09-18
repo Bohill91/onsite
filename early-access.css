@@ -375,7 +375,7 @@ label small { color: var(--ea-muted); font-size: .68rem; font-weight: 500; line-
 .os-select-option:last-child { border-bottom: 0; }
 .os-select-option:hover, .os-select-option.is-highlighted, .os-select-option.is-selected { background: var(--ea-orange-soft); }
 .os-select-option.is-placeholder { color: #777a76; }
-.os-select-option-label { min-width: 0; overflow-wrap: anywhere; }
+.os-select-option-label { min-width: 0; white-space: nowrap; }
 .os-select-option-check { color: var(--ea-orange); display: inline-flex; flex: 0 0 16px; opacity: 0; }
 .os-select-option-check svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.25; width: 16px; }
 .os-select-option.is-selected .os-select-option-check { opacity: 1; }

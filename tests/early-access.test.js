@@ -293,6 +293,7 @@ test("phone normalisation supports selected countries and pasted international f
 });
 
 test("phone country presentation stays compact while preserving full dropdown names", () => {
+  const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
   const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
   const css = fs.readFileSync(path.join(rootDir, "early-access.css"), "utf8");
   const ui = fs.readFileSync(path.join(rootDir, "ui.js"), "utf8");
@@ -302,6 +303,10 @@ test("phone country presentation stays compact while preserving full dropdown na
   assert.match(client, /Country calling code: \$\{country\.name\} \$\{country\.callingCode\}/);
   assert.match(client, /option\.textContent = `\$\{country\.callingCode\} · \$\{country\.name\}`/);
   assert.match(css, /grid-template-columns: minmax\(96px, \.75fr\) minmax\(0, 1\.9fr\)/);
+  assert.equal((html.match(/data-dropdown-width="250"/g) || []).length, 2);
+  assert.match(css, /\.os-select-option-label \{ min-width: 0; white-space: nowrap; \}/);
+  assert.match(ui, /select\.dataset\.dropdownWidth/);
+  assert.match(ui, /Math\.max\(rect\.width, Number\.isFinite\(preferredWidth\) \? preferredWidth : rect\.width\)/);
   assert.match(ui, /select\.dataset\.displayValue \|\| selectedText/);
   assert.match(ui, /select\.dataset\.accessibleLabel \|\| `\$\{selectFieldLabel\(select\)\}: \$\{selectedText\}`/);
 });

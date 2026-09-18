@@ -298,7 +298,11 @@
         const rect = trigger.getBoundingClientRect();
         const viewportWidth = document.documentElement.clientWidth;
         const viewportHeight = document.documentElement.clientHeight;
-        const width = Math.min(rect.width, viewportWidth - viewportPadding * 2);
+        const preferredWidth = Number(select.dataset.dropdownWidth);
+        const width = Math.min(
+          Math.max(rect.width, Number.isFinite(preferredWidth) ? preferredWidth : rect.width),
+          viewportWidth - viewportPadding * 2,
+        );
         const below = viewportHeight - rect.bottom - gap - viewportPadding;
         const above = rect.top - gap - viewportPadding;
         const openUp = below < 180 && above > below;
