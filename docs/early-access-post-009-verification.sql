@@ -292,8 +292,28 @@ order by c.relname;
 select
   p.oid::regprocedure as function_signature,
   p.prosecdef as security_definer,
-  pg_get_functiondef(p.oid) ~* 'set search_path = pg_catalog, public'
-    as hardened_search_path,
+  coalesce(
+    exists (
+      select 1
+      from unnest(coalesce(p.proconfig, array[]::text[])) as setting
+      where lower(btrim(split_part(setting, '=', 1))) = 'search_path'
+        and replace(
+          replace(
+            regexp_replace(
+              lower(split_part(setting, '=', 2)),
+              '[[:space:]]',
+              '',
+              'g'
+            ),
+            chr(39),
+            ''
+          ),
+          '"',
+          ''
+        ) = 'pg_catalog,public'
+    ),
+    false
+  ) as hardened_search_path,
   has_function_privilege('anon', p.oid, 'EXECUTE') as anon_execute,
   has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_execute,
   has_function_privilege('service_role', p.oid, 'EXECUTE') as service_role_execute

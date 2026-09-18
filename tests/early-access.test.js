@@ -837,6 +837,9 @@ test("verification SQL keeps pre-009 checks compatible with migration 008", () =
     "verification_confirmed_at",
     "protect_early_access_referral_reward_transition",
   ].forEach((name) => assert.match(postflight, new RegExp(name, "i")));
+  assert.match(postflight, /p\.proconfig/i);
+  assert.match(postflight, /unnest\(coalesce\(p\.proconfig/i);
+  assert.doesNotMatch(postflight, /pg_get_functiondef\(p\.oid\)/i);
   assert.doesNotMatch(
     preflight,
     /^\s*(insert|update|delete|alter|create|drop|grant|revoke)\b/im,
