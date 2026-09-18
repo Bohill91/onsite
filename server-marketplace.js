@@ -1,6 +1,7 @@
 "use strict";
 
 const { createClient } = require("@supabase/supabase-js");
+const taxonomy = require("./taxonomy.js");
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const COMPANY_ROLES = new Set(["administrator", "manager", "supervisor"]);
@@ -386,8 +387,12 @@ function requireCompanyPrincipal(principal) {
 }
 
 function requirementMatchesWorker(row, worker) {
-  const workerTradeKey = cleanText(worker.tradeKey, 160).toLowerCase();
-  const requirementTradeKey = cleanText(row.trade_key, 160).toLowerCase();
+  const workerTradeKey =
+    taxonomy.tradeKeyFor(worker.tradeKey || worker.trade) ||
+    cleanText(worker.tradeKey || worker.trade, 160).toLowerCase();
+  const requirementTradeKey =
+    taxonomy.tradeKeyFor(row.trade_key || row.trade) ||
+    cleanText(row.trade_key || row.trade, 160).toLowerCase();
   if (workerTradeKey && requirementTradeKey) return workerTradeKey === requirementTradeKey;
   const workerTrade = cleanText(worker.trade, 160).toLowerCase();
   return !workerTrade || cleanText(row.trade, 160).toLowerCase() === workerTrade;

@@ -93,6 +93,22 @@ The intended production value is `https://joinonsite.uk`; the server defaults
 to that origin and never stores a Replit preview origin as the canonical link.
 No Brevo or Bitly dependency exists.
 
+## Canonical trade and role taxonomy
+
+OnSite uses one shared trade taxonomy for Early Access, worker registration,
+Request Labour, job requirements and matching. Generic site-wide management
+belongs under **Site Management & Supervision**. Management and supervision
+for a specific package belongs under that package instead: for example,
+Electrical Manager and Electrical Supervisor are Electrical roles, while
+Mechanical Manager and Mechanical Supervisor are Mechanical Pipework roles.
+
+Trade and role keys are stable machine-readable identifiers and must be kept
+when labels are refined. Existing display-value aliases may be accepted for
+backwards compatibility, but new UI selections and persisted payloads should
+use the canonical trade and role keys. A role name containing “Manager” or
+“Supervisor” never creates cross-trade matching by itself; matching retains the
+trade key.
+
 ## Future full-account conversion
 
 `early_access_signups` contains nullable linkage columns for the future Auth

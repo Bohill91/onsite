@@ -501,14 +501,26 @@ const TRADE_SYNONYMS = {
 };
 function canonicalTrade(v) {
   const n = normalize(v);
-  return TRADE_SYNONYMS[n] || n;
+  return (
+    window.OnSiteTaxonomy?.tradeKeyFor(v) ||
+    TRADE_SYNONYMS[n] ||
+    n
+  );
 }
 function setupTradeSpecialismDropdowns() {
   const tradeSelect = document.getElementById("jobTrade");
   const specialismSelect = document.getElementById("jobSpecialism");
+  const workerTradeSelect = document.getElementById("workerTrade");
   const taxonomy = window.OnSiteTaxonomy;
 
-  if (!tradeSelect || !specialismSelect || !taxonomy) return;
+  if (!taxonomy) return;
+
+  taxonomy.populateTradeSelect(workerTradeSelect, {
+    selectedValue: workerTradeSelect?.value || "",
+    preserveUnknown: true,
+  });
+
+  if (!tradeSelect || !specialismSelect) return;
 
   taxonomy.populateTradeSelect(tradeSelect, {
     selectedValue: tradeSelect.value,

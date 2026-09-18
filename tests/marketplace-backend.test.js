@@ -330,6 +330,49 @@ test("worker trade is applied server-side to published requirements", async () =
   assert.deepEqual(jobs.map((job) => job.requirementId), [REQUIREMENT_A]);
 });
 
+test("marketplace trade matching canonicalises legacy aliases without crossing disciplines", async () => {
+  const adapter = fakeMarketplaceAdapter();
+  adapter.requirements.set(
+    REQUIREMENT_A,
+    publishedRequirement({
+      trade: "Electrical",
+      tradeKey: "electrical",
+    }),
+  );
+  adapter.requirements.set(
+    REQUIREMENT_B,
+    publishedRequirement({
+      id: REQUIREMENT_B,
+      projectId: PROJECT_B,
+      companyId: COMPANY_B,
+      trade: "Mechanical Pipework",
+      tradeKey: "mechanical_pipework",
+    }),
+  );
+  const mechanicalJobs = await createMarketplaceService({ adapter }).listJobs(
+    workerPrincipal(WORKER_A, { trade: "Mechanical", tradeKey: "mechanical" }),
+  );
+  assert.deepEqual(mechanicalJobs.map((job) => job.requirementId), [REQUIREMENT_B]);
+
+  const genericManagement = publishedRequirement({
+    id: REQUIREMENT_B,
+    projectId: PROJECT_B,
+    companyId: COMPANY_B,
+    trade: "Site Management & Supervision",
+    tradeKey: "site_management_supervision",
+  });
+  adapter.requirements.set(REQUIREMENT_B, genericManagement);
+  const electricalManagerJobs = await createMarketplaceService({ adapter }).listJobs(
+    workerPrincipal(WORKER_A, {
+      trade: "Electrical",
+      tradeKey: "electrical",
+      specialism: "Electrical Manager",
+      roleKey: "electrical_manager",
+    }),
+  );
+  assert.deepEqual(electricalManagerJobs.map((job) => job.requirementId), [REQUIREMENT_A]);
+});
+
 test("anonymous and company principals cannot browse worker jobs", async () => {
   const service = createMarketplaceService({ adapter: fakeMarketplaceAdapter() });
   await rejectsCode(service.listJobs(null), "UNAUTHENTICATED");
