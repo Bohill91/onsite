@@ -24,7 +24,7 @@
           <h1 id="earlyAccessTitle">Construction work without the agency.</h1>
           <p class="ea-tagline">Reliable trades. On demand.</p>
           <p class="ea-intro">Join the platform connecting reliable CIS tradespeople directly with UK contractors. No recruitment agency in the middle.</p>
-          <p class="ea-assurance">Free to join <span aria-hidden="true">·</span> No password needed <span aria-hidden="true">·</span> Full profile setup comes later</p>
+          <p class="ea-assurance">Free to register <span aria-hidden="true">·</span> No password needed <span aria-hidden="true">·</span> We'll contact you when onboarding opens</p>
         </div>
 
         <div class="ea-signup-card" id="join">
@@ -33,11 +33,11 @@
             <button type="button" role="tab" aria-selected="false" aria-controls="companyPanel" id="companyTab" data-signup-path="company">I'm hiring</button>
           </div>
 
-          <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab" data-internal-label="Founding Worker">
+           <section id="workerPanel" role="tabpanel" aria-labelledby="workerTab">
             <div class="ea-form-heading">
               <p class="ea-kicker">FOR CIS SUB-CONTRACTORS</p>
               <h2>Join OnSite Early Access</h2>
-              <p>Join before launch and get priority access when OnSite opens.</p>
+               <p>Register before launch so you're ready to complete your profile when OnSite onboarding opens.</p>
             </div>
             <form id="workerEarlyAccessForm" novalidate>
               <div class="ea-form-grid ea-form-grid--two">
@@ -73,9 +73,9 @@
 
           <section id="companyPanel" role="tabpanel" aria-labelledby="companyTab" hidden>
             <div class="ea-form-heading">
-              <p class="ea-kicker">For UK contractors</p>
+            <p class="ea-kicker">FOR UK CONTRACTORS</p>
               <h2>Get early access to OnSite</h2>
-              <p>Join before launch and be among the first contractors able to source reliable CIS sub-contractors directly.</p>
+            <p>Register your company before launch and we'll let you know when OnSite opens for contractors.</p>
             </div>
             <form id="companyEarlyAccessForm" novalidate>
               <label>Company name<input name="companyName" type="text" autocomplete="organization" maxlength="200" required /></label>
@@ -88,11 +88,20 @@
                 <label>Mobile / telephone<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
               </div>
               <div class="ea-category-field">
-                <span class="ea-field-label">Main trade / labour categories</span>
-                <div class="ea-category-picker" id="eaCategoryPicker">
-                  <div class="ea-category-chips" id="eaCompanyCategoryChips" role="group" aria-label="Main trade and labour categories"></div>
-                  <button class="ea-category-more" id="eaCompanyCategoryMore" type="button" aria-expanded="false">Show more</button>
-                  <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-describedby="eaCategoryHint"></select>
+                 <label class="ea-field-label" for="eaCompanyCategoryTrigger">Main trade / labour categories</label>
+                 <div class="ea-category-picker" id="eaCategoryPicker">
+                   <button class="ea-multi-select-trigger" id="eaCompanyCategoryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCategoryOptions" aria-describedby="eaCategoryHint">
+                     <span id="eaCompanyCategoryValue">Select trades</span>
+                     <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                   </button>
+                   <div class="ea-multi-select-menu" id="eaCompanyCategoryMenu" hidden>
+                     <label class="ea-category-search">
+                       <span>Search categories</span>
+                       <input id="eaCompanyCategorySearch" type="search" autocomplete="off" placeholder="Search trades" />
+                     </label>
+                     <div class="ea-category-options" id="eaCompanyCategoryOptions" role="listbox" aria-label="Main trade and labour categories" aria-multiselectable="true"></div>
+                   </div>
+                   <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-label="Main trade and labour categories" aria-describedby="eaCategoryHint"></select>
                 </div>
                 <small id="eaCategoryHint">Select all that apply.</small>
               </div>
@@ -115,13 +124,13 @@
 
       <section class="ea-value-section" aria-labelledby="earlyAccessValue">
         <div class="ea-section-heading">
-          <p class="ea-kicker">Join early. Build trust.</p>
-          <h2 id="earlyAccessValue">Why join early?</h2>
+           <p class="ea-kicker">The OnSite difference</p>
+           <h2 id="earlyAccessValue">Why OnSite?</h2>
         </div>
         <div class="ea-value-grid">
-          <article><span>01</span><h3>Priority access</h3><p>Join before launch and get priority access when OnSite opens.</p></article>
-          <article><span>02</span><h3>Direct opportunities</h3><p>Connect with UK contractors without a recruitment agency sitting between the company and the sub-contractor.</p></article>
-          <article><span>03</span><h3>Reliability-led matching</h3><p>OnSite is being built around availability, attendance and dependable working history, not an unqualified contact list.</p></article>
+           <article><span>01</span><h3>Direct connections</h3><p>Connect directly with UK contractors without a recruitment agency sitting in the middle.</p></article>
+           <article><span>02</span><h3>Reliability matters</h3><p>OnSite is built around availability, attendance and dependable working history.</p></article>
+           <article><span>03</span><h3>Better labour matching</h3><p>Opportunities are matched using the information that actually matters for the job.</p></article>
         </div>
       </section>
 
@@ -146,6 +155,7 @@
       <p>© 2026 OnSite. Reliable trades. On demand.</p>
     </footer>
 
+    <script src="/ui.js"></script>
     <script src="/taxonomy.js"></script>
     <script src="/early-access.js"></script>
   </body>

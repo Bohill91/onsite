@@ -9,8 +9,12 @@
   const workerTrade = document.getElementById("eaWorkerTrade");
   const workerRole = document.getElementById("eaWorkerRole");
   const companyCategories = document.getElementById("eaCompanyCategories");
-  const companyCategoryChips = document.getElementById("eaCompanyCategoryChips");
-  const companyCategoryMore = document.getElementById("eaCompanyCategoryMore");
+  const companyCategoryPicker = document.getElementById("eaCategoryPicker");
+  const companyCategoryTrigger = document.getElementById("eaCompanyCategoryTrigger");
+  const companyCategoryValue = document.getElementById("eaCompanyCategoryValue");
+  const companyCategoryMenu = document.getElementById("eaCompanyCategoryMenu");
+  const companyCategorySearch = document.getElementById("eaCompanyCategorySearch");
+  const companyCategoryOptions = document.getElementById("eaCompanyCategoryOptions");
   const referralInput = document.getElementById("eaReferralCode");
   const referralCaptured = document.getElementById("eaReferralCaptured");
   const referralReveal = document.getElementById("eaReferralReveal");
@@ -19,8 +23,7 @@
   const REFERRAL_STORAGE_KEY = "onsite_early_access_referral_v1";
   const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
   const REFERRAL_CODE_PATTERN = /^OSW-[A-Z0-9]{12,24}$/;
-  const CATEGORY_PREVIEW_COUNT = 9;
-  let companyCategoriesExpanded = false;
+  let companyCategoryMenuOpen = false;
 
   function escapeHtml(value) {
     return String(value || "")
@@ -130,6 +133,7 @@
 
   function setPath(path) {
     const workerSelected = path === "worker";
+    setCompanyCategoryMenuOpen(false);
     workerPanel.hidden = !workerSelected;
     companyPanel.hidden = workerSelected;
     document.querySelectorAll("[data-signup-path]").forEach((button) => {
@@ -141,31 +145,59 @@
     return Array.from(select.selectedOptions).map((option) => option.value).filter(Boolean);
   }
 
-  function setCompanyCategoriesExpanded(expanded) {
-    companyCategoriesExpanded = expanded;
-    Array.from(companyCategoryChips?.querySelectorAll("[data-category-index]") || []).forEach((button) => {
-      button.hidden = !companyCategoriesExpanded && Number(button.dataset.categoryIndex) >= CATEGORY_PREVIEW_COUNT;
-    });
-    if (companyCategoryMore) {
-      companyCategoryMore.textContent = companyCategoriesExpanded ? "Show less" : "Show more";
-      companyCategoryMore.setAttribute("aria-expanded", String(companyCategoriesExpanded));
+  function visibleCompanyCategoryOptions() {
+    return Array.from(companyCategoryOptions?.querySelectorAll("[data-category-key]") || [])
+      .filter((button) => !button.hidden);
+  }
+
+  function updateCompanyCategorySummary() {
+    if (!companyCategoryValue || !companyCategories) return;
+    const selected = Array.from(companyCategories.selectedOptions).filter((option) => option.value);
+    const labels = selected.map((option) => option.textContent.trim());
+    companyCategoryValue.textContent = labels.length === 0
+      ? "Select trades"
+      : labels.length <= 2
+        ? labels.join(", ")
+        : `${labels.length} trades selected`;
+    companyCategoryTrigger?.classList.toggle("is-placeholder", labels.length === 0);
+  }
+
+  function setCompanyCategoryMenuOpen(open, { focusSearch = false } = {}) {
+    if (!companyCategoryTrigger || !companyCategoryMenu) return;
+    companyCategoryMenuOpen = Boolean(open);
+    companyCategoryMenu.hidden = !companyCategoryMenuOpen;
+    companyCategoryTrigger.setAttribute("aria-expanded", String(companyCategoryMenuOpen));
+    companyCategoryPicker?.classList.toggle("is-open", companyCategoryMenuOpen);
+    if (companyCategoryMenuOpen) {
+      filterCompanyCategories(companyCategorySearch?.value || "");
+      if (focusSearch) window.setTimeout(() => companyCategorySearch?.focus(), 0);
+    } else {
+      companyCategorySearch?.blur();
     }
   }
 
+  function filterCompanyCategories(query) {
+    const needle = String(query || "").trim().toLowerCase();
+    Array.from(companyCategoryOptions?.querySelectorAll("[data-category-key]") || []).forEach((button) => {
+      button.hidden = needle && !button.textContent.toLowerCase().includes(needle);
+    });
+  }
+
   function syncCompanyCategoryButton(option) {
-    const button = Array.from(companyCategoryChips?.querySelectorAll("[data-category-key]") || [])
+    const button = Array.from(companyCategoryOptions?.querySelectorAll("[data-category-key]") || [])
       .find((candidate) => candidate.dataset.categoryKey === option.value);
     if (!button) return;
-    button.setAttribute("aria-pressed", String(option.selected));
+    button.setAttribute("aria-selected", String(option.selected));
     button.classList.toggle("is-selected", option.selected);
+    updateCompanyCategorySummary();
   }
 
   function renderCompanyCategories() {
     const trades = window.OnSiteTaxonomy?.trades || [];
-    if (!companyCategories || !companyCategoryChips) return;
+    if (!companyCategories || !companyCategoryOptions) return;
     companyCategories.replaceChildren();
-    companyCategoryChips.replaceChildren();
-    trades.forEach((trade, index) => {
+    companyCategoryOptions.replaceChildren();
+    trades.forEach((trade) => {
       const option = document.createElement("option");
       option.value = trade.key;
       option.textContent = trade.name;
@@ -173,25 +205,65 @@
 
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "ea-category-chip";
-      button.dataset.categoryIndex = String(index);
+      button.className = "ea-category-option";
       button.dataset.categoryKey = trade.key;
-      button.setAttribute("aria-pressed", "false");
-      button.textContent = trade.name;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", "false");
+      button.tabIndex = -1;
+      button.innerHTML = `<span>${escapeHtml(trade.name)}</span><span class="ea-category-option-check" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
       button.addEventListener("click", () => {
         option.selected = !option.selected;
-        syncCompanyCategoryButton(option);
+        companyCategories.dispatchEvent(new Event("change", { bubbles: true }));
       });
-      companyCategoryChips.appendChild(button);
+      companyCategoryOptions.appendChild(button);
     });
-    if (companyCategoryMore) {
-      companyCategoryMore.hidden = trades.length <= CATEGORY_PREVIEW_COUNT;
-      companyCategoryMore.addEventListener("click", () => setCompanyCategoriesExpanded(!companyCategoriesExpanded));
-    }
-    setCompanyCategoriesExpanded(false);
     companyCategories.addEventListener("change", () => {
       Array.from(companyCategories.options).forEach(syncCompanyCategoryButton);
+      companyCategories.setCustomValidity("");
     });
+    updateCompanyCategorySummary();
+  }
+
+  function focusVisibleCompanyCategoryOption(offset) {
+    const options = visibleCompanyCategoryOptions();
+    if (!options.length) return;
+    const active = document.activeElement?.closest?.("[data-category-key]");
+    const currentIndex = Math.max(0, options.indexOf(active));
+    const nextIndex = Math.min(Math.max(currentIndex + offset, 0), options.length - 1);
+    options[nextIndex].focus();
+  }
+
+  function handleCompanyCategoryKeydown(event) {
+    const option = event.target.closest?.("[data-category-key]");
+    if (option) {
+      const options = visibleCompanyCategoryOptions();
+      const currentIndex = options.indexOf(option);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        options[Math.min(Math.max(currentIndex + (event.key === "ArrowDown" ? 1 : -1), 0), options.length - 1)]?.focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        options[event.key === "Home" ? 0 : options.length - 1]?.focus();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        option.click();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setCompanyCategoryMenuOpen(false);
+        companyCategoryTrigger?.focus();
+      } else if (event.key === "Tab") {
+        setCompanyCategoryMenuOpen(false);
+      }
+      return;
+    }
+    if (event.target === companyCategorySearch && event.key === "ArrowDown") {
+      event.preventDefault();
+      focusVisibleCompanyCategoryOption(0);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setCompanyCategoryMenuOpen(false);
+      companyCategoryTrigger?.focus();
+    }
   }
 
   function formPayload(form, type) {
@@ -242,9 +314,11 @@
     formError(form, "");
     if (type === "company" && !selectedValues(companyCategories).length) {
       formError(form, "Select at least one trade or labour category.");
-      companyCategoryChips?.querySelector("button")?.focus();
+      companyCategoryTrigger?.classList.add("is-invalid");
+      companyCategoryTrigger?.focus();
       return;
     }
+    companyCategoryTrigger?.classList.remove("is-invalid");
     if (!form.reportValidity()) return;
     setSubmitting(form, true);
     try {
@@ -286,7 +360,7 @@
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
     success.innerHTML = `<span class="ea-success-badge">Sub-contractor Early Access</span>
       <h2>Your Early Access place is confirmed.</h2>
-      <p>${escapeHtml(payload.firstName || "Thanks")}, you now have priority access when OnSite opens.</p>
+       <p>${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We'll let you know when OnSite onboarding opens.</p>
       ${hasReferral ? `<div class="ea-referral-result">
         <small>Your personal referral link</small>
         <div class="ea-referral-code">${escapeHtml(payload.referralCode)}</div>
@@ -333,6 +407,31 @@
   referralInput?.addEventListener("blur", () => {
     referralInput.value = normaliseReferralCode(referralInput.value);
   });
+  companyCategoryTrigger?.addEventListener("click", () => {
+    setCompanyCategoryMenuOpen(!companyCategoryMenuOpen, { focusSearch: !companyCategoryMenuOpen });
+  });
+  companyCategoryTrigger?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setCompanyCategoryMenuOpen(!companyCategoryMenuOpen, { focusSearch: !companyCategoryMenuOpen });
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setCompanyCategoryMenuOpen(true);
+      window.setTimeout(() => focusVisibleCompanyCategoryOption(event.key === "ArrowDown" ? 0 : visibleCompanyCategoryOptions().length - 1), 0);
+    } else if (event.key === "Escape" && companyCategoryMenuOpen) {
+      event.preventDefault();
+      setCompanyCategoryMenuOpen(false);
+    } else if (event.key === "Tab") {
+      setCompanyCategoryMenuOpen(false);
+    }
+  });
+  companyCategorySearch?.addEventListener("input", () => filterCompanyCategories(companyCategorySearch.value));
+  companyCategoryMenu?.addEventListener("keydown", handleCompanyCategoryKeydown);
+  document.addEventListener("pointerdown", (event) => {
+    if (companyCategoryMenuOpen && !companyCategoryPicker?.contains(event.target)) {
+      setCompanyCategoryMenuOpen(false);
+    }
+  }, true);
 
   window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
   renderCompanyCategories();
