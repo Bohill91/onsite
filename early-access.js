@@ -93,7 +93,7 @@
     referralInput.classList.toggle("ea-referral-input--captured", captured);
     if (referralCaptured) referralCaptured.hidden = !captured;
     if (referralReveal) referralReveal.hidden = captured;
-    if (referralFallbackFields) referralFallbackFields.hidden = captured;
+    if (referralFallbackFields) referralFallbackFields.hidden = true;
     if (referralHint && captured) referralHint.textContent = "Referral link captured for 30 days.";
   }
 
