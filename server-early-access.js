@@ -446,7 +446,7 @@ ${record.referral_code}
 Your contractor referral link:
 ${url}
 
-Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. When they complete 5 paid labour days through OnSite, your company receives £100 credit. When they reach 20 paid labour days, your company receives another £150 credit.
+Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. Once the referred contractor reaches 5 paid labour days through OnSite, your company receives £100 credit. At 20 paid labour days, you receive another £150 credit.
 
 Company verification will be required before referral credit can be applied. OnSite credit is not cash and cannot be withdrawn. Registration alone does not qualify for credit.
 
@@ -465,7 +465,7 @@ OnSite`,
             <p style="font-size:20px;font-weight:700;letter-spacing:.08em">${safeReferralCode}</p>
             <p style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Your contractor referral link</p>
             <p><a href="${safeUrl}" style="color:#171717;overflow-wrap:anywhere">${safeUrl}</a></p>
-            <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. When they complete 5 paid labour days through OnSite, your company receives £100 credit. When they reach 20 paid labour days, your company receives another £150 credit.</p>
+            <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. Once the referred contractor reaches 5 paid labour days through OnSite, your company receives £100 credit. At 20 paid labour days, you receive another £150 credit.</p>
             <p>Company verification will be required before referral credit can be applied. OnSite credit is not cash and cannot be withdrawn. Registration alone does not qualify for credit.</p>
             <p>Keep this email so you can find your referral link later.</p>
             <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>

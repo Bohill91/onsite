@@ -279,12 +279,12 @@
         const selected = select.options[select.selectedIndex] || null;
         const selectedText = selected?.textContent?.trim() || "Select an option";
         const placeholder = !selected || selected.value === "";
-        value.textContent = selectedText;
+        value.textContent = select.dataset.displayValue || selectedText;
         trigger.classList.toggle("is-placeholder", placeholder);
         trigger.disabled = select.disabled;
         trigger.setAttribute("aria-disabled", String(select.disabled));
         trigger.setAttribute("aria-required", String(select.required));
-        trigger.setAttribute("aria-label", `${selectFieldLabel(select)}: ${selectedText}`);
+        trigger.setAttribute("aria-label", select.dataset.accessibleLabel || `${selectFieldLabel(select)}: ${selectedText}`);
         const describedBy = select.getAttribute("aria-describedby");
         if (describedBy) trigger.setAttribute("aria-describedby", describedBy);
         else trigger.removeAttribute("aria-describedby");

@@ -292,6 +292,20 @@ test("phone normalisation supports selected countries and pasted international f
   assert.equal(normalisePhone("not a phone", "GB"), "");
 });
 
+test("phone country presentation stays compact while preserving full dropdown names", () => {
+  const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
+  const css = fs.readFileSync(path.join(rootDir, "early-access.css"), "utf8");
+  const ui = fs.readFileSync(path.join(rootDir, "ui.js"), "utf8");
+  assert.match(client, /country\.iso2 === "GB" \? "UK" : country\.iso2/);
+  assert.match(client, /select\.dataset\.displayValue = compactLabel/);
+  assert.match(client, /select\.dataset\.accessibleLabel = accessibleLabel/);
+  assert.match(client, /Country calling code: \$\{country\.name\} \$\{country\.callingCode\}/);
+  assert.match(client, /option\.textContent = `\$\{country\.callingCode\} · \$\{country\.name\}`/);
+  assert.match(css, /grid-template-columns: minmax\(96px, \.75fr\) minmax\(0, 1\.9fr\)/);
+  assert.match(ui, /select\.dataset\.displayValue \|\| selectedText/);
+  assert.match(ui, /select\.dataset\.accessibleLabel \|\| `\$\{selectFieldLabel\(select\)\}: \$\{selectedText\}`/);
+});
+
 test("server-issued referral codes use the canonical unpredictable format", () => {
   const first = referralCode("OSW");
   const second = referralCode("OSW");

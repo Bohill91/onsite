@@ -153,7 +153,7 @@ a { color: inherit; }
 .ea-referral-teaser { background: var(--ea-orange-soft); border-left: 3px solid var(--ea-orange); border-radius: 7px; display: grid; gap: 4px; margin: 0 0 16px; padding: 10px 12px; }
 .ea-referral-teaser-label { color: var(--ea-ink); font-size: .65rem; font-weight: 800; letter-spacing: .05em; margin: 0; text-transform: uppercase; }
 .ea-referral-teaser-reward { color: var(--ea-black); font-size: .82rem; font-weight: 800; line-height: 1.35; margin: 0; }
-.ea-referral-teaser a { color: var(--ea-muted); font-size: .7rem; font-weight: 700; justify-self: start; text-decoration: underline; text-decoration-color: rgba(249, 115, 22, .65); text-underline-offset: 3px; }
+.ea-referral-teaser a { color: var(--ea-orange); font-size: .7rem; font-weight: 700; justify-self: start; text-decoration: underline; text-decoration-color: rgba(249, 115, 22, .65); text-underline-offset: 3px; transition: color 180ms ease; }
 .ea-referral-teaser a:hover { color: var(--ea-ink); }
 form { display: grid; gap: 11px; }
 .ea-form-grid { display: grid; gap: 10px; }
@@ -169,7 +169,7 @@ form > label, .ea-form-grid label {
   align-items: stretch;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(145px, .9fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(96px, .75fr) minmax(0, 1.9fr);
 }
 .ea-phone-control > .os-select,
 .ea-phone-control > input {

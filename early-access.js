@@ -187,7 +187,7 @@
     if (path === "company") {
       referralProgrammeCopy.innerHTML = `<p class="ea-kicker">ONSITE CONTRACTOR REFERRAL PROGRAMME</p>
         <h2 id="referralValue">Earn up to £250 in OnSite credit per qualifying contractor referral.</h2>
-        <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. When they complete 5 paid labour days through OnSite, your company receives £100 credit. When they reach 20 paid labour days, your company receives another £150 credit.</p>
+        <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. Once the referred contractor reaches 5 paid labour days through OnSite, your company receives £100 credit. At 20 paid labour days, you receive another £150 credit.</p>
         <p>Referral credit is available to verified OnSite contractor accounts. Registration alone does not qualify for credit.</p>
         <p class="ea-example">OnSite credit is not cash and cannot be withdrawn.</p>`;
       referralProgrammeRewards.innerHTML = `<article><strong>REFERRED CONTRACTOR</strong><span>£100 credit towards their first qualifying labour booking</span></article>
@@ -392,6 +392,24 @@
     return normalised;
   }
 
+  function syncPhoneCountryPresentation(select) {
+    const countries = window.OnSitePhone?.countries || [];
+    const country = countries.find((candidate) => candidate.iso2 === select.value);
+    const wrapper = select.closest(".os-select");
+    const value = wrapper?.querySelector(".os-select-value");
+    const trigger = wrapper?.querySelector(".os-select-trigger");
+    if (!country || !value || !trigger) return;
+
+    const compactIso = country.iso2 === "GB" ? "UK" : country.iso2;
+    const compactLabel = `${compactIso} ${country.callingCode}`;
+    const accessibleLabel = `Country calling code: ${country.name} ${country.callingCode}`;
+    select.dataset.displayValue = compactLabel;
+    select.dataset.accessibleLabel = accessibleLabel;
+    window.OnSiteUI?.syncSelect(select);
+    value.textContent = compactLabel;
+    trigger.setAttribute("aria-valuetext", `${country.name} ${country.callingCode}`);
+  }
+
   function renderPhoneCountries() {
     const countries = window.OnSitePhone?.countries || [];
     phoneCountrySelects.forEach((select) => {
@@ -403,6 +421,7 @@
       }));
       select.value = "GB";
       window.OnSiteUI?.syncSelect(select);
+      syncPhoneCountryPresentation(select);
     });
   }
 
@@ -600,7 +619,10 @@
     input.addEventListener("blur", () => updatePhoneValidity(input.form));
   });
   phoneCountrySelects.forEach((select) => {
-    select.addEventListener("change", () => updatePhoneValidity(select.form));
+    select.addEventListener("change", () => {
+      syncPhoneCountryPresentation(select);
+      updatePhoneValidity(select.form);
+    });
   });
   workerTrade?.addEventListener("change", () => {
     window.OnSiteTaxonomy?.populateRoleSelect(workerRole, workerTrade.value);
