@@ -15,6 +15,7 @@
   const companyCategoryMenu = document.getElementById("eaCompanyCategoryMenu");
   const companyCategorySearch = document.getElementById("eaCompanyCategorySearch");
   const companyCategoryOptions = document.getElementById("eaCompanyCategoryOptions");
+  const routeStories = document.querySelectorAll("[data-route-story]");
   const referralInput = document.getElementById("eaReferralCode");
   const referralCaptured = document.getElementById("eaReferralCaptured");
   const referralReveal = document.getElementById("eaReferralReveal");
@@ -136,6 +137,9 @@
     setCompanyCategoryMenuOpen(false);
     workerPanel.hidden = !workerSelected;
     companyPanel.hidden = workerSelected;
+    routeStories.forEach((story) => {
+      story.hidden = story.dataset.routeStory !== path;
+    });
     document.querySelectorAll("[data-signup-path]").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.signupPath === path));
     });
