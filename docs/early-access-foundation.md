@@ -93,6 +93,32 @@ OSW and OSC attribution cannot cross programmes. Attribution is immutable, one
 referrer may be attached to a signup, first valid attribution wins, duplicate
 signup does not create another identity, and self-referral is rejected.
 
+## Future company referral area
+
+The main authenticated app currently exposes referral progress for
+sub-contractors, but it does not have a company referral area. This task keeps
+that scope intentionally deferred rather than presenting a dashboard backed by
+fake counts or unauthoritative browser state.
+
+When the company area is built, it should:
+
+- show the signed-in company's server-issued OSC link and provide copy/share
+  actions without exposing another company's contact details;
+- show only server-derived referral totals and milestone progress, with clear
+  `registration`, `5 paid labour days`, `20 paid labour days`, `verification`
+  and `credit applied` states;
+- distinguish the referred contractor's first-booking credit from the
+  referring company's £100 and £150 milestones;
+- explain that registration alone does not qualify, credit is non-cash and
+  non-withdrawable, and verification gates application; and
+- read through an authenticated, company-scoped projection that uses the
+  canonical referral and reward records, never direct browser access to the
+  locked tables.
+
+The company area should be added alongside the existing account navigation only
+after the future payment evidence and credit-ledger integration can provide
+real progress and applied-credit states.
+
 ## Qualifying paid-day boundary
 
 A qualifying paid day is not an attendance event. It must ultimately be a

@@ -640,6 +640,8 @@ test("Resend provider uses the professional Early Access confirmation copy", asy
   assert.match(requests[1].text, /first qualifying labour booking/i);
   assert.match(requests[1].text, /£100 credit/i);
   assert.match(requests[1].text, /£150 credit/i);
+  assert.match(requests[1].text, /registration alone does not qualify for credit/i);
+  assert.match(requests[1].text, /keep this email so you can find your referral link later/i);
   assert.match(requests[1].text, /not cash and cannot be withdrawn/i);
   assert.doesNotMatch(`${requests[1].text}\n${requests[1].html}`, /CIS verification|cash reward/i);
 });
@@ -898,7 +900,17 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(client, /\.get\("ref"\)/);
   assert.match(client, /startsWith\("OSC-"\)/);
   assert.match(client, /Earn up to £250 in OnSite credit per qualifying contractor referral/);
+  assert.match(client, /Refer another UK contractor to OnSite/);
+  assert.match(client, /£100 credit towards their first qualifying labour booking/);
+  assert.match(client, /£100 OnSite credit/);
+  assert.match(client, /Additional £150 OnSite credit/);
   assert.match(client, /OnSite credit is not cash and cannot be withdrawn/);
+  assert.match(client, /CONTRACTOR EARLY ACCESS/);
+  assert.match(client, /your company is registered for Early Access/i);
+  assert.match(client, /YOUR CONTRACTOR REFERRAL PROGRAMME/);
+  assert.match(client, /Your company has been referred to OnSite/);
+  assert.match(client, /copyText\(payload\.referralUrl\)/);
+  assert.match(client, /Invite text copied/);
   assert.match(client, /companyReferralAcknowledged/);
   assert.match(client, /cisAcknowledged/);
   assert.match(client, /data-copy-referral/);

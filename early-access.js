@@ -136,7 +136,12 @@
     controls.input.value = record?.code || "";
     controls.input.readOnly = captured;
     controls.input.classList.toggle("ea-referral-input--captured", captured);
-    if (controls.captured) controls.captured.hidden = !captured;
+    if (controls.captured) {
+      controls.captured.hidden = !captured;
+      controls.captured.textContent = type === "company"
+        ? "Your company has been referred to OnSite."
+        : "You've been referred to OnSite.";
+    }
     if (controls.reveal) controls.reveal.hidden = captured;
     if (controls.fallback) controls.fallback.hidden = true;
     if (controls.hint && captured) controls.hint.textContent = "Referral link captured for 30 days.";
@@ -185,7 +190,7 @@
         <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. When they complete 5 paid labour days through OnSite, your company receives £100 credit. When they reach 20 paid labour days, your company receives another £150 credit.</p>
         <p>Referral credit is available to verified OnSite contractor accounts. Registration alone does not qualify for credit.</p>
         <p class="ea-example">OnSite credit is not cash and cannot be withdrawn.</p>`;
-      referralProgrammeRewards.innerHTML = `<article><strong>REFERRED CONTRACTOR</strong><span>£100 credit towards first qualifying labour booking</span></article>
+      referralProgrammeRewards.innerHTML = `<article><strong>REFERRED CONTRACTOR</strong><span>£100 credit towards their first qualifying labour booking</span></article>
         <article><strong>5 PAID LABOUR DAYS</strong><span>£100 OnSite credit</span></article>
         <article><strong>20 PAID LABOUR DAYS</strong><span>Additional £150 OnSite credit</span></article>`;
       return;
@@ -414,6 +419,33 @@
     if (element) element.textContent = message || "";
   }
 
+  async function copyText(value) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+    const fallback = document.createElement("textarea");
+    fallback.value = value;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.appendChild(fallback);
+    fallback.select();
+    const copied = document.execCommand("copy");
+    fallback.remove();
+    if (!copied) throw new Error("Clipboard unavailable");
+  }
+
+  function setTemporaryButtonLabel(button, label) {
+    if (!button) return;
+    const original = button.dataset.originalLabel || button.textContent;
+    button.dataset.originalLabel = original;
+    button.textContent = label;
+    window.setTimeout(() => {
+      if (button.isConnected) button.textContent = original;
+    }, 1800);
+  }
+
   async function submit(form, type) {
     formError(form, "");
     if (type === "company" && !selectedValues(companyCategories).length) {
@@ -459,28 +491,45 @@
     success.hidden = false;
     const emailDeliveryStatus = payload.emailDeliveryStatus;
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
-    const emailCopy = {
-      sent: "We've also emailed your referral link to you.",
-      skipped: "Your registration is complete. Save or copy your referral link below.",
-      failed: "Your registration is complete, but we couldn't send the confirmation email. Save or copy your referral link below.",
-      not_sent: "Your registration is complete. Save or copy your referral link below.",
-    }[emailDeliveryStatus] || "";
     const company = type === "company";
-    const badge = company ? "Contractor Early Access" : "Sub-contractor Early Access";
+    const emailCopy = company
+      ? {
+        sent: "We've also emailed your contractor referral link to you.",
+        skipped: "Save or copy your referral link before leaving this page.",
+        failed: "We couldn't send the confirmation email. Save or copy your referral link before leaving this page.",
+        not_sent: "Save or copy your referral link before leaving this page.",
+      }[emailDeliveryStatus]
+      : {
+        sent: "We've also emailed your referral link to you.",
+        skipped: "Your registration is complete. Save or copy your referral link below.",
+        failed: "Your registration is complete, but we couldn't send the confirmation email. Save or copy your referral link below.",
+        not_sent: "Your registration is complete. Save or copy your referral link below.",
+      }[emailDeliveryStatus] || "";
+    const badge = company ? "CONTRACTOR EARLY ACCESS" : "SUB-CONTRACTOR EARLY ACCESS";
     const title = company
       ? "Your company Early Access registration is confirmed."
       : "Your Early Access registration is confirmed.";
     const intro = company
-      ? `<strong>${escapeHtml(payload.companyName || "Your company")}</strong> is registered for OnSite Early Access. We'll notify you when contractor onboarding opens.`
+      ? `${escapeHtml(payload.firstName || "Thanks")}, your company is registered for Early Access. We'll contact you when OnSite contractor onboarding opens.`
       : `${escapeHtml(payload.firstName || "Thanks")}, your details are registered for Early Access. We'll notify you when OnSite onboarding opens.`;
-    const codeLabel = company ? "Your contractor referral code" : "Your referral code";
-    const linkLabel = company ? "Your contractor referral link" : "Your personal referral link";
+    const codeLabel = company ? "YOUR CONTRACTOR REFERRAL CODE" : "Your referral code";
+    const linkLabel = company ? "YOUR CONTRACTOR REFERRAL LINK" : "Your personal referral link";
     const attribution = company
       ? "Registrations through this link are attributed to your company automatically."
       : "Registrations through this link are attributed to you automatically.";
     const eligibility = company
-      ? "Company verification will be required before referral credit can be applied. OnSite credit is not cash and cannot be withdrawn."
+      ? "Company verification will be required before referral credit can be applied."
       : "You do not need to complete paid work yourself to earn referral rewards. CIS verification will be required before any referral reward can be paid.";
+    const creditClarification = company
+      ? "OnSite credit is not cash and cannot be withdrawn."
+      : "";
+    const contractorSummary = company
+      ? `<section class="ea-contractor-summary" aria-labelledby="contractorSummaryTitle">
+        <p class="ea-summary-kicker" id="contractorSummaryTitle">YOUR CONTRACTOR REFERRAL PROGRAMME</p>
+        <div class="ea-summary-row"><strong>Referred contractor</strong><span>£100 credit towards first qualifying labour booking</span></div>
+        <div class="ea-summary-row"><strong>Your company</strong><span>£100 credit at 5 paid labour days<br />+ £150 at 20 paid labour days</span></div>
+      </section>`
+      : "";
     success.innerHTML = `<span class="ea-success-badge">${badge}</span>
       <h2>${title}</h2>
       <p>${intro}</p>
@@ -494,25 +543,43 @@
           <button type="button" data-copy-referral>Copy link</button>
           <button type="button" data-share-referral>Share invite</button>
         </div>
+         <p class="ea-action-status" data-referral-action-status role="status" aria-live="polite"></p>
         <p class="ea-referral-attribution">${attribution}</p>
         <p class="ea-referral-attribution">${eligibility}</p>
-      </div>` : `<p>Your registration is recorded. Referral details are available for new registrations.</p>`}`;
+         ${creditClarification ? `<p class="ea-referral-attribution">${creditClarification}</p>` : ""}
+       </div>
+       ${contractorSummary}` : `<p>Your registration is recorded. Referral details are available for new registrations.</p>`}`;
     if (!hasReferral) return;
+    const actionStatus = success.querySelector("[data-referral-action-status]");
     success.querySelector("[data-copy-referral]")?.addEventListener("click", async (event) => {
-      await navigator.clipboard.writeText(payload.referralUrl);
-      event.currentTarget.textContent = "Copied";
+      try {
+        await copyText(payload.referralUrl);
+        setTemporaryButtonLabel(event.currentTarget, "Copied");
+        if (actionStatus) actionStatus.textContent = "Referral link copied.";
+      } catch (_) {
+        if (actionStatus) actionStatus.textContent = "Copy failed. Select the link above to copy it manually.";
+      }
     });
-    success.querySelector("[data-share-referral]")?.addEventListener("click", async () => {
+    success.querySelector("[data-share-referral]")?.addEventListener("click", async (event) => {
       const shareText = company
         ? `We've joined OnSite Early Access. If your company hires CIS sub-contractors, register using our link:\n\n${payload.referralUrl}`
         : `I've joined OnSite Early Access. If you're a CIS sub-contractor, register using my link:\n\n${payload.referralUrl}`;
-      if (navigator.share) {
-        await navigator.share({
-          title: "OnSite Early Access",
-          text: shareText,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareText);
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: "OnSite Early Access",
+            text: shareText,
+          });
+          if (actionStatus) actionStatus.textContent = "Invite shared.";
+        } else {
+          await copyText(shareText);
+          setTemporaryButtonLabel(event.currentTarget, "Invite copied");
+          if (actionStatus) actionStatus.textContent = "Invite text copied.";
+        }
+      } catch (error) {
+        if (error?.name !== "AbortError" && actionStatus) {
+          actionStatus.textContent = "Share failed. Copy the link above to send your invite.";
+        }
       }
     });
   }

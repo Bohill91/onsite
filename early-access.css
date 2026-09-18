@@ -404,6 +404,12 @@ input[readonly] { background: #fafaf8; color: var(--ea-muted); }
 .ea-referral-attribution { color: var(--ea-muted); font-size: .72rem; line-height: 1.5; margin: 0; }
 .ea-share-actions { display: flex; gap: 8px; }
 .ea-share-actions button { background: #fff; border: 1px solid var(--ea-border); border-radius: 7px; color: var(--ea-ink); cursor: pointer; font-size: .74rem; font-weight: 700; min-height: 40px; padding: 8px 12px; }
+.ea-action-status { color: var(--ea-ink); font-size: .7rem; font-weight: 700; line-height: 1.45; margin: -4px 0 0; min-height: 1em; }
+.ea-contractor-summary { border-top: 1px solid #e6e6e1; display: grid; gap: 12px; margin-top: 20px; padding-top: 18px; }
+.ea-summary-kicker { color: var(--ea-ink); font-size: .66rem; font-weight: 800; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.ea-summary-row { align-items: start; display: grid; gap: 4px; }
+.ea-summary-row strong { color: var(--ea-ink); font-size: .74rem; }
+.ea-summary-row span { color: var(--ea-muted); font-size: .72rem; line-height: 1.45; }
 .ea-progress-zero { align-items: center; border-top: 1px solid #e6e6e3; display: flex; justify-content: space-between; padding-top: 12px; }
 .ea-progress-zero span { color: var(--ea-muted); font-size: .72rem; }
 .ea-progress-zero strong { color: var(--ea-black); }
