@@ -135,10 +135,10 @@
               </div>
               <div class="ea-form-grid ea-form-grid--two">
                 <label>Work email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
-                <label>Mobile / telephone<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
+                <label>Contact number<input name="mobile" type="tel" autocomplete="tel" maxlength="40" required /></label>
               </div>
               <div class="ea-category-field">
-                 <label class="ea-field-label" for="eaCompanyCategoryTrigger">Main trade / labour categories</label>
+                 <label class="ea-field-label" for="eaCompanyCategoryTrigger">Trades / labour categories required</label>
                  <div class="ea-category-picker" id="eaCategoryPicker">
                    <button class="ea-multi-select-trigger" id="eaCompanyCategoryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCategoryOptions" aria-describedby="eaCategoryHint">
                      <span id="eaCompanyCategoryValue">Select trades</span>
@@ -149,14 +149,14 @@
                        <span>Search categories</span>
                        <input id="eaCompanyCategorySearch" type="search" autocomplete="off" placeholder="Search trades" />
                      </label>
-                     <div class="ea-category-options" id="eaCompanyCategoryOptions" role="listbox" aria-label="Main trade and labour categories" aria-multiselectable="true"></div>
+                     <div class="ea-category-options" id="eaCompanyCategoryOptions" role="listbox" aria-label="Trades / labour categories required" aria-multiselectable="true"></div>
                    </div>
-                   <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-label="Main trade and labour categories" aria-describedby="eaCategoryHint"></select>
+                   <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-label="Trades / labour categories required" aria-describedby="eaCategoryHint"></select>
                 </div>
                 <small id="eaCategoryHint">Select all that apply.</small>
               </div>
               <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
-              <label>Temporary sub-contractors typically required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+              <label>Typical number of sub-contractors required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage our Early Access enquiry.</span></label>
@@ -175,8 +175,8 @@
       <section class="ea-referral-section" aria-labelledby="referralValue">
         <div>
           <p class="ea-kicker">ONSITE REFERRAL PROGRAMME</p>
-          <h2 id="referralValue">Earn up to £100 for each qualifying referral.</h2>
-           <p>Refer a CIS sub-contractor to OnSite. When they complete 5 paid days, you earn £50. When they reach 20 paid days, you earn another £50. They also earn £25 after completing their first 5 paid days.</p>
+          <h2 id="referralValue">Earn up to £100 per qualifying referral.</h2>
+           <p>Refer a CIS sub-contractor to OnSite. When they complete 5 paid days, you earn £50. When they reach 20 paid days, you earn another £50. The referred sub-contractor also earns £25 after their first 5 paid days.</p>
            <p class="ea-example">Twenty qualifying referrals could earn you up to <strong>£2,000</strong> in referral rewards. Registration alone does not qualify for a reward.</p>
         </div>
         <div class="ea-reward-steps">
