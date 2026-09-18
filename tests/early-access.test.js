@@ -534,13 +534,19 @@ test("migration 008 locks down tables and preserves historical referral records"
   assert.match(sql, /commit;\s*$/i);
 });
 
-test("public UI is password-free, API-backed and has Worker and Company paths", () => {
+test("public UI is password-free, API-backed and has sub-contractor and hiring-company paths", () => {
   const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
   const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
   const css = fs.readFileSync(path.join(rootDir, "early-access.css"), "utf8");
   assert.match(html, /id="workerEarlyAccessForm"/);
   assert.match(html, /id="companyEarlyAccessForm"/);
-  assert.match(html, /Founding Worker/);
+  assert.match(html, /I'm looking for work/);
+  assert.match(html, /I'm hiring/);
+  assert.match(html, /FOR CIS SUB-CONTRACTORS/);
+  assert.match(html, /FOR UK CONTRACTORS/);
+  assert.match(html, /Join OnSite Early Access/);
+  assert.doesNotMatch(html, /Founding Worker/);
+  assert.doesNotMatch(html, /\bWorker\b/);
   assert.doesNotMatch(html, /type="password"/);
   assert.match(client, /\/api\/early-access\/\$\{type\}/);
   assert.doesNotMatch(client, /\/api\/auth\//);
