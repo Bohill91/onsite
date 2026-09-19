@@ -13,6 +13,24 @@ with checks as (
       then 'PASS' else 'FAIL' end as result
   union all
   select
+    'legacy company v2 RPC is not executable by service_role',
+    case when to_regprocedure('public.join_early_access_company_v2(text,text,text,text,text,text[],text[],text,integer,text,text,text,boolean,text,boolean,text,text,text,text,text,text)') is not null
+      and not has_function_privilege(
+        'service_role',
+        to_regprocedure('public.join_early_access_company_v2(text,text,text,text,text,text[],text[],text,integer,text,text,text,boolean,text,boolean,text,text,text,text,text,text)'),
+        'execute'
+      )
+      then 'PASS' else 'FAIL' end
+  union all
+  select
+    'v3 company RPC remains executable by service_role',
+    case when has_function_privilege(
+      'service_role',
+      to_regprocedure('public.join_early_access_company_v3(text,text,text,text,text,text,text,text[],text[],text,integer,text,text,text,boolean,boolean,boolean,text,boolean,text,text,text,text,text)'),
+      'execute'
+    ) then 'PASS' else 'FAIL' end
+  union all
+  select
     'registration market values are explicit',
     case when not exists (
       select 1 from public.early_access_signups

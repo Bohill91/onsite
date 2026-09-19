@@ -930,8 +930,75 @@ test("migration 010 separates international interest from the UK contractor prog
   assert.match(sql, /security definer/i);
   assert.match(sql, /set search_path = pg_catalog, public/i);
   assert.match(sql, /grant execute on function public\.join_early_access_company_v3[\s\S]*to service_role/i);
+  assert.match(
+    sql,
+    /cis_referral_acknowledged_at is null[\s\S]*company_referral_acknowledged_at is null[\s\S]*referral_terms_version is null[\s\S]*uk_operating_acknowledged_at is null[\s\S]*international_interest_acknowledged_at is null/i,
+  );
+  assert.match(
+    sql,
+    /revoke all on function public\.join_early_access_company_v2\(\s*text, text, text, text, text, text\[\], text\[\], text, integer, text,\s*text, text, boolean, text, boolean, text, text, text, text, text, text\s*\) from public, anon, authenticated, service_role/i,
+  );
   assert.doesNotMatch(sql, /grant (?:select|insert|update|delete)[^;]*to (?:anon|authenticated)/i);
   assert.match(sql, /commit;\s*$/i);
+});
+
+test("migration 010 keeps acknowledgement enforcement split between legacy rows and new routes", () => {
+  const sql = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),
+    "utf8",
+  );
+  const constraintStart = sql.indexOf("add constraint early_access_signups_referral_acknowledgement_check");
+  const constraintEnd = sql.indexOf(";\n\ncreate or replace function public.protect_early_access_signup_identity", constraintStart);
+  assert.notEqual(constraintStart, -1);
+  assert.notEqual(constraintEnd, -1);
+  const constraint = sql.slice(constraintStart, constraintEnd);
+  assert.match(
+    constraint,
+    /\(\s*cis_referral_acknowledged_at is null[\s\S]*company_referral_acknowledged_at is null[\s\S]*referral_terms_version is null[\s\S]*uk_operating_acknowledged_at is null[\s\S]*international_interest_acknowledged_at is null\s*\)/i,
+  );
+  assert.match(
+    constraint,
+    /signup_type = 'worker'[\s\S]*cis_referral_acknowledged_at is not null/i,
+  );
+  assert.match(
+    constraint,
+    /signup_type = 'company'[\s\S]*registration_market = 'uk'[\s\S]*company_referral_acknowledged_at is not null/i,
+  );
+  assert.match(
+    constraint,
+    /signup_type = 'company'[\s\S]*registration_market = 'international'[\s\S]*international_interest_acknowledged_at is not null/i,
+  );
+
+  const triggerStart = sql.indexOf("create or replace function public.validate_early_access_signup_programme");
+  const triggerEnd = sql.indexOf("$$;", triggerStart);
+  assert.notEqual(triggerStart, -1);
+  assert.notEqual(triggerEnd, -1);
+  const trigger = sql.slice(triggerStart, triggerEnd);
+  [
+    "CIS_REFERRAL_ACKNOWLEDGEMENT_REQUIRED",
+    "COMPANY_REFERRAL_ACKNOWLEDGEMENT_REQUIRED",
+    "UK_OPERATING_ACKNOWLEDGEMENT_REQUIRED",
+    "INTERNATIONAL_INTEREST_ACKNOWLEDGEMENT_REQUIRED",
+  ].forEach((detail) => assert.match(trigger, new RegExp(detail)));
+});
+
+test("migration 010 retires only the legacy company route while retaining worker and v3 service access", () => {
+  const sql = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),
+    "utf8",
+  );
+  assert.match(
+    sql,
+    /revoke all on function public\.join_early_access_company_v2\([\s\S]*?from public, anon, authenticated, service_role/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.join_early_access_company_v3\([\s\S]*?to service_role/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /revoke all on function public\.join_early_access_worker_v2\(/i,
+  );
 });
 
 test("international migration verification scripts are read-only and separated by phase", () => {
