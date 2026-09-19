@@ -200,6 +200,7 @@
 
   function renderReferralProgramme(path) {
     if (!referralProgrammeCopy || !referralProgrammeRewards) return;
+    referralProgrammeRewards.dataset.route = path;
     if (path === "company") {
       if (!companyIsUkMarket()) {
         referralProgrammeCopy.innerHTML = `<p class="ea-kicker">ONSITE INTERNATIONAL EARLY ACCESS</p>

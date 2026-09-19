@@ -1157,7 +1157,7 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(html, /I'm looking for work/);
   assert.match(html, /I'm hiring/);
   assert.match(html, /FOR CIS SUB-CONTRACTORS/);
-  assert.match(html, /FOR CONSTRUCTION CONTRACTORS/);
+  assert.match(html, /FOR HIRING COMPANIES/);
   assert.match(html, /Launching first in the United Kingdom/);
   assert.match(html, /Register for OnSite Early Access/);
   assert.match(html, /Register your interest and we'll notify you when profile setup opens/);
@@ -1212,8 +1212,23 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.doesNotMatch(client, /referralProgress\?\.joinedCount/);
   assert.match(client, /Registrations through this link are attributed to you automatically/);
   assert.match(html, /name="mobileCountry"/);
+  assert.match(html, /name="mobileCountry" aria-label="Calling code"/);
+  assert.match(html, /<fieldset class="ea-fieldset">[\s\S]*<legend>Operating details<\/legend>/);
+  assert.match(html, /Primary operating area[\s\S]*e\.g\. London and the South East/);
+  assert.doesNotMatch(html, /eaCountryHint/);
+  const companyPanel = html.match(/<section id="companyPanel"[\s\S]*?<\/section>/)?.[0] || "";
+  const operatingOrder = [
+    "Country of operation",
+    "Primary operating area",
+    "Trades / labour categories required",
+    "Typical number of sub-contractors required",
+  ].map((label) => companyPanel.indexOf(label));
+  assert.ok(operatingOrder.every((index) => index >= 0));
+  assert.deepEqual([...operatingOrder].sort((left, right) => left - right), operatingOrder);
   assert.match(client, /normalisePhone/);
+  assert.match(client, /referralProgrammeRewards\.dataset\.route = path/);
   assert.match(html, /name="viewport"/);
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /@media \(max-width: 420px\)/);
+  assert.match(css, /ea-reward-steps\[data-route="company"\][\s\S]*gap: 12px/);
 });
