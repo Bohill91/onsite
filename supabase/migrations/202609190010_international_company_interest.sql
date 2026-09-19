@@ -62,6 +62,14 @@ alter table public.early_access_signups
   add constraint early_access_signups_referral_acknowledgement_check
     check (
       (
+        cis_referral_acknowledged_at is null
+        and company_referral_acknowledged_at is null
+        and referral_terms_version is null
+        and uk_operating_acknowledged_at is null
+        and international_interest_acknowledged_at is null
+      )
+      or
+      (
         signup_type = 'worker'
         and cis_referral_acknowledged_at is not null
         and company_referral_acknowledged_at is null
@@ -438,6 +446,13 @@ grant execute on function public.join_early_access_company_v3(
   text, text, text, text, text, text, text, text[], text[], text, integer, text,
   text, text, boolean, boolean, boolean, text, boolean, text, text, text, text, text
 ) to service_role;
+
+-- The migration-009 company route does not collect geographical registration
+-- data and must not remain executable after v3 becomes the only company path.
+revoke all on function public.join_early_access_company_v2(
+  text, text, text, text, text, text[], text[], text, integer, text,
+  text, text, boolean, text, boolean, text, text, text, text, text, text
+) from public, anon, authenticated, service_role;
 
 revoke all on function public.validate_early_access_referral_programme()
 from public, anon, authenticated, service_role;
