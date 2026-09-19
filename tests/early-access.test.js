@@ -956,6 +956,10 @@ test("migration 010 uses exact v3 permissions and preserves worker access", () =
     path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),
     "utf8",
   );
+  const migration009 = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609180009_canonical_referral_programmes.sql"),
+    "utf8",
+  );
   const v3Types = extractFunctionArgumentTypes(
     sql,
     /create or replace function public\.join_early_access_company_v3\(\s*([\s\S]*?)\n\)/i,
@@ -977,13 +981,27 @@ test("migration 010 uses exact v3 permissions and preserves worker access", () =
     sql,
     /revoke all on function public\.join_early_access_company_v2\(\s*([\s\S]*?)\n\) from/i,
   );
-  assert.equal(companyV2Types.length, 21);
+  const companyV2CreateTypes = extractFunctionArgumentTypes(
+    migration009,
+    /create or replace function public\.join_early_access_company_v2\(\s*([\s\S]*?)\n\)/i,
+  );
+  assert.deepEqual(companyV2Types, companyV2CreateTypes);
   assert.match(
     sql,
     /revoke all on function public\.join_early_access_company_v2\([\s\S]*?\) from public, anon, authenticated, service_role/i,
   );
+
+  const workerV2CreateTypes = extractFunctionArgumentTypes(
+    migration009,
+    /create or replace function public\.join_early_access_worker_v2\(\s*([\s\S]*?)\n\)/i,
+  );
+  const workerV2GrantTypes = extractFunctionArgumentTypes(
+    migration009,
+    /grant execute on function public\.join_early_access_worker_v2\(\s*([\s\S]*?)\n\) to service_role/i,
+  );
+  assert.deepEqual(workerV2GrantTypes, workerV2CreateTypes);
   assert.match(
-    sql,
+    migration009,
     /grant execute on function public\.join_early_access_worker_v2\([\s\S]*?\) to service_role/i,
   );
 });
