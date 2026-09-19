@@ -327,6 +327,23 @@ test("phone country presentation stays compact while preserving full dropdown na
   assert.match(ui, /select\.dataset\.accessibleLabel \|\| `\$\{selectFieldLabel\(select\)\}: \$\{selectedText\}`/);
 });
 
+test("contractor route keeps one country-of-operation selector through route switching", () => {
+  const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
+  const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
+  const ui = fs.readFileSync(path.join(rootDir, "ui.js"), "utf8");
+  const companyPanel = html.match(/<section id="companyPanel"[\s\S]*?<\/section>/)?.[0] || "";
+
+  assert.equal((companyPanel.match(/id="eaCompanyCountryTrigger"/g) || []).length, 1);
+  assert.equal((companyPanel.match(/name="operatingCountryCode"/g) || []).length, 1);
+  assert.match(companyPanel, /<select[^>]*data-native-select[^>]*name="operatingCountryCode"/);
+  assert.equal((companyPanel.match(/name="mobileCountry"/g) || []).length, 1);
+  assert.match(client, /setCompanyCountryMenuOpen\(false\)/);
+  assert.match(client, /workerPanel\.hidden = !workerSelected/);
+  assert.match(client, /companyPanel\.hidden = workerSelected/);
+  assert.match(client, /renderReferralProgramme\(path\)/);
+  assert.match(ui, /!select\.matches\("\[data-native-select\], \[data-onsite-select='native'\]"\)/);
+});
+
 test("server-issued referral codes use the canonical unpredictable format", () => {
   const first = referralCode("OSW");
   const second = referralCode("OSW");
