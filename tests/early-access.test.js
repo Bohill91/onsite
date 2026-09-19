@@ -327,6 +327,32 @@ test("phone country presentation stays compact while preserving full dropdown na
   assert.match(ui, /select\.dataset\.accessibleLabel \|\| `\$\{selectFieldLabel\(select\)\}: \$\{selectedText\}`/);
 });
 
+test("company acknowledgement controls stay market-specific and optional fields stay compact", () => {
+  const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
+  const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
+  const css = fs.readFileSync(path.join(rootDir, "early-access.css"), "utf8");
+  const companyPanel = html.match(/<section id="companyPanel"[\s\S]*?<\/section>/)?.[0] || "";
+
+  assert.match(companyPanel, /<span class="ea-label-with-optional">Typical number of sub-contractors required <small>Optional<\/small><\/span><input name="approximateWorkers"/);
+  assert.doesNotMatch(companyPanel, /name="approximateWorkers"[^>]*required/);
+  assert.equal((companyPanel.match(/name="ukOperatingAcknowledged"[^>]*required/g) || []).length, 1);
+  assert.equal((companyPanel.match(/name="companyReferralAcknowledged"[^>]*required/g) || []).length, 1);
+  assert.match(companyPanel, /id="eaInternationalInterestConsent" hidden/);
+  assert.doesNotMatch(companyPanel, /name="internationalInterestAcknowledged"[^>]*required/);
+  assert.equal((companyPanel.match(/name="privacyAcknowledged"[^>]*required/g) || []).length, 1);
+  assert.equal((companyPanel.match(/name="marketingConsent"/g) || []).length, 1);
+  assert.match(css, /\.ea-check\[hidden\], \.ea-referral-choice\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.ea-label-with-optional small \{ margin-left: 6px; \}/);
+  assert.match(client, /ukOperatingConsent\) ukOperatingConsent\.hidden = !isUk/);
+  assert.match(client, /companyReferralConsent\) companyReferralConsent\.hidden = !isUk/);
+  assert.match(client, /internationalInterestConsent\) internationalInterestConsent\.hidden = isUk/);
+  assert.match(client, /ukOperatingInput\.required = isUk/);
+  assert.match(client, /companyReferralInput\.required = isUk/);
+  assert.match(client, /internationalInput\.required = !isUk/);
+  assert.match(client, /selectedCompanyCountry === "GB"\s*\n\s*&& data\.get\("companyReferralAcknowledged"\)/);
+  assert.match(client, /selectedCompanyCountry !== "GB"\s*\n\s*&& data\.get\("internationalInterestAcknowledged"\)/);
+});
+
 test("contractor route keeps one country-of-operation selector through route switching", () => {
   const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
   const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");

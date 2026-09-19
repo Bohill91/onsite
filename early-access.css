@@ -198,9 +198,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--ea-orange); box-
 label small { color: var(--ea-muted); font-size: .68rem; font-weight: 500; line-height: 1.45; }
 .ea-consents { border-top: 1px solid #e6e6e1; display: grid; gap: 10px; margin-top: 2px; padding-top: 14px; }
 .ea-check { align-items: start; color: var(--ea-muted); display: grid; font-size: .7rem; font-weight: 500; gap: 9px; grid-template-columns: 16px 1fr; line-height: 1.5; }
+.ea-check[hidden], .ea-referral-choice[hidden] { display: none; }
 .ea-check input { accent-color: var(--ea-orange); height: 16px; margin: 2px 0 0; min-height: 0; padding: 0; width: 16px; }
 .ea-check a { color: var(--ea-ink); font-weight: 700; }
 .ea-check em { font-style: normal; }
+.ea-label-with-optional { color: var(--ea-ink); font-size: .76rem; font-weight: 700; }
+.ea-label-with-optional small { margin-left: 6px; }
 .ea-submit { margin-top: 4px; width: 100%; }
 .ea-submit-note { color: var(--ea-muted); font-size: .68rem; line-height: 1.45; margin: -10px 0 0; text-align: center; }
 .ea-form-error { color: #b91c1c; display: none; font-size: .75rem; font-weight: 600; line-height: 1.45; }
