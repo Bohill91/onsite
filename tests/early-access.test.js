@@ -16,7 +16,7 @@ const {
   normalizeWorkerInput,
   referralCode,
 } = require("../server-early-access.js");
-const { normalisePhone } = require("../phone-utils.js");
+const { countries, normalisePhone } = require("../phone-utils.js");
 
 const rootDir = path.resolve(__dirname, "..");
 
@@ -297,12 +297,19 @@ test("phone country presentation stays compact while preserving full dropdown na
   const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
   const css = fs.readFileSync(path.join(rootDir, "early-access.css"), "utf8");
   const ui = fs.readFileSync(path.join(rootDir, "ui.js"), "utf8");
-  assert.match(client, /country\.iso2 === "GB" \? "UK" : country\.iso2/);
+  const closedExamples = Object.fromEntries(
+    countries
+      .filter((country) => ["GB", "IE", "FR"].includes(country.iso2))
+      .map((country) => [country.iso2, country.callingCode]),
+  );
+  assert.deepEqual(closedExamples, { GB: "+44", IE: "+353", FR: "+33" });
+  assert.match(client, /const compactLabel = country\.callingCode/);
+  assert.doesNotMatch(client, /compactIso/);
   assert.match(client, /select\.dataset\.displayValue = compactLabel/);
   assert.match(client, /select\.dataset\.accessibleLabel = accessibleLabel/);
   assert.match(client, /Country calling code: \$\{country\.name\} \$\{country\.callingCode\}/);
   assert.match(client, /option\.textContent = `\$\{country\.callingCode\} · \$\{country\.name\}`/);
-  assert.match(css, /grid-template-columns: minmax\(96px, \.75fr\) minmax\(0, 1\.9fr\)/);
+  assert.match(css, /grid-template-columns: minmax\(88px, \.55fr\) minmax\(0, 2\.1fr\)/);
   assert.equal((html.match(/data-dropdown-width="250"/g) || []).length, 2);
   assert.match(css, /\.os-select-option-label \{ min-width: 0; white-space: nowrap; \}/);
   assert.match(ui, /select\.dataset\.dropdownWidth/);

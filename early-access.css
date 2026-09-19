@@ -169,7 +169,7 @@ form > label, .ea-form-grid label {
   align-items: stretch;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(96px, .75fr) minmax(0, 1.9fr);
+  grid-template-columns: minmax(88px, .55fr) minmax(0, 2.1fr);
 }
 .ea-phone-control > .os-select,
 .ea-phone-control > input {

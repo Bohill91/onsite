@@ -400,8 +400,7 @@
     const trigger = wrapper?.querySelector(".os-select-trigger");
     if (!country || !value || !trigger) return;
 
-    const compactIso = country.iso2 === "GB" ? "UK" : country.iso2;
-    const compactLabel = `${compactIso} ${country.callingCode}`;
+    const compactLabel = country.callingCode;
     const accessibleLabel = `Country calling code: ${country.name} ${country.callingCode}`;
     select.dataset.displayValue = compactLabel;
     select.dataset.accessibleLabel = accessibleLabel;
