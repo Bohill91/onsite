@@ -208,6 +208,10 @@ label small { color: var(--ea-muted); font-size: .68rem; font-weight: 500; line-
 .ea-honeypot { height: 1px; left: -10000px; overflow: hidden; position: absolute; width: 1px; }
 .ea-category-field { display: grid; gap: 8px; }
 .ea-country-field { display: grid; gap: 8px; }
+.ea-fieldset { border: 1px solid #e6e6e1; border-radius: 9px; display: grid; gap: 12px; margin: 2px 0 0; padding: 12px 14px 14px; }
+.ea-fieldset legend { color: var(--ea-ink); font-size: .68rem; font-weight: 800; letter-spacing: .06em; padding: 0 5px; text-transform: uppercase; }
+.ea-fieldset-fields { display: grid; gap: 11px; }
+.ea-fieldset-fields > label { color: var(--ea-ink); display: grid; font-size: .76rem; font-weight: 700; gap: 8px; }
 .ea-country-picker { position: relative; }
 .ea-field-label { color: var(--ea-ink); font-size: .76rem; font-weight: 700; }
 .ea-category-picker { position: relative; }
@@ -443,6 +447,10 @@ input[readonly] { background: #fafaf8; color: var(--ea-muted); }
 .ea-reward-steps article { background: #000; display: grid; gap: 5px; padding: 16px 18px; }
 .ea-reward-steps article:first-child { border-radius: 8px 8px 0 0; }
 .ea-reward-steps article:last-child { border-radius: 0 0 8px 8px; }
+.ea-reward-steps[data-route="company"] { background: transparent; gap: 12px; overflow: visible; }
+.ea-reward-steps[data-route="company"] article,
+.ea-reward-steps[data-route="company"] article:first-child,
+.ea-reward-steps[data-route="company"] article:last-child { border-radius: 9px; box-shadow: 0 8px 18px rgba(0, 0, 0, .12); padding: 20px 22px; }
 .ea-reward-steps strong { color: #fff; font-size: .86rem; }
 .ea-reward-steps span { color: #aaa; font-size: .72rem; line-height: 1.45; }
 .ea-footer { border-top: 1px solid #dededb; color: var(--ea-muted); display: grid; gap: 14px; padding-bottom: 48px; padding-top: 32px; }

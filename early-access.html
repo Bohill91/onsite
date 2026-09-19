@@ -133,8 +133,8 @@
           </section>
 
           <section id="companyPanel" role="tabpanel" aria-labelledby="companyTab" hidden>
-            <div class="ea-form-heading">
-             <p class="ea-kicker">FOR CONSTRUCTION CONTRACTORS</p>
+             <div class="ea-form-heading">
+              <p class="ea-kicker">FOR HIRING COMPANIES</p>
                 <h2>Register for OnSite Early Access</h2>
                <p>Register your interest and we'll contact you when contractor access opens.</p>
                <p class="ea-launch-note"><strong>Launching first in the United Kingdom.</strong> Contractors outside the UK can register international interest so we can understand where access is wanted next.</p>
@@ -154,49 +154,53 @@
                 <label>Work email<input name="email" type="email" autocomplete="email" maxlength="320" required /></label>
                  <label>Contact number
                    <span class="ea-phone-control">
-                      <select name="mobileCountry" aria-label="Contact number country" data-dropdown-width="250" required></select>
+                       <select name="mobileCountry" aria-label="Calling code" data-dropdown-width="250" required></select>
                      <input name="mobile" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" placeholder="e.g. 07700 900000" required />
                    </span>
                  </label>
               </div>
-               <div class="ea-country-field">
-                 <label class="ea-field-label" for="eaCompanyCountryTrigger">Country of operation</label>
-                 <div class="ea-country-picker" id="eaCompanyCountryPicker">
-                   <button class="ea-multi-select-trigger" id="eaCompanyCountryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCountryOptions" aria-describedby="eaCountryHint">
-                     <span id="eaCompanyCountryValue">United Kingdom</span>
-                     <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
-                   </button>
-                   <div class="ea-multi-select-menu" id="eaCompanyCountryMenu" hidden>
-                     <label class="ea-category-search">
-                       <span>Search countries</span>
-                       <input id="eaCompanyCountrySearch" type="search" autocomplete="off" placeholder="Search countries" />
-                     </label>
-                     <div class="ea-category-options" id="eaCompanyCountryOptions" role="listbox" aria-label="Country of operation"></div>
-                   </div>
-                   <select class="ea-category-native" name="operatingCountryCode" id="eaCompanyCountry" required aria-label="Country of operation"></select>
-                 </div>
-                 <small id="eaCountryHint">This is separate from the country calling code for your contact number.</small>
-               </div>
-              <div class="ea-category-field">
-                 <label class="ea-field-label" for="eaCompanyCategoryTrigger">Trades / labour categories required</label>
-                 <div class="ea-category-picker" id="eaCategoryPicker">
-                   <button class="ea-multi-select-trigger" id="eaCompanyCategoryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCategoryOptions" aria-describedby="eaCategoryHint">
-                     <span id="eaCompanyCategoryValue">Select trades</span>
-                     <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
-                   </button>
-                   <div class="ea-multi-select-menu" id="eaCompanyCategoryMenu" hidden>
-                     <label class="ea-category-search">
-                       <span>Search categories</span>
-                       <input id="eaCompanyCategorySearch" type="search" autocomplete="off" placeholder="Search trades" />
-                     </label>
-                     <div class="ea-category-options" id="eaCompanyCategoryOptions" role="listbox" aria-label="Trades / labour categories required" aria-multiselectable="true"></div>
-                   </div>
-                   <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-label="Trades / labour categories required" aria-describedby="eaCategoryHint"></select>
-                </div>
-                <small id="eaCategoryHint">Select all that apply.</small>
-              </div>
-              <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
-              <label>Typical number of sub-contractors required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+                <fieldset class="ea-fieldset">
+                  <legend>Operating details</legend>
+                  <div class="ea-fieldset-fields">
+                    <div class="ea-country-field">
+                      <label class="ea-field-label" for="eaCompanyCountryTrigger">Country of operation</label>
+                      <div class="ea-country-picker" id="eaCompanyCountryPicker">
+                        <button class="ea-multi-select-trigger" id="eaCompanyCountryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCountryOptions">
+                          <span id="eaCompanyCountryValue">United Kingdom</span>
+                          <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                        </button>
+                        <div class="ea-multi-select-menu" id="eaCompanyCountryMenu" hidden>
+                          <label class="ea-category-search">
+                            <span>Search countries</span>
+                            <input id="eaCompanyCountrySearch" type="search" autocomplete="off" placeholder="Search countries" />
+                          </label>
+                          <div class="ea-category-options" id="eaCompanyCountryOptions" role="listbox" aria-label="Country of operation"></div>
+                        </div>
+                        <select class="ea-category-native" name="operatingCountryCode" id="eaCompanyCountry" required aria-label="Country of operation"></select>
+                      </div>
+                    </div>
+                    <label>Primary operating area<input name="operatingArea" type="text" maxlength="200" placeholder="e.g. London and the South East" required /></label>
+                    <div class="ea-category-field">
+                      <label class="ea-field-label" for="eaCompanyCategoryTrigger">Trades / labour categories required</label>
+                      <div class="ea-category-picker" id="eaCategoryPicker">
+                        <button class="ea-multi-select-trigger" id="eaCompanyCategoryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCategoryOptions" aria-describedby="eaCategoryHint">
+                          <span id="eaCompanyCategoryValue">Select trades</span>
+                          <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                        </button>
+                        <div class="ea-multi-select-menu" id="eaCompanyCategoryMenu" hidden>
+                          <label class="ea-category-search">
+                            <span>Search categories</span>
+                            <input id="eaCompanyCategorySearch" type="search" autocomplete="off" placeholder="Search trades" />
+                          </label>
+                          <div class="ea-category-options" id="eaCompanyCategoryOptions" role="listbox" aria-label="Trades / labour categories required" aria-multiselectable="true"></div>
+                        </div>
+                        <select class="ea-category-native" name="labourCategoryKeys" id="eaCompanyCategories" multiple required aria-label="Trades / labour categories required" aria-describedby="eaCategoryHint"></select>
+                      </div>
+                      <small id="eaCategoryHint">Select all that apply.</small>
+                    </div>
+                    <label>Typical number of sub-contractors required <span>Optional</span><input name="approximateWorkers" type="number" inputmode="numeric" min="1" max="100000" placeholder="e.g. 25" /></label>
+                  </div>
+                </fieldset>
               <div class="ea-referral-choice" id="eaCompanyReferralChoice">
                 <p class="ea-referral-captured" id="eaCompanyReferralCaptured" hidden>You've been referred to OnSite.</p>
                 <button class="ea-referral-reveal" id="eaCompanyReferralReveal" type="button">Were you referred by another contractor?</button>
