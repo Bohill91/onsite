@@ -446,14 +446,14 @@ input[readonly] { background: #fafaf8; color: var(--ea-muted); }
 .ea-referral-section p { color: #000; margin-top: 12px; }
 .ea-referral-section .ea-example { color: #000; }
 .ea-referral-section .ea-example strong { color: #000; }
-.ea-reward-steps { background: #2a2a2a; border-radius: 10px; box-shadow: 0 12px 24px rgba(0, 0, 0, .14); display: grid; gap: 1px; overflow: hidden; }
+.ea-reward-steps { background: #2a2a2a; border-radius: 10px; box-shadow: none; display: grid; gap: 1px; overflow: hidden; }
 .ea-reward-steps article { background: #000; display: grid; gap: 5px; padding: 16px 18px; }
 .ea-reward-steps article:first-child { border-radius: 8px 8px 0 0; }
 .ea-reward-steps article:last-child { border-radius: 0 0 8px 8px; }
 .ea-reward-steps[data-route="company"] { background: transparent; gap: 12px; overflow: visible; }
 .ea-reward-steps[data-route="company"] article,
 .ea-reward-steps[data-route="company"] article:first-child,
-.ea-reward-steps[data-route="company"] article:last-child { border-radius: 9px; box-shadow: 0 8px 18px rgba(0, 0, 0, .12); padding: 20px 22px; }
+.ea-reward-steps[data-route="company"] article:last-child { border-radius: 9px; box-shadow: none; padding: 20px 22px; }
 .ea-reward-steps strong { color: #fff; font-size: .86rem; }
 .ea-reward-steps span { color: #aaa; font-size: .72rem; line-height: 1.45; }
 .ea-footer { border-top: 1px solid #dededb; color: var(--ea-muted); display: grid; gap: 14px; padding-bottom: 48px; padding-top: 32px; }
