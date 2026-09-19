@@ -134,9 +134,10 @@
 
           <section id="companyPanel" role="tabpanel" aria-labelledby="companyTab" hidden>
             <div class="ea-form-heading">
-            <p class="ea-kicker">FOR UK CONTRACTORS</p>
+             <p class="ea-kicker">FOR CONSTRUCTION CONTRACTORS</p>
                 <h2>Register for OnSite Early Access</h2>
-              <p>Register your interest and we'll contact you when contractor access opens.</p>
+               <p>Register your interest and we'll contact you when contractor access opens.</p>
+               <p class="ea-launch-note"><strong>Launching first in the United Kingdom.</strong> Contractors outside the UK can register international interest so we can understand where access is wanted next.</p>
             </div>
              <div class="ea-referral-teaser" data-referral-teaser="company">
                <p class="ea-referral-teaser-label">CONTRACTOR REFERRALS</p>
@@ -158,6 +159,24 @@
                    </span>
                  </label>
               </div>
+               <div class="ea-country-field">
+                 <label class="ea-field-label" for="eaCompanyCountryTrigger">Country of operation</label>
+                 <div class="ea-country-picker" id="eaCompanyCountryPicker">
+                   <button class="ea-multi-select-trigger" id="eaCompanyCountryTrigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="eaCompanyCountryOptions" aria-describedby="eaCountryHint">
+                     <span id="eaCompanyCountryValue">United Kingdom</span>
+                     <span class="ea-select-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                   </button>
+                   <div class="ea-multi-select-menu" id="eaCompanyCountryMenu" hidden>
+                     <label class="ea-category-search">
+                       <span>Search countries</span>
+                       <input id="eaCompanyCountrySearch" type="search" autocomplete="off" placeholder="Search countries" />
+                     </label>
+                     <div class="ea-category-options" id="eaCompanyCountryOptions" role="listbox" aria-label="Country of operation"></div>
+                   </div>
+                   <select class="ea-category-native" name="operatingCountryCode" id="eaCompanyCountry" required aria-label="Country of operation"></select>
+                 </div>
+                 <small id="eaCountryHint">This is separate from the country calling code for your contact number.</small>
+               </div>
               <div class="ea-category-field">
                  <label class="ea-field-label" for="eaCompanyCategoryTrigger">Trades / labour categories required</label>
                  <div class="ea-category-picker" id="eaCategoryPicker">
@@ -187,7 +206,9 @@
               </div>
               <label class="ea-honeypot" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
               <div class="ea-consents">
-                <label class="ea-check"><input name="companyReferralAcknowledged" type="checkbox" required /><span>I confirm I am registering on behalf of a UK contractor and understand that company verification will be required before referral credit can be applied.</span></label>
+                 <label class="ea-check" id="eaUkOperatingConsent"><input name="ukOperatingAcknowledged" type="checkbox" required /><span>I confirm that my company operates or intends to provide labour in the UK and understand that company verification will be required before referral credit can be applied.</span></label>
+                 <label class="ea-check" id="eaCompanyReferralConsent"><input name="companyReferralAcknowledged" type="checkbox" required /><span>I understand that the UK contractor referral programme is subject to the published terms and registration alone does not qualify for OnSite credit.</span></label>
+                 <label class="ea-check" id="eaInternationalInterestConsent" hidden><input name="internationalInterestAcknowledged" type="checkbox" /><span>I understand that this is an international-interest registration only. It does not provide immediate marketplace access or eligibility for the UK contractor referral programme or OnSite credit.</span></label>
                 <label class="ea-check"><input name="privacyAcknowledged" type="checkbox" required /><span>I have read the <a href="#privacy">Early Access privacy information</a> and agree to OnSite processing these details to manage our Early Access enquiry.</span></label>
                 <label class="ea-check"><input name="marketingConsent" type="checkbox" /><span>Send me occasional OnSite launch and product updates. <em>Optional</em></span></label>
               </div>
@@ -231,6 +252,7 @@
      <script src="/ui.js"></script>
     <script src="/taxonomy.js"></script>
      <script src="/phone-utils.js"></script>
+     <script src="/country-utils.js"></script>
     <script src="/early-access.js"></script>
   </body>
 </html>

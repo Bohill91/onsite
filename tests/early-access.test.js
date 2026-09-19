@@ -53,11 +53,14 @@ function companyInput(overrides = {}) {
     email: "luke@apex.example",
     mobile: "0113 555 0101",
     labourCategoryKeys: ["electrical", "plumbing_heating"],
+    operatingCountryCode: "GB",
     operatingArea: "Yorkshire",
     approximateWorkers: 25,
     note: "Regional M&E projects",
     referralCode: "",
     companyReferralAcknowledged: true,
+    ukOperatingAcknowledged: true,
+    internationalInterestAcknowledged: false,
     privacyAcknowledged: true,
     marketingConsent: true,
     source: { landingPath: "/early-access" },
@@ -107,6 +110,8 @@ function fakeAdapter() {
       first_name: row.first_name,
       company_name: row.company_name,
       email_normalized: row.email_normalized,
+      registration_market: row.registration_market,
+      operating_country_code: row.operating_country_code,
       referral_code: row.referral_code,
       referred_count: referrals.filter((entry) => entry.referrer_signup_id === row.id).length,
     };
@@ -194,14 +199,14 @@ function fakeAdapter() {
         }
         return companyResult(row, false);
       }
-      if ([...companies.values()].some((row) => row.referral_code === input.issuedReferralCode)) {
+      if (input.issuedReferralCode && [...companies.values()].some((row) => row.referral_code === input.issuedReferralCode)) {
         throw new EarlyAccessAdapterError(
           "Referral code collision",
           "REFERRAL_CODE_COLLISION",
           "referral_code",
         );
       }
-      const referrer = input.suppliedReferralCode
+      const referrer = input.registrationMarket === "uk" && input.suppliedReferralCode
         ? [...companies.values()].find((row) => row.referral_code === input.suppliedReferralCode)
         : null;
       if (input.suppliedReferralCode && !referrer) {
@@ -213,14 +218,18 @@ function fakeAdapter() {
         company_name: input.companyName,
         email_normalized: input.email,
         mobile_normalized: input.mobile,
+        registration_market: input.registrationMarket,
+        operating_country_code: input.operatingCountryCode,
         labour_category_keys: [...input.labourCategoryKeys],
-        referral_code: input.issuedReferralCode,
-        referred_by_code: input.suppliedReferralCode || null,
+        referral_code: input.issuedReferralCode || null,
+        referred_by_code: input.registrationMarket === "uk" ? input.suppliedReferralCode || null : null,
         company_referral_acknowledged: input.companyReferralAcknowledged,
+        uk_operating_acknowledged: input.ukOperatingAcknowledged,
+        international_interest_acknowledged: input.internationalInterestAcknowledged,
         referral_terms_version: input.referralTermsVersion,
       };
       companies.set(row.id, row);
-      if (referrer) {
+      if (referrer && input.registrationMarket === "uk") {
         const referral = {
           id: id(),
           referrer_signup_id: referrer.id,
@@ -378,9 +387,11 @@ test("Supabase adapter uses acknowledgement-aware programme RPCs", async () => {
   });
   assert.equal(calls[0].name, "join_early_access_worker_v2");
   assert.equal(calls[0].params.p_cis_acknowledged, true);
-  assert.equal(calls[1].name, "join_early_access_company_v2");
+  assert.equal(calls[1].name, "join_early_access_company_v3");
   assert.equal(calls[1].params.p_company_acknowledged, true);
   assert.equal(calls[1].params.p_issued_referral_code, "OSC-AAAAAAAAAAAAAAAA");
+  assert.equal(calls[1].params.p_operating_country_code, "GB");
+  assert.equal(calls[1].params.p_registration_market, "uk");
 });
 
 test("valid worker signup is canonical, Founding Worker and password-free", async () => {
@@ -440,6 +451,51 @@ test("company signup and duplicate retry remain password-free and idempotent", a
   assert.equal(first.referralUrl, "https://joinonsite.uk/early-access?ref=OSC-AAAAAAAAAAAAAAAA");
   assert.equal(adapter.companies.size, 1);
   assert.equal(Object.hasOwn(adapter.companies.values().next().value, "password"), false);
+});
+
+test("international company interest is explicitly classified without OSC identity or rewards", async () => {
+  const adapter = fakeAdapter();
+  const result = await service(adapter).joinCompany(companyInput({
+    companyName: "Nordic Build AS",
+    email: "hello@nordic.example",
+    mobile: "+47 900 00 123",
+    operatingCountryCode: "NO",
+    internationalInterestAcknowledged: true,
+    companyReferralAcknowledged: false,
+    ukOperatingAcknowledged: false,
+  }));
+  assert.equal(result.registrationMarket, "international");
+  assert.equal(result.operatingCountryCode, "NO");
+  assert.equal(result.referralCode, "");
+  assert.equal(result.referralUrl, "");
+  assert.equal(adapter.companies.size, 1);
+  assert.equal(adapter.referrals.length, 0);
+  assert.equal(adapter.rewards.length, 0);
+  const row = adapter.companies.values().next().value;
+  assert.equal(row.referral_code, null);
+  assert.equal(row.referred_by_code, null);
+});
+
+test("international company interest requires its own acknowledgement and rejects referral codes", async () => {
+  assert.throws(
+    () => normalizeCompanyInput(companyInput({
+      operatingCountryCode: "CA",
+      internationalInterestAcknowledged: false,
+      companyReferralAcknowledged: false,
+      ukOperatingAcknowledged: false,
+    })),
+    (error) => error.code === "INTERNATIONAL_INTEREST_ACKNOWLEDGEMENT_REQUIRED",
+  );
+  assert.throws(
+    () => normalizeCompanyInput(companyInput({
+      operatingCountryCode: "CA",
+      internationalInterestAcknowledged: true,
+      companyReferralAcknowledged: false,
+      ukOperatingAcknowledged: false,
+      referralCode: "OSC-AAAAAAAAAAAAAAAA",
+    })),
+    (error) => error.code === "INTERNATIONAL_REFERRAL_NOT_ALLOWED",
+  );
 });
 
 test("contractor referrals create fixed non-cash entitlements and immutable attribution", async () => {
@@ -650,8 +706,16 @@ test("Resend provider uses the professional Early Access confirmation copy", asy
     company_name: "Apex Construction Ltd",
     referral_code: "OSC-AAAAAAAAAAAAAAAA",
   });
+  await provider.sendCompany({
+    email_normalized: "anna@nordic.example",
+    first_name: "Anna",
+    company_name: "Nordic Build AS",
+    registration_market: "international",
+    operating_country_code: "NO",
+    referral_code: null,
+  });
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.equal(requests[0].subject, "You're registered for OnSite Early Access");
   assert.match(requests[0].text, /OSW-AAAAAAAAAAAAAAAA/);
   assert.match(requests[0].text, /https:\/\/joinonsite\.uk\/early-access\?ref=OSW-AAAAAAAAAAAAAAAA/);
@@ -670,6 +734,12 @@ test("Resend provider uses the professional Early Access confirmation copy", asy
   assert.match(requests[1].text, /keep this email so you can find your referral link later/i);
   assert.match(requests[1].text, /not cash and cannot be withdrawn/i);
   assert.doesNotMatch(`${requests[1].text}\n${requests[1].html}`, /CIS verification|cash reward/i);
+  assert.equal(requests[2].subject, "Your OnSite international interest is registered");
+  assert.match(requests[2].text, /international interest/i);
+  assert.match(requests[2].text, /Norway/i);
+  assert.match(requests[2].text, /launching first in the United Kingdom/i);
+  assert.match(requests[2].text, /does not include the UK contractor referral programme/i);
+  assert.doesNotMatch(`${requests[2].text}\n${requests[2].html}`, /OSC-|OnSite credit towards|referral code/i);
 });
 
 test("client identity ignores forwarding headers unless proxy trust is explicit", () => {
@@ -841,6 +911,47 @@ test("migration 009 extends referrals without weakening programme or reward auth
   assert.match(sql, /commit;\s*$/i);
 });
 
+test("migration 010 separates international interest from the UK contractor programme", () => {
+  const sql = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),
+    "utf8",
+  );
+  assert.match(sql, /^begin;/i);
+  assert.match(sql, /operating_country_code/i);
+  assert.match(sql, /registration_market text not null default 'uk'/i);
+  assert.match(sql, /registration_market in \('uk', 'international'\)/i);
+  assert.match(sql, /international_interest_acknowledged_at/i);
+  assert.match(sql, /join_early_access_company_v3/i);
+  assert.match(sql, /p_registration_market/i);
+  assert.match(sql, /INTERNATIONAL_REFERRAL_NOT_ALLOWED/i);
+  assert.match(sql, /referral_code is null/i);
+  assert.match(sql, /referrer_record\.registration_market <> 'uk'/i);
+  assert.match(sql, /referred_record\.registration_market <> 'uk'/i);
+  assert.match(sql, /security definer/i);
+  assert.match(sql, /set search_path = pg_catalog, public/i);
+  assert.match(sql, /grant execute on function public\.join_early_access_company_v3[\s\S]*to service_role/i);
+  assert.doesNotMatch(sql, /grant (?:select|insert|update|delete)[^;]*to (?:anon|authenticated)/i);
+  assert.match(sql, /commit;\s*$/i);
+});
+
+test("international migration verification scripts are read-only and separated by phase", () => {
+  const preflight = fs.readFileSync(
+    path.join(rootDir, "docs/early-access-pre-010-verification.sql"),
+    "utf8",
+  );
+  const postflight = fs.readFileSync(
+    path.join(rootDir, "docs/early-access-post-010-verification.sql"),
+    "utf8",
+  );
+  assert.doesNotMatch(preflight, /registration_market|operating_country_code|join_early_access_company_v3/i);
+  assert.match(postflight, /registration_market/i);
+  assert.match(postflight, /operating_country_code/i);
+  assert.match(postflight, /join_early_access_company_v3/i);
+  [preflight, postflight].forEach((sql) => {
+    assert.doesNotMatch(sql, /^\s*(insert|update|delete|alter|create|drop|grant|revoke)\b/im);
+  });
+});
+
 test("verification SQL keeps pre-009 checks compatible with migration 008", () => {
   const preflight = fs.readFileSync(
     path.join(rootDir, "docs/early-access-pre-009-verification.sql"),
@@ -892,6 +1003,20 @@ test("migration 008 remains byte-for-byte unchanged", () => {
   assert.equal(current, baseline);
 });
 
+test("migration 009 remains byte-for-byte unchanged", () => {
+  const current = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609180009_canonical_referral_programmes.sql"),
+    "utf8",
+  );
+  const baseline = require("node:child_process")
+    .execFileSync(
+      "git",
+      ["show", "HEAD:supabase/migrations/202609180009_canonical_referral_programmes.sql"],
+      { encoding: "utf8" },
+    );
+  assert.equal(current, baseline);
+});
+
 test("public UI is password-free, API-backed and has sub-contractor and hiring-company paths", () => {
   const html = fs.readFileSync(path.join(rootDir, "early-access.html"), "utf8");
   const client = fs.readFileSync(path.join(rootDir, "early-access.js"), "utf8");
@@ -901,7 +1026,8 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(html, /I'm looking for work/);
   assert.match(html, /I'm hiring/);
   assert.match(html, /FOR CIS SUB-CONTRACTORS/);
-  assert.match(html, /FOR UK CONTRACTORS/);
+  assert.match(html, /FOR CONSTRUCTION CONTRACTORS/);
+  assert.match(html, /Launching first in the United Kingdom/);
   assert.match(html, /Register for OnSite Early Access/);
   assert.match(html, /Register your interest and we'll notify you when profile setup opens/);
   assert.match(html, /Register your interest and we'll contact you when contractor access opens/);
@@ -915,6 +1041,9 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(html, /Earn up to £100 per qualifying referral/);
   assert.match(html, /name="cisAcknowledged"[^>]*required/);
   assert.match(html, /name="companyReferralAcknowledged"[^>]*required/);
+  assert.match(html, /name="ukOperatingAcknowledged"[^>]*required/);
+  assert.match(html, /name="internationalInterestAcknowledged"/);
+  assert.match(html, /name="operatingCountryCode"/);
   assert.match(html, /id="eaCompanyReferralCode"/);
   assert.match(html, /ONSITE SUB-CONTRACTOR REFERRAL PROGRAMME/);
   assert.match(html, /Registration alone does not qualify for a reward/);
@@ -938,6 +1067,8 @@ test("public UI is password-free, API-backed and has sub-contractor and hiring-c
   assert.match(client, /CONTRACTOR EARLY ACCESS/);
   assert.match(client, /setPath\(path\)/);
   assert.match(client, /renderReferralProgramme\(path\)/);
+  assert.match(client, /registrationMarket === "international"/);
+  assert.match(`${html}\n${client}`, /international-interest registration only/i);
   assert.match(client, /your company is registered for Early Access/i);
   assert.match(client, /YOUR CONTRACTOR REFERRAL PROGRAMME/);
   assert.match(client, /Your company has been referred to OnSite/);

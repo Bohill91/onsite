@@ -16,6 +16,16 @@
   const companyCategoryMenu = document.getElementById("eaCompanyCategoryMenu");
   const companyCategorySearch = document.getElementById("eaCompanyCategorySearch");
   const companyCategoryOptions = document.getElementById("eaCompanyCategoryOptions");
+  const companyCountryPicker = document.getElementById("eaCompanyCountryPicker");
+  const companyCountryTrigger = document.getElementById("eaCompanyCountryTrigger");
+  const companyCountryValue = document.getElementById("eaCompanyCountryValue");
+  const companyCountryMenu = document.getElementById("eaCompanyCountryMenu");
+  const companyCountrySearch = document.getElementById("eaCompanyCountrySearch");
+  const companyCountryOptions = document.getElementById("eaCompanyCountryOptions");
+  const companyCountrySelect = document.getElementById("eaCompanyCountry");
+  const ukOperatingConsent = document.getElementById("eaUkOperatingConsent");
+  const companyReferralConsent = document.getElementById("eaCompanyReferralConsent");
+  const internationalInterestConsent = document.getElementById("eaInternationalInterestConsent");
   const routeStories = document.querySelectorAll("[data-route-story]");
   const referralControls = Object.freeze({
     worker: {
@@ -39,6 +49,8 @@
   const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
   const REFERRAL_CODE_PATTERN = /^OS[WC]-[A-Z0-9]{12,24}$/;
   let companyCategoryMenuOpen = false;
+  let companyCountryMenuOpen = false;
+  let selectedCompanyCountry = "GB";
 
   function escapeHtml(value) {
     return String(value || "")
@@ -182,9 +194,23 @@
     };
   }
 
+  function companyIsUkMarket() {
+    return selectedCompanyCountry === "GB";
+  }
+
   function renderReferralProgramme(path) {
     if (!referralProgrammeCopy || !referralProgrammeRewards) return;
     if (path === "company") {
+      if (!companyIsUkMarket()) {
+        referralProgrammeCopy.innerHTML = `<p class="ea-kicker">ONSITE INTERNATIONAL EARLY ACCESS</p>
+          <h2 id="referralValue">Register international interest for future market updates.</h2>
+          <p>OnSite is launching first in the United Kingdom. If your company operates elsewhere, register your interest so we can understand where contractor companies want access next.</p>
+          <p>International-interest registration does not provide immediate marketplace access and does not include the UK contractor referral programme or OnSite credit.</p>`;
+        referralProgrammeRewards.innerHTML = `<article><strong>INTERNATIONAL INTEREST</strong><span>Help us understand where contractor access is wanted next</span></article>
+          <article><strong>UK FIRST</strong><span>OnSite will launch the marketplace in the United Kingdom first</span></article>
+          <article><strong>MARKET UPDATES</strong><span>We'll contact you when there is an update for your market</span></article>`;
+        return;
+      }
       referralProgrammeCopy.innerHTML = `<p class="ea-kicker">ONSITE CONTRACTOR REFERRAL PROGRAMME</p>
         <h2 id="referralValue">Earn up to £250 in OnSite credit per qualifying contractor referral.</h2>
         <p>Refer another UK contractor to OnSite. They receive £100 OnSite credit towards their first qualifying labour booking. Once the referred contractor reaches 5 paid labour days through OnSite, your company receives £100 credit. At 20 paid labour days, you receive another £150 credit.</p>
@@ -208,6 +234,7 @@
   function setPath(path) {
     const workerSelected = path === "worker";
     setCompanyCategoryMenuOpen(false);
+    setCompanyCountryMenuOpen(false);
     workerPanel.hidden = !workerSelected;
     companyPanel.hidden = workerSelected;
     routeStories.forEach((story) => {
@@ -344,6 +371,137 @@
     }
   }
 
+  function visibleCompanyCountryOptions() {
+    return Array.from(companyCountryOptions?.querySelectorAll("[data-country-code]") || [])
+      .filter((button) => !button.hidden);
+  }
+
+  function setCompanyCountryMenuOpen(open, { focusSearch = false } = {}) {
+    if (!companyCountryTrigger || !companyCountryMenu) return;
+    companyCountryMenuOpen = Boolean(open);
+    companyCountryMenu.hidden = !companyCountryMenuOpen;
+    companyCountryTrigger.setAttribute("aria-expanded", String(companyCountryMenuOpen));
+    companyCountryPicker?.classList.toggle("is-open", companyCountryMenuOpen);
+    if (companyCountryMenuOpen) {
+      filterCompanyCountries(companyCountrySearch?.value || "");
+      if (focusSearch) window.setTimeout(() => companyCountrySearch?.focus(), 0);
+    } else {
+      companyCountrySearch?.blur();
+    }
+  }
+
+  function filterCompanyCountries(query) {
+    const needle = String(query || "").trim().toLowerCase();
+    visibleCompanyCountryOptions();
+    Array.from(companyCountryOptions?.querySelectorAll("[data-country-code]") || []).forEach((button) => {
+      button.hidden = Boolean(needle && !button.textContent.toLowerCase().includes(needle));
+    });
+  }
+
+  function selectCompanyCountry(code) {
+    const country = window.OnSiteCountries?.findCountry(code);
+    if (!country || !companyCountrySelect) return;
+    selectedCompanyCountry = country.iso2;
+    companyCountrySelect.value = country.iso2;
+    if (companyCountryValue) companyCountryValue.textContent = country.name;
+    companyCountryTrigger?.setAttribute("aria-valuetext", country.name);
+    Array.from(companyCountryOptions?.querySelectorAll("[data-country-code]") || []).forEach((button) => {
+      const selected = button.dataset.countryCode === country.iso2;
+      button.setAttribute("aria-selected", String(selected));
+      button.classList.toggle("is-selected", selected);
+    });
+    const isUk = country.iso2 === "GB";
+    const ukOperatingInput = ukOperatingConsent?.querySelector("input");
+    const companyReferralInput = companyReferralConsent?.querySelector("input");
+    const internationalInput = internationalInterestConsent?.querySelector("input");
+    if (ukOperatingConsent) ukOperatingConsent.hidden = !isUk;
+    if (companyReferralConsent) companyReferralConsent.hidden = !isUk;
+    if (internationalInterestConsent) internationalInterestConsent.hidden = isUk;
+    if (ukOperatingInput) {
+      ukOperatingInput.required = isUk;
+      if (!isUk) ukOperatingInput.checked = false;
+    }
+    if (companyReferralInput) {
+      companyReferralInput.required = isUk;
+      if (!isUk) companyReferralInput.checked = false;
+    }
+    if (internationalInput) {
+      internationalInput.required = !isUk;
+      if (isUk) internationalInput.checked = false;
+    }
+    const referralChoice = document.getElementById("eaCompanyReferralChoice");
+    if (referralChoice) referralChoice.hidden = !isUk;
+    const areaInput = companyForm?.querySelector("[name='operatingArea']");
+    if (areaInput) {
+      areaInput.placeholder = isUk
+        ? "e.g. London and the South East"
+        : `e.g. ${country.name} or the regions you cover`;
+    }
+    if (companyPanel && !companyPanel.hidden) renderReferralProgramme("company");
+  }
+
+  function handleCompanyCountryKeydown(event) {
+    const option = event.target.closest?.("[data-country-code]");
+    if (option) {
+      const options = visibleCompanyCountryOptions();
+      const currentIndex = options.indexOf(option);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        options[Math.min(Math.max(currentIndex + (event.key === "ArrowDown" ? 1 : -1), 0), options.length - 1)]?.focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        options[event.key === "Home" ? 0 : options.length - 1]?.focus();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectCompanyCountry(option.dataset.countryCode);
+        setCompanyCountryMenuOpen(false);
+        companyCountryTrigger?.focus();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setCompanyCountryMenuOpen(false);
+        companyCountryTrigger?.focus();
+      }
+      return;
+    }
+    if (event.target === companyCountrySearch && event.key === "ArrowDown") {
+      event.preventDefault();
+      visibleCompanyCountryOptions()[0]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setCompanyCountryMenuOpen(false);
+      companyCountryTrigger?.focus();
+    }
+  }
+
+  function renderCompanyCountries() {
+    const countries = [...(window.OnSiteCountries?.countries || [])]
+      .sort((left, right) => left.iso2 === "GB" ? -1 : right.iso2 === "GB" ? 1 : left.name.localeCompare(right.name));
+    if (!companyCountrySelect || !companyCountryOptions) return;
+    companyCountrySelect.replaceChildren(...countries.map((country) => {
+      const option = document.createElement("option");
+      option.value = country.iso2;
+      option.textContent = country.name;
+      return option;
+    }));
+    companyCountryOptions.replaceChildren(...countries.map((country) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ea-category-option";
+      button.dataset.countryCode = country.iso2;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(country.iso2 === "GB"));
+      button.tabIndex = -1;
+      button.innerHTML = `<span>${escapeHtml(country.name)}</span><span class="ea-category-option-check" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>`;
+      button.addEventListener("click", () => {
+        selectCompanyCountry(country.iso2);
+        setCompanyCountryMenuOpen(false);
+        companyCountryTrigger?.focus();
+      });
+      return button;
+    }));
+    selectCompanyCountry("GB");
+  }
+
   function formPayload(form, type) {
     const data = new FormData(form);
     const mobile = window.OnSitePhone?.normalisePhone(
@@ -373,12 +531,20 @@
     return {
       ...common,
       companyName: data.get("companyName") || "",
+      operatingCountryCode: data.get("operatingCountryCode") || "GB",
       labourCategoryKeys: selectedValues(companyCategories),
       operatingArea: data.get("operatingArea") || "",
       approximateWorkers: data.get("approximateWorkers") || "",
       note: "",
-      referralCode: normaliseReferralCode(data.get("referralCode") || ""),
-      companyReferralAcknowledged: data.get("companyReferralAcknowledged") === "on",
+      referralCode: selectedCompanyCountry === "GB"
+        ? normaliseReferralCode(data.get("referralCode") || "")
+        : "",
+      companyReferralAcknowledged: selectedCompanyCountry === "GB"
+        && data.get("companyReferralAcknowledged") === "on",
+      ukOperatingAcknowledged: selectedCompanyCountry === "GB"
+        && data.get("ukOperatingAcknowledged") === "on",
+      internationalInterestAcknowledged: selectedCompanyCountry !== "GB"
+        && data.get("internationalInterestAcknowledged") === "on",
     };
   }
 
@@ -508,6 +674,59 @@
     document.querySelector(".ea-path-toggle").hidden = true;
     success.hidden = false;
     const emailDeliveryStatus = payload.emailDeliveryStatus;
+    const internationalCompany = type === "company" && payload.registrationMarket === "international";
+    if (internationalCompany) {
+      const country = window.OnSiteCountries?.findCountry(payload.operatingCountryCode);
+      const shareUrl = payload.earlyAccessUrl || `${window.location.origin}/early-access`;
+      const emailCopy = {
+        sent: "We've also emailed you a link to the Early Access page.",
+        skipped: "Your interest is recorded. You can share the Early Access page below.",
+        failed: "Your interest is recorded, but we couldn't send the confirmation email. Share the Early Access page below.",
+        not_sent: "Your interest is recorded. You can share the Early Access page below.",
+      }[emailDeliveryStatus] || "";
+      success.innerHTML = `<span class="ea-success-badge">INTERNATIONAL EARLY ACCESS</span>
+        <h2>Your international interest is registered.</h2>
+        <p>${escapeHtml(payload.firstName || "Thanks")}, we've recorded your company's interest in OnSite Early Access for ${escapeHtml(country?.name || "your market")}.</p>
+        <p>OnSite is launching first in the United Kingdom. This registration does not provide immediate marketplace access and does not include the UK contractor referral programme or OnSite credit.</p>
+        ${emailCopy ? `<p class="ea-email-status">${emailCopy}</p>` : ""}
+        <div class="ea-referral-result">
+          <small>SHARE ONSITE EARLY ACCESS</small>
+          <div class="ea-referral-url">${escapeHtml(shareUrl)}</div>
+          <div class="ea-share-actions">
+            <button type="button" data-copy-interest>Copy link</button>
+            <button type="button" data-share-interest>Share OnSite</button>
+          </div>
+          <p class="ea-action-status" data-interest-action-status role="status" aria-live="polite"></p>
+        </div>`;
+      const actionStatus = success.querySelector("[data-interest-action-status]");
+      success.querySelector("[data-copy-interest]")?.addEventListener("click", async (event) => {
+        try {
+          await copyText(shareUrl);
+          setTemporaryButtonLabel(event.currentTarget, "Copied");
+          if (actionStatus) actionStatus.textContent = "Early Access link copied.";
+        } catch (_) {
+          if (actionStatus) actionStatus.textContent = "Copy failed. Select the link above to copy it manually.";
+        }
+      });
+      success.querySelector("[data-share-interest]")?.addEventListener("click", async (event) => {
+        const shareText = `We're interested in OnSite Early Access for ${country?.name || "our market"}. Find out more:\n\n${shareUrl}`;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: "OnSite Early Access", text: shareText });
+            if (actionStatus) actionStatus.textContent = "Early Access link shared.";
+          } else {
+            await copyText(shareText);
+            setTemporaryButtonLabel(event.currentTarget, "Invite copied");
+            if (actionStatus) actionStatus.textContent = "Share text copied.";
+          }
+        } catch (error) {
+          if (error?.name !== "AbortError" && actionStatus) {
+            actionStatus.textContent = "Share failed. Copy the Early Access link above to send it.";
+          }
+        }
+      });
+      return;
+    }
     const hasReferral = !!payload.referralCode && !!payload.referralUrl;
     const company = type === "company";
     const emailCopy = company
@@ -652,14 +871,41 @@
   });
   companyCategorySearch?.addEventListener("input", () => filterCompanyCategories(companyCategorySearch.value));
   companyCategoryMenu?.addEventListener("keydown", handleCompanyCategoryKeydown);
+  companyCountryTrigger?.addEventListener("click", () => {
+    setCompanyCountryMenuOpen(!companyCountryMenuOpen, { focusSearch: !companyCountryMenuOpen });
+  });
+  companyCountryTrigger?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setCompanyCountryMenuOpen(!companyCountryMenuOpen, { focusSearch: !companyCountryMenuOpen });
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setCompanyCountryMenuOpen(true);
+      window.setTimeout(() => {
+        const options = visibleCompanyCountryOptions();
+        options[event.key === "ArrowDown" ? 0 : options.length - 1]?.focus();
+      }, 0);
+    } else if (event.key === "Escape" && companyCountryMenuOpen) {
+      event.preventDefault();
+      setCompanyCountryMenuOpen(false);
+    } else if (event.key === "Tab") {
+      setCompanyCountryMenuOpen(false);
+    }
+  });
+  companyCountrySearch?.addEventListener("input", () => filterCompanyCountries(companyCountrySearch.value));
+  companyCountryMenu?.addEventListener("keydown", handleCompanyCountryKeydown);
   document.addEventListener("pointerdown", (event) => {
     if (companyCategoryMenuOpen && !companyCategoryPicker?.contains(event.target)) {
       setCompanyCategoryMenuOpen(false);
+    }
+    if (companyCountryMenuOpen && !companyCountryPicker?.contains(event.target)) {
+      setCompanyCountryMenuOpen(false);
     }
   }, true);
 
   window.OnSiteTaxonomy?.populateTradeSelect(workerTrade);
   renderPhoneCountries();
+  renderCompanyCountries();
   renderCompanyCategories();
   initialiseReferral();
 })();

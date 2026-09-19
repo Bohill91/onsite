@@ -5,6 +5,7 @@ const net = require("node:net");
 const { createClient } = require("@supabase/supabase-js");
 const taxonomy = require("./taxonomy.js");
 const { normalisePhone } = require("./phone-utils.js");
+const { findCountry } = require("./country-utils.js");
 
 const PRIVACY_VERSION = "early-access-v1";
 const REFERRAL_TERMS_VERSION = "referral-programmes-v1";
@@ -75,6 +76,18 @@ function normalizeMobile(value) {
     );
   }
   return mobile;
+}
+
+function normalizeOperatingCountry(value) {
+  const code = strictText(value, "Country of operation", 2, { required: true }).toUpperCase();
+  if (!findCountry(code)) {
+    throw new EarlyAccessServiceError(
+      "Choose a valid country of operation.",
+      400,
+      "INVALID_OPERATING_COUNTRY",
+    );
+  }
+  return code;
 }
 
 function normalizeReferralCode(value, signupType = "") {
@@ -172,7 +185,24 @@ function normalizeWorkerInput(input = {}) {
 
 function normalizeCompanyInput(input = {}) {
   requirePrivacyAcknowledgement(input.privacyAcknowledged);
-  requireReferralAcknowledgement(input.companyReferralAcknowledged, "company");
+  const operatingCountryCode = normalizeOperatingCountry(input.operatingCountryCode);
+  const isUkMarket = operatingCountryCode === "GB";
+  if (isUkMarket) {
+    requireReferralAcknowledgement(input.companyReferralAcknowledged, "company");
+    if (input.ukOperatingAcknowledged !== true) {
+      throw new EarlyAccessServiceError(
+        "Confirm that your company operates or intends to provide labour in the UK.",
+        400,
+        "UK_OPERATING_ACKNOWLEDGEMENT_REQUIRED",
+      );
+    }
+  } else if (input.internationalInterestAcknowledged !== true) {
+    throw new EarlyAccessServiceError(
+      "Confirm that you are registering international interest in OnSite.",
+      400,
+      "INTERNATIONAL_INTEREST_ACKNOWLEDGEMENT_REQUIRED",
+    );
+  }
   const categoryKeys = Array.isArray(input.labourCategoryKeys)
     ? [...new Set(input.labourCategoryKeys.map((value) => String(value || "").trim()))]
     : [];
@@ -204,12 +234,22 @@ function normalizeCompanyInput(input = {}) {
       "INVALID_WORKER_REQUIREMENT",
     );
   }
+  const suppliedReferralCode = normalizeReferralCode(input.referralCode, "company");
+  if (!isUkMarket && suppliedReferralCode) {
+    throw new EarlyAccessServiceError(
+      "International-interest registrations cannot use contractor referral codes.",
+      400,
+      "INTERNATIONAL_REFERRAL_NOT_ALLOWED",
+    );
+  }
   return {
     companyName: strictText(input.companyName, "Company name", 200, { required: true }),
     firstName: strictText(input.firstName, "Contact first name", 100, { required: true }),
     lastName: strictText(input.lastName, "Contact last name", 100, { required: true }),
     email: normalizeEmail(input.email),
     mobile: normalizeMobile(input.mobile),
+    operatingCountryCode,
+    registrationMarket: isUkMarket ? "uk" : "international",
     labourCategoryKeys: categories.map((category) => category.key),
     labourCategories: categories.map((category) => category.name),
     operatingArea: strictText(input.operatingArea, "Primary operating area", 200, {
@@ -217,9 +257,11 @@ function normalizeCompanyInput(input = {}) {
     }),
     approximateWorkers,
     note: strictText(input.note, "Note", 1200),
-    suppliedReferralCode: normalizeReferralCode(input.referralCode, "company"),
-    companyReferralAcknowledged: true,
-    referralTermsVersion: REFERRAL_TERMS_VERSION,
+    suppliedReferralCode: isUkMarket ? suppliedReferralCode : "",
+    ukOperatingAcknowledged: isUkMarket,
+    internationalInterestAcknowledged: !isUkMarket,
+    companyReferralAcknowledged: isUkMarket,
+    referralTermsVersion: isUkMarket ? REFERRAL_TERMS_VERSION : null,
     marketingConsent: input.marketingConsent === true,
     privacyVersion: PRIVACY_VERSION,
     source: normalizeSource(input.source),
@@ -247,6 +289,10 @@ function canonicalReferralUrl(code, env = process.env) {
   const url = new URL("/early-access", configuredBaseUrl(env));
   url.searchParams.set("ref", code);
   return url.toString();
+}
+
+function canonicalEarlyAccessUrl(env = process.env) {
+  return new URL("/early-access", configuredBaseUrl(env)).toString();
 }
 
 function adapterError(result, fallbackMessage) {
@@ -313,19 +359,23 @@ function createSupabaseEarlyAccessAdapter({
       }, "Early Access worker signup failed.");
     },
     joinCompany(input) {
-      return rpc("join_early_access_company_v2", {
+      return rpc("join_early_access_company_v3", {
         p_company_name: input.companyName,
         p_first_name: input.firstName,
         p_last_name: input.lastName,
         p_email_normalized: input.email,
         p_mobile_normalized: input.mobile,
+        p_operating_country_code: input.operatingCountryCode,
+        p_registration_market: input.registrationMarket,
         p_labour_category_keys: input.labourCategoryKeys,
         p_labour_categories: input.labourCategories,
         p_operating_area: input.operatingArea,
         p_approximate_workers: input.approximateWorkers,
         p_note: input.note || null,
-        p_issued_referral_code: input.issuedReferralCode,
+        p_issued_referral_code: input.issuedReferralCode || null,
         p_supplied_referral_code: input.suppliedReferralCode || null,
+        p_uk_operating_acknowledged: input.ukOperatingAcknowledged,
+        p_international_interest_acknowledged: input.internationalInterestAcknowledged,
         p_company_acknowledged: input.companyReferralAcknowledged,
         p_referral_terms_version: input.referralTermsVersion,
         p_marketing_consent: input.marketingConsent,
@@ -427,6 +477,41 @@ OnSite`,
       });
     },
     sendCompany(record, envForLinks = env) {
+      if (record.registration_market === "international") {
+        const firstName = escapeHtml(record.first_name);
+        const country = escapeHtml(findCountry(record.operating_country_code)?.name || "your country");
+        const shareUrl = canonicalEarlyAccessUrl(envForLinks);
+        const safeShareUrl = escapeHtml(shareUrl);
+        return send({
+          to: record.email_normalized,
+          subject: "Your OnSite international interest is registered",
+          text: `Hi ${record.first_name},
+
+Your interest in OnSite Early Access has been registered for contractor activity in ${findCountry(record.operating_country_code)?.name || "your country"}.
+
+OnSite is launching first in the United Kingdom. We are collecting international interest so we can understand where contractor companies want access next. This registration does not provide immediate marketplace access and does not include the UK contractor referral programme or OnSite credit.
+
+We will contact you when there is an update for your market.
+
+Share the OnSite Early Access page:
+${shareUrl}
+
+Reliable trades. On demand.
+OnSite`,
+          html: `<div style="background:#f5f5f2;color:#171717;font-family:Arial,sans-serif;padding:32px 16px">
+            <div style="margin:0 auto;max-width:560px;background:#fff;border:1px solid #dedede;border-radius:10px;padding:32px">
+              <p style="color:#f97316;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">OnSite Early Access</p>
+              <p>Hi ${firstName},</p>
+              <h1 style="font-size:24px;line-height:1.2;margin:0 0 16px">Your international interest is registered.</h1>
+              <p>We have recorded your interest in OnSite Early Access for contractor activity in ${country}.</p>
+              <p>OnSite is launching first in the United Kingdom. We are collecting international interest so we can understand where contractor companies want access next. This registration does not provide immediate marketplace access and does not include the UK contractor referral programme or OnSite credit.</p>
+              <p>We will contact you when there is an update for your market.</p>
+              <p><strong>Share the OnSite Early Access page</strong><br /><a href="${safeShareUrl}" style="color:#171717;overflow-wrap:anywhere">${safeShareUrl}</a></p>
+              <p style="font-weight:700;margin-top:28px">Reliable trades. On demand.<br />OnSite</p>
+            </div>
+          </div>`,
+        });
+      }
       const url = canonicalReferralUrl(record.referral_code, envForLinks);
       const firstName = escapeHtml(record.first_name);
       const safeUrl = escapeHtml(url);
@@ -596,7 +681,9 @@ function createEarlyAccessService({
         try {
           record = await adapter.joinCompany({
             ...normalized,
-            issuedReferralCode: codeGenerator("OSC"),
+            issuedReferralCode: normalized.registrationMarket === "uk"
+              ? codeGenerator("OSC")
+              : null,
           });
           break;
         } catch (error) {
@@ -619,8 +706,13 @@ function createEarlyAccessService({
         message: "Your company Early Access place is confirmed.",
         companyName: String(record.company_name || normalized.companyName),
         firstName: String(record.first_name || normalized.firstName),
+        registrationMarket: String(record.registration_market || normalized.registrationMarket),
+        // A pre-010 historical company may not have a stored operating country.
+        // Do not infer one from a duplicate submission.
+        operatingCountryCode: String(record.operating_country_code || ""),
         referralCode: code,
         referralUrl: canonicalReferralUrl(code, env),
+        earlyAccessUrl: canonicalEarlyAccessUrl(env),
         emailDeliveryStatus,
       };
     },
@@ -710,6 +802,7 @@ module.exports = {
   REFERRAL_CODE_PATTERNS,
   REFERRAL_TERMS_VERSION,
   canonicalReferralUrl,
+  canonicalEarlyAccessUrl,
   createEarlyAccessRateLimiter,
   createEarlyAccessService,
   createResendEarlyAccessEmailProvider,
@@ -718,6 +811,7 @@ module.exports = {
   normalizeCompanyInput,
   normalizeEmail,
   normalizeMobile,
+  normalizeOperatingCountry,
   normalizeReferralCode,
   normalizeSource,
   normalizeWorkerInput,
