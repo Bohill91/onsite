@@ -942,6 +942,52 @@ test("migration 010 separates international interest from the UK contractor prog
   assert.match(sql, /commit;\s*$/i);
 });
 
+function extractFunctionArgumentTypes(sql, declarationPattern) {
+  const match = sql.match(declarationPattern);
+  assert.ok(match, `Expected function declaration matching ${declarationPattern}`);
+  return match[1]
+    .split(",")
+    .map((argument) => argument.trim().replace(/^p_[a-z0-9_]+\s+/i, ""))
+    .filter(Boolean);
+}
+
+test("migration 010 uses exact v3 permissions and preserves worker access", () => {
+  const sql = fs.readFileSync(
+    path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),
+    "utf8",
+  );
+  const v3Types = extractFunctionArgumentTypes(
+    sql,
+    /create or replace function public\.join_early_access_company_v3\(\s*([\s\S]*?)\n\)/i,
+  );
+  const v3RevokeTypes = extractFunctionArgumentTypes(
+    sql,
+    /revoke all on function public\.join_early_access_company_v3\(\s*([\s\S]*?)\n\) from/i,
+  );
+  const v3GrantTypes = extractFunctionArgumentTypes(
+    sql,
+    /grant execute on function public\.join_early_access_company_v3\(\s*([\s\S]*?)\n\) to/i,
+  );
+  assert.equal(v3Types.length, 25);
+  assert.deepEqual(v3RevokeTypes, v3Types);
+  assert.deepEqual(v3GrantTypes, v3Types);
+  assert.equal(v3Types.at(-1), "text");
+
+  const companyV2Types = extractFunctionArgumentTypes(
+    sql,
+    /revoke all on function public\.join_early_access_company_v2\(\s*([\s\S]*?)\n\) from/i,
+  );
+  assert.equal(companyV2Types.length, 21);
+  assert.match(
+    sql,
+    /revoke all on function public\.join_early_access_company_v2\([\s\S]*?\) from public, anon, authenticated, service_role/i,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.join_early_access_worker_v2\([\s\S]*?\) to service_role/i,
+  );
+});
+
 test("migration 010 keeps acknowledgement enforcement split between legacy rows and new routes", () => {
   const sql = fs.readFileSync(
     path.join(rootDir, "supabase/migrations/202609190010_international_company_interest.sql"),

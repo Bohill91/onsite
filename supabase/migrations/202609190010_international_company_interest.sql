@@ -444,7 +444,7 @@ revoke all on function public.join_early_access_company_v3(
 ) from public, anon, authenticated, service_role;
 grant execute on function public.join_early_access_company_v3(
   text, text, text, text, text, text, text, text[], text[], text, integer, text,
-  text, text, boolean, boolean, boolean, text, boolean, text, text, text, text, text
+  text, text, boolean, boolean, boolean, text, boolean, text, text, text, text, text, text
 ) to service_role;
 
 -- The migration-009 company route does not collect geographical registration
